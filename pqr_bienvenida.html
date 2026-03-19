@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>PQR · Tododrogas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#080d1a;--ink2:#2a3250;--ink3:#6b748a;
+  --bg:#f0f3fa;--surface:#fff;--border:#dde2ef;
+  --blue:#2563eb;--blue-d:#1a45c4;--blue-l:#eff4ff;--blue-m:#93c5fd;
+  --green:#10b981;--green-l:#d1fae5;
+  --shadow:0 4px 28px rgba(8,13,26,.13),0 1px 5px rgba(8,13,26,.07);
+  --shadow-xl:0 20px 60px rgba(8,13,26,.22),0 4px 16px rgba(8,13,26,.1);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;font-family:'Sora',sans-serif;overflow-x:hidden;}
+body{background:var(--ink);display:flex;min-height:100vh;}
+
+/* ════ LAYOUT ════ */
+.layout{display:flex;width:100%;height:100%;}
+
+/* ════ LEFT PANEL ════ */
+.left{
+  flex:1.4;display:flex;flex-direction:column;
+  position:relative;overflow:hidden;
+  background:linear-gradient(160deg,#060b18 0%,#0c1428 55%,#080d1a 100%);
+}
+.left-noise{position:absolute;inset:0;opacity:.03;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+.left-grid{position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(37,99,235,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(37,99,235,.05) 1px,transparent 1px);
+  background-size:60px 60px;}
+.glow1{position:absolute;top:-80px;left:-80px;width:500px;height:500px;border-radius:50%;
+  background:radial-gradient(circle,rgba(37,99,235,.16) 0%,transparent 70%);pointer-events:none;}
+.glow2{position:absolute;bottom:-100px;right:0;width:380px;height:380px;border-radius:50%;
+  background:radial-gradient(circle,rgba(124,58,237,.1) 0%,transparent 70%);pointer-events:none;}
+#particles{position:absolute;inset:0;pointer-events:none;}
+
+/* ── TOPBAR ── */
+.l-top{
+  position:relative;z-index:3;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:22px 28px 0;flex-shrink:0;
+}
+.brand-pill{display:flex;align-items:center;gap:7px;
+  background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.28);
+  border-radius:99px;padding:6px 16px;}
+.brand-dot{width:7px;height:7px;border-radius:50%;background:var(--blue);
+  box-shadow:0 0 10px var(--blue);animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.brand-name{font-size:11px;font-weight:700;color:rgba(255,255,255,.65);
+  letter-spacing:.8px;text-transform:uppercase;}
+.live-pill{display:flex;align-items:center;gap:6px;
+  background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.22);
+  border-radius:99px;padding:5px 12px;}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;}
+.live-txt{font-size:10px;font-weight:600;color:rgba(16,185,129,.85);letter-spacing:.4px;}
+
+/* ════ CARRUSEL — PROTAGONISTA ════ */
+.carousel-section{
+  position:relative;z-index:3;
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:24px 32px 16px;
+  overflow:hidden;
+}
+
+.carousel-eyebrow{
+  font-size:10px;font-weight:700;letter-spacing:1.6px;
+  text-transform:uppercase;color:rgba(37,99,235,.75);
+  margin-bottom:20px;
+  display:flex;align-items:center;gap:10px;
+}
+.carousel-eyebrow::before,.carousel-eyebrow::after{
+  content:'';flex:0 0 28px;height:1px;background:rgba(37,99,235,.3);
+}
+
+.carousel-wrap{
+  width:100%;max-width:600px;
+  position:relative;
+  margin-bottom:28px;
+}
+
+/* Slide visible */
+.carousel-slide{
+  text-align:center;
+  min-height:140px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;
+}
+.carousel-text{
+  font-size:clamp(26px,3.8vw,46px);
+  font-weight:800;color:#fff;
+  line-height:1.1;letter-spacing:-.8px;
+  animation:slideIn .55s cubic-bezier(.22,1,.36,1) both;
+}
+.carousel-text .hl{
+  background:linear-gradient(90deg,var(--blue-m),#7dd3fc,var(--blue-m));
+  background-size:200% 100%;
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  animation:shimmer 3s linear infinite;
+}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+@keyframes slideIn{
+  from{opacity:0;transform:translateX(60px) scale(.97)}
+  to{opacity:1;transform:translateX(0) scale(1)}
+}
+@keyframes slideOut{
+  from{opacity:1;transform:translateX(0) scale(1)}
+  to{opacity:0;transform:translateX(-60px) scale(.97)}
+}
+.carousel-sub{
+  font-size:14px;color:rgba(255,255,255,.38);
+  letter-spacing:.2px;line-height:1.5;
+  animation:fadeUp .55s ease .1s both;
+}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Dots */
+.carousel-dots{
+  display:flex;gap:7px;align-items:center;justify-content:center;
+  margin-bottom:32px;
+}
+.cdot{width:6px;height:6px;border-radius:99px;
+  background:rgba(255,255,255,.18);transition:all .35s cubic-bezier(.34,1.56,.64,1);}
+.cdot.active{width:22px;background:var(--blue);box-shadow:0 0 8px rgba(37,99,235,.7);}
+
+/* ════ AGENT ROW — SECUNDARIO ════ */
+.agent-row{
+  position:relative;z-index:3;
+  display:flex;align-items:center;gap:0;
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:20px;
+  overflow:hidden;
+  width:100%;max-width:600px;
+  margin:0 auto;
+  flex-shrink:0;
+}
+
+.agent-left{
+  display:flex;align-items:center;gap:14px;
+  padding:18px 20px;flex:1;
+}
+.agent-avatar{
+  width:52px;height:52px;flex-shrink:0;
+  border-radius:50%;
+  background:linear-gradient(135deg,#1a3a8f 0%,#2563eb 60%,#3b82f6 100%);
+  display:flex;align-items:center;justify-content:center;font-size:26px;
+  box-shadow:0 0 0 2px rgba(37,99,235,.35),0 4px 20px rgba(37,99,235,.3);
+  animation:float 5s ease-in-out infinite;
+  position:relative;
+}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+.agent-online{position:absolute;bottom:1px;right:1px;width:14px;height:14px;
+  border-radius:50%;background:var(--green);border:2px solid #0c1428;
+  box-shadow:0 0 8px rgba(16,185,129,.5);}
+.agent-info{}
+.agent-name{font-size:14px;font-weight:700;color:#fff;margin-bottom:3px;}
+.agent-desc{font-size:11px;color:rgba(255,255,255,.38);line-height:1.5;}
+.agent-caps{display:flex;gap:5px;margin-top:6px;flex-wrap:wrap;}
+.acap{font-size:10px;font-weight:600;
+  background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.2);
+  border-radius:99px;padding:3px 9px;color:rgba(255,255,255,.45);}
+
+.agent-divider{width:1px;background:rgba(255,255,255,.08);align-self:stretch;flex-shrink:0;}
+
+.agent-right{
+  display:flex;flex-direction:column;gap:8px;
+  padding:16px 18px;align-items:stretch;width:220px;flex-shrink:0;
+}
+.btn-chat{
+  display:flex;align-items:center;gap:8px;justify-content:center;
+  background:linear-gradient(135deg,var(--blue-d),var(--blue));
+  border:none;border-radius:11px;padding:11px 16px;
+  font-size:13px;font-family:'Sora',sans-serif;font-weight:700;color:#fff;
+  cursor:pointer;transition:all .22s;
+  box-shadow:0 4px 18px rgba(37,99,235,.4);
+}
+.btn-chat:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(37,99,235,.55);}
+.btn-chat:active{transform:none;}
+.btn-audio{
+  display:flex;align-items:center;gap:7px;justify-content:center;
+  background:rgba(124,58,237,.15);border:1px solid rgba(124,58,237,.28);
+  border-radius:11px;padding:8px 14px;
+  font-size:11px;font-family:'Sora',sans-serif;font-weight:600;
+  color:rgba(167,139,250,.9);cursor:pointer;transition:all .2s;
+}
+.btn-audio:hover{background:rgba(124,58,237,.28);color:#c4b5fd;}
+
+/* ── STATS BAR ── */
+.stats-bar{
+  position:relative;z-index:3;
+  display:flex;gap:0;flex-shrink:0;
+  border-top:1px solid rgba(255,255,255,.07);
+}
+.sitem{flex:1;padding:14px 10px;text-align:center;
+  border-right:1px solid rgba(255,255,255,.06);}
+.sitem:last-child{border-right:none;}
+.sv{font-size:20px;font-weight:800;color:#fff;
+  font-family:'JetBrains Mono',monospace;line-height:1;}
+.sl{font-size:9px;font-weight:600;color:rgba(255,255,255,.25);
+  letter-spacing:.8px;text-transform:uppercase;margin-top:3px;}
+
+/* ════ RIGHT PANEL ════ */
+/* Canales contacto */
+.canales-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin-top:4px;}
+.canal-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  padding:10px 6px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg2);
+  cursor:pointer;transition:all .2s;text-decoration:none;}
+.canal-btn:hover{border-color:var(--blue);background:rgba(37,99,235,.08);transform:translateY(-2px);}
+.canal-icon{font-size:20px;}
+.canal-label{font-size:10px;font-weight:700;color:var(--ink2);letter-spacing:.5px;text-align:center;}
+.canal-detail{font-size:9px;color:var(--ink3);text-align:center;}
+/* QR doble */
+.qr-duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;}
+.qr-card{display:flex;flex-direction:column;align-items:center;gap:4px;
+  background:var(--bg2);border:1.5px solid var(--border);border-radius:14px;padding:10px 8px;}
+.qr-card-label{font-size:9px;font-weight:700;letter-spacing:1px;color:var(--ink3);text-transform:uppercase;}
+.qr-card .qr-frame{margin:0;width:100%;}
+.qr-card-url{font-size:9px;font-family:'JetBrains Mono',monospace;color:var(--blue);text-align:center;}
+.right{
+  /* Ancho fluido: 38% en desktop, nunca menos de 300px ni más de 480px */
+  width:clamp(300px, 38vw, 480px);
+  flex-shrink:0;
+  background:var(--surface);
+  display:flex;flex-direction:column;align-items:center;justify-content:space-between;
+  overflow-y:auto;
+  padding:clamp(14px,2.5vw,28px) clamp(12px,2.2vw,28px) 20px;
+  box-shadow:-10px 0 48px rgba(8,13,26,.14);
+  gap:0;
+}
+.rp-eyebrow{font-size:9px;font-weight:700;letter-spacing:1.5px;
+  text-transform:uppercase;color:var(--ink3);margin-bottom:8px;}
+.rp-title{font-size:32px;font-weight:800;color:var(--ink);
+  letter-spacing:-.4px;margin-bottom:6px;text-align:center;}
+.rp-sub{font-size:13px;color:var(--ink3);text-align:center;
+  line-height:1.6;margin-bottom:20px;}
+.horario-badge{display:inline-flex;align-items:center;gap:6px;
+  background:var(--green-l);border:1px solid #6ee7b7;
+  border-radius:99px;padding:5px 14px;margin-bottom:20px;
+  font-size:11px;font-weight:600;color:#059669;}
+.h-dot{width:5px;height:5px;border-radius:50%;background:var(--green);animation:blink 2s infinite;}
+
+/* QR */
+.qr-frame{background:var(--bg);border:1.5px solid var(--border);
+  border-radius:18px;padding:16px;margin-bottom:14px;
+  position:relative;box-shadow:var(--shadow);transition:box-shadow .2s;}
+.qr-frame:hover{box-shadow:var(--shadow-xl);}
+.qr-frame::before,.qr-frame::after{content:'';position:absolute;width:14px;height:14px;
+  border-color:var(--blue);border-style:solid;}
+.qr-frame::before{top:6px;left:6px;border-width:2px 0 0 2px;border-radius:3px 0 0 0;}
+.qr-frame::after{bottom:6px;right:6px;border-width:0 2px 2px 0;border-radius:0 0 3px 0;}
+.qr-inner{position:relative;}
+.qr-inner::before,.qr-inner::after{content:'';position:absolute;width:14px;height:14px;
+  border-color:var(--blue);border-style:solid;z-index:2;}
+.qr-inner::before{top:-22px;right:-22px;border-width:2px 2px 0 0;border-radius:0 3px 0 0;}
+.qr-inner::after{bottom:-22px;left:-22px;border-width:0 0 2px 2px;border-radius:0 0 0 3px;}
+.scan-line{position:absolute;left:8px;right:8px;height:2px;
+  background:linear-gradient(90deg,transparent,var(--blue),transparent);
+  top:8px;opacity:.7;animation:scanMove 2.8s ease-in-out infinite;}
+@keyframes scanMove{0%,100%{top:8px}50%{top:calc(100% - 10px)}}
+.qr-url{font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--blue);
+  text-align:center;margin-bottom:16px;}
+
+.or-div{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:14px;}
+.or-line{flex:1;height:1px;background:var(--border);}
+.or-txt{font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px;}
+
+.btn-radicar{width:100%;background:var(--ink);color:#fff;border:none;
+  border-radius:12px;padding:14px;font-size:14px;
+  font-family:'Sora',sans-serif;font-weight:700;cursor:pointer;
+  transition:all .2s;display:flex;align-items:center;justify-content:center;
+  gap:8px;box-shadow:0 4px 20px rgba(8,13,26,.25);margin-bottom:10px;}
+.btn-radicar:hover{background:var(--ink2);transform:translateY(-1px);}
+.footer-note{font-size:11px;color:var(--ink3);text-align:center;line-height:1.6;}
+
+/* ════ CHAT MODAL ════ */
+.overlay{position:fixed;inset:0;z-index:999;
+  background:rgba(8,13,26,.8);backdrop-filter:blur(10px);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .3s;}
+.overlay.open{opacity:1;pointer-events:auto;}
+
+.chat-modal{
+  width:min(560px,96vw);height:min(720px,94vh);
+  background:#0b1426;border:1px solid rgba(37,99,235,.18);
+  border-radius:22px;
+  box-shadow:0 48px 120px rgba(0,0,0,.75);
+  display:flex;flex-direction:column;overflow:hidden;
+  transform:scale(.9) translateY(40px);
+  transition:transform .38s cubic-bezier(.34,1.4,.64,1);
+}
+.overlay.open .chat-modal{transform:scale(1) translateY(0);}
+
+/* Modal header */
+.mh{padding:16px 18px;border-bottom:1px solid rgba(255,255,255,.07);
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(37,99,235,.07);flex-shrink:0;}
+.mh-left{display:flex;align-items:center;gap:12px;}
+.mh-av{width:44px;height:44px;border-radius:50%;
+  background:linear-gradient(135deg,#1a3a8f,#2563eb);
+  display:flex;align-items:center;justify-content:center;font-size:22px;
+  box-shadow:0 0 0 2px rgba(37,99,235,.35);
+  animation:float 5s ease-in-out infinite;}
+.mh-name{font-size:14px;font-weight:700;color:#fff;}
+.mh-status{font-size:11px;color:var(--green);display:flex;align-items:center;gap:5px;margin-top:2px;}
+.mh-sdot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;}
+.mh-close{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+  border-radius:99px;padding:6px 14px;cursor:pointer;
+  font-size:12px;font-weight:600;color:rgba(255,255,255,.45);
+  font-family:'Sora',sans-serif;transition:all .15s;}
+.mh-close:hover{background:rgba(255,255,255,.14);color:#fff;}
+
+/* Mensajes */
+.msgs{flex:1;overflow-y:auto;padding:18px 16px;
+  display:flex;flex-direction:column;gap:11px;}
+.msgs::-webkit-scrollbar{width:3px}
+.msgs::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:99px}
+.msg{max-width:82%;font-size:13px;line-height:1.55;padding:10px 14px;border-radius:14px;word-wrap:break-word;}
+.msg-bot{background:rgba(37,99,235,.14);border:1px solid rgba(37,99,235,.2);
+  color:rgba(255,255,255,.85);align-self:flex-start;border-bottom-left-radius:4px;}
+.msg-user{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.07);
+  color:rgba(255,255,255,.8);align-self:flex-end;border-bottom-right-radius:4px;}
+.msg-audio{background:rgba(124,58,237,.14);border:1px solid rgba(124,58,237,.22);
+  color:rgba(255,255,255,.85);align-self:flex-start;border-bottom-left-radius:4px;
+  display:flex;flex-direction:column;gap:8px;}
+.audio-pl{display:flex;align-items:center;gap:8px;
+  background:rgba(255,255,255,.06);border-radius:9px;padding:7px 10px;}
+.apl-btn{width:28px;height:28px;border-radius:50%;
+  background:linear-gradient(135deg,#7c3aed,#9333ea);
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:transform .15s;}
+.apl-btn:hover{transform:scale(1.1);}
+.apl-wave{flex:1;display:flex;align-items:center;gap:2px;height:20px;}
+.wb{width:3px;border-radius:99px;background:rgba(167,139,250,.5);
+  animation:waveA .8s ease-in-out infinite;}
+.wb:nth-child(2n){animation-delay:.1s}.wb:nth-child(3n){animation-delay:.2s}
+.wb:nth-child(4n){animation-delay:.3s}.wb:nth-child(5n){animation-delay:.4s}
+@keyframes waveA{0%,100%{height:4px}50%{height:16px}}
+.apl-dur{font-size:10px;font-family:'JetBrains Mono',monospace;color:rgba(255,255,255,.35);}
+
+.typing{display:flex;gap:4px;align-items:center;padding:11px 14px;
+  background:rgba(37,99,235,.14);border:1px solid rgba(37,99,235,.2);
+  border-radius:14px;border-bottom-left-radius:4px;align-self:flex-start;}
+.td{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.4);
+  animation:tp 1.2s ease-in-out infinite;}
+.td:nth-child(2){animation-delay:.2s}.td:nth-child(3){animation-delay:.4s}
+@keyframes tp{0%,100%{transform:scale(1);opacity:.4}50%{transform:scale(1.5);opacity:1}}
+
+/* Modo voz */
+.voice-panel{flex:1;display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:18px;padding:24px;}
+.voice-panel.on{display:flex;}
+.vc{width:110px;height:110px;border-radius:50%;
+  background:linear-gradient(135deg,#7c3aed,#9333ea);
+  display:flex;align-items:center;justify-content:center;
+  font-size:44px;cursor:pointer;
+  animation:vpulse 2.5s ease-in-out infinite;
+  transition:all .2s;}
+.vc.rec{background:linear-gradient(135deg,#dc2626,#ef4444);
+  animation:vrec 1s ease-in-out infinite;}
+@keyframes vpulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.4),0 16px 48px rgba(124,58,237,.25)}
+  50%{box-shadow:0 0 0 18px rgba(124,58,237,.08),0 16px 48px rgba(124,58,237,.35)}}
+@keyframes vrec{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+.vtimer{font-size:26px;font-weight:800;color:#fff;
+  font-family:'JetBrains Mono',monospace;display:none;}
+.vtimer.on{display:block;}
+.vwave{display:none;align-items:center;gap:3px;height:40px;}
+.vwave.on{display:flex;}
+.vb{width:4px;border-radius:99px;background:rgba(220,38,38,.65);
+  animation:waveA .4s ease-in-out infinite;}
+.vlabel{font-size:14px;font-weight:600;color:#fff;text-align:center;}
+.vsub{font-size:12px;color:rgba(255,255,255,.32);text-align:center;max-width:260px;}
+.btn-vback{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);
+  border-radius:99px;padding:8px 20px;font-size:12px;font-weight:600;
+  color:rgba(255,255,255,.45);cursor:pointer;font-family:'Sora',sans-serif;transition:all .15s;}
+.btn-vback:hover{background:rgba(255,255,255,.14);color:#fff;}
+
+/* Quick */
+.quick{padding:0 16px 8px;display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0;}
+.qb{background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.2);
+  border-radius:99px;padding:6px 13px;font-size:11px;font-weight:600;
+  color:rgba(255,255,255,.5);cursor:pointer;font-family:'Sora',sans-serif;
+  transition:all .15s;white-space:nowrap;}
+.qb:hover{background:rgba(37,99,235,.25);color:#fff;}
+
+/* Hint audio */
+.audio-hint{margin:0 16px 8px;
+  background:rgba(124,58,237,.09);border:1px solid rgba(124,58,237,.18);
+  border-radius:11px;padding:9px 13px;font-size:12px;
+  color:rgba(255,255,255,.4);display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.audio-hint button{background:rgba(124,58,237,.28);border:1px solid rgba(124,58,237,.35);
+  border-radius:99px;padding:4px 12px;font-size:11px;font-weight:700;
+  color:#c4b5fd;cursor:pointer;font-family:'Sora',sans-serif;flex-shrink:0;transition:all .15s;}
+.audio-hint button:hover{background:rgba(124,58,237,.5);color:#fff;}
+
+/* Escalate */
+.esc-bar{margin:0 16px 8px;padding:12px 14px;
+  background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.2);
+  border-radius:11px;font-size:12px;color:rgba(255,255,255,.5);
+  line-height:1.6;display:none;flex-shrink:0;}
+.esc-bar.on{display:block;}
+.esc-btn{display:inline-flex;align-items:center;gap:6px;margin-top:8px;
+  background:linear-gradient(135deg,var(--blue-d),var(--blue));
+  border:none;border-radius:10px;padding:8px 16px;
+  font-size:12px;font-weight:700;color:#fff;cursor:pointer;
+  font-family:'Sora',sans-serif;transition:all .2s;}
+.esc-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,.4);}
+
+/* Input row */
+.input-row{display:flex;gap:8px;padding:12px 14px;
+  border-top:1px solid rgba(255,255,255,.06);flex-shrink:0;}
+.chat-inp{flex:1;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.09);
+  border-radius:11px;padding:10px 13px;font-size:13px;
+  font-family:'Sora',sans-serif;color:#fff;outline:none;transition:border-color .15s;}
+.chat-inp:focus{border-color:rgba(37,99,235,.45);}
+.chat-inp::placeholder{color:rgba(255,255,255,.22);}
+.send-btn{width:40px;height:40px;border-radius:11px;
+  background:linear-gradient(135deg,var(--blue-d),var(--blue));
+  border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:all .15s;box-shadow:0 4px 14px rgba(37,99,235,.35);}
+.send-btn:hover{transform:scale(1.06);}
+
+/* ════ RESPONSIVE FLUID ════
+   Estrategia: clamp() para todo, breakpoints solo para cambios de layout
+   ════════════════════════════════════════════════════════════════════ */
+
+/* ── Tablet (< 900px): sigue siendo 2 columnas pero más compacto ── */
+@media (max-width:900px){
+  .right{
+    width:clamp(280px,42vw,380px);
+    padding:16px 14px;
+  }
+  .rp-title{font-size:clamp(20px,4vw,28px);}
+  .qr-frame{padding:10px !important;}
+  #qr-encuesta,#qr-radicar{
+    min-width:clamp(90px,15vw,130px) !important;
+    min-height:clamp(90px,15vw,130px) !important;
+  }
+  .agent-right{width:180px;}
+  .carousel-text{font-size:clamp(20px,3.2vw,36px);}
+}
+
+/* ── Móvil / pantalla angosta (< 650px): una sola columna ── */
+@media (max-width:650px){
+  html,body{overflow-x:hidden;overflow-y:auto;height:auto;}
+  .layout{
+    flex-direction:column;
+    min-height:100svh;
+    min-height:100vh;
+  }
+  /* Panel QR primero (arriba) */
+  .right{
+    order:1;
+    width:100% !important;
+    max-width:100%;
+    flex-shrink:0;
+    height:auto;
+    overflow-y:visible;
+    padding:20px 16px 16px;
+    box-shadow:none;
+    border-bottom:1px solid rgba(255,255,255,.07);
+    justify-content:flex-start;
+    gap:14px;
+  }
+  /* Panel izquierdo (carrusel + chat) abajo */
+  .left{
+    order:2;
+    flex:none;
+    width:100%;
+    min-height:50vh;
+    overflow:visible;
+  }
+  /* QRs a tamaño cómodo para pantallas pequeñas */
+  .qr-frame{padding:12px !important;margin:0 !important;}
+  #qr-encuesta,#qr-radicar{
+    min-width:clamp(100px,28vw,150px) !important;
+    min-height:clamp(100px,28vw,150px) !important;
+  }
+  .rp-title{font-size:clamp(22px,7vw,32px);}
+  .rp-sub{font-size:12px;}
+  /* Carrusel compacto */
+  .carousel-section{padding:14px 16px 10px;}
+  .carousel-text{font-size:clamp(18px,6vw,28px);}
+  /* Agent row vertical */
+  .agent-row{flex-direction:column;}
+  .agent-right{
+    width:100%;
+    border-top:1px solid rgba(255,255,255,.08);
+    border-left:none;
+    padding:10px 16px 14px;
+  }
+  .agent-divider{display:none;}
+  /* Stats bar */
+  .stats-bar{flex-wrap:wrap;padding:10px 12px !important;}
+}
+
+/* ── Móvil muy pequeño (< 380px) ── */
+@media (max-width:380px){
+  .right{padding:14px 10px;}
+  #qr-encuesta,#qr-radicar{
+    min-width:clamp(80px,26vw,120px) !important;
+    min-height:clamp(80px,26vw,120px) !important;
+  }
+  .rp-title{font-size:20px;}
+  .horario-badge{font-size:9px;padding:4px 10px;}
+}
+</style>
+<script src="assets/js/config.js" onerror="console.warn('config.js not found')"></script>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ════ LEFT ════ -->
+  <div class="left">
+    <div class="left-noise"></div>
+    <div class="left-grid"></div>
+    <div class="glow1"></div>
+    <div class="glow2"></div>
+    <div id="particles"></div>
+
+    <!-- TOP BAR -->
+    <div class="l-top">
+      <div class="brand-pill">
+        <div class="brand-dot"></div>
+        <span class="brand-name">Tododrogas · PQR</span>
+      </div>
+      <div class="live-pill">
+        <div class="live-dot"></div>
+        <span class="live-txt">En línea</span>
+      </div>
+    </div>
+
+    <!-- ════ CARRUSEL ════ -->
+    <div class="carousel-section">
+      <div class="carousel-eyebrow">Tu opinión nos importa</div>
+
+      <div class="carousel-wrap">
+        <div class="carousel-slide" id="carouselSlide">
+          <div class="carousel-text" id="carouselText">Cargando…</div>
+          <div class="carousel-sub" id="carouselSub">Sistema PQR · Tododrogas</div>
+        </div>
+      </div>
+
+      <div class="carousel-dots" id="carouselDots"></div>
+
+      <!-- AGENT ROW -->
+      <div class="agent-row">
+        <div class="agent-left">
+          <div class="agent-avatar">
+            🤖
+            <div class="agent-online"></div>
+          </div>
+          <div class="agent-info">
+            <div class="agent-name">Nova · Asistente IA</div>
+            <div class="agent-desc">Resuelvo tus dudas antes de radicar.<br>Disponible 24/7, respondo al instante.</div>
+            <div class="agent-caps">
+              <span class="acap">Preguntas frecuentes</span>
+              <span class="acap">Seguimiento</span>
+              <span class="acap">🔊 Audio</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="agent-divider"></div>
+
+        <div class="agent-right">
+          <button class="btn-chat" onclick="openChat()">
+            💬 Hablar con Nova
+          </button>
+          <button class="btn-audio" onclick="openChatVoice()">
+            🎤 No sé escribir, prefiero audio
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CANALES BAR -->
+    <div class="stats-bar" style="flex-wrap:wrap;padding:16px 20px;gap:8px;justify-content:center;align-items:stretch;background:linear-gradient(180deg,#060b18 0%,#080d1a 100%);">
+
+      <a href="https://wa.me/573043412431" target="_blank" style="text-decoration:none;flex:1;min-width:100px;max-width:140px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:14px;border:1px solid rgba(37,99,235,.35);background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03));transition:all .25s;" onmouseover="this.style.borderColor='rgba(37,99,235,.7)';this.style.background='linear-gradient(135deg,rgba(37,99,235,.2),rgba(37,99,235,.08))';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='rgba(37,99,235,.35)';this.style.background='linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03))';this.style.transform='translateY(0)'">
+        <span style="font-size:22px;line-height:1;">💬</span>
+        <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:.8px;text-transform:uppercase;">WhatsApp</span>
+        <span style="font-size:9px;color:rgba(99,179,237,.9);font-family:'JetBrains Mono',monospace;font-weight:600;">304 341 2431</span>
+      </a>
+
+      <a href="/cdn-cgi/l/email-protection#aadadbd8d9ccceeadec5cec5ced8c5cdcbd984c9c5c784c9c5" style="text-decoration:none;flex:1;min-width:100px;max-width:140px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:14px;border:1px solid rgba(37,99,235,.35);background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03));transition:all .25s;" onmouseover="this.style.borderColor='rgba(37,99,235,.7)';this.style.background='linear-gradient(135deg,rgba(37,99,235,.2),rgba(37,99,235,.08))';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='rgba(37,99,235,.35)';this.style.background='linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03))';this.style.transform='translateY(0)'">
+        <span style="font-size:22px;line-height:1;">✉️</span>
+        <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:.8px;text-transform:uppercase;">Correo</span>
+        <span style="font-size:9px;color:rgba(99,179,237,.9);font-family:'JetBrains Mono',monospace;font-weight:600;">pqrsfd@tododrogas</span>
+      </a>
+
+      <a href="tel:6043222432" style="text-decoration:none;flex:1;min-width:100px;max-width:140px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:14px;border:1px solid rgba(37,99,235,.35);background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03));transition:all .25s;" onmouseover="this.style.borderColor='rgba(37,99,235,.7)';this.style.background='linear-gradient(135deg,rgba(37,99,235,.2),rgba(37,99,235,.08))';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='rgba(37,99,235,.35)';this.style.background='linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03))';this.style.transform='translateY(0)'">
+        <span style="font-size:22px;line-height:1;">📞</span>
+        <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:.8px;text-transform:uppercase;">PBX · Op. 2</span>
+        <span style="font-size:9px;color:rgba(99,179,237,.9);font-family:'JetBrains Mono',monospace;font-weight:600;">604 322 2432</span>
+      </a>
+
+      <a href="https://tododrogas.com.co" target="_blank" style="text-decoration:none;flex:1;min-width:100px;max-width:140px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:14px;border:1px solid rgba(37,99,235,.35);background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03));transition:all .25s;" onmouseover="this.style.borderColor='rgba(37,99,235,.7)';this.style.background='linear-gradient(135deg,rgba(37,99,235,.2),rgba(37,99,235,.08))';this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='rgba(37,99,235,.35)';this.style.background='linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03))';this.style.transform='translateY(0)'">
+        <span style="font-size:22px;line-height:1;">🌐</span>
+        <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:.8px;text-transform:uppercase;">Página Web</span>
+        <span style="font-size:9px;color:rgba(99,179,237,.9);font-family:'JetBrains Mono',monospace;font-weight:600;">tododrogas.com.co</span>
+      </a>
+
+      <div style="flex:1;min-width:100px;max-width:140px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:14px;border:1px solid rgba(37,99,235,.35);background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03));">
+        <span style="font-size:22px;line-height:1;">🗣️</span>
+        <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:.8px;text-transform:uppercase;">Verbal</span>
+        <span style="font-size:9px;color:rgba(99,179,237,.9);font-family:'JetBrains Mono',monospace;font-weight:600;">Presencial</span>
+      </div>
+
+      <div style="flex:1;min-width:100px;max-width:140px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:14px;border:1px solid rgba(37,99,235,.35);background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03));">
+        <span style="font-size:22px;line-height:1;">📥</span>
+        <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:.8px;text-transform:uppercase;">Buzón Físico</span>
+        <span style="font-size:9px;color:rgba(99,179,237,.9);font-family:'JetBrains Mono',monospace;font-weight:600;">Presencial</span>
+      </div>
+
+      <div style="flex:1;min-width:100px;max-width:140px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border-radius:14px;border:1px solid rgba(37,99,235,.35);background:linear-gradient(135deg,rgba(37,99,235,.1),rgba(37,99,235,.03));">
+        <span style="font-size:22px;line-height:1;">📲</span>
+        <span style="font-size:10px;font-weight:800;color:#fff;letter-spacing:.8px;text-transform:uppercase;">Código QR</span>
+        <span style="font-size:9px;color:rgba(99,179,237,.9);font-family:'JetBrains Mono',monospace;font-weight:600;">Digital</span>
+      </div>
+
+      <div style="width:100%;border-top:1px solid rgba(255,255,255,.06);padding-top:10px;text-align:center;">
+        <span style="font-size:9px;font-weight:800;color:rgba(255,255,255,.45);letter-spacing:2px;text-transform:uppercase;font-family:'JetBrains Mono',monospace;">◈ 11 CANALES DE ATENCIÓN AL CIUDADANO ◈</span>
+      </div>
+
+    </div>
+  </div>
+  <!-- ════ RIGHT ════ -->
+  <div class="right">
+
+    <!-- CABECERA -->
+    <div style="text-align:center;width:100%;">
+      <div class="rp-eyebrow">Sistema de atención al cliente</div>
+      <div class="rp-title">¡Bienvenido!</div>
+      <div class="horario-badge" style="margin:10px auto 0;background:linear-gradient(135deg,rgba(37,99,235,.15),rgba(37,99,235,.05));border-color:rgba(37,99,235,.5);box-shadow:0 4px 18px rgba(29,78,216,.35);">
+        <div class="h-dot" style="background:#3b82f6;box-shadow:0 0 6px #3b82f6;"></div>
+        <span style="color:#4d7fc4;font-weight:600;">Lun-Vier 7 a.m-5:30 p.m. · Nova 24/7</span>
+      </div>
+    </div>
+
+    <!-- ZONA ENCUESTA -->
+    <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;">
+      <!-- ETIQUETA ENCUESTA -->
+      <div id="btn-encuesta-wrap" onclick="openEncuesta()" style="width:100%;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:12px;background:linear-gradient(135deg,rgba(37,99,235,.15),rgba(37,99,235,.05));border:1px solid rgba(37,99,235,.4);cursor:pointer;transition:border-color .2s,opacity .2s;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="font-size:18px;">⭐</span>
+          <div style="font-size:14px;font-weight:900;color:#fff;background:#2563eb;padding:2px 10px;border-radius:6px;letter-spacing:.3px;">Encuesta de satisfacción</div>
+        </div>
+        <div style="font-size:11px;color:rgba(96,165,250,.9);text-align:center;">Escanea el QR con tu celular o toca el botón</div>
+      </div>
+      <div class="qr-frame" style="padding:14px;margin:0;"><div class="scan-line"></div><div class="qr-inner"><div id="qr-encuesta" style="line-height:1;min-width:130px;min-height:130px;display:flex;align-items:center;justify-content:center;"></div></div></div>
+      <div class="qr-url" id="qr-encuesta-url">Encuesta de satisfacción · Escanea con tu cámara</div>
+    </div>
+
+    <!-- DIVISOR -->
+    <div class="or-div" style="width:100%;margin:0;">
+      <div class="or-line"></div>
+      <span class="or-txt" style="white-space:nowrap;font-size:9px;">O DESDE ESTE QR · REALIZA LA RADICACIÓN</span>
+      <div class="or-line"></div>
+    </div>
+
+    <!-- ZONA RADICAR -->
+    <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:6px;">
+      <!-- ETIQUETA RADICAR -->
+      <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 14px;border-radius:12px;background:linear-gradient(135deg,rgba(37,99,235,.15),rgba(37,99,235,.05));border:1px solid rgba(37,99,235,.4);">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="font-size:18px;">📋</span>
+          <div style="font-size:14px;font-weight:900;color:#fff;background:#2563eb;padding:2px 10px;border-radius:6px;letter-spacing:.3px;">Radicar tu solicitud PQRSF</div>
+        </div>
+        <div style="font-size:11px;color:rgba(96,165,250,.9);text-align:center;">Escanea el QR con tu celular o toca el botón</div>
+      </div>
+      <div class="qr-frame" style="padding:14px;margin:0;"><div class="scan-line"></div><div class="qr-inner"><div id="qr-radicar" style="line-height:1;min-width:130px;min-height:130px;display:flex;align-items:center;justify-content:center;"></div></div></div>
+      <div class="qr-url" id="qr-radicar-url">tododrogas.com/pqr · Escanea con tu cámara</div>
+      <button class="btn-radicar" id="btn-radicar-main" style="margin-top:4px;">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        Radicar mi solicitud aquí
+      </button>
+    </div>
+
+    <!-- FOOTER -->
+    <p class="footer-note" style="margin:0;text-align:center;">
+      Tododrogas CIA S.A.S · Sistema PQR © 2026<br>
+      <strong>Confidencial · Tu información está protegida</strong>
+    </p>
+
+  </div>
+</div>
+
+<!-- ════ CHAT MODAL ════ -->
+<div class="overlay" id="overlay" onclick="onOvClick(event)">
+  <div class="chat-modal" id="chatModal">
+
+    <div class="mh">
+      <div class="mh-left">
+        <div class="mh-av">🤖</div>
+        <div>
+          <div class="mh-name">Nova · Asistente PQR</div>
+          <div class="mh-status"><div class="mh-sdot"></div> En línea · Responde al instante</div>
+        </div>
+      </div>
+      <button class="mh-close" onclick="closeChat()">✕ Cerrar</button>
+    </div>
+
+    <!-- Mensajes texto -->
+    <div class="msgs" id="msgs"></div>
+
+    <!-- Modo voz -->
+    <div class="voice-panel" id="voicePanel">
+      <div class="vc" id="vc" onclick="toggleRec()">🎤</div>
+      <div class="vtimer" id="vtimer">0:00</div>
+      <div class="vwave" id="vwave">
+        <div class="vb" style="height:8px"></div><div class="vb" style="height:18px"></div>
+        <div class="vb" style="height:26px"></div><div class="vb" style="height:12px"></div>
+        <div class="vb" style="height:22px"></div><div class="vb" style="height:8px"></div>
+        <div class="vb" style="height:28px"></div><div class="vb" style="height:16px"></div>
+        <div class="vb" style="height:10px"></div><div class="vb" style="height:22px"></div>
+        <div class="vb" style="height:18px"></div>
+      </div>
+      <div class="vlabel" id="vlabel">Toca el micrófono para hablar</div>
+      <p class="vsub">Nova te escucha y responde también con audio.<br>Máximo 2 minutos.</p>
+      <button class="btn-vback" onclick="switchToText()">← Prefiero escribir</button>
+    </div>
+
+    <div class="quick" id="quick">
+      <div class="qb" onclick="sendQ('¿Qué es una PQR?')">¿Qué es una PQR?</div>
+      <div class="qb" onclick="sendQ('¿Cuánto demora la respuesta?')">Tiempo de respuesta</div>
+      <div class="qb" onclick="sendQ('¿Cómo hago seguimiento?')">Seguimiento</div>
+      <div class="qb" onclick="sendQ('¿Qué datos necesito dar?')">¿Qué datos piden?</div>
+    </div>
+
+    <div class="audio-hint" id="audioHint">
+      <span>🎤</span>
+      <span>¿Prefieres hablar? Nova responde también por voz.</span>
+      <button onclick="switchToVoice()">Usar voz</button>
+    </div>
+
+    <div class="esc-bar" id="escBar">
+      ⚠️ Nova no logró resolver tu consulta del todo. ¿Deseas que un asesor te contacte formalmente?
+      <br><button class="esc-btn" id="btn-radicar-chat">📋 Radicar mi solicitud</button>
+    </div>
+
+    <div class="input-row" id="inputRow">
+      <input class="chat-inp" id="chatInp" placeholder="Escribe tu duda…"
+        onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="send-btn" onclick="sendChat()">
+        <svg width="16" height="16" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24">
+          <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+// ══════════════════════════════
+// CARRUSEL — carga desde config o defaults
+// ══════════════════════════════
+let FRASES = [
+  { text:'Tu voz importa', hl:true },
+  { text:'¿Tienes una queja o sugerencia? Estamos para escucharte', hl:false },
+  { text:'Confidencial · Tu información está protegida', hl:false },
+  { text:'Respuesta garantizada en máximo 15 días hábiles', hl:false },
+  { text:'Elige el canal que más te convenga: correo, chat, audio o escritura', hl:false },
+];
+
+// Carga config desde localStorage (guardada por el panel en el mismo dominio)
+let CFG = {};
+let FORM_URL = 'pqr_form.html'; // default
+let _lastQrUrl = null; // para detectar cambios
+
+function applyConfig(cfg){
+  if(!cfg) return;
+  CFG = cfg;
+  if(cfg.frases && cfg.frases.length)
+    FRASES = cfg.frases.map((f,i) => ({text: f.text, hl: i===0}));
+  if(cfg.qrUrl) FORM_URL = cfg.qrUrl;
+}
+
+// Carga inicial desde localStorage
+try {
+  const saved = localStorage.getItem('pqr_config');
+  if(saved) applyConfig(JSON.parse(saved));
+} catch(e){}
+
+// Credenciales Supabase hardcodeadas — permite que tablet/celular lean config sin localStorage del PC
+const SB_URL  = window.SUPABASE_URL  || 'https://lyosqaqhihwgvjigvqtc.supabase.co';
+const SB_ANON = window.SUPABASE_KEY || 'ANON_KEY_NO_DEFINIDA';
+
+// Polling a Supabase: revisa la config cada 30 s y actualiza QRs
+async function pollSupabaseConfig(){
+  try {
+    // Usar credenciales hardcodeadas; fallback a localStorage si existen
+    let sbUrl  = SB_URL;
+    let sbAnon = SB_ANON;
+    try {
+      const sbRaw = localStorage.getItem('td_sb_cfg');
+      if(sbRaw){ const sb=JSON.parse(sbRaw); if(sb.url) sbUrl=sb.url; if(sb.anon) sbAnon=sb.anon; }
+    } catch(e){}
+    const r = await fetch(`${sbUrl}/rest/v1/config_sistema?id=eq.main&select=data`, {
+      headers:{ apikey: sbAnon, Authorization: 'Bearer ' + sbAnon }
+    });
+    if(!r.ok) return;
+    const rows = await r.json();
+    if(!rows || !rows.length || !rows[0].data) return;
+    const remoteCfg = rows[0].data;
+    const newQrUrl  = remoteCfg.qrUrl || '';
+    const newEncUrl = remoteCfg.canales && remoteCfg.canales.encuesta ? remoteCfg.canales.encuesta : '';
+    const oldEncUrl = CFG.canales && CFG.canales.encuesta ? CFG.canales.encuesta : '';
+    const qrChanged  = newQrUrl  && newQrUrl  !== _lastQrUrl;
+    const encChanged = newEncUrl !== oldEncUrl;
+    const firstLoad  = !CFG.updatedAt; // primera vez que llega data de Supabase
+    if(firstLoad || qrChanged || encChanged){
+      CFG = remoteCfg;
+      if(newQrUrl){ _lastQrUrl = newQrUrl; FORM_URL = newQrUrl; }
+      applyQRs(); // regenera AMBOS QRs
+    }
+    localStorage.setItem('pqr_config', JSON.stringify(remoteCfg));
+  } catch(e){}
+}
+
+// Genera QR midiendo el contenedor real para adaptarse a cualquier pantalla
+function makeQR(elId, url, fallbackSize){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  el.innerHTML = '';
+  if(!url){
+    el.innerHTML='<span style="color:#6b748a;font-size:10px;text-align:center;display:block;padding:20px 4px;">Sin URL<br>configurada</span>';
+    return;
+  }
+  // Medir el contenedor padre para saber cuánto espacio hay disponible
+  const parent = el.closest('.qr-frame') || el.parentElement;
+  const available = parent ? Math.floor(parent.getBoundingClientRect().width) - 32 : 0;
+  // Usar el tamaño disponible, mínimo 90px, máximo 200px
+  const s = Math.max(90, Math.min(200, available > 60 ? available : (fallbackSize || 130)));
+  el.style.minWidth = s+'px';
+  el.style.minHeight = s+'px';
+  el.innerHTML='<img src="https://api.qrserver.com/v1/create-qr-code/?size='+s+'x'+s+'&data='+encodeURIComponent(url)+'&bgcolor=0a0e1a&color=ffffff&qzone=1" width="'+s+'" height="'+s+'" style="display:block;border-radius:4px;width:100%;height:auto;">';
+}
+
+// Regenera QRs al cambiar tamaño de ventana (orientación, resize)
+let _qrResizeTimer = null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(_qrResizeTimer);
+  _qrResizeTimer = setTimeout(applyQRs, 250);
+});
+
+// URL global de encuesta (accesible por openEncuesta)
+const ENC_DEFAULT = (window.location.origin || 'https://tododrogas.online') + '/pqr_encuesta.html';
+let ENC_URL = ENC_DEFAULT; // hardcodeado — Supabase puede sobreescribir
+
+// Aplica QRs una vez el DOM esté listo
+function applyQRs(){
+  // QR Radicar
+  makeQR('qr-radicar', FORM_URL, 130);
+  const radLbl = document.getElementById('qr-radicar-url');
+  if(radLbl){
+    try{ radLbl.textContent = new URL(FORM_URL).hostname + new URL(FORM_URL).pathname; }
+    catch(e){ radLbl.textContent = FORM_URL; }
+  }
+  // QR Encuesta
+  ENC_URL = (CFG.canales && CFG.canales.encuesta) ? CFG.canales.encuesta : ENC_DEFAULT;
+  makeQR('qr-encuesta', ENC_URL, 130);
+  const encLbl = document.getElementById('qr-encuesta-url');
+  if(encLbl) encLbl.textContent = ENC_URL ? 'Encuesta · Escanea con tu cámara' : 'Encuesta · configura la URL en el panel';
+  // Estilo del botón encuesta según tenga URL o no
+  const btnWrap = document.getElementById('btn-encuesta-wrap');
+  if(btnWrap){
+    if(ENC_URL){
+      btnWrap.style.opacity = '1';
+      btnWrap.style.borderColor = 'rgba(37,99,235,.7)';
+      btnWrap.title = 'Abrir encuesta de satisfacción';
+    } else {
+      btnWrap.style.opacity = '0.65';
+      btnWrap.style.cursor = 'default';
+      btnWrap.title = 'URL no configurada — panel de administración';
+    }
+  }
+}
+
+// Abre la encuesta en nueva pestaña (toque del botón en móvil)
+function openEncuesta(){
+  if(ENC_URL){
+    window.open(ENC_URL, '_blank');
+  } else {
+    const lbl = document.getElementById('qr-encuesta-url');
+    if(lbl){
+      lbl.style.color = '#f87171';
+      lbl.textContent = '⚠ Configura la URL en el panel de administración';
+      setTimeout(()=>{ lbl.style.color=''; lbl.textContent='Encuesta · configura la URL en el panel'; }, 3000);
+    }
+  }
+}
+
+let cIdx = 0;
+let cTimer = null;
+
+function renderCarousel(){
+  const textEl = document.getElementById('carouselText');
+  const dotsEl = document.getElementById('carouselDots');
+  const f = FRASES[cIdx];
+
+  // Animate out
+  textEl.style.animation='none';
+  textEl.offsetHeight;
+
+  // Set content
+  if(f.hl){
+    const words = f.text.split(' ');
+    const mid = Math.ceil(words.length/2);
+    const first = words.slice(0,mid).join(' ');
+    const second = words.slice(mid).join(' ');
+    textEl.innerHTML = second
+      ? `${esc(first)} <span class="hl">${esc(second)}</span>`
+      : `<span class="hl">${esc(f.text)}</span>`;
+  } else {
+    textEl.textContent = f.text;
+  }
+
+  textEl.style.animation='slideIn .55s cubic-bezier(.22,1,.36,1) both';
+
+  // Dots
+  dotsEl.innerHTML = FRASES.map((_,i)=>`<div class="cdot ${i===cIdx?'active':''}"></div>`).join('');
+}
+
+function nextSlide(){
+  cIdx = (cIdx+1) % FRASES.length;
+  renderCarousel();
+}
+
+function startCarousel(){
+  renderCarousel();
+  cTimer = setInterval(nextSlide, 3500);
+}
+
+// Partículas
+(function(){
+  const c=document.getElementById('particles');
+  for(let i=0;i<12;i++){
+    const p=document.createElement('div');
+    const size=Math.random()*3+2;
+    p.style.cssText=`position:absolute;border-radius:50%;pointer-events:none;animation:floatP linear infinite;opacity:0;width:${size}px;height:${size}px;left:${Math.random()*100}%;top:${40+Math.random()*60}%;background:rgba(37,99,235,${Math.random()*.35+.1});animation-duration:${Math.random()*10+7}s;animation-delay:${Math.random()*8}s;`;
+    c.appendChild(p);
+  }
+  const style=document.createElement('style');
+  style.textContent='@keyframes floatP{0%{transform:translateY(0) scale(1);opacity:0}10%{opacity:.4}90%{opacity:.1}100%{transform:translateY(-110px) scale(.5);opacity:0}}';
+  document.head.appendChild(style);
+})();
+
+function goToForm(){
+  document.body.style.transition='opacity .35s ease';
+  document.body.style.opacity='0';
+  setTimeout(()=>{ window.location.href='pqr_form.html'; },350);
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ══════════════════════════════
+// CHAT
+// ══════════════════════════════
+const SYS = `Eres Nova, asistente virtual de PQR de Tododrogas. Amable, clara y empática.
+Responde siempre en español, máximo 3 oraciones. Eres experta en:
+- PQR: peticiones, quejas, reclamos, sugerencias
+- Tiempo de respuesta: máximo 15 días hábiles
+- Canales: WhatsApp, correo electrónico (con confirmación automática), llamada telefónica, buzón virtual (escritura a mano en tablet), mensaje verbal (audio 2 min)
+- Al radicar: número de radicado + confirmación automática
+- Seguimiento: por número de radicado en tododrogas.com/pqr
+- Datos requeridos: nombre, documento, teléfono, correo, descripción del caso
+- Confidencialidad total
+- Horario asesores: Lun-Vier 7 a.m-5:30 p.m. Nova disponible 24/7.
+Si no puedes resolver escribe exactamente "ESCALAR" al inicio de tu respuesta.
+Si el usuario quiere radicar, indícale que toque el botón "Radicar mi solicitud".`;
+
+let msgs = [];
+let noAns = 0;
+let voiceMode = false;
+let isRec = false;
+let recTimer = null;
+let recSecs = 0;
+let mediaRec = null;
+
+function openChat(){
+  voiceMode=false;
+  document.getElementById('overlay').classList.add('open');
+  showTextUI();
+  if(msgs.length===0) setTimeout(()=>addBot('¡Hola! 👋 Soy Nova. Puedo ayudarte con dudas sobre cómo radicar tu PQR, tiempos y canales disponibles. ¿En qué te ayudo?'),400);
+  setTimeout(()=>document.getElementById('chatInp').focus(),500);
+}
+
+function openChatVoice(){
+  document.getElementById('overlay').classList.add('open');
+  setTimeout(()=>switchToVoice(),200);
+  if(msgs.length===0) setTimeout(()=>addBot('¡Hola! 🎤 Soy Nova. Toca el micrófono y cuéntame tu duda — te responderé también con audio.'),600);
+}
+
+function closeChat(){document.getElementById('overlay').classList.remove('open');}
+function onOvClick(e){if(e.target===document.getElementById('overlay'))closeChat();}
+
+function showTextUI(){
+  document.getElementById('msgs').style.display='flex';
+  document.getElementById('voicePanel').classList.remove('on');
+  document.getElementById('inputRow').style.display='flex';
+  document.getElementById('quick').style.display='flex';
+  document.getElementById('audioHint').style.display='flex';
+  voiceMode=false;
+}
+function switchToVoice(){
+  document.getElementById('msgs').style.display='flex';
+  document.getElementById('voicePanel').classList.add('on');
+  document.getElementById('inputRow').style.display='none';
+  document.getElementById('quick').style.display='none';
+  document.getElementById('audioHint').style.display='none';
+  voiceMode=true;
+}
+function switchToText(){
+  if(isRec) stopRec();
+  showTextUI();
+}
+
+function addBot(text, withAudio=false){
+  const container=document.getElementById('msgs');
+  const div=document.createElement('div');
+  const isEsc = text.startsWith('ESCALAR');
+  if(isEsc){
+    text=text.replace('ESCALAR','').trim();
+    noAns++;
+    if(noAns>=1) document.getElementById('escBar').classList.add('on');
+  }
+  msgs.push({role:'assistant',content:text});
+  if(withAudio){
+    div.className='msg msg-audio';
+    div.innerHTML=`<span>${esc(text)}</span>
+      <div class="audio-pl">
+        <button class="apl-btn" onclick="speak(decodeURIComponent(this.dataset.t))" data-t="${encodeURIComponent(text)}">
+          <svg width="12" height="12" fill="#fff" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <div class="apl-wave">${Array.from({length:10},(_,i)=>`<div class="wb" style="height:${4+Math.random()*12}px;animation-delay:${i*.08}s"></div>`).join('')}</div>
+        <span class="apl-dur">🔊 Escuchar</span>
+      </div>`;
+  } else {
+    div.className='msg msg-bot';
+    div.textContent=text;
+  }
+  container.appendChild(div);
+  container.scrollTop=container.scrollHeight;
+}
+
+function addUser(text){
+  msgs.push({role:'user',content:text});
+  const container=document.getElementById('msgs');
+  const div=document.createElement('div');
+  div.className='msg msg-user';div.textContent=text;
+  container.appendChild(div);container.scrollTop=container.scrollHeight;
+}
+
+function showTyping(){
+  const c=document.getElementById('msgs');
+  const t=document.createElement('div');
+  t.className='typing';t.id='typing';
+  t.innerHTML='<div class="td"></div><div class="td"></div><div class="td"></div>';
+  c.appendChild(t);c.scrollTop=c.scrollHeight;
+}
+function hideTyping(){const t=document.getElementById('typing');if(t)t.remove();}
+
+async function sendQ(text){
+  document.getElementById('quick').style.display='none';
+  await callClaude(text,false);
+}
+
+async function sendChat(){
+  const inp=document.getElementById('chatInp');
+  const text=inp.value.trim();
+  if(!text) return;
+  inp.value='';
+  document.getElementById('quick').style.display='none';
+  await callClaude(text,false);
+}
+
+async function callClaude(userText, withAudio=false){
+  addUser(userText);showTyping();
+  const history = msgs.filter(m=>m.role==='user'||m.role==='assistant').slice(-10);
+  // Convertir historial al formato OpenAI (igual que Anthropic)
+  const openaiMsgs = [{role:'system',content:SYS}, ...history];
+  try{
+    const r=await fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+(window.OPENAI_KEY||'')},
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:400,messages:openaiMsgs,temperature:0.7})
+    });
+    const d=await r.json();
+    hideTyping();
+    const reply=d.choices?.[0]?.message?.content||'No pude procesar tu consulta. Toca "Radicar mi solicitud" para continuar.';
+    addBot(reply,withAudio);
+    if(withAudio) speak(reply);
+  }catch(e){
+    hideTyping();
+    addBot('No pude conectarme ahora. Toca "Radicar mi solicitud" para que un asesor te ayude.',false);
+  }
+}
+
+function speak(text){
+  if(!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang='es-CO';u.rate=.95;u.pitch=1.05;
+  const voices=window.speechSynthesis.getVoices();
+  const v=voices.find(x=>x.lang.startsWith('es'));
+  if(v) u.voice=v;
+  window.speechSynthesis.speak(u);
+}
+
+// ── GRABACIÓN ──
+async function toggleRec(){
+  if(!isRec) await startRec(); else stopRec();
+}
+
+async function startRec(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    mediaRec=new MediaRecorder(stream);
+    const chunks=[];
+    mediaRec.ondataavailable=e=>chunks.push(e.data);
+    mediaRec.onstop=()=>processVoice(chunks);
+    mediaRec.start();isRec=true;
+    const vc=document.getElementById('vc');
+    vc.classList.add('rec');vc.textContent='⏹';
+    document.getElementById('vtimer').classList.add('on');
+    document.getElementById('vwave').classList.add('on');
+    document.getElementById('vlabel').textContent='Escuchando… toca para terminar';
+    recSecs=0;updateTimer();
+    recTimer=setInterval(()=>{recSecs++;updateTimer();if(recSecs>=120)stopRec();},1000);
+  }catch(e){alert('No se pudo acceder al micrófono. Verifica los permisos.');}
+}
+
+function stopRec(){
+  clearInterval(recTimer);isRec=false;
+  if(mediaRec){mediaRec.stop();mediaRec.stream.getTracks().forEach(t=>t.stop());}
+  const vc=document.getElementById('vc');
+  vc.classList.remove('rec');vc.textContent='⏳';
+  document.getElementById('vtimer').classList.remove('on');
+  document.getElementById('vwave').classList.remove('on');
+  document.getElementById('vlabel').textContent='Procesando tu mensaje…';
+}
+
+function updateTimer(){
+  const m=Math.floor(recSecs/60),s=recSecs%60;
+  document.getElementById('vtimer').textContent=`${m}:${s.toString().padStart(2,'0')}`;
+}
+
+async function processVoice(chunks){
+  // En producción: enviar chunks a Whisper API para transcripción real
+  document.getElementById('msgs').style.display='flex';
+  showTextUI();
+  addUser('🎤 Mensaje de voz enviado');
+  showTyping();
+  try{
+    const r=await fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+(window.OPENAI_KEY||'')},
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:300,temperature:0.7,
+        messages:[
+          {role:'system',content:SYS+'\n\nEl usuario habló por audio. Responde de forma muy clara y breve. Pregúntale en qué le puedes ayudar.'},
+          {role:'user',content:'El paciente grabó un audio. Salúdale y pregúntale qué necesita.'}
+        ]
+      })
+    });
+    const d=await r.json();
+    hideTyping();
+    const reply=d.choices?.[0]?.message?.content||'Recibí tu audio. ¿En qué te puedo ayudar?';
+    addBot(reply,true);speak(reply);
+  }catch(e){hideTyping();addBot('Recibí tu mensaje. Escríbeme y te ayudo.');}
+  const vc=document.getElementById('vc');
+  vc.textContent='🎤';
+  document.getElementById('vlabel').textContent='Toca el micrófono para hablar';
+}
+
+// ── RELOJ ──
+function updateClock(){
+  const now=new Date();
+  const h=String(now.getHours()).padStart(2,'0');
+  const m=String(now.getMinutes()).padStart(2,'0');
+  const el=document.getElementById('clockDisplay');
+  if(el) el.textContent=h+':'+m;
+}
+setInterval(updateClock,1000);
+updateClock();
+
+// ── FADE IN ──
+document.body.style.opacity='0';
+document.body.style.transition='opacity .4s ease';
+setTimeout(()=>{ document.body.style.opacity='1'; },50);
+
+// ── INIT ──
+startCarousel();
+
+// Esperar a que el DOM esté pintado para medir contenedores correctamente
+// requestAnimationFrame garantiza que los estilos ya están aplicados
+requestAnimationFrame(()=>{
+  requestAnimationFrame(()=>{
+    applyQRs();
+    _lastQrUrl = FORM_URL;
+    pollSupabaseConfig();
+    setInterval(pollSupabaseConfig, 30000);
+  });
+});
+
+document.getElementById('btn-radicar-main').addEventListener('click', goToForm);
+document.getElementById('btn-radicar-chat').addEventListener('click', goToForm);
+
+// También re-aplicar al cambiar orientación en móvil/tablet
+window.addEventListener('orientationchange', ()=>{
+  setTimeout(applyQRs, 400); // esperar que el viewport actualice sus dimensiones
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,2303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PQR Agente · Tododrogas</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="config.js" onerror="console.warn('config.js not found')"></script>
+<style>
+:root {
+  --ink:      #0a0e1a;
+  --ink2:     #3a4258;
+  --ink3:     #8892a4;
+  --bg:       #f2f4f8;
+  --bg2:      #e8ebf2;
+  --surface:  #ffffff;
+  --surface2: #f7f8fb;
+  --border:   #dde1eb;
+  --blue:     #2563eb;
+  --blue-d:   #1d4ed8;
+  --blue-l:   #eff4ff;
+  --blue-m:   #bfdbfe;
+  --green:    #16a34a;
+  --green-l:  #dcfce7;
+  --yellow:   #ca8a04;
+  --yellow-l: #fef9c3;
+  --red:      #dc2626;
+  --red-l:    #fee2e2;
+  --orange:   #ea580c;
+  --orange-l: #fff7ed;
+  --purple:   #7c3aed;
+  --purple-l: #f5f3ff;
+  --shadow:   0 1px 3px rgba(10,14,26,.08), 0 4px 12px rgba(10,14,26,.04);
+  --shadow-l: 0 2px 8px rgba(10,14,26,.12), 0 8px 24px rgba(10,14,26,.08);
+  --r:12px; --r2:8px;
+  --agent-color:#2563eb;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--ink);color:#fff;height:52px;display:flex;align-items:center;padding:0 20px;gap:14px;position:sticky;top:0;z-index:200;flex-shrink:0}
+.topbar-logo-text{font-size:15px;font-weight:800;color:#fff}
+.topbar-logo-dot{width:7px;height:7px;border-radius:50%;background:var(--blue);box-shadow:0 0 8px var(--blue);flex-shrink:0}
+.topbar-divider{width:1px;height:20px;background:rgba(255,255,255,.15)}
+.topbar-title{font-size:12px;font-weight:600;color:rgba(255,255,255,.55);letter-spacing:.2px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.topbar-sync{background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:5px 12px;border-radius:7px;font-size:12px;font-family:'Poppins',sans-serif;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all .2s}
+.topbar-sync:hover{background:#334155;color:#fff}
+.topbar-sync svg{transition:transform .3s}
+.topbar-sync.loading svg{animation:spin 1s linear infinite}
+.agent-badge{display:flex;align-items:center;gap:8px;background:rgba(37,99,235,.2);border:1px solid rgba(37,99,235,.3);padding:4px 12px;border-radius:7px}
+.agent-av{width:24px;height:24px;border-radius:50%;background:var(--agent-color);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff}
+.agent-name{font-size:12px;font-weight:600;color:rgba(255,255,255,.9)}
+.btn-logout{background:none;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);padding:4px 10px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .15s}
+.btn-logout:hover{border-color:var(--red);color:#fca5a5}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── LAYOUT ── */
+.app-body{display:flex;flex:1;min-height:0;overflow:hidden}
+
+/* ── FOLDERS ── */
+.folders-panel{width:180px;min-width:180px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:14px 8px;gap:2px;overflow-y:auto;min-height:0}
+.folders-title{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink3);padding:4px 10px 10px}
+.folder-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--r2);cursor:pointer;font-size:12px;font-weight:500;color:var(--ink2);transition:all .15s}
+.folder-item:hover{background:var(--bg)}
+.folder-item.active{background:var(--blue-l);color:var(--blue)}
+.folder-cnt{margin-left:auto;background:var(--bg2);color:var(--ink3);font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;font-family:'DM Mono',monospace}
+.folder-item.active .folder-cnt{background:var(--blue-m);color:var(--blue-d)}
+.folder-urgente .folder-cnt{background:var(--red-l);color:var(--red)}
+
+/* ── EMAIL LIST ── */
+.email-list-panel{width:320px;min-width:280px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.list-header{padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.list-search{position:relative}
+.list-search input{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r2);padding:7px 12px 7px 30px;font-size:12px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;transition:all .15s}
+.list-search input:focus{border-color:var(--blue);background:#fff}
+.list-search svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--ink3)}
+.email-list-items{flex:1;overflow-y:auto;min-height:0}
+.email-list-items::-webkit-scrollbar{width:8px}
+.email-list-items::-webkit-scrollbar-track{background:var(--bg2)}
+.email-list-items::-webkit-scrollbar-thumb{background:#b0b8cc;border-radius:4px;border:2px solid var(--bg2)}
+.email-list-items::-webkit-scrollbar-thumb:hover{background:#8892a4}
+.email-item{padding:11px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;position:relative}
+.email-item:hover{background:var(--bg)}
+.email-item.selected{background:var(--blue-l);border-left:3px solid var(--blue)}
+.email-item.unread .ei-from{font-weight:700}
+.unread-pip{position:absolute;left:4px;top:50%;transform:translateY(-50%);width:5px;height:5px;border-radius:50%;background:var(--blue)}
+.ei-from{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ei-subj{font-size:11px;color:var(--ink2);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ei-prev{font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ei-foot{display:flex;align-items:center;justify-content:space-between;margin-top:4px}
+.ei-time{font-size:10px;font-family:'DM Mono',monospace;color:var(--ink3)}
+.ei-badges{display:flex;gap:4px}
+.badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px}
+.badge.pendiente{background:var(--yellow-l);color:var(--yellow)}
+.badge.gestion{background:var(--blue-l);color:var(--blue)}
+.badge.gestionado{background:var(--orange-l);color:var(--orange)}
+.badge.solucionado{background:var(--green-l);color:var(--green)}
+.badge.pendiente_firma{background:var(--purple-l);color:var(--purple)}
+.btn-purple{background:var(--purple-l);color:var(--purple);border:1.5px solid var(--purple-l)}
+.btn-purple:hover{background:#ede9fe}
+.empty-state{padding:36px 12px;text-align:center;color:var(--ink3)}
+.empty-state .ei-icon{font-size:28px;margin-bottom:8px}
+.empty-state p{font-size:12px}
+
+/* ── EMAIL DETAIL ── */
+.email-detail-outer{flex:1;display:flex;overflow:hidden;background:var(--surface2);min-height:0}
+.no-selection{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink3)}
+.no-selection svg{margin-bottom:14px;opacity:.25}
+.no-selection p{font-size:12px}
+
+.email-view{flex:1;overflow-y:auto;padding:18px;min-height:0;display:flex;flex-direction:column}
+.email-view::-webkit-scrollbar{width:8px}
+.email-view::-webkit-scrollbar-track{background:var(--bg2)}
+.email-view::-webkit-scrollbar-thumb{background:#b0b8cc;border-radius:4px;border:2px solid var(--bg2)}
+.email-view::-webkit-scrollbar-thumb:hover{background:#8892a4}
+.ev-subject{font-size:17px;font-weight:700;color:var(--ink);line-height:1.3;margin-bottom:8px}
+.ev-meta{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+.meta-chip{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:2px 9px;font-size:11px;color:var(--ink2)}
+.ev-actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:var(--r2);font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:'Poppins',sans-serif;transition:all .15s}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:var(--blue-d)}
+.btn-ghost{background:transparent;color:var(--ink2);border:1.5px solid var(--border)}
+.btn-ghost:hover{background:var(--bg);border-color:var(--ink3)}
+.btn-success{background:var(--green-l);color:var(--green)}
+.btn-success:hover{background:#bbf7d0}
+.ev-body{background:#fff;border:1px solid var(--border);border-radius:var(--r);padding:14px;font-size:13px;line-height:1.7;color:var(--ink);flex:1;overflow-y:auto;min-height:0}
+.adj-section{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px}
+.adj-title{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:8px}
+.adj-pill{display:inline-flex;align-items:center;gap:5px;background:#fff;border:1.5px solid var(--border);border-radius:var(--r2);padding:4px 10px;font-size:11px;font-weight:500;color:var(--ink2);cursor:pointer;transition:all .15s;margin:2px}
+.adj-pill:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-l)}
+.reply-box{background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:12px}
+.reply-textarea{width:100%;background:#fff;border:1.5px solid var(--border);border-radius:var(--r2);padding:9px 12px;font-size:13px;font-family:'Poppins',sans-serif;color:var(--ink);resize:vertical;min-height:80px;outline:none;transition:all .15s}
+.reply-textarea:focus{border-color:var(--blue)}
+
+/* ── RIGHT PANEL (MGMT + TIMELINE) ── */
+.mgmt-right{width:270px;min-width:250px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.mgmt-section{padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.mgmt-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;flex-shrink:0}
+.mgmt-select{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r2);padding:7px 10px;font-size:12px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;cursor:pointer}
+.mgmt-select:focus{border-color:var(--blue)}
+.priority-row{display:flex;gap:5px;margin-top:8px}
+.priority-btn{flex:1;padding:5px;border-radius:6px;border:1.5px solid var(--border);background:var(--bg);font-size:10px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;color:var(--ink3);transition:all .15s;text-align:center}
+.priority-btn[data-p="alta"]:hover,.priority-btn[data-p="alta"].active-prio{background:#dc2626;border-color:#dc2626;color:#fff}
+.priority-btn[data-p="media"]:hover,.priority-btn[data-p="media"].active-prio{background:#ca8a04;border-color:#ca8a04;color:#fff}
+.priority-btn[data-p="baja"]:hover,.priority-btn[data-p="baja"].active-prio{background:#16a34a;border-color:#16a34a;color:#fff}
+.mgmt-btn-full{width:100%;justify-content:center;margin-top:6px}
+
+/* Timeline */
+.timeline-wrap{flex:1;overflow-y:auto;padding:12px 14px;min-height:0}
+.timeline-wrap::-webkit-scrollbar{width:8px}
+.timeline-wrap::-webkit-scrollbar-track{background:var(--bg2)}
+.timeline-wrap::-webkit-scrollbar-thumb{background:#b0b8cc;border-radius:4px;border:2px solid var(--bg2)}
+.timeline-wrap::-webkit-scrollbar-thumb:hover{background:#8892a4}
+.timeline-item{display:flex;gap:9px;cursor:pointer;margin-bottom:12px;position:relative}
+.timeline-item:not(:last-child)::after{content:'';position:absolute;left:7px;top:18px;bottom:-6px;width:1.5px;background:var(--border)}
+.tl-dot{width:14px;height:14px;border-radius:50%;flex-shrink:0;margin-top:2px;border:2px solid #fff;box-shadow:0 0 0 1.5px currentColor}
+.tl-dot.color-grey{color:var(--ink3);background:var(--bg2)}
+.tl-dot.color-blue{color:var(--blue);background:var(--blue-l)}
+.tl-dot.color-yellow{color:var(--yellow);background:var(--yellow-l)}
+.tl-dot.color-orange{color:var(--orange);background:var(--orange-l)}
+.tl-dot.color-green{color:var(--green);background:var(--green-l)}
+.tl-dot.color-red{color:var(--red);background:var(--red-l)}
+.tl-dot.color-purple{color:var(--purple);background:#f5f3ff}
+.tl-content{flex:1;min-width:0}
+.tl-action{font-size:11px;font-weight:700;color:var(--ink);line-height:1.3}
+.tl-agent{font-size:10px;color:var(--ink3)}
+.tl-date{font-size:10px;font-family:'DM Mono',monospace;color:var(--ink3)}
+.tl-obs{font-size:10px;color:var(--ink2);margin-top:3px;background:var(--bg2);border-radius:4px;padding:3px 7px;line-height:1.4}
+
+/* ── MODALS ── */
+.modal-backdrop{position:fixed;inset:0;background:rgba(10,14,26,.5);z-index:500;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-backdrop.show{display:flex}
+.gestion-modal{background:var(--surface);border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.gestion-modal h3{font-size:16px;font-weight:700;margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--ink3);margin-bottom:18px;line-height:1.5}
+.form-field{margin-bottom:13px}
+.form-label{font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:5px;display:block}
+.form-input{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r2);padding:9px 12px;font-size:13px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;transition:all .15s}
+.form-input:focus{border-color:var(--blue);background:#fff}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:6px}
+.modal-actions .btn{font-size:13px;padding:8px 18px}
+
+/* TL detail modal */
+.tl-modal{background:var(--surface);border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:80vh;overflow-y:auto}
+.tl-detail-row{display:flex;gap:10px;margin-bottom:10px}
+.tl-detail-label{font-size:11px;font-weight:700;color:var(--ink3);min-width:100px;flex-shrink:0;text-transform:uppercase;letter-spacing:.5px}
+.tl-detail-val{font-size:12px;color:var(--ink2);flex:1;line-height:1.5}
+
+/* TOASTS */
+#toasts{position:fixed;bottom:24px;right:24px;z-index:1000;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{padding:11px 16px;border-radius:10px;font-size:12px;font-weight:600;box-shadow:var(--shadow-l);animation:toastIn .25s ease;display:flex;align-items:center;gap:8px;pointer-events:all;font-family:'Poppins',sans-serif}
+.toast.success{background:var(--green);color:#fff}
+.toast.error{background:var(--red);color:#fff}
+.toast.info{background:var(--ink);color:#fff}
+@keyframes toastIn{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+
+/* Immutable badge */
+.lock-badge{display:inline-flex;align-items:center;gap:5px;background:var(--bg2);color:var(--ink3);font-size:10px;padding:3px 10px;border-radius:99px;font-weight:600;margin-bottom:12px}
+
+/* ── AUTOCOMPLETE CONTACTOS ─────────────────────────── */
+.ac-dropdown{position:fixed;z-index:9999;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.18);min-width:300px;max-width:420px;max-height:260px;overflow-y:auto;display:none}
+.ac-dropdown.show{display:block}
+.ac-item{display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;transition:background .1s}
+.ac-item:hover,.ac-item.focused{background:var(--blue-l)}
+.ac-avatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0}
+.ac-info{min-width:0;flex:1}
+.ac-nombre{font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-email{font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ac-cargo{font-size:10px;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <img src="data:image/jpeg;base64,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" alt="Tododrogas" style="height:28px;object-fit:contain;filter:brightness(10) saturate(0);mix-blend-mode:screen">
+  <div class="topbar-divider"></div>
+  <div class="topbar-title">Panel Agente</div>
+  <div class="topbar-right">
+    <button class="topbar-sync" id="syncBtn" onclick="syncAll()">
+      <svg id="syncIcon" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg>
+      Actualizar
+    </button>
+    <div class="agent-badge">
+      <div class="agent-av" id="agentAv">A</div>
+      <span class="agent-name" id="agentNameLabel">Agente</span>
+    </div>
+    <button class="btn-logout" onclick="logout()">Salir</button>
+  </div>
+</div>
+
+<!-- APP BODY -->
+<div class="app-body">
+
+  <!-- Folders -->
+  <div class="folders-panel">
+    <div class="folders-title">Mis tickets</div>
+    <div class="folder-item active" onclick="setFolder('todos',this)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>
+      Todos
+      <span class="folder-cnt" id="fc-todos">0</span>
+    </div>
+    <div class="folder-item" onclick="setFolder('pendiente',this)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Pendientes
+      <span class="folder-cnt" id="fc-pendiente">0</span>
+    </div>
+    <div class="folder-item" onclick="setFolder('gestion',this)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      En Gestión
+      <span class="folder-cnt" id="fc-gestion">0</span>
+    </div>
+    <div class="folder-item" onclick="setFolder('solucionado',this)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Solucionados
+      <span class="folder-cnt" id="fc-solucionado">0</span>
+    </div>
+    <div class="folder-item" onclick="setFolder('pendiente_firma',this)" style="color:var(--purple)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Pte. por firma
+      <span class="folder-cnt" id="fc-pendiente_firma" style="background:var(--purple-l);color:var(--purple)">0</span>
+    </div>
+    <div class="folder-item folder-urgente" onclick="setFolder('urgente',this)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      Urgentes
+      <span class="folder-cnt" id="fc-urgente">0</span>
+    </div>
+  </div>
+
+  <!-- Email list -->
+  <div class="email-list-panel">
+    <div class="list-header">
+      <div class="list-search">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Buscar..." oninput="renderEmailList()">
+      </div>
+    </div>
+    <div class="email-list-items" id="emailList">
+      <div class="empty-state"><div class="ei-icon">📬</div><p>Cargando...</p></div>
+    </div>
+  </div>
+
+  <!-- Detail + mgmt -->
+  <div class="email-detail-outer">
+    <div class="no-selection" id="noSelection">
+      <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      <p>Selecciona un correo para gestionarlo</p>
+    </div>
+    <div class="email-view" id="emailView" style="display:none"></div>
+    <div class="mgmt-right" id="mgmtRight" style="display:none">
+      <div class="mgmt-section">
+        <div class="mgmt-label">Estado del ticket</div>
+        <span id="mgmtEstadoBadge" class="badge pendiente" style="font-size:11px;padding:3px 10px;margin-bottom:10px;display:inline-flex"></span>
+        <button class="btn btn-primary mgmt-btn-full" onclick="openGestionModal()">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Añadir gestión
+        </button>
+        <button class="btn btn-success mgmt-btn-full" onclick="marcarSolucionado()">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          Marcar solucionado
+        </button>
+        <button class="btn btn-purple mgmt-btn-full" onclick="abrirModalFirma()" style="display:none">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          Confirmar firma
+        </button>
+      </div>
+      <div class="mgmt-section">
+        <div class="mgmt-label">Prioridad</div>
+        <div class="priority-row">
+          <button class="priority-btn" data-p="alta" onclick="setPriority('alta',this)">🔴 Alta</button>
+          <button class="priority-btn" data-p="media" onclick="setPriority('media',this)">🟡 Media</button>
+          <button class="priority-btn" data-p="baja" onclick="setPriority('baja',this)">🟢 Baja</button>
+        </div>
+      </div>
+      <div class="mgmt-label" style="padding:12px 14px 4px;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);flex-shrink:0">Historial del ticket</div>
+      <div class="timeline-wrap" id="ticketTimeline">
+        <div class="empty-state"><p>Sin eventos</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: AÑADIR GESTIÓN ══ -->
+<div class="modal-backdrop" id="modalGestion" onclick="if(event.target===this)closeModal('modalGestion')">
+  <div class="gestion-modal">
+    <h3>Añadir gestión</h3>
+    <div class="modal-sub">
+      <span class="lock-badge">🔒 No editable una vez guardada</span><br>
+      Garantiza la trazabilidad y auditoría del ticket.
+    </div>
+    <div class="form-field">
+      <label class="form-label">Acción</label>
+      <select class="form-input" id="gestionAccion">
+        <option value="">— Seleccionar acción —</option>
+      </select>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Observaciones <span style="color:var(--red)">*</span> <span style="font-weight:400;color:var(--ink3)">(obligatorio)</span></label>
+      <textarea class="form-input" id="gestionObs" rows="4" placeholder="Describe detalladamente la gestión realizada..." style="resize:vertical;min-height:90px"></textarea>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Evidencia <span style="font-weight:400;color:var(--ink3)">(opcional — foto, PDF, captura)</span></label>
+      <div id="gestionEvidenciaZone" style="border:1.5px dashed var(--border);border-radius:var(--r2);padding:10px 12px;background:var(--bg);transition:background .15s;cursor:pointer"
+           ondragover="event.preventDefault();this.style.background='#EFF6FF';this.style.borderColor='var(--blue)'"
+           ondragleave="this.style.background='var(--bg)';this.style.borderColor='var(--border)'"
+           ondrop="event.preventDefault();this.style.background='var(--bg)';this.style.borderColor='var(--border)';gestionEvidenciaAdd(event.dataTransfer.files[0])"
+           onclick="document.getElementById('gestionFiles').click()">
+        <div id="gestionEvidenciaPreview" style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink3)">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          Clic aquí o arrastra un archivo
+        </div>
+      </div>
+      <input type="file" id="gestionFiles" style="display:none" accept="*/*"
+             onchange="gestionEvidenciaAdd(this.files[0]);this.value=''">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalGestion')">Cancelar</button>
+      <button class="btn btn-primary" id="btnSaveGestion" onclick="saveGestion()">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Guardar gestión
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: TIMELINE DETAIL ══ -->
+<div class="modal-backdrop" id="modalTlDetail" onclick="if(event.target===this)closeModal('modalTlDetail')">
+  <div class="tl-modal" id="tlDetailContent"></div>
+</div>
+
+<!-- ══ MODAL: FIRMA DE CIERRE ══ -->
+<div class="modal-backdrop" id="modalFirma" onclick="if(event.target===this)closeModal('modalFirma')">
+  <div class="gestion-modal" style="max-width:480px">
+    <h3 style="color:var(--purple)">✍️ Firma de cierre</h3>
+    <div class="modal-sub" style="background:var(--purple-l);color:var(--purple);border-radius:var(--r2);padding:10px 12px;margin-bottom:14px;font-size:11px;line-height:1.6">
+      Para cerrar definitivamente este ticket debes adjuntar la firma de cierre.<br>
+      <strong>Sin firma no es posible marcar el ticket como solucionado.</strong>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Archivo de firma <span style="color:var(--red)">*</span></label>
+      <input type="file" id="firmaFile" accept="*/*"
+        style="font-size:12px;color:var(--ink2);width:100%;padding:8px;border:1.5px solid var(--border);border-radius:var(--r2);background:#fff;cursor:pointer"
+        onchange="
+          const f=this.files[0];
+          if(!f)return;
+          const size=f.size>1048576?(f.size/1048576).toFixed(1)+' MB':Math.round(f.size/1024)+' KB';
+          document.getElementById('firmaPreview').innerHTML=
+            '<div style=\'display:inline-flex;align-items:center;gap:6px;background:#fff;border:1.5px solid var(--purple-l);border-radius:8px;padding:4px 10px;font-size:11px;margin-top:6px;color:var(--purple)\'>'+
+            getFileIcon(f.name)+' '+f.name+' <span style=\'color:var(--ink3)\'>'+size+'</span></div>';
+          document.getElementById('firmaError').style.display='none';
+        ">
+      <div id="firmaPreview"></div>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Observaciones de cierre <span style="font-weight:400;color:var(--ink3)">(opcional)</span></label>
+      <textarea class="form-input" id="firmaObs" rows="3" placeholder="Ej: Firma de conformidad del ciudadano adjunta..." style="resize:vertical;min-height:70px"></textarea>
+    </div>
+    <div id="firmaError" style="display:none;background:var(--red-l);color:var(--red);border-radius:var(--r2);padding:8px 12px;font-size:11px;font-weight:700;margin-bottom:10px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modalFirma')">Cancelar</button>
+      <button class="btn btn-purple" id="btnConfirmarFirma" onclick="confirmarFirma()" style="background:var(--purple);color:#fff">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Confirmar y cerrar ticket
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL: PREVIEW CORREO ESTILO OUTLOOK (con timeline y todas las acciones) ══ -->
+<div class="modal-backdrop" id="modalCorreoPreview" onclick="if(event.target===this)closeModal('modalCorreoPreview')" style="align-items:flex-start;padding:16px 0;overflow-y:auto">
+  <div style="background:var(--surface);border-radius:16px;width:min(1100px,97vw);max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3);margin:auto">
+
+    <!-- HEADER -->
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0;background:var(--surface)">
+      <div style="min-width:0;flex:1">
+        <div id="mpAsunto" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:5px;line-height:1.3"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <span id="mpRemitente" style="font-size:12px;color:var(--ink2)"></span>
+          <span id="mpFecha" style="font-size:11px;color:var(--ink3)"></span>
+          <span id="mpEstadoBadge"></span>
+        </div>
+      </div>
+      <button onclick="closeModal('modalCorreoPreview')" style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--ink3);font-size:20px;line-height:1;padding:2px 8px;border-radius:6px" title="Cerrar">✕</button>
+    </div>
+
+    <!-- ADJUNTOS (si hay) -->
+    <div id="mpAdjuntosBar" style="display:none;padding:8px 20px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0">
+      <div style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px;margin-bottom:6px">📎 ADJUNTOS</div>
+      <div id="mpAdjuntosGrid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+
+    <!-- LAYOUT PRINCIPAL: cuerpo izq + panel der -->
+    <div style="flex:1;display:flex;overflow:hidden;min-height:0">
+
+      <!-- COLUMNA IZQUIERDA: acciones + hilo + cuerpo -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0">
+
+        <!-- ACCIONES -->
+        <div id="mpAcciones" style="padding:8px 16px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;background:var(--surface)"></div>
+
+        <!-- ÁREA RESPUESTA -->
+        <div id="mpReplyBoxArea" style="flex-shrink:0"></div>
+
+        <!-- HILO -->
+        <div id="mpHiloArea" style="flex-shrink:0"></div>
+
+        <!-- CUERPO CORREO -->
+        <div style="flex:1;overflow-y:auto;padding:16px 20px;min-height:0">
+          <div id="mpBody"></div>
+        </div>
+      </div>
+
+      <!-- COLUMNA DERECHA: estado + acciones gestión + timeline -->
+      <div style="width:280px;min-width:260px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--surface)">
+
+        <!-- Estado + botones gestión -->
+        <div id="mpMgmtSection" style="padding:14px 14px 10px;border-bottom:1px solid var(--border);flex-shrink:0">
+          <div style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px;margin-bottom:6px">ESTADO DEL TICKET</div>
+          <span id="mpStateBadge" class="badge" style="font-size:11px;padding:3px 10px;margin-bottom:10px;display:inline-flex"></span>
+          <div id="mpBotonesGestion" style="display:flex;flex-direction:column;gap:6px;margin-top:8px"></div>
+          <div id="mpLockMsg" style="display:none;border-radius:var(--r2);padding:10px 12px;font-size:11px;font-weight:700;line-height:1.5;margin-top:6px"></div>
+        </div>
+
+        <!-- Prioridad -->
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
+          <div style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px;margin-bottom:6px">PRIORIDAD</div>
+          <div class="priority-row" id="mpPriorityRow">
+            <button class="priority-btn" data-pp="alta" onclick="mpSetPriority('alta',this)">🔴 Alta</button>
+            <button class="priority-btn" data-pp="media" onclick="mpSetPriority('media',this)">🟡 Media</button>
+            <button class="priority-btn" data-pp="baja" onclick="mpSetPriority('baja',this)">🟢 Baja</button>
+          </div>
+        </div>
+
+        <!-- Timeline -->
+        <div style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px;padding:10px 14px 4px;flex-shrink:0">HISTORIAL DEL TICKET</div>
+        <div class="timeline-wrap" id="mpTimeline" style="flex:1;overflow-y:auto;padding:8px 10px;min-height:0">
+          <div class="empty-state"><p>Cargando…</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;background:var(--bg)">
+      <button onclick="closeModal('modalCorreoPreview')" class="btn btn-ghost" style="font-size:12px">Cerrar</button>
+      <button onclick="mpAbrirEnVista()" class="btn btn-primary" style="font-size:12px">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+        Ver en pantalla completa
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- TOASTS -->
+<div id="toasts"></div>
+
+<script>
+// ──────────────────────────────────────────────
+// CONFIG
+// ──────────────────────────────────────────────
+const SB_URL = window.SUPABASE_URL || 'https://TU_PROYECTO.supabase.co';
+const SB_KEY = window.SUPABASE_KEY || 'TU_ANON_KEY';
+
+async function sb(path, method='GET', body=null) {
+  const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!r.ok && r.status !== 201 && r.status !== 204) throw new Error(await r.text());
+  if (r.status === 204 || r.status === 201) return null;
+  try { return await r.json(); } catch { return null; }
+}
+
+// ──────────────────────────────────────────────
+// SESSION
+// ──────────────────────────────────────────────
+const AGENT_ID   = sessionStorage.getItem('pqr_agent_id') || '';
+const AGENT_NAME = sessionStorage.getItem('pqr_name') || 'Agente';
+
+// Default actions (loaded from config or fallback)
+let DEFAULT_ACTIONS = ['Observación añadida','Solicitud de información','Cliente contactado','Seguimiento','Escalado','En gestión','Solucionado','Correo respondido'];
+
+// ──────────────────────────────────────────────
+// STATE
+// ──────────────────────────────────────────────
+const state = {
+  emails: [],
+  selectedId: null,
+  folder: 'todos',
+};
+
+let _gestionForSolucionado = false;
+
+// ──────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────
+(async()=>{
+  if(sessionStorage.getItem('pqr_role')!=='agente') {
+    window.location.href='login.html'; return;
+  }
+  // Set agent UI
+  document.getElementById('agentNameLabel').textContent = AGENT_NAME;
+  document.getElementById('agentAv').textContent = (AGENT_NAME||'A').charAt(0).toUpperCase();
+  await loadEmails();
+  setInterval(()=>loadEmails(), 60000);
+})();
+
+// ──────────────────────────────────────────────
+// DATA
+// ──────────────────────────────────────────────
+async function loadEmails() {
+  try {
+    const data = await sb(`correos?asignado_a=eq.${AGENT_ID}&order=received_at.desc&limit=200`);
+    state.emails = (data||[]).map(e=>({
+      id: e.id,
+      message_id: e.message_id,
+      asunto: e.subject || '(Sin asunto)',
+      remitente: e.from_email || '',
+      remitente_nombre: e.from_name || '',
+      fecha: e.received_at || e.created_at,
+      estado: e.estado || 'pendiente',
+      prioridad: e.prioridad || '',
+      es_urgente: e.es_urgente || false,
+      nivel_riesgo: e.nivel_riesgo || '',
+      horas_sla: e.horas_sla || 120,
+      fecha_limite_sla: e.fecha_limite_sla || null,
+      tipo_pqr: e.tipo_pqr || '',
+      resumen_corto: e.resumen_corto || '',
+      categoria_ia: e.categoria_ia || '',
+      ley_aplicable: e.ley_aplicable || '',
+      body_content: e.body_content || e.body_preview || '',
+      body_type: e.body_type || 'text',
+      has_attachments: e.has_attachments || false,
+      is_read: e.is_read || false,
+      to_recipients: e.to_recipients || [],
+      cc_recipients: e.cc_recipients || [],
+      sent_at: e.sent_at || e.received_at || e.created_at,
+      raw: e,
+    }));
+  } catch(err) {
+    console.error('[loadEmails] Error:', err.message);
+    state.emails = [];
+    const listEl = document.getElementById('emailList');
+    if(listEl) listEl.innerHTML = `<div class="empty-state"><div class="ei-icon">⚠️</div><p style="color:var(--red)">Error al cargar correos.<br><small>${err.message.substring(0,80)}</small></p></div>`;
+  }
+  updateFolderCounts();
+  renderEmailList();
+}
+
+// ──────────────────────────────────────────────
+// FOLDERS
+// ──────────────────────────────────────────────
+function updateFolderCounts() {
+  document.getElementById('fc-todos').textContent = state.emails.length;
+  ['pendiente','gestion','solucionado','pendiente_firma'].forEach(s=>{
+    const el=document.getElementById('fc-'+s);
+    if(el) el.textContent=state.emails.filter(e=>e.estado===s).length;
+  });
+  // Urgentes = alta prioridad no solucionados ni pendiente_firma
+  const urg = state.emails.filter(e=>e.prioridad==='alta'&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length;
+  document.getElementById('fc-urgente').textContent=urg;
+}
+
+function setFolder(f, el) {
+  state.folder = f;
+  document.querySelectorAll('.folder-item').forEach(i=>i.classList.remove('active'));
+  if(el) el.classList.add('active');
+  renderEmailList();
+}
+
+// ──────────────────────────────────────────────
+// EMAIL LIST
+// ──────────────────────────────────────────────
+function renderEmailList() {
+  let list = [...state.emails];
+  const search = document.getElementById('searchInput')?.value?.toLowerCase()||'';
+
+  if(state.folder==='urgente') {
+    list = list.filter(e=>e.prioridad==='alta'&&e.estado!=='solucionado');
+  } else if(state.folder!=='todos') {
+    list = list.filter(e=>e.estado===state.folder);
+  }
+  if(search) list = list.filter(e=>
+    (e.remitente||'').toLowerCase().includes(search)||
+    (e.asunto||'').toLowerCase().includes(search)
+  );
+  list.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+
+  const el = document.getElementById('emailList');
+  if(!list.length) {
+    el.innerHTML=`<div class="empty-state"><div class="ei-icon">${state.folder==='urgente'?'✅':'📭'}</div><p>${state.folder==='urgente'?'Sin urgentes':'No hay correos'}</p></div>`;
+    return;
+  }
+  const prioColor={alta:'#dc2626',media:'#ca8a04',baja:'#16a34a'};
+  el.innerHTML = list.map(e=>`
+    <div class="email-item${e.id===state.selectedId?' selected':''}${!e.is_read?' unread':''}"
+      onclick="selectEmail('${e.id}')"
+      ondblclick="abrirPreviewCorreo('${e.id}')">
+      ${!e.is_read?'<div class="unread-pip"></div>':''}
+      ${(e.es_urgente||e.tipo_pqr||e.fecha_limite_sla)?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin:3px 0">${e.es_urgente?'<span style="background:#fee2e2;color:#dc2626;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px">⚠ URGENTE</span>':''  }${e.tipo_pqr?'<span style="background:var(--bg2);color:var(--ink2);font-size:9px;font-weight:600;padding:1px 6px;border-radius:99px;text-transform:capitalize;border:1px solid var(--border)">'+e.tipo_pqr+'</span>':''  }${e.fecha_limite_sla?(()=>{const fin=new Date(e.fecha_limite_sla).getTime();const ahora=Date.now();const hRest=Math.max(0,Math.round((fin-ahora)/3600000));const vencido=fin<ahora;const color=vencido?'#dc2626':hRest<24?'#ca8a04':'#16a34a';const bg=vencido?'#fee2e2':hRest<24?'#fef9c3':'#dcfce7';return '<span style="background:'+bg+';color:'+color+';font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px">'+( vencido?'⚠ Vencido':'⏱ '+hRest+'h')+'</span>';})():''  }</div>`:''}
+      <div class="ei-from">${esc(e.remitente_nombre||e.remitente)}</div>
+      <div class="ei-subj">${esc(e.asunto)}</div>
+      <div class="ei-foot">
+        <span class="ei-time">${formatDate(new Date(e.fecha))}</span>
+        <span class="badge ${e.estado}">${estadoLabel(e.estado)}</span>
+      </div>
+    </div>`).join('');
+}
+
+// ──────────────────────────────────────────────
+// SELECT EMAIL
+// ──────────────────────────────────────────────
+async function selectEmail(id) {
+  state.selectedId = id;
+  renderEmailList();
+  const email = state.emails.find(e=>e.id===id);
+  if(!email) return;
+
+  document.getElementById('noSelection').style.display='none';
+  document.getElementById('emailView').style.display='';
+  document.getElementById('mgmtRight').style.display='';
+
+  if(!email.is_read) {
+    try { await sb(`correos?id=eq.${id}`,'PATCH',{is_read:true}); email.is_read=true; } catch {}
+  }
+
+  // Render view
+  const ev = document.getElementById('emailView');
+  ev.innerHTML = `
+    <div class="ev-subject">${esc(email.asunto)}</div>
+    <div class="ev-meta">
+      <span class="meta-chip">De: ${esc(email.remitente_nombre||email.remitente)}</span>
+      <span class="meta-chip">&lt;${esc(email.remitente)}&gt;</span>
+      <span class="meta-chip">${formatDate(new Date(email.fecha),true)}</span>
+      ${email.es_urgente?`<span style="display:inline-flex;align-items:center;gap:4px;background:#fee2e2;color:#dc2626;font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px">⚠️ URGENTE · ${email.nivel_riesgo||''}</span>`:''}
+      ${email.tipo_pqr?`<span class="meta-chip" style="text-transform:capitalize">${email.tipo_pqr}</span>`:''}
+      ${email.fecha_limite_sla?`<span class="meta-chip" style="color:${new Date(email.fecha_limite_sla)<new Date()?'#dc2626':new Date(email.fecha_limite_sla)<new Date(Date.now()+86400000)?'#ca8a04':'#16a34a'};font-weight:600">⏱ SLA: ${new Date(email.fecha_limite_sla).toLocaleDateString('es-CO',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:''}
+    </div>
+    ${email.fecha_limite_sla?`<div style="margin-bottom:12px">${(()=>{const fin=new Date(email.fecha_limite_sla).getTime();const inicio=new Date(email.fecha).getTime();const ahora=Date.now();const pct=Math.max(0,Math.min(100,Math.round((ahora-inicio)/(fin-inicio)*100)));const color=pct>=90?'#dc2626':pct>=70?'#ca8a04':'#16a34a';const restante=fin-ahora;const hRest=Math.max(0,Math.round(restante/3600000));return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);margin-bottom:4px"><span>Progreso SLA · '+email.horas_sla+'h</span><span style="color:'+color+';font-weight:600">'+(restante>0?hRest+'h restantes':'⚠️ Vencido')+'</span></div><div style="height:6px;background:var(--border);border-radius:99px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:99px"></div></div>'})()}</div>`:''}
+    <div class="ev-actions">
+      ${email.estado==='solucionado' ? `
+        <span style="display:inline-flex;align-items:center;gap:5px;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">🔒 Ticket cerrado · solo lectura</span>
+      ` : email.estado==='pendiente_firma' ? `
+        <span style="display:inline-flex;align-items:center;gap:5px;background:var(--purple-l);color:var(--purple);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">✍️ Pendiente por firma · adjunta la firma para cerrar</span>
+      ` : `
+      <button class="btn btn-ghost" onclick="toggleReply('reply')" title="Responder al remitente">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        Responder
+      </button>
+      <button class="btn btn-ghost" onclick="toggleReply('replyAll')" title="Responder a todos (remitente + CC)">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><polyline points="14 17 9 12 14 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        Resp. a todos
+      </button>
+      <button class="btn btn-ghost" onclick="toggleReply('forward')" title="Reenviar este correo">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+        Reenviar
+      </button>
+      <button class="btn btn-primary" onclick="openGestionModal()">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Añadir gestión
+      </button>
+      <button class="btn btn-ghost" onclick="generarConNovaTD('${email.id}')" style="border-color:#7c3aed;color:#7c3aed">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        ✦ Nova TD
+      </button>
+      `}
+      ${email.message_id ? `
+      <button class="btn btn-ghost" onclick="descargarEML('${esc(email.message_id)}','${esc(email.asunto)}')" title="Descargar este correo como .eml (igual que Outlook)">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        EML
+      </button>
+      <button class="btn btn-ghost" onclick="verHiloCompleto('${esc(email.raw?.conversation_id||'')}','${esc(email.id)}')" title="Ver todos los mensajes de esta conversación">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Hilo
+      </button>
+      ` : ''}
+    </div>
+    <div id="hiloArea"></div>
+    <div id="replyBoxArea"></div>
+    ${email.has_attachments?`<div class="adj-section" style="margin-bottom:12px"><div class="adj-title">📎 Adjuntos</div><div id="adjGrid"><span style="font-size:12px;color:var(--ink3)">Cargando...</span></div></div>`:''}
+    <div class="ev-body">
+      ${email.body_type==='html'?`<iframe srcdoc="${esc(email.body_content||'')}" sandbox="allow-same-origin" style="width:100%;height:100%;min-height:260px;border:none"></iframe>`:
+        `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`}
+    </div>
+  `;
+
+  // Mgmt panel
+  document.getElementById('mgmtEstadoBadge').className='badge '+email.estado;
+  document.getElementById('mgmtEstadoBadge').textContent=estadoLabel(email.estado);
+  document.querySelectorAll('.priority-btn').forEach(b=>b.classList.toggle('active-prio', b.dataset.p===email.prioridad));
+
+  // Bloquear panel según estado
+  const mgmtSection = document.querySelector('#mgmtRight .mgmt-section');
+  const btnAñadir = mgmtSection ? mgmtSection.querySelector('.btn-primary') : null;
+  const btnSol = mgmtSection ? mgmtSection.querySelector('.btn-success') : null;
+  const btnFirma = mgmtSection ? mgmtSection.querySelector('.btn-purple') : null;
+  let lockMsg = document.getElementById('mgmtLockMsg');
+
+  if(email.estado==='solucionado') {
+    if(btnAñadir) btnAñadir.style.display='none';
+    if(btnSol) btnSol.style.display='none';
+    if(btnFirma) btnFirma.style.display='none';
+    if(!lockMsg) {
+      lockMsg = document.createElement('div');
+      lockMsg.id = 'mgmtLockMsg';
+      lockMsg.style.cssText='border-radius:var(--r2);padding:10px 12px;font-size:11px;font-weight:700;line-height:1.5;margin-top:6px';
+      if(mgmtSection) mgmtSection.appendChild(lockMsg);
+    }
+    lockMsg.style.background='var(--green-l)'; lockMsg.style.color='var(--green)';
+    lockMsg.innerHTML='✅ Ticket solucionado<br><span style="font-weight:400">Solo el administrador puede reabrir este ticket</span>';
+    lockMsg.style.display='';
+    document.querySelectorAll('.priority-btn').forEach(b=>{ b.disabled=true; b.style.opacity='0.4'; b.style.cursor='not-allowed'; });
+  } else if(email.estado==='pendiente_firma') {
+    if(btnAñadir) btnAñadir.style.display='none';
+    if(btnSol) btnSol.style.display='none';
+    if(btnFirma) btnFirma.style.display='';
+    if(!lockMsg) {
+      lockMsg = document.createElement('div');
+      lockMsg.id = 'mgmtLockMsg';
+      lockMsg.style.cssText='border-radius:var(--r2);padding:10px 12px;font-size:11px;font-weight:700;line-height:1.5;margin-top:6px';
+      if(mgmtSection) mgmtSection.appendChild(lockMsg);
+    }
+    lockMsg.style.background='var(--purple-l)'; lockMsg.style.color='var(--purple)';
+    lockMsg.innerHTML='✍️ Esperando firma de cierre<br><span style="font-weight:400">Adjunta la firma para cerrar definitivamente</span>';
+    lockMsg.style.display='';
+    document.querySelectorAll('.priority-btn').forEach(b=>{ b.disabled=true; b.style.opacity='0.4'; b.style.cursor='not-allowed'; });
+  } else {
+    if(btnAñadir) btnAñadir.style.display='';
+    if(btnSol) btnSol.style.display='';
+    if(btnFirma) btnFirma.style.display='none';
+    if(lockMsg) lockMsg.style.display='none';
+    document.querySelectorAll('.priority-btn').forEach(b=>{ b.disabled=false; b.style.opacity=''; b.style.cursor=''; });
+  }
+
+  // Timeline
+  await loadTicketTimeline(id);
+  if(email.has_attachments) loadAttachments(id);
+}
+
+async function loadTicketTimeline(correoId) {
+  const el = document.getElementById('ticketTimeline');
+  el.innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
+  try {
+    let events = [];
+    try {
+      events = await sb(`historial_eventos?correo_id=eq.${correoId}&order=created_at.asc`)||[];
+    } catch {
+      events = await sb(`historial?correo_id=eq.${correoId}&order=fecha.asc`)||[];
+    }
+    renderTimeline(events, el);
+  } catch { el.innerHTML='<div class="empty-state"><p>Error al cargar</p></div>'; }
+}
+
+function renderTimeline(events, container) {
+  if(!events.length) { container.innerHTML='<div class="empty-state"><p>Sin gestiones registradas</p></div>'; return; }
+  const colorMap={pendiente:'grey',recibido:'grey',asignado:'blue',asignado_manual:'blue',gestion:'yellow',en_gestion:'yellow',observacion:'orange',solucionado:'green',cerrado:'green',reabierto:'red',pendiente_firma:'purple',firma_confirmada:'purple',respondido:'purple',correo_respondido:'purple'};
+  const getColor=(ev)=>{
+    const k=(ev.evento||ev.accion||'').toLowerCase();
+    for(const key of Object.keys(colorMap)) if(k.includes(key)) return colorMap[key];
+    return 'grey';
+  };
+  container.innerHTML = events.map((ev,i)=>{
+    const color=getColor(ev);
+    const fecha=ev.created_at||ev.fecha||'';
+    const accion=ev.evento||ev.accion||'Evento';
+    const meta=ev.metadata||{};
+    const agente=meta.agente_nombre||ev.agente_nombre||'';
+    const obs=meta.observaciones||ev.detalle||ev.observaciones||'';
+    return `<div class="timeline-item" onclick="openTlDetail(${i})">
+      <div class="tl-dot color-${color}"></div>
+      <div class="tl-content">
+        <div class="tl-action">${esc(accion)}</div>
+        ${agente?`<div class="tl-agent">${esc(agente)}</div>`:''}
+        <div class="tl-date">${fecha?formatDate(new Date(fecha),true):''}</div>
+        ${obs?`<div class="tl-obs">${esc(obs.substring(0,90))}${obs.length>90?'...':''}</div>`:''}
+      </div>
+    </div>`;
+  }).join('');
+  container._events = events;
+}
+
+function openTlDetail(idx) {
+  const el = document.getElementById('ticketTimeline');
+  const events = el._events;
+  if(!events||!events[idx]) return;
+  const ev=events[idx],meta=ev.metadata||{};
+  const fecha=ev.created_at||ev.fecha||'';
+
+  let adjuntosHTML = '';
+  if(meta.firma_url) {
+    adjuntosHTML += `<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
+  }
+  if(meta.evidencia_url) {
+    adjuntosHTML += `<div class="tl-detail-row"><div class="tl-detail-label">Evidencia</div><div class="tl-detail-val"><a href="${esc(meta.evidencia_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--blue);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--blue-l);border-radius:6px;font-size:11px;background:var(--blue-l)">${getFileIcon(meta.evidencia_nombre||'evidencia')} ${esc(meta.evidencia_nombre||'Ver evidencia')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
+  }
+  if(meta.adjuntos_nombres?.length) {
+    adjuntosHTML += `<div class="tl-detail-row"><div class="tl-detail-label">Adjuntos</div><div class="tl-detail-val" style="color:var(--ink2)">${meta.adjuntos_nombres.map(n=>esc(n)).join(', ')}</div></div>`;
+  }
+
+  document.getElementById('tlDetailContent').innerHTML=`
+    <button onclick="closeModal('modalTlDetail')" style="float:right;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:0">✕</button>
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:16px">Detalle de gestión</h3>
+    ${row('Fecha',fecha?new Date(fecha).toLocaleString('es-CO'):'—')}
+    ${row('Acción',ev.evento||ev.accion||'—')}
+    ${row('Agente',meta.agente_nombre||ev.agente_nombre||'—')}
+    ${row('Observaciones',meta.observaciones||ev.detalle||ev.observaciones||'—')}
+    ${adjuntosHTML}
+    <div style="margin-top:14px;padding:10px 12px;background:var(--bg2);border-radius:8px;font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px">
+      🔒 Esta gestión no puede ser editada ni eliminada
+    </div>`;
+  document.getElementById('modalTlDetail').classList.add('show');
+}
+function row(l,v){return `<div class="tl-detail-row"><div class="tl-detail-label">${l}</div><div class="tl-detail-val">${esc(String(v))}</div></div>`;}
+
+async function loadAttachments(correoId) {
+  const el=document.getElementById('adjGrid');
+  if(!el) return;
+  try {
+    const adjs=await sb(`adjuntos?correo_id=eq.${correoId}`)||[];
+    el.innerHTML=adjs.length?adjs.map(a=>`<div class="adj-pill" onclick="window.open('${esc(a.storage_url||a.url||a.content_url||'#')}')">${getFileIcon(a.nombre||a.name)} ${esc(a.nombre||a.name||'Archivo')}</div>`).join(''):'<span style="font-size:11px;color:var(--ink3)">Sin adjuntos</span>';
+  } catch { el.innerHTML=''; }
+}
+
+// ──────────────────────────────────────────────
+// MANAGEMENT ACTIONS
+// ──────────────────────────────────────────────
+async function setPriority(prio, btn) {
+  const id=state.selectedId;
+  if(!id) return;
+  await sb(`correos?id=eq.${id}`,'PATCH',{prioridad:prio});
+  document.querySelectorAll('.priority-btn').forEach(b=>b.classList.remove('active-prio'));
+  btn.classList.add('active-prio');
+  const em=state.emails.find(e=>e.id===id);
+  if(em) em.prioridad=prio;
+  showToast(`Prioridad: ${prio} ✓`,'success');
+  updateFolderCounts();
+}
+
+function marcarSolucionado() {
+  const id=state.selectedId;
+  if(!id) return;
+  const email=state.emails.find(e=>e.id===id);
+  if(!confirm('¿Marcar este ticket como "Pendiente por firma"?\n\nDeberás adjuntar la firma de cierre para cerrar definitivamente.')) return;
+  sb(`correos?id=eq.${id}`,'PATCH',{estado:'pendiente_firma'}).then(()=>{
+    sb('historial_eventos','POST',{correo_id:id,message_id:email?.message_id,evento:'pendiente_firma',from_email:email?.remitente,subject:email?.asunto,metadata:{agente_id:AGENT_ID,agente_nombre:AGENT_NAME,por:'agente',observaciones:'Ticket marcado como pendiente de firma de cierre'}}).catch(()=>{});
+    const em=state.emails.find(e=>e.id===id);
+    if(em) em.estado='pendiente_firma';
+    document.getElementById('mgmtEstadoBadge').className='badge pendiente_firma';
+    document.getElementById('mgmtEstadoBadge').textContent='Pte. por firma';
+    showToast('Ticket pendiente por firma ✍️','info');
+    updateFolderCounts();
+    renderEmailList();
+    selectEmail(id);
+  }).catch(e=>showToast('Error: '+e.message.substring(0,60),'error'));
+}
+
+function abrirModalFirma() {
+  const id=state.selectedId;
+  if(!id) return;
+  document.getElementById('firmaFile').value='';
+  document.getElementById('firmaObs').value='';
+  document.getElementById('firmaPreview').innerHTML='';
+  document.getElementById('firmaError').style.display='none';
+  // Resetear botón por si quedó en estado "Guardando..." de un intento anterior
+  const btn=document.getElementById('btnConfirmarFirma');
+  if(btn){
+    btn.disabled=false;
+    btn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Confirmar y cerrar ticket';
+    btn.style.background='var(--purple)';btn.style.color='#fff';
+  }
+  document.getElementById('modalFirma').classList.add('show');
+}
+
+async function confirmarFirma() {
+  const id=state.selectedId;
+  if(!id) return;
+  const fileInput=document.getElementById('firmaFile');
+  const obs=document.getElementById('firmaObs').value.trim();
+  const errorEl=document.getElementById('firmaError');
+  const btn=document.getElementById('btnConfirmarFirma');
+
+  // Asegurar estado limpio del botón antes de cualquier validación
+  if(btn && btn.disabled){
+    btn.disabled=false;
+    btn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Confirmar y cerrar ticket';
+  }
+
+  if(!fileInput || !fileInput.files || !fileInput.files.length){
+    errorEl.textContent='⚠️ Debes adjuntar la firma de cierre para continuar.';
+    errorEl.style.display='block'; return;
+  }
+  const file=fileInput.files[0];
+  if(file.size>50*1024*1024){
+    errorEl.textContent='⚠️ El archivo supera 50 MB.';
+    errorEl.style.display='block'; return;
+  }
+
+  if(btn){ btn.disabled=true; btn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Guardando…'; }
+  errorEl.style.display='none';
+
+  try {
+    const email=state.emails.find(e=>e.id===id);
+    // 1. Subir firma a Storage
+    const ts=Date.now();
+    const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const storagePath=`firmas/${id}/${ts}_${safeName}`;
+    const uploadRes=await fetch(`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`,{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},
+      body:file,
+    });
+    if(!uploadRes.ok) throw new Error('Error subiendo firma: '+await uploadRes.text());
+    // 2. URL firmada 10 años
+    const signRes=await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`,{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({expiresIn:315360000}),
+    });
+    const signData=signRes.ok?await signRes.json():{};
+    const firmaUrl=signData.signedURL?`${SB_URL}/storage/v1${signData.signedURL}`:`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
+    // 3. Registrar en tabla adjuntos
+    await sb('adjuntos','POST',{correo_id:id,attachment_id:`firma_${id}_${Date.now()}`,nombre:file.name,tipo_contenido:file.type||'application/octet-stream',tamano_bytes:file.size,es_inline:false,storage_url:firmaUrl,direccion:'firma_cierre',enviado_por:AGENT_ID});
+    // 4. Cambiar estado a solucionado
+    await sb(`correos?id=eq.${id}`,'PATCH',{estado:'solucionado',fecha_resolucion:new Date().toISOString()});
+    // 5. Historial
+    await sb('historial_eventos','POST',{correo_id:id,message_id:email?.message_id,evento:'firma_confirmada',from_email:email?.remitente,subject:email?.asunto,metadata:{agente_id:AGENT_ID,agente_nombre:AGENT_NAME,por:'agente',firma_archivo:file.name,firma_url:firmaUrl,observaciones:obs||'Firma de cierre adjuntada'}});
+    // 6. Actualizar UI
+    const em=state.emails.find(e=>e.id===id);
+    if(em) em.estado='solucionado';
+    showToast('Ticket cerrado con firma ✅','success');
+    closeModal('modalFirma');
+    updateFolderCounts();
+    renderEmailList();
+    await loadTicketTimeline(id);
+    selectEmail(id);
+  } catch(e){
+    errorEl.textContent='⚠️ '+e.message.substring(0,100);
+    errorEl.style.display='block';
+    btn.disabled=false;
+    btn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Confirmar y cerrar ticket';
+  }
+}
+
+// Archivo de evidencia seleccionado para la gestión actual
+let _gestionEvidenciaFile = null;
+
+function gestionEvidenciaAdd(file) {
+  if(!file) return;
+  if(file.size > 50*1024*1024) { showToast('El archivo supera 50 MB','error'); return; }
+  _gestionEvidenciaFile = file;
+  const size = file.size > 1048576 ? (file.size/1048576).toFixed(1)+' MB' : Math.round(file.size/1024)+' KB';
+  document.getElementById('gestionEvidenciaPreview').innerHTML =
+    `<span style="display:inline-flex;align-items:center;gap:6px;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:500;color:var(--ink2)">
+      <span style="font-size:14px">${getFileIcon(file.name)}</span>
+      <span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(file.name)}</span>
+      <span style="color:var(--ink3)">${size}</span>
+      <button onclick="_gestionEvidenciaFile=null;document.getElementById('gestionEvidenciaPreview').innerHTML='<svg width=\\'14\\' height=\\'14\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'2\\' viewBox=\\'0 0 24 24\\'><path d=\\'M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48\\'/></svg> Clic aquí o arrastra un archivo'" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 2px" title="Quitar">×</button>
+    </span>`;
+}
+
+
+// ── NOVA TD ──────────────────────────────────────────────────
+async function generarConNovaTD(correoId) {
+  const email = state.emails.find(e=>e.id===correoId);
+  if(!email) return;
+  const area = document.getElementById('replyBoxArea');
+  area.innerHTML = `<div style="background:#f5f3ff;border:1px solid #7c3aed;border-radius:8px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border:2px solid #7c3aed;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><span style="color:#7c3aed;font-weight:600;font-size:13px">✦ Nova TD generando respuesta...</span></div>`;
+  try {
+    const N8N_BASE_NOVA = window.N8N_WEBHOOK_BASE || 'https://tododrogas.online/webhook';
+    const res = await fetch(`${N8N_BASE_NOVA}/nova-td-respuesta`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        correo_id: email.id,
+        asunto: email.asunto||'',
+        body_content: email.body_content||'',
+        tipo_pqr: email.tipo_pqr||'',
+        categoria_ia: email.categoria_ia||'',
+        prioridad: email.prioridad||'',
+        es_urgente: email.es_urgente||false,
+        ley_aplicable: email.ley_aplicable||'Ley 1755/2015',
+        fecha_limite_sla: email.fecha_limite_sla||'',
+        nivel_riesgo: email.nivel_riesgo||'',
+        horas_sla: email.horas_sla||120,
+        agente_nombre: state.user?.nombre||'Equipo PQRSFD',
+        remitente_nombre: email.remitente_nombre||email.remitente||'',
+        remitente: email.remitente||'',
+        conversation_id: email.raw?.conversation_id||'',
+        ticket_id: email.raw?.ticket_id||email.id,
+        estado: email.estado||''
+      })
+    });
+    const data = await res.json();
+    const html = data.respuesta_html||data.respuesta||'';
+    const confianza = data.confianza||70;
+    const advertencias = data.advertencias||[];
+    const fuentes = data.fuentes_usadas||{};
+    const extraccion = data.extraccion||{};
+    const bc = confianza>=80?'#dcfce7':confianza>=50?'#fef9c3':'#fee2e2';
+    const tc = confianza>=80?'#16a34a':confianza>=50?'#ca8a04':'#dc2626';
+    const msg = confianza>=80?'✅ Alta confianza':confianza>=50?'⚠️ Confianza media · revisa antes de enviar':'❌ Baja confianza · reescribe manualmente';
+    const fuentesBadges = [
+      fuentes.kb?'<span style="background:#ede9fe;color:#6d28d9;font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px">📚 KB</span>':'',
+      fuentes.extraccion_ia?'<span style="background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px">🧠 IA</span>':''
+    ].filter(Boolean).join(' ');
+    const extInfo = extraccion.paciente||extraccion.radicado ? `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:6px 12px;margin-bottom:6px;font-size:11px;color:var(--ink2)">${[extraccion.paciente?'👤 '+extraccion.paciente:'', extraccion.radicado?'📋 Rad: '+extraccion.radicado:'', extraccion.medicamento?'💊 '+extraccion.medicamento:'', extraccion.urgencia&&extraccion.urgencia!=='normal'?'⚡ '+extraccion.urgencia:''].filter(Boolean).join(' · ')}</div>` : '';
+    area.innerHTML = `<div style="background:${bc};border-radius:6px;padding:8px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><span style="color:${tc};font-weight:700;font-size:12px">${msg}</span><span style="color:${tc};font-size:11px">Confianza: ${confianza}%</span></div>${fuentesBadges?`<div style="margin-bottom:6px;font-size:11px;color:var(--ink3)">Fuentes: ${fuentesBadges}</div>`:''}${extInfo}${advertencias.length?`<ul style="margin:0 0 8px;padding:0 0 0 18px;font-size:12px;color:#ca8a04">${advertencias.map(a=>`<li>${a}</li>`).join('')}</ul>`:''}`;
+    toggleReply('reply');
+    setTimeout(()=>{ const ed=document.querySelector('#replyBoxArea [contenteditable]'); if(ed) ed.innerHTML=html; },300);
+  } catch(err) {
+    area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error al conectar con Nova TD. Verifica que el Flujo 14 está activo en N8N.</div>`;
+    console.error('Nova TD error:', err);
+  }
+}
+
+function openGestionModal(mode) {
+  _gestionForSolucionado = mode==='solucionado';
+  _gestionEvidenciaFile = null;
+  const preview = document.getElementById('gestionEvidenciaPreview');
+  if(preview) preview.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Clic aquí o arrastra un archivo';
+  const sel=document.getElementById('gestionAccion');
+  sel.innerHTML='<option value="">— Seleccionar acción —</option>'+
+    DEFAULT_ACTIONS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');
+  if(_gestionForSolucionado) sel.value='Solucionado';
+  document.getElementById('gestionObs').value='';
+  document.getElementById('modalGestion').classList.add('show');
+}
+
+async function saveGestion() {
+  const id=state.selectedId;
+  if(!id) return;
+  const accion=document.getElementById('gestionAccion').value;
+  const obs=document.getElementById('gestionObs').value.trim();
+  if(!obs) { showToast('Las observaciones son obligatorias','error'); return; }
+
+  const btn=document.getElementById('btnSaveGestion');
+  btn.disabled=true; btn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Guardando…';
+
+  const email=state.emails.find(e=>e.id===id);
+  const metadata={
+    agente_id:AGENT_ID,
+    agente_nombre:AGENT_NAME,
+    por:'agente',
+    observaciones:obs,
+  };
+
+  // Subir evidencia a Storage si la hay
+  if(_gestionEvidenciaFile) {
+    try {
+      const ts=Date.now();
+      const safeName=_gestionEvidenciaFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const storagePath=`evidencias/${id}/${ts}_${safeName}`;
+      const uploadRes=await fetch(`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`,{
+        method:'POST',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':_gestionEvidenciaFile.type||'application/octet-stream','x-upsert':'true'},
+        body:_gestionEvidenciaFile,
+      });
+      if(uploadRes.ok) {
+        const signRes=await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`,{
+          method:'POST',
+          headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+          body:JSON.stringify({expiresIn:315360000}),
+        });
+        const signData=signRes.ok?await signRes.json():{};
+        metadata.evidencia_url = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
+        metadata.evidencia_nombre = _gestionEvidenciaFile.name;
+      }
+    } catch(e){ console.warn('[evidencia]', e.message); }
+  }
+
+  try {
+    try {
+      await sb('historial_eventos','POST',{
+        correo_id:id,
+        message_id:email?.message_id,
+        evento:accion||'Observación añadida',
+        from_email:email?.remitente,
+        subject:email?.asunto,
+        metadata,
+      });
+    } catch {
+      await sb('historial','POST',{correo_id:id,accion:accion||'Observación añadida',detalle:obs,fecha:new Date().toISOString()});
+    }
+
+    if(_gestionForSolucionado) {
+      await sb(`correos?id=eq.${id}`,'PATCH',{estado:'solucionado',fecha_resolucion:new Date().toISOString()});
+      const em=state.emails.find(e=>e.id===id);
+      if(em) em.estado='solucionado';
+      document.getElementById('mgmtEstadoBadge').className='badge solucionado';
+      document.getElementById('mgmtEstadoBadge').textContent='Solucionado';
+      showToast('Ticket solucionado ✓','success');
+    } else {
+      if(email?.estado==='pendiente') {
+        await sb(`correos?id=eq.${id}`,'PATCH',{estado:'gestion'});
+        const em=state.emails.find(e=>e.id===id);
+        if(em){ em.estado='gestion'; }
+        document.getElementById('mgmtEstadoBadge').className='badge gestion';
+        document.getElementById('mgmtEstadoBadge').textContent='En gestión';
+      }
+      showToast('Gestión registrada ✓','success');
+    }
+
+    closeModal('modalGestion');
+    updateFolderCounts();
+    renderEmailList();
+    await loadTicketTimeline(id);
+
+  } catch(e){ showToast('Error: '+e.message.substring(0,60),'error'); }
+  finally { btn.disabled=false; btn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Guardar gestión'; }
+}
+
+// Reply
+function toggleReply(modo) {
+  modo = modo || 'reply';
+  const area = document.getElementById('replyBoxArea');
+  // Si ya está abierto con el mismo modo, cerrar
+  if(area.innerHTML && area.dataset.modo === modo) { area.innerHTML=''; return; }
+  area.dataset.modo = modo;
+  window._replyModo = modo;
+
+  const email = state.emails.find(e=>e.id===state.selectedId);
+  if(!email) return;
+
+  // Calcular campos según el modo
+  let toVal='', ccVal='', subjectVal='', titleColor='', modoLabel='';
+
+  if(modo==='reply') {
+    toVal = email.remitente||'';
+    ccVal = '';
+    subjectVal = 'RE: '+( email.asunto||'').replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor = 'var(--blue)'; modoLabel = '↩ Responder';
+  } else if(modo==='replyAll') {
+    toVal = email.remitente||'';
+    // CC = todos los to_recipients + cc_recipients excepto el buzón propio
+    const propioEmail = (window.GRAPH_USER_ID||'').toLowerCase();
+    const allCC = [
+      ...(email.to_recipients||[]).map(r=>r?.emailAddress?.address||r),
+      ...(email.cc_recipients||[]).map(r=>r?.emailAddress?.address||r),
+    ].filter(Boolean).filter(a=>a.toLowerCase()!==propioEmail && a.toLowerCase()!==toVal.toLowerCase());
+    ccVal = [...new Set(allCC)].join('; ');
+    subjectVal = 'RE: '+(email.asunto||'').replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor = 'var(--green)'; modoLabel = '↩↩ Responder a todos';
+  } else {
+    // forward
+    toVal = '';
+    ccVal = '';
+    subjectVal = 'RV: '+(email.asunto||'').replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor = 'var(--orange,#f97316)'; modoLabel = '↪ Reenviar';
+  }
+
+  const ccPrev = (email.cc_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ');
+
+  area.innerHTML = `
+    <div class="reply-box" style="border:1px solid var(--border);border-radius:var(--r);background:#fff;overflow:hidden;box-shadow:var(--shadow)">
+      <div style="padding:6px 12px;background:${titleColor}18;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:11px;font-weight:700;color:${titleColor}">${modoLabel}</span>
+        <button onclick="document.getElementById('replyBoxArea').innerHTML=''" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 4px">✕</button>
+      </div>
+      <div style="border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">Para</span>
+          <input id="replyTo" value="${esc(toVal)}" placeholder="${modo==='forward'?'Destinatario…':''}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        </div>
+        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">CC</span>
+          <input id="replyCC" value="${esc(ccVal)}" placeholder="Separar con punto y coma" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        </div>
+        <div style="display:flex;align-items:center;padding:7px 12px;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">Asunto</span>
+          <input id="replySubject" value="${esc(subjectVal)}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        </div>
+      </div>
+      <div id="replyEditor" contenteditable="true" style="min-height:120px;padding:12px 14px;font-size:13px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);outline:none;line-height:1.6"></div>
+      <div style="border-top:1px solid var(--border);padding:10px 14px;background:#fafafa">
+        <div style="font-size:11px;color:var(--ink3);margin-bottom:6px;font-family:'Franklin Gothic Book',Arial,sans-serif">───────── Mensaje original ─────────</div>
+        <div style="font-size:11px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;line-height:1.5">
+          <b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br>
+          <b>Enviado:</b> ${email?.sent_at ? new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : ''}<br>
+          <b>Para:</b> ${esc((email?.to_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br>
+          <b>CC:</b> ${esc((email?.cc_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br>
+          <b>Asunto:</b> ${esc(email?.asunto||'')}
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;max-height:180px;overflow-y:auto;border-left:3px solid var(--border);padding-left:10px">${email?.body_content||email?.raw?.body_preview||''}</div>
+      </div>
+      <!-- Adjuntos -->
+      <div id="replyAttachZone" style="padding:8px 12px;background:var(--bg2);border-top:1px solid var(--border);transition:background .15s"
+           ondragover="event.preventDefault();this.style.background='#EFF6FF'"
+           ondragleave="this.style.background='var(--bg2)'"
+           ondrop="event.preventDefault();this.style.background='var(--bg2)';_attachAdd(event.dataTransfer.files)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <label for="replyFiles" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;font-weight:700;color:var(--ink3);padding:4px 10px;border:1.5px solid var(--border);border-radius:6px;background:#fff">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            Adjuntar
+          </label>
+          <span style="font-size:10px;color:var(--ink3)">o arrastra · máx. ${ATTACH_MAX_FILE_MB} MB/archivo · ${ATTACH_MAX_TOTAL_MB} MB total</span>
+        </div>
+        <input type="file" id="replyFiles" multiple style="display:none" accept="*/*">
+        <div id="replyFilesPreview" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+        <div id="replyAttachTotal"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:var(--bg)">
+        <button class="btn btn-ghost" onclick="document.getElementById('replyBoxArea').innerHTML=''">Cancelar</button>
+        <button class="btn btn-primary" onclick="sendReply()" style="background:${titleColor};border-color:${titleColor}">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          ${modo==='forward'?'Reenviar':'Enviar'}
+        </button>
+      </div>
+    </div>`;
+  _attachedFiles.clear(); _attachRender();
+  document.getElementById('replyFiles').addEventListener('change', function() {
+    _attachAdd(this.files); this.value='';
+  });
+  document.getElementById('replyEditor').focus();
+  // Activar autocompletado en campos Para y CC
+  // Activar autocompletado (sin delay — los inputs ya existen en el DOM)
+  _acInit(document.getElementById('replyTo'));
+  _acInit(document.getElementById('replyCC'));
+}
+
+async function sendReply() {
+  const id=state.selectedId;
+  const email=state.emails.find(e=>e.id===id);
+  const toInput=document.getElementById('replyTo')?.value?.trim();
+  const ccInput=document.getElementById('replyCC')?.value?.trim();
+  const subject=document.getElementById('replySubject')?.value?.trim();
+  const editor=document.getElementById('replyEditor');
+  const body=editor?.innerHTML?.trim();
+  if(!body||body==='<br>'){ showToast('Escribe un mensaje','info'); return; }
+  if(!toInput){ showToast('Escribe un destinatario','info'); return; }
+
+  // Construir hilo histórico
+  const hiloHTML=`
+    <br><br>
+    <div style="border-left:3px solid #ccc;padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px">
+      <b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br>
+      <b>Enviado:</b> ${email?.sent_at ? new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : ''}<br>
+      <b>Para:</b> ${esc((email?.to_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br>
+      <b>CC:</b> ${esc((email?.cc_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br>
+      <b>Asunto:</b> ${esc(email?.asunto||'')}<br><br>
+      ${email?.body_content||''}
+    </div>`;
+
+  // Separar adjuntos pequeños (inline) y grandes (upload session)
+  const inlineFiles=[], largeFiles=[];
+  const INLINE_LIMIT=ATTACH_INLINE_MB*1024*1024;
+  _attachedFiles.forEach(({file,id:fid})=>{
+    if(file.size<=INLINE_LIMIT) inlineFiles.push({file,id:fid});
+    else largeFiles.push({file,id:fid});
+  });
+
+  const sendBtn=document.querySelector('#replyBoxArea .btn-primary');
+  if(sendBtn){sendBtn.disabled=true;sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Enviando…';}
+
+  try {
+    const token=await getGraphToken();
+    const userId=window.GRAPH_USER_ID||'';
+
+    // Adjuntos pequeños → base64 inline
+    const attachments=[];
+    for(const {file} of inlineFiles){
+      const base64=await _fileToBase64(file);
+      attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:base64});
+    }
+
+    const messagePayload={
+      subject: subject||('RE: '+email.asunto),
+      body:{contentType:'HTML',content:`<div style="font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px">${body}${hiloHTML}</div>`},
+      toRecipients:[{emailAddress:{address:toInput}}],
+    };
+    if(ccInput){
+      messagePayload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+    }
+    if(attachments.length>0) messagePayload.attachments=attachments;
+
+    let r;
+    if(largeFiles.length>0){
+      r=await _sendMailWithLargeAttachments(token,userId,messagePayload,largeFiles);
+    } else {
+      r=await _sendMailDirect(token,userId,messagePayload);
+    }
+
+    const totalAdj=_attachedFiles.size;
+    if(r.ok||r.status===202||r.status===200){
+      const adjInfo=totalAdj>0?` (${totalAdj} adjunto${totalAdj>1?'s':''})`:'';
+      showToast('Respuesta enviada ✓'+adjInfo,'success');
+
+      // Guardar adjuntos salientes en Supabase Storage (no bloqueante)
+      const todosLosArchivos=[...inlineFiles,...largeFiles];
+      if(todosLosArchivos.length>0){
+        _guardarAdjuntosEnStorage(id, todosLosArchivos, AGENT_ID)
+          .then(res=>{
+            const fallidos=res.filter(r=>!r.ok);
+            if(fallidos.length>0)
+              console.warn('[adjuntos-storage] Sin guardar:',fallidos.map(f=>f.nombre).join(', '));
+          })
+          .catch(err=>console.warn('[adjuntos-storage] Error general:',err.message));
+      }
+
+      try{ await sb('historial_eventos','POST',{
+        correo_id:id,
+        message_id:email.message_id,
+        evento:'correo_respondido',
+        from_email:email.remitente,
+        subject:email.asunto,
+        metadata:{
+          agente_id:AGENT_ID,
+          agente_nombre:AGENT_NAME,
+          por:'agente',
+          adjuntos:totalAdj,
+          adjuntos_nombres:[..._attachedFiles.keys()],
+          observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,80)
+        }
+      }); }catch{}
+      _attachedFiles.clear();
+      document.getElementById('replyBoxArea').innerHTML='';
+      await loadTicketTimeline(id);
+    } else throw new Error(await r.text());
+  } catch(e){
+    showToast('Error al enviar: '+e.message.substring(0,80),'error');
+    if(sendBtn){sendBtn.disabled=false;sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar';}
+  }
+}
+
+// ──────────────────────────────────────────────
+// GUARDAR ADJUNTOS SALIENTES EN SUPABASE STORAGE
+// ──────────────────────────────────────────────
+async function _guardarAdjuntosEnStorage(correoId, archivos, enviadoPor) {
+  const resultados=[];
+  for(const {file} of archivos){
+    try{
+      const ts=Date.now();
+      const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const storagePath=`saliente/${correoId}/${ts}_${safeName}`;
+      const storageUrl=`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
+      const uploadRes=await fetch(storageUrl,{
+        method:'POST',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},
+        body:file,
+      });
+      if(!uploadRes.ok) throw new Error(`Storage upload ${uploadRes.status}: ${await uploadRes.text()}`);
+      const signRes=await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`,{
+        method:'POST',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+        body:JSON.stringify({expiresIn:315360000}),
+      });
+      const signData=signRes.ok?await signRes.json():{};
+      const finalUrl=signData.signedURL?`${SB_URL}/storage/v1${signData.signedURL}`:storageUrl;
+      await sb('adjuntos','POST',{
+        correo_id:correoId,
+        attachment_id:`sal_${correoId}_${ts}`,
+        nombre:file.name,
+        tipo_contenido:file.type||'application/octet-stream',
+        tamano_bytes:file.size,
+        es_inline:false,
+        storage_url:finalUrl,
+        direccion:'saliente',
+        enviado_por:enviadoPor||AGENT_ID,
+      });
+      resultados.push({nombre:file.name,ok:true,url:finalUrl});
+    }catch(err){
+      console.warn(`[adjuntos-storage] No se pudo guardar "${file.name}":`,err.message);
+      resultados.push({nombre:file.name,ok:false,error:err.message});
+    }
+  }
+  return resultados;
+}
+
+// ──────────────────────────────────────────────
+// SYNC
+// ──────────────────────────────────────────────
+async function syncAll() {
+  const btn=document.getElementById('syncBtn'),icon=document.getElementById('syncIcon');
+  btn.classList.add('loading');
+  try{
+    await loadEmails();
+    showToast('Actualizado ✓','success');
+  }catch{ showToast('Error al actualizar','error'); }
+  finally{ btn.classList.remove('loading'); }
+}
+
+// ──────────────────────────────────────────────
+// UTILS
+// ──────────────────────────────────────────────
+function estadoLabel(s){return {pendiente:'Pendiente',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function getFileIcon(n=''){
+  const e=(n.split('.').pop()||'').toLowerCase();
+  if(['pdf'].includes(e))return '📄';
+  if(['doc','docx','odt','rtf'].includes(e))return '📝';
+  if(['xls','xlsx','csv','ods'].includes(e))return '📊';
+  if(['ppt','pptx','odp'].includes(e))return '📊';
+  if(['jpg','jpeg','png','gif','bmp','webp','svg','tiff','ico'].includes(e))return '🖼️';
+  if(['mp4','avi','mov','wmv','mkv','webm'].includes(e))return '🎬';
+  if(['mp3','wav','ogg','m4a','flac','aac'].includes(e))return '🎵';
+  if(['zip','rar','7z','tar','gz','bz2'].includes(e))return '🗜️';
+  if(['eml','msg','emlx'].includes(e))return '📧';
+  if(['txt','md','log'].includes(e))return '📃';
+  if(['js','ts','html','css','json','xml','py','java','cs','php','sql'].includes(e))return '💻';
+  if(['ics','vcf'].includes(e))return '📅';
+  return '📎';
+}
+
+// ─────────────────────────────────────────────────────────
+// SISTEMA DE ADJUNTOS ESTILO OUTLOOK
+// Límites: 35 MB por archivo, 150 MB total (igual que Exchange/Outlook)
+// Archivos < 4 MB → base64 inline
+// Archivos 4 MB – 35 MB → Graph API Upload Session (chunked)
+// ─────────────────────────────────────────────────────────
+const ATTACH_MAX_FILE_MB  = 35;
+const ATTACH_MAX_TOTAL_MB = 150;
+const ATTACH_INLINE_MB    = 3.9;
+const ATTACH_CHUNK_BYTES  = 3 * 1024 * 1024;
+
+const _attachedFiles = new Map();
+let _attachCounter = 0;
+
+function _fmtSize(bytes){
+  if(bytes>1048576)return (bytes/1048576).toFixed(1)+' MB';
+  if(bytes>1024)return Math.round(bytes/1024)+' KB';
+  return bytes+' B';
+}
+
+function _attachRender(){
+  const preview=document.getElementById('replyFilesPreview');
+  if(!preview)return;
+  preview.innerHTML='';
+  let totalBytes=0;
+  _attachedFiles.forEach(({file,id})=>{
+    totalBytes+=file.size;
+    const isLarge=file.size>ATTACH_INLINE_MB*1024*1024;
+    const pill=document.createElement('div');
+    pill.id='attach-pill-'+id;
+    pill.style.cssText='display:inline-flex;align-items:center;gap:6px;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:4px 8px 4px 10px;font-size:11px;font-weight:500;color:var(--ink2);margin:2px;max-width:260px;position:relative';
+    pill.innerHTML=`
+      <span style="flex-shrink:0;font-size:14px">${getFileIcon(file.name)}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px" title="${esc(file.name)}">${esc(file.name)}</span>
+      <span style="color:var(--ink3);flex-shrink:0">${_fmtSize(file.size)}</span>
+      ${isLarge?'<span style="background:#EFF6FF;color:#3B82F6;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;flex-shrink:0">CHUNKED</span>':''}
+      <div id="attach-progress-${id}" style="display:none;position:absolute;bottom:0;left:0;height:2px;background:#3B82F6;border-radius:0 0 0 6px;transition:width .2s"></div>
+      <button onclick="_attachRemove('${id}')" title="Quitar" style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 2px;border-radius:4px;transition:color .15s" onmouseover="this.style.color='#e53e3e'" onmouseout="this.style.color='var(--ink3)'">×</button>
+    `;
+    preview.appendChild(pill);
+  });
+  const totalEl=document.getElementById('replyAttachTotal');
+  if(totalEl){
+    const totalMB=(totalBytes/1048576).toFixed(1);
+    const pct=Math.min(100,(totalBytes/(ATTACH_MAX_TOTAL_MB*1024*1024))*100);
+    const color=pct>85?'#e53e3e':pct>60?'#f59e0b':'#3B82F6';
+    totalEl.innerHTML=_attachedFiles.size>0
+      ?`<div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+           <div style="flex:1;height:3px;background:var(--border);border-radius:2px"><div style="height:3px;width:${pct}%;background:${color};border-radius:2px;transition:width .3s"></div></div>
+           <span style="font-size:10px;color:var(--ink3);white-space:nowrap">${totalMB} / ${ATTACH_MAX_TOTAL_MB} MB</span>
+         </div>`
+      :'';
+  }
+}
+
+function _attachRemove(id){
+  _attachedFiles.forEach((v,k)=>{ if(v.id===id) _attachedFiles.delete(k); });
+  _attachRender();
+}
+
+function _attachAdd(files){
+  let totalBytes=0;
+  _attachedFiles.forEach(({file})=>totalBytes+=file.size);
+  for(const file of files){
+    if(file.size>ATTACH_MAX_FILE_MB*1024*1024){
+      showToast(`"${file.name}" supera ${ATTACH_MAX_FILE_MB} MB`,'error'); continue;
+    }
+    if(totalBytes+file.size>ATTACH_MAX_TOTAL_MB*1024*1024){
+      showToast(`Total de adjuntos supera ${ATTACH_MAX_TOTAL_MB} MB`,'error'); break;
+    }
+    if(!_attachedFiles.has(file.name)){
+      _attachedFiles.set(file.name,{file,id:'a'+(++_attachCounter)});
+      totalBytes+=file.size;
+    }
+  }
+  _attachRender();
+}
+
+function _fileToBase64(file){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(',')[1]);
+    r.onerror=rej;
+    r.readAsDataURL(file);
+  });
+}
+
+async function _uploadLargeAttachment(token,userId,draftId,file,progressId){
+  const sessionRes=await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${draftId}/attachments/createUploadSession`,{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({AttachmentItem:{attachmentType:'file',name:file.name,size:file.size}})
+  });
+  if(!sessionRes.ok) throw new Error('Upload session: '+(await sessionRes.text()));
+  const {uploadUrl}=await sessionRes.json();
+  let offset=0;
+  const progEl=document.getElementById('attach-progress-'+progressId);
+  while(offset<file.size){
+    const end=Math.min(offset+ATTACH_CHUNK_BYTES,file.size);
+    const chunk=file.slice(offset,end);
+    const chunkRes=await fetch(uploadUrl,{
+      method:'PUT',
+      headers:{'Content-Length':String(end-offset),'Content-Range':`bytes ${offset}-${end-1}/${file.size}`,'Content-Type':file.type||'application/octet-stream'},
+      body:chunk
+    });
+    if(!chunkRes.ok&&chunkRes.status!==202&&chunkRes.status!==201&&chunkRes.status!==200)
+      throw new Error(`Chunk upload error ${chunkRes.status}`);
+    offset=end;
+    if(progEl){progEl.style.display='block';progEl.style.width=Math.round(offset/file.size*100)+'%';}
+  }
+}
+
+async function _sendMailDirect(token,userId,payload){
+  return fetch(`https://graph.microsoft.com/v1.0/users/${userId}/sendMail`,{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({message:payload,saveToSentItems:true})
+  });
+}
+
+async function _sendMailWithLargeAttachments(token,userId,payload,largeFiles){
+  const draftRes=await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages`,{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  if(!draftRes.ok) throw new Error('Error creando borrador: '+(await draftRes.text()));
+  const {id:draftId}=await draftRes.json();
+  for(const {file,id:fid} of largeFiles) await _uploadLargeAttachment(token,userId,draftId,file,fid);
+  return fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${draftId}/send`,{
+    method:'POST',headers:{'Authorization':'Bearer '+token}
+  });
+}
+function showToast(msg,type='info'){
+  const tc=document.getElementById('toasts'),t=document.createElement('div');
+  t.className=`toast ${type}`;t.innerHTML=`<span>${msg}</span>`;
+  tc.appendChild(t);setTimeout(()=>t.remove(),4000);
+}
+function formatDate(d,full=false){
+  if(!d||isNaN(d))return '—';
+  if(full)return d.toLocaleString('es-CO',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const now=new Date(),diff=now-d;
+  if(diff<60000)return 'ahora';
+  if(diff<3600000)return Math.floor(diff/60000)+'m';
+  if(diff<86400000)return Math.floor(diff/3600000)+'h';
+  if(diff<604800000)return Math.floor(diff/86400000)+'d';
+  return d.toLocaleDateString('es-CO');
+}
+// ──────────────────────────────────────────────────────────────
+// DESCARGA EML Y HILO COMPLETO
+// ──────────────────────────────────────────────────────────────
+
+// ──────────────────────────────────────────────────────────────
+// MODAL PREVIEW CORREO — agente (doble clic en lista)
+// Preview completo con acciones, timeline, respuesta, gestión
+// ──────────────────────────────────────────────────────────────
+let _mpId = null;
+
+async function abrirPreviewCorreo(id) {
+  _mpId = id;
+  const email = state.emails.find(e=>e.id===id);
+  if(!email) return;
+
+  // Header
+  document.getElementById('mpAsunto').textContent = email.asunto||'(Sin asunto)';
+  document.getElementById('mpRemitente').textContent =
+    (email.remitente_nombre?email.remitente_nombre+' ':'')+'<'+(email.remitente||'')+'>';
+  document.getElementById('mpFecha').textContent =
+    email.sent_at ? new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : '';
+  document.getElementById('mpEstadoBadge').outerHTML =
+    `<span id="mpEstadoBadge" class="badge ${email.estado}">${estadoLabel(email.estado)}</span>`;
+
+  // Badge estado panel der
+  const sb2 = document.getElementById('mpStateBadge');
+  sb2.className = 'badge '+email.estado;
+  sb2.textContent = estadoLabel(email.estado);
+
+  // Prioridad
+  document.querySelectorAll('#mpPriorityRow .priority-btn').forEach(b=>{
+    b.classList.toggle('active-prio', b.dataset.pp===email.prioridad);
+    b.disabled=false; b.style.opacity=''; b.style.cursor='';
+  });
+
+  // Acciones ev-actions
+  _mpRenderAcciones(email);
+
+  // Cuerpo
+  const bodyEl = document.getElementById('mpBody');
+  if(email.body_type==='html') {
+    bodyEl.innerHTML = `<iframe srcdoc="${esc(email.body_content||'')}" sandbox="allow-same-origin" style="width:100%;min-height:320px;border:none;border-radius:var(--r2)"></iframe>`;
+  } else {
+    bodyEl.innerHTML = `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`;
+  }
+
+  // Reset áreas
+  document.getElementById('mpReplyBoxArea').innerHTML='';
+  document.getElementById('mpHiloArea').innerHTML='';
+
+  // Adjuntos
+  const adjBar = document.getElementById('mpAdjuntosBar');
+  const adjGrid = document.getElementById('mpAdjuntosGrid');
+  adjGrid.innerHTML='';
+  if(email.has_attachments) {
+    adjBar.style.display='';
+    adjGrid.innerHTML='<span style="font-size:11px;color:var(--ink3)">Cargando…</span>';
+    sb(`adjuntos?correo_id=eq.${id}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion`)
+      .then(adjs=>{
+        if(!adjs?.length){adjGrid.innerHTML='<span style="font-size:11px;color:var(--ink3)">Sin adjuntos</span>';return;}
+        adjGrid.innerHTML=adjs.map(a=>{
+          const url=a.storage_url||'#';
+          const size=a.tamano_bytes>1048576?(a.tamano_bytes/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||0)/1024)+' KB';
+          return `<div onclick="mpPreviewAdj('${esc(url)}','${esc(a.nombre||'archivo')}','${esc(a.tipo_contenido||'')}')"
+            style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;max-width:210px;transition:border-color .15s"
+            onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'"
+            title="Clic para previsualizar">
+            <span style="font-size:15px">${getFileIcon(a.nombre||'')}</span>
+            <div style="min-width:0">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)">${esc(a.nombre||'Archivo')}</div>
+              <div style="color:var(--ink3)">${size}</div>
+            </div>
+          </div>`;
+        }).join('');
+      }).catch(()=>{adjBar.style.display='none';});
+  } else { adjBar.style.display='none'; }
+
+  // Abrir modal
+  document.getElementById('modalCorreoPreview').classList.add('show');
+
+  // Bloqueo panel según estado
+  _mpLockPanel(email);
+
+  // Cargar timeline en el panel derecho
+  _mpLoadTimeline(id);
+
+  // Marcar como leído
+  if(!email.is_read) {
+    try{await sb(`correos?id=eq.${id}`,'PATCH',{is_read:true}); email.is_read=true;}catch{}
+  }
+}
+
+function _mpRenderAcciones(email) {
+  const area = document.getElementById('mpAcciones');
+  const id = email.id;
+  let html = '';
+
+  if(email.estado==='solucionado') {
+    html = `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">🔒 Ticket cerrado · solo lectura</span>`;
+  } else if(email.estado==='pendiente_firma') {
+    html = `<span style="display:inline-flex;align-items:center;gap:5px;background:var(--purple-l);color:var(--purple);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">✍️ Pendiente por firma</span>`;
+  } else {
+    html = `<button class="btn btn-ghost" onclick="mpToggleReply('reply')" style="font-size:11px" title="Responder al remitente">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg> Responder</button>
+    <button class="btn btn-ghost" onclick="mpToggleReply('replyAll')" style="font-size:11px" title="Responder a todos">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><polyline points="14 17 9 12 14 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg> Resp. todos</button>
+    <button class="btn btn-ghost" onclick="mpToggleReply('forward')" style="font-size:11px" title="Reenviar">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg> Reenviar</button>
+    <button class="btn btn-primary" onclick="mpAbrirGestion()" style="font-size:11px">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Gestión</button>`;
+  }
+
+  if(email.message_id) {
+    html += `<button class="btn btn-ghost" onclick="mpDescargarEML()" title="Descargar .eml" style="font-size:11px">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> EML</button>
+    <button class="btn btn-ghost" onclick="mpVerHilo()" title="Ver hilo de conversación" style="font-size:11px">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> Hilo</button>`;
+  }
+  area.innerHTML = html;
+}
+
+function _mpLockPanel(email) {
+  const botones = document.getElementById('mpBotonesGestion');
+  const lockMsg = document.getElementById('mpLockMsg');
+  const prioRow = document.getElementById('mpPriorityRow');
+
+  if(email.estado==='solucionado') {
+    botones.innerHTML='';
+    lockMsg.style.display='';
+    lockMsg.style.background='var(--green-l)'; lockMsg.style.color='var(--green)';
+    lockMsg.innerHTML='✅ Ticket solucionado<br><span style="font-weight:400">Solo el administrador puede reabrir este ticket</span>';
+    document.querySelectorAll('#mpPriorityRow .priority-btn').forEach(b=>{b.disabled=true;b.style.opacity='0.4';b.style.cursor='not-allowed';});
+  } else if(email.estado==='pendiente_firma') {
+    botones.innerHTML=`<button class="btn btn-purple mgmt-btn-full" onclick="mpAbrirFirma()" style="font-size:12px">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      Confirmar firma</button>`;
+    lockMsg.style.display='';
+    lockMsg.style.background='var(--purple-l)'; lockMsg.style.color='var(--purple)';
+    lockMsg.innerHTML='✍️ Esperando firma de cierre';
+    document.querySelectorAll('#mpPriorityRow .priority-btn').forEach(b=>{b.disabled=true;b.style.opacity='0.4';b.style.cursor='not-allowed';});
+  } else {
+    botones.innerHTML=`
+      <button class="btn btn-primary mgmt-btn-full" onclick="mpAbrirGestion()" style="font-size:12px">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Añadir gestión</button>
+      <button class="btn btn-success mgmt-btn-full" onclick="mpMarcarSolucionado()" style="font-size:12px">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Marcar solucionado</button>`;
+    lockMsg.style.display='none';
+  }
+}
+
+async function _mpLoadTimeline(correoId) {
+  const el = document.getElementById('mpTimeline');
+  el.innerHTML='<div class="empty-state"><p>Cargando…</p></div>';
+  try {
+    let evs=[];
+    try{ evs=await sb(`historial_eventos?correo_id=eq.${correoId}&order=created_at.asc`)||[]; }
+    catch{ try{ evs=await sb(`historial?correo_id=eq.${correoId}&order=fecha.asc`)||[]; }catch{} }
+    if(!evs.length){el.innerHTML='<div class="empty-state"><p>Sin eventos aún</p></div>';return;}
+    const colorMap={pendiente:'grey',recibido:'grey',asignado:'blue',asignado_manual:'blue',gestion:'yellow',en_gestion:'yellow',observacion:'orange',solucionado:'green',cerrado:'green',reabierto:'red',pendiente_firma:'purple',firma_confirmada:'purple',respondido:'purple',correo_respondido:'purple'};
+    const getColor=ev=>{const k=(ev.evento||ev.accion||'').toLowerCase();for(const key of Object.keys(colorMap))if(k.includes(key))return colorMap[key];return 'grey';};
+    el.innerHTML=evs.map((ev,i)=>{
+      const color=getColor(ev);
+      const fecha=ev.created_at||ev.fecha||'';
+      const accion=ev.evento||ev.accion||'Evento';
+      const meta=ev.metadata||{};
+      const agente=meta.agente_nombre||ev.agente_nombre||'';
+      const obs=meta.observaciones||ev.detalle||ev.observaciones||'';
+      return `<div class="timeline-item" onclick="mpOpenTlDetail(${i})" data-mp-idx="${i}">
+        <div class="tl-dot color-${color}"></div>
+        <div class="tl-content">
+          <div class="tl-action">${esc(accion)}</div>
+          ${agente?`<div class="tl-agent">${esc(agente)}</div>`:''}
+          <div class="tl-date">${fecha?formatDate(new Date(fecha),true):''}</div>
+          ${obs?`<div class="tl-obs">${esc(obs.substring(0,80))}${obs.length>80?'…':''}</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+    el._events=evs;
+  } catch(e){ el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">Error cargando historial</p></div>`; }
+}
+
+function mpOpenTlDetail(idx) {
+  const el = document.getElementById('mpTimeline');
+  const events = el._events;
+  if(!events||!events[idx]) return;
+  const ev=events[idx], meta=ev.metadata||{};
+  const fecha=ev.created_at||ev.fecha||'';
+  let adjHTML='';
+  if(meta.firma_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
+  if(meta.evidencia_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Evidencia</div><div class="tl-detail-val"><a href="${esc(meta.evidencia_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--blue);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--blue-l);border-radius:6px;font-size:11px;background:var(--blue-l)">${getFileIcon(meta.evidencia_nombre||'evidencia')} ${esc(meta.evidencia_nombre||'Ver evidencia')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
+  document.getElementById('tlDetailContent').innerHTML=`
+    <button onclick="closeModal('modalTlDetail')" style="float:right;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:0">✕</button>
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:16px">Detalle de gestión</h3>
+    ${row('Fecha',fecha?new Date(fecha).toLocaleString('es-CO'):'—')}
+    ${row('Acción',ev.evento||ev.accion||'—')}
+    ${row('Agente',meta.agente_nombre||ev.agente_nombre||'—')}
+    ${row('Observaciones',meta.observaciones||ev.detalle||ev.observaciones||'—')}
+    ${adjHTML}
+    <div style="margin-top:14px;padding:10px 12px;background:var(--bg2);border-radius:8px;font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px">🔒 Esta gestión no puede ser editada ni eliminada</div>`;
+  document.getElementById('modalTlDetail').classList.add('show');
+}
+
+function mpPreviewAdj(url, nombre, tipo) {
+  if(!url||url==='#'){showToast('URL no disponible','error');return;}
+  const isPDF=tipo.includes('pdf')||nombre.toLowerCase().endsWith('.pdf');
+  const isImg=tipo.startsWith('image/');
+  const w=window.open('','_blank','width=860,height=700,resizable=yes,scrollbars=yes');
+  if(isPDF) w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659}iframe{width:100%;height:100vh;border:none}</style></head><body><iframe src="${url}#toolbar=1&navpanes=0"></iframe></body></html>`);
+  else if(isImg) w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${url}" alt="${nombre}"></body></html>`);
+  else window.open(url,'_blank');
+  w?.document.close();
+}
+
+// Acciones del panel derecho del modal
+function mpSetPriority(prio, btn) {
+  if(!_mpId) return;
+  document.querySelectorAll('#mpPriorityRow .priority-btn').forEach(b=>b.classList.remove('active-prio'));
+  btn.classList.add('active-prio');
+  sb(`correos?id=eq.${_mpId}`,'PATCH',{prioridad:prio})
+    .then(()=>{ const em=state.emails.find(e=>e.id===_mpId); if(em)em.prioridad=prio; showToast('Prioridad: '+prio+' ✓','success'); })
+    .catch(e=>showToast('Error: '+e.message.substring(0,40),'error'));
+}
+
+function mpAbrirGestion() {
+  closeModal('modalCorreoPreview');
+  state.selectedId = _mpId;
+  openGestionModal();
+}
+
+function mpMarcarSolucionado() {
+  closeModal('modalCorreoPreview');
+  state.selectedId = _mpId;
+  marcarSolucionado();
+}
+
+function mpAbrirFirma() {
+  closeModal('modalCorreoPreview');
+  state.selectedId = _mpId;
+  abrirModalFirma();
+}
+
+function mpToggleReply(modo) {
+  modo = modo || 'reply';
+  const id = _mpId;
+  closeModal('modalCorreoPreview');
+  selectEmail(id).then(()=>toggleReply(modo));
+}
+
+function mpDescargarEML() {
+  const email = state.emails.find(e=>e.id===_mpId);
+  if(email?.message_id) descargarEML(email.message_id, email.asunto);
+}
+
+function mpVerHilo() {
+  const email = state.emails.find(e=>e.id===_mpId);
+  // Seleccionar correo y abrir hilo en la vista principal
+  closeModal('modalCorreoPreview');
+  selectEmail(_mpId).then(()=>verHiloCompleto(email?.raw?.conversation_id||'', _mpId));
+}
+
+function mpAbrirEnVista() {
+  closeModal('modalCorreoPreview');
+  if(_mpId) selectEmail(_mpId);
+}
+
+async function descargarHiloEML(msgs, asuntoHilo) {
+  if(!msgs||!msgs.length){ showToast('No hay mensajes en el hilo','error'); return; }
+  const userId = window.GRAPH_USER_ID || '';
+  const boundary = '----=_HiloPQR_' + Date.now();
+  const ahora = new Date().toUTCString();
+  const asuntoSeguro = (asuntoHilo||'Hilo').replace(/[\r\n]/g,'');
+  const partes = [];
+
+  // Intentar obtener token — si falla, usamos solo datos locales
+  let token = null;
+  try { token = await getGraphToken(); } catch(e) {}
+
+  showToast(`Preparando hilo (${msgs.length} mensajes)…`,'info');
+
+  for(let i=0; i<msgs.length; i++) {
+    const m = msgs[i];
+    let raw = null;
+
+    // Intentar Graph API si tenemos token
+    if(token && m.id) {
+      try {
+        const r = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${userId}/messages/${m.id}/$value`,
+          { headers:{'Authorization':'Bearer '+token} }
+        );
+        if(r.ok) raw = await r.text();
+      } catch(e) {}
+    }
+
+    // Fallback: construir MIME con datos locales del mensaje
+    if(!raw) {
+      const de     = m.from?.emailAddress?.address || 'desconocido@tododrogas.com.co';
+      const deNom  = m.from?.emailAddress?.name || de;
+      const para   = (m.toRecipients||[]).map(r=>r.emailAddress?.address||'').join(', ') || userId;
+      const fecha  = m.receivedDateTime||m.sentDateTime||new Date().toISOString();
+      const asunto = m.subject || '(Sin asunto)';
+      // Buscar cuerpo completo en state si es el correo principal
+      const emailLocal = (typeof state!=='undefined' && state.emails)
+        ? state.emails.find(e => e.message_id === m.id)
+        : null;
+      const cuerpo = emailLocal?.body_content || m.bodyPreview || '(Sin contenido disponible)';
+      const esCuerpoHTML = emailLocal?.body_type === 'html';
+      const fechaUTC = new Date(fecha).toUTCString();
+
+      if(esCuerpoHTML) {
+        const innerBoundary = '----=_Parte_' + i + '_' + Date.now();
+        raw  = `From: ${deNom} <${de}>\r\n`;
+        raw += `To: ${para}\r\n`;
+        raw += `Subject: ${asunto}\r\n`;
+        raw += `Date: ${fechaUTC}\r\n`;
+        raw += `MIME-Version: 1.0\r\n`;
+        raw += `Content-Type: multipart/alternative; boundary="${innerBoundary}"\r\n\r\n`;
+        raw += `--${innerBoundary}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n`;
+        raw += (m.bodyPreview||'').replace(/\r?\n/g,'\r\n') + '\r\n';
+        raw += `--${innerBoundary}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n`;
+        raw += cuerpo + '\r\n';
+        raw += `--${innerBoundary}--\r\n`;
+      } else {
+        raw  = `From: ${deNom} <${de}>\r\n`;
+        raw += `To: ${para}\r\n`;
+        raw += `Subject: ${asunto}\r\n`;
+        raw += `Date: ${fechaUTC}\r\n`;
+        raw += `MIME-Version: 1.0\r\n`;
+        raw += `Content-Type: text/plain; charset=utf-8\r\n\r\n`;
+        raw += cuerpo.replace(/\r?\n/g,'\r\n') + '\r\n';
+      }
+    }
+
+    partes.push(raw);
+  }
+
+  let eml = '';
+  eml += `From: PQR Tododrogas <noreply@tododrogas.com.co>\r\n`;
+  eml += `Subject: [Hilo] ${asuntoSeguro} (${msgs.length} mensaje${msgs.length>1?'s':''})\r\n`;
+  eml += `Date: ${ahora}\r\nMIME-Version: 1.0\r\n`;
+  eml += `Content-Type: multipart/digest; boundary="${boundary}"\r\n\r\n`;
+  partes.forEach(raw => {
+    eml += `--${boundary}\r\nContent-Type: message/rfc822\r\n\r\n${raw}\r\n`;
+  });
+  eml += `--${boundary}--\r\n`;
+
+  const fileName = ('[Hilo] '+(asuntoHilo||'conversacion')).replace(/[\/\\:*?"<>|]/g,'_').substring(0,80)+'.eml';
+  const blob = new Blob([eml],{type:'message/rfc822'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=fileName;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },2000);
+  showToast(`Hilo descargado: ${msgs.length} mensaje${msgs.length>1?'s':''} ✓`,'success');
+}
+
+
+// ──────────────────────────────────────────────────────────────
+// AUTOCOMPLETADO CONTACTOS — estilo Outlook
+// ──────────────────────────────────────────────────────────────
+let _acCache = null;
+
+async function _acCargar() {
+  if(_acCache) return _acCache;
+  try {
+    _acCache = await sb('contactos_frecuentes?activo=eq.true&order=frecuencia.desc&limit=500') || [];
+  } catch(e) { _acCache = []; }
+  return _acCache;
+}
+
+function _acNorm(s) {
+  return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+async function _acBuscar(q) {
+  const all = await _acCargar();
+  if(!q || q.length < 1) {
+    // Sin query: mostrar los 6 más frecuentes
+    return all.slice(0,6);
+  }
+  const n = _acNorm(q);
+  return all.filter(c =>
+    _acNorm(c.nombre).includes(n) ||
+    _acNorm(c.email).includes(n)  ||
+    _acNorm(c.cargo||'').includes(n) ||
+    (c.aliases||[]).some(a => _acNorm(a).includes(n))
+  ).slice(0,8);
+}
+
+function _acHL(txt, q) {
+  if(!q) return txt;
+  const nt = _acNorm(txt), nq = _acNorm(q);
+  const i = nt.indexOf(nq);
+  if(i < 0) return txt;
+  return txt.slice(0,i)
+    + '<mark style="background:#dbeafe;color:#1d4ed8;border-radius:2px;padding:0 2px">'
+    + txt.slice(i, i+q.length)
+    + '</mark>'
+    + txt.slice(i+q.length);
+}
+
+const _AC_COLORS = ['#3B82F6','#10B981','#8B5CF6','#F59E0B','#EF4444','#06B6D4','#EC4899','#14B8A6'];
+
+function _acGetDD() {
+  let dd = document.getElementById('ac-dropdown-global');
+  if(!dd) {
+    dd = document.createElement('div');
+    dd.id = 'ac-dropdown-global';
+    dd.style.cssText = [
+      'position:fixed','z-index:99999',
+      'background:var(--surface,#fff)',
+      'border:1px solid var(--border,#e2e8f0)',
+      'border-radius:10px',
+      'box-shadow:0 8px 32px rgba(0,0,0,.18)',
+      'min-width:300px','max-width:460px','max-height:280px',
+      'overflow-y:auto','display:none',
+      'font-family:Poppins,sans-serif'
+    ].join(';');
+    document.body.appendChild(dd);
+  }
+  return dd;
+}
+
+function _acPos(inp) {
+  const dd = _acGetDD();
+  const r  = inp.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - r.bottom;
+  const spaceAbove = r.top;
+  const h = Math.min(280, dd.scrollHeight || 200);
+  if(spaceBelow >= h || spaceBelow >= spaceAbove) {
+    dd.style.top  = (r.bottom + 2) + 'px';
+  } else {
+    dd.style.top  = (r.top - h - 2) + 'px';
+  }
+  dd.style.left  = r.left + 'px';
+  dd.style.width = Math.max(r.width, 300) + 'px';
+}
+
+function _acShow(inp, resultados, query) {
+  const dd = _acGetDD();
+  if(!resultados.length) { dd.style.display='none'; return; }
+  dd.innerHTML = resultados.map((c,i) => {
+    const ini = (c.nombre||'?')[0].toUpperCase();
+    const col = _AC_COLORS[i % _AC_COLORS.length];
+    const aliasCount = (c.aliases||[]).length;
+    return `<div class="_ac-item" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border,#f1f5f9)"
+      onmousedown="event.preventDefault()"
+      onclick="_acSelect(this)"
+      data-email="${c.email.replace(/"/g,'&quot;')}"
+      data-nombre="${(c.nombre||'').replace(/"/g,'&quot;')}"
+      onmouseenter="this.style.background='var(--blue-l,#eff6ff)'"
+      onmouseleave="this.style.background=''">
+      <div style="width:30px;height:30px;border-radius:50%;background:${col};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">${ini}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:12px;font-weight:700;color:var(--ink,#1e293b);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_acHL(c.nombre||'',query)}</div>
+        <div style="font-size:10px;color:var(--ink3,#94a3b8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_acHL(c.email,query)}${aliasCount?' <span style="opacity:.6">+'+aliasCount+' alias</span>':''}</div>
+        ${c.cargo?`<div style="font-size:10px;color:#3B82F6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.cargo}</div>`:''}
+      </div>
+      ${c.frecuencia>0?`<div style="font-size:9px;color:var(--ink3,#94a3b8);flex-shrink:0">×${c.frecuencia}</div>`:''}
+    </div>`;
+  }).join('');
+  dd.style.display = 'block';
+  _acPos(inp);
+}
+
+function _acHide() {
+  const dd = document.getElementById('ac-dropdown-global');
+  if(dd) dd.style.display = 'none';
+}
+
+let _acActiveInp = null, _acTimer = null;
+
+function _acSelect(el) {
+  const inp = _acActiveInp; if(!inp) return;
+  const email = el.dataset.email;
+  const val = inp.value;
+  const semi = val.lastIndexOf(';');
+  inp.value = (semi >= 0 ? val.slice(0,semi+1)+' ' : '') + email;
+  inp.dispatchEvent(new Event('input'));
+  // Mover foco al siguiente campo vacío o al editor
+  const nextInput = inp.id==='replyTo'
+    ? document.getElementById('replyCC')
+    : document.getElementById('replyEditor');
+  if(nextInput) nextInput.focus();
+  _acHide();
+  // Incrementar frecuencia (silent)
+  sb(`contactos_frecuentes?email=eq.${encodeURIComponent(email)}`)
+    .then(r => { if(r?.[0]?.id) sb(`contactos_frecuentes?id=eq.${r[0].id}`,'PATCH',{frecuencia:(r[0].frecuencia||0)+1}).catch(()=>{}); })
+    .catch(()=>{});
+}
+
+function _acInit(inp) {
+  if(!inp || inp._acOk) return;
+  inp._acOk = true;
+  inp.setAttribute('autocomplete','off');
+
+  const trigger = async function(query) {
+    const res = await _acBuscar(query);
+    _acShow(inp, res, query);
+  };
+
+  inp.addEventListener('focus', async function() {
+    _acActiveInp = this;
+    const semi = this.value.lastIndexOf(';');
+    const q = (semi >= 0 ? this.value.slice(semi+1) : this.value).trim();
+    // Al hacer foco: mostrar frecuentes o buscar lo que hay
+    await trigger(q);
+  });
+
+  inp.addEventListener('input', function() {
+    _acActiveInp = this;
+    clearTimeout(_acTimer);
+    const semi = this.value.lastIndexOf(';');
+    const q = (semi >= 0 ? this.value.slice(semi+1) : this.value).trim();
+    _acTimer = setTimeout(() => trigger(q), 80);
+  });
+
+  inp.addEventListener('keydown', function(e) {
+    const dd = document.getElementById('ac-dropdown-global');
+    if(!dd || dd.style.display==='none') return;
+    const items = [...dd.querySelectorAll('._ac-item')];
+    const fi = items.findIndex(x => x.style.background && x.style.background!=='');
+    if(e.key==='ArrowDown') {
+      e.preventDefault();
+      items[fi]?.style && (items[fi].style.background='');
+      const next = items[Math.min(fi+1, items.length-1)];
+      if(next) next.style.background='var(--blue-l,#eff6ff)';
+    } else if(e.key==='ArrowUp') {
+      e.preventDefault();
+      items[fi]?.style && (items[fi].style.background='');
+      const prev = items[Math.max(fi-1, 0)];
+      if(prev) prev.style.background='var(--blue-l,#eff6ff)';
+    } else if(e.key==='Enter' || e.key==='Tab') {
+      const focused = items.find(x => x.style.background && x.style.background!=='') || items[0];
+      if(focused) { e.preventDefault(); _acSelect(focused); }
+    } else if(e.key==='Escape') {
+      _acHide();
+    }
+  });
+
+  inp.addEventListener('blur', () => setTimeout(_acHide, 180));
+}
+
+function limpiarHilo(){const a=document.getElementById('hiloArea');if(a){a.innerHTML='';a.dataset.conv='';}}
+
+async function descargarEML(messageId, asunto) {
+  if(!messageId) { showToast('No hay ID de mensaje para descargar','error'); return; }
+  const userId = window.GRAPH_USER_ID || '';
+  const fileName = (asunto||'correo').replace(/[\/\\:*?"<>|]/g,'_').substring(0,80) + '.eml';
+
+  showToast('Preparando descarga EML…','info');
+  try {
+    const token = await getGraphToken();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${userId}/messages/${messageId}/$value`,
+      { headers:{'Authorization':'Bearer '+token} }
+    );
+    if(r.status===401) { showToast('Token expirado. Recarga la página.','error'); return; }
+    if(r.status===404) { showToast('Mensaje no encontrado en el buzón.','error'); return; }
+    if(!r.ok) throw new Error('Graph '+r.status);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(new Blob([blob],{type:'message/rfc822'}));
+    const a = document.createElement('a');
+    a.href=url; a.download=fileName;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },2000);
+    showToast('EML descargado ✓','success');
+  } catch(e) {
+    // Graph falló (503, red, etc.) → usar datos locales inmediatamente
+    _descargarEMLLocal(messageId, asunto, fileName);
+  }
+}
+
+function _descargarEMLLocal(messageId, asunto, fileName) {
+  // Construir EML con datos que ya tenemos en memoria
+  const email = (typeof state!=='undefined' && state.emails)
+    ? state.emails.find(e => e.message_id === messageId || e.id === messageId)
+    : null;
+
+  if(!email) {
+    showToast('Buzón en migración y sin datos locales disponibles. Inténtalo en 2-3 minutos.','error');
+    return;
+  }
+
+  const de     = email.remitente || 'desconocido@tododrogas.com.co';
+  const deNom  = email.remitente_nombre || de;
+  const asuntoMsg = email.asunto || asunto || '(Sin asunto)';
+  const fecha  = email.sent_at || email.fecha || new Date().toISOString();
+  const cuerpo = email.body_content || email.raw?.body_preview || '(Sin contenido)';
+  const boundary = '----=_Local_' + Date.now();
+
+  let eml = '';
+  eml += `From: ${deNom} <${de}>\r\n`;
+  eml += `Subject: ${asuntoMsg}\r\n`;
+  eml += `Date: ${new Date(fecha).toUTCString()}\r\n`;
+  eml += `MIME-Version: 1.0\r\n`;
+
+  if(email.body_type==='html') {
+    eml += `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n`;
+    eml += `--${boundary}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n`;
+    eml += (email.raw?.body_preview||'').replace(/\r?\n/g,'\r\n') + '\r\n';
+    eml += `--${boundary}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n`;
+    eml += cuerpo + '\r\n';
+    eml += `--${boundary}--\r\n`;
+  } else {
+    eml += `Content-Type: text/plain; charset=utf-8\r\n\r\n`;
+    eml += cuerpo.replace(/\r?\n/g,'\r\n') + '\r\n';
+  }
+
+  const fn = fileName || (asuntoMsg.replace(/[\/\\:*?"<>|]/g,'_').substring(0,80)+'.eml');
+  const blob = new Blob([eml],{type:'message/rfc822'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=fn;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },2000);
+  showToast('EML descargado desde datos locales ✓','success');
+}
+
+async function verHiloCompleto(conversationId, correoId) {
+  const area = document.getElementById('hiloArea');
+  if(!area) return;
+  if(area.innerHTML && area.dataset.conv === conversationId) {
+    area.innerHTML = ''; area.dataset.conv = ''; return;
+  }
+  if(!conversationId) {
+    area.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--ink3);background:var(--bg2);border-radius:var(--r2);margin-top:8px">No hay conversation_id para este correo.</div>';
+    return;
+  }
+  area.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--ink3)">Cargando hilo…</div>';
+  area.dataset.conv = conversationId;
+  try {
+    const token = await getGraphToken();
+    const userId = window.GRAPH_USER_ID || '';
+    const convIdClean = conversationId.replace(/'/g, "''");
+    const url = `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/allItems/messages?$filter=conversationId eq '${convIdClean}'&$select=id,subject,from,toRecipients,receivedDateTime,sentDateTime,bodyPreview,hasAttachments,isDraft&$top=50`;
+    const r = await fetch(url, { headers: {'Authorization':'Bearer '+token} });
+    if(!r.ok) {
+      const errText = await r.text();
+      if(r.status===503) throw new Error('Buzón temporalmente en migración (503). Intenta en unos minutos.');
+      if(r.status===404) throw new Error('Buzón no encontrado. Verifica GRAPH_USER_ID.');
+      if(r.status===401) throw new Error('Token expirado. Recarga la página.');
+      throw new Error('Graph API '+r.status+': '+errText.substring(0,100));
+    }
+    const data = await r.json();
+    const msgs = (data.value||[]).sort((a,b)=>new Date(a.receivedDateTime||a.sentDateTime||0)-new Date(b.receivedDateTime||b.sentDateTime||0));
+    window._hiloMsgs = msgs;
+    window._hiloAsunto = msgs[0]?.subject||'';
+    if(!msgs.length) {
+      area.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--ink3);background:var(--bg2);border-radius:var(--r2);margin-top:8px">No se encontraron mensajes en este hilo.</div>';
+      return;
+    }
+    let rows = '';
+    msgs.forEach((m,i) => {
+      const de = m.from?.emailAddress?.address || '';
+      const deNombre = m.from?.emailAddress?.name || de;
+      const fecha = m.receivedDateTime||m.sentDateTime||'';
+      const esEnviado = de.toLowerCase().includes((window.GRAPH_USER_ID||'').split('@')[0].toLowerCase());
+      const subjectSafe = (m.subject||'correo').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      rows += '<div style="padding:10px 14px;border-bottom:1px solid var(--border);'+(i===msgs.length-1?'border-bottom:none':'')+'">';
+      rows += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
+      rows += '<div style="display:flex;align-items:center;gap:8px;min-width:0">';
+      rows += '<span style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:'+(esEnviado?'var(--blue)':'var(--green)')+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff">'+esc(deNombre).charAt(0).toUpperCase()+'</span>';
+      rows += '<div style="min-width:0">';
+      rows += '<div style="font-size:11px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(deNombre)+(esEnviado?' <span style="background:var(--blue-l);color:var(--blue);font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">ENVIADO</span>':'')+'</div>';
+      rows += '<div style="font-size:10px;color:var(--ink3)">'+(fecha?new Date(fecha).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'')+' </div>';
+      rows += '</div></div>';
+      rows += '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center">';
+      rows += (m.hasAttachments?'<span style="font-size:10px;color:var(--ink3)" title="Tiene adjuntos">📎</span>':'');
+      rows += '<button data-mid="'+m.id+'" data-sub="'+encodeURIComponent(m.subject||'correo')+'" onclick="descargarEML(this.dataset.mid,decodeURIComponent(this.dataset.sub))" title="Descargar como .eml" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2);display:flex;align-items:center;gap:4px">';
+      rows += '<svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> EML</button>';
+      rows += '</div></div>';
+      rows += '<div style="margin-top:5px;font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.bodyPreview||'')+'</div>';
+      rows += '</div>';
+    });
+    area.innerHTML = '<div style="margin-top:10px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
+      +'<div style="background:var(--bg2);padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px">'
+      +'<span style="font-size:11px;font-weight:700;color:var(--ink2)">🧵 Hilo completo · '+msgs.length+' mensaje'+(msgs.length>1?'s':'')+'</span>'
+      +'<div style="display:flex;gap:6px;align-items:center">'
+      +'<button onclick="descargarHiloEML(window._hiloMsgs,window._hiloAsunto)" title="Descargar hilo completo como un solo .eml (igual que Outlook)" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2);display:flex;align-items:center;gap:4px"><svg width=\'10\' height=\'10\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2.5\' viewBox=\'0 0 24 24\'><path d=\'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\'/><polyline points=\'7 10 12 15 17 10\'/><line x1=\'12\' y1=\'15\' x2=\'12\' y2=\'3\'/></svg> ⬇ Hilo completo</button>'
+      +'<button onclick="limpiarHilo()" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px">✕</button>'
+      +'</div></div>'+rows+'</div>';
+  } catch(e) {
+    area.innerHTML = '<div style="padding:12px 14px;background:var(--red-l);border-radius:var(--r2);margin-top:8px;font-size:11px;color:var(--red)">⚠️ '+esc(e.message)+'</div>';
+  }
+}
+
+function logout(){sessionStorage.clear();window.location.href='login.html';}
+async function getGraphToken(){
+  try{
+    const r=await fetch('/api/token',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:`client_id=${window.CLIENT_ID||''}&client_secret=${window.CLIENT_SECRET||''}&scope=https://graph.microsoft.com/.default&grant_type=client_credentials`
+    });
+    const d=await r.json();
+    if(!d.access_token) console.error('Token response:',d);
+    return d.access_token;
+  }catch(e){console.error('Error obteniendo token:',e);return '';}
+}
+</script>
+</body>
+</html>
