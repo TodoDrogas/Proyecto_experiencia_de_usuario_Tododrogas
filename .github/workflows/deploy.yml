@@ -15,25 +15,29 @@ jobs:
         uses: actions/checkout@v4
 
       # ── 2. Generar config.js con secrets reales ──────────────
+      #    Se genera en la RAÍZ de public/ porque todos los HTMLs
+      #    lo cargan con <script src="config.js"> (ruta relativa).
       #    Este archivo NUNCA se sube al repo. Lo genera CI/CD.
       - name: Generar config.js
         run: |
           mkdir -p public/assets/js
-          cat > public/assets/js/config.js << 'CONFIGEOF'
-          window.SUPABASE_URL      = '${{ secrets.SUPABASE_URL }}';
-          window.SUPABASE_KEY      = '${{ secrets.SUPABASE_KEY }}';
-          window.AZURE_TENANT_ID   = '${{ secrets.AZURE_TENANT_ID }}';
-          window.AZURE_CLIENT_ID   = '${{ secrets.AZURE_CLIENT_ID }}';
+          cat > public/config.js << 'CONFIGEOF'
+          window.SUPABASE_URL        = '${{ secrets.SUPABASE_URL }}';
+          window.SUPABASE_KEY        = '${{ secrets.SUPABASE_KEY }}';
+          window.AZURE_TENANT_ID     = '${{ secrets.AZURE_TENANT_ID }}';
+          window.AZURE_CLIENT_ID     = '${{ secrets.AZURE_CLIENT_ID }}';
           window.AZURE_CLIENT_SECRET = '${{ secrets.AZURE_CLIENT_SECRET }}';
-          window.GRAPH_USER_ID     = '${{ secrets.GRAPH_USER_ID }}';
-          window.N8N_WEBHOOK_BASE  = '${{ secrets.N8N_WEBHOOK_BASE }}';
-          window.OPENAI_KEY        = '${{ secrets.OPENAI_KEY }}';
+          window.GRAPH_USER_ID       = '${{ secrets.GRAPH_USER_ID }}';
+          window.N8N_WEBHOOK_BASE    = '${{ secrets.N8N_WEBHOOK_BASE }}';
+          window.OPENAI_KEY          = '${{ secrets.OPENAI_KEY }}';
+          window.ADMIN_USER          = '${{ secrets.ADMIN_USER }}';
+          window.ADMIN_PASS          = '${{ secrets.ADMIN_PASS }}';
           CONFIGEOF
 
       # ── 3. Validar que no haya secrets vacíos ────────────────
       - name: Validar secrets
         run: |
-          EMPTY=$(grep -P "=\s*''" public/assets/js/config.js || true)
+          EMPTY=$(grep -P "=\s*''" public/config.js || true)
           if [ -n "$EMPTY" ]; then
             echo "❌ ERROR: Hay secrets vacíos en config.js:"
             echo "$EMPTY"
