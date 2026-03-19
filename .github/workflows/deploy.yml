@@ -1,0 +1,77 @@
+name: 🚀 Deploy PQR Producción — Tododrogas
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      # ── 2. Generar config.js con secrets reales ──────────────
+      #    Este archivo NUNCA se sube al repo. Lo genera CI/CD.
+      - name: Generar config.js
+        run: |
+          mkdir -p public/assets/js
+          cat > public/assets/js/config.js << 'CONFIGEOF'
+          window.SUPABASE_URL      = '${{ secrets.SUPABASE_URL }}';
+          window.SUPABASE_KEY      = '${{ secrets.SUPABASE_KEY }}';
+          window.AZURE_TENANT_ID   = '${{ secrets.AZURE_TENANT_ID }}';
+          window.AZURE_CLIENT_ID   = '${{ secrets.AZURE_CLIENT_ID }}';
+          window.AZURE_CLIENT_SECRET = '${{ secrets.AZURE_CLIENT_SECRET }}';
+          window.GRAPH_USER_ID     = '${{ secrets.GRAPH_USER_ID }}';
+          window.N8N_WEBHOOK_BASE  = '${{ secrets.N8N_WEBHOOK_BASE }}';
+          window.OPENAI_KEY        = '${{ secrets.OPENAI_KEY }}';
+          CONFIGEOF
+
+      # ── 3. Validar que no haya secrets vacíos ────────────────
+      - name: Validar secrets
+        run: |
+          EMPTY=$(grep -P "=\s*''" public/assets/js/config.js || true)
+          if [ -n "$EMPTY" ]; then
+            echo "❌ ERROR: Hay secrets vacíos en config.js:"
+            echo "$EMPTY"
+            exit 1
+          fi
+          echo "✅ Todos los secrets están presentes"
+
+      # ── 4. Preparar directorios en VPS Web ───────────────────
+      - name: Preparar VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.VPS_WEB_HOST }}
+          username: root
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            mkdir -p /var/www/pqr/assets/{css,js,img}
+            echo "✅ Directorios listos"
+
+      # ── 5. Copiar archivos al VPS Web ────────────────────────
+      - name: Copiar archivos
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.VPS_WEB_HOST }}
+          username: root
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          source:   "public/"
+          target:   /var/www/pqr/
+          strip_components: 1
+
+      # ── 6. Recargar Nginx ────────────────────────────────────
+      - name: Recargar Nginx
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.VPS_WEB_HOST }}
+          username: root
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            nginx -t && systemctl reload nginx
+            echo "✅ Deploy completo en producción"
+            echo "📁 Archivos desplegados:"
+            ls -la /var/www/pqr/
