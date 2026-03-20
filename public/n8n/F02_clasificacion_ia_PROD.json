@@ -1,0 +1,387 @@
+{
+  "name": "F02 — Clasificación IA + SLA (PROD v3)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 3
+            }
+          ]
+        }
+      },
+      "id": "6aaaa101-a524-4254-b18c-9fcd24f1dbe5",
+      "name": "Schedule Clasificar (cada 3 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -784,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?origen=eq.correo&select=id,descripcion,body_content,tipo_pqr&limit=10",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "specifyHeaders": "=keypair",
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      },
+      "id": "33dac654-25be-4978-bc32-b0a3155298e8",
+      "name": "Obtener PQR sin clasificar1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -576,
+        432
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "supabaseApi": {
+          "id": "PADCchCXZ8moH0XN",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "06b760b2-c456-4189-97a8-12c05361fcc1",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "536f22a5-35cd-4657-b191-287ec5f45b94",
+      "name": "¿Hay PQR para clasificar?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -336,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── Limpieza HTML → texto plano antes de enviar al GPT ──────────────────────\n// Evita el error: \"messages resulted in 172485 tokens\" (límite 128000)\n// Los correos llegan como HTML completo con estilos, scripts y cadenas de reply.\n// Este nodo extrae solo el texto útil y lo recorta a 3000 caracteres máximo.\n\nconst MAX_CHARS = 3000;\n\nfunction htmlToText(html) {\n  if (!html || typeof html !== 'string') return '';\n\n  return html\n    // Eliminar bloques <style> y <script> con su contenido\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, ' ')\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, ' ')\n    // Eliminar head completo\n    .replace(/<head[^>]*>[\\s\\S]*?<\\/head>/gi, ' ')\n    // Convertir saltos de bloque en espacios\n    .replace(/<br\\s*\\/?>/gi, ' ')\n    .replace(/<\\/?(p|div|li|tr|td|th|h[1-6])[^>]*>/gi, ' ')\n    // Eliminar todos los tags restantes\n    .replace(/<[^>]+>/g, '')\n    // Decodificar entidades HTML básicas\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"')\n    .replace(/&#39;/g, \"'\")\n    // Colapsar espacios y saltos redundantes\n    .replace(/[ \\t]{2,}/g, ' ')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nfunction truncate(text, max) {\n  if (!text || text.length <= max) return text;\n  // Cortar en el último espacio antes del límite para no partir palabras\n  const cut = text.lastIndexOf(' ', max);\n  return text.slice(0, cut > 0 ? cut : max) + ' [...]';\n}\n\nconst raw = $json.body_content || $json.descripcion || '';\nconst textoLimpio = truncate(htmlToText(raw), MAX_CHARS) || 'Sin contenido';\n\nreturn [{ json: {\n  ...$json,\n  texto_para_gpt: textoLimpio\n}}];"
+      },
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Limpiar HTML → texto plano",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4o-mini",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "Eres un clasificador de PQR para INVERSIONES TODO DROGAS S.A.S., operador logístico farmacéutico colombiano.\nAnaliza el texto y responde SOLO con JSON válido, sin markdown ni bloques de código:\n{\n  \"tipo_pqr\": \"peticion|queja|reclamo|sugerencia|felicitacion|denuncia\",\n  \"prioridad\": \"alta|media|baja\",\n  \"sentimiento\": \"positivo|neutro|negativo|muy_negativo\",\n  \"categoria_ia\": \"atencion_cliente|producto|precios|espera|error_factura|medicamento_critico|otro\",\n  \"resumen_corto\": \"máximo 15 palabras\",\n  \"es_urgente\": false,\n  \"nivel_riesgo\": \"ninguno\",\n  \"ley_aplicable\": \"Ley 1755/2015\",\n  \"horas_sla\": 120\n}\n\nDEFINICIONES DE TIPO PQR:\n- queja: inconformidad por mala atención, tiempos de espera, trato del personal o procesos en punto de dispensación\n- peticion: solicitud de información sobre disponibilidad, estado de fórmula o proceso de dispensación (SIN inconformidad)\n- reclamo: no entrega del medicamento, entrega incompleta, error en dispensación o retrasos\n- denuncia: reporte de irregularidades en dispensación o posible incumplimiento del servicio\n- sugerencia: propuesta del usuario para mejorar procesos\n- felicitacion: reconocimiento de buena atención\n\nREGLAS SLA — QUEJA (horas CORRIDAS, no hábiles):\n- queja + palabras clave vitales → es_urgente=true, nivel_riesgo=\"vital\", horas_sla=24\n- queja + paciente priorizado (sin riesgo vital) → es_urgente=true, nivel_riesgo=\"priorizado\", horas_sla=48\n- queja + cualquier otro caso → es_urgente=false, nivel_riesgo=\"simple\", horas_sla=72\nREGLA CRÍTICA: tipo_pqr=\"queja\" NUNCA puede tener nivel_riesgo=\"ninguno\" ni horas_sla=120.\n\nREGLAS SLA — OTROS TIPOS (horas HÁBILES):\n- peticion estándar → horas_sla=120, nivel_riesgo=\"ninguno\", es_urgente=false\n- peticion con medicamento crítico o solicitud urgente → es_urgente=true, horas_sla=64, nivel_riesgo=\"ninguno\"\n- reclamo → horas_sla=120, nivel_riesgo=\"ninguno\", ley_aplicable=\"Ley 1755/2015 + Ley 1751/2015\"\n- denuncia → horas_sla=120, nivel_riesgo=\"ninguno\", es_urgente=false, ley_aplicable=\"Ley 1755/2015 + vigilancia sanitaria\"\nREGLA CRÍTICA: tipo_pqr=\"denuncia\" SIEMPRE horas_sla=120, sin excepción aunque mencione riesgo vital.\nREGLA CRÍTICA: tipo_pqr=\"peticion\" NUNCA puede tener nivel_riesgo=\"vital\" ni \"priorizado\".\n\nPALABRAS CLAVE VITALES (solo aplican para determinar nivel dentro de queja):\ntutela, riesgo vital, oncológico, insulina, anticoagulante, UCI, hospitalización.\nSi el texto menciona estas palabras pero es una peticion o denuncia, NO cambia el nivel_riesgo ni reduce las horas_sla.\n\nCLASIFICACIÓN CORRECTA — si el texto expresa inconformidad Y menciona palabras clave vitales → tipo_pqr=\"queja\", nivel_riesgo=\"vital\", horas_sla=24.\nSi el texto solo informa o solicita algo (sin inconformidad) Y menciona palabras clave vitales → tipo_pqr=\"peticion\", horas_sla=120.\n\nSin texto útil → tipo_pqr=peticion, prioridad=baja, es_urgente=false, nivel_riesgo=\"ninguno\", horas_sla=120."
+            },
+            {
+              "content": "={{ $json.texto_para_gpt }}"
+            }
+          ]
+        },
+        "simplifyOutput": false,
+        "options": {},
+        "requestOptions": {}
+      },
+      "id": "dea06757-c1b8-4548-af49-324374f0faf4",
+      "name": "GPT-4o-mini Clasificar + SLA",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        100,
+        432
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "Znxodr26l9Kf4mq0",
+          "name": "OpenAI-PQR"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const correoId = $('¿Hay PQR para clasificar?1').first().json.id;\nconst raw = $input.first().json.choices?.[0]?.message?.content || \n            $input.first().json.message?.content || '{}';\n\nlet clasificacion;\ntry {\n  const cleaned = raw.replace(/```json|```/g, '').trim();\n  clasificacion = JSON.parse(cleaned);\n} catch(e) {\n  clasificacion = {\n    tipo_pqr: 'peticion',\n    prioridad: 'media',\n    sentimiento: 'neutro',\n    categoria_ia: 'otro',\n    resumen_corto: 'Sin clasificar',\n    es_urgente: false,\n    nivel_riesgo: 'ninguno',\n    ley_aplicable: 'Ley 1755/2015',\n    horas_sla: 120\n  };\n}\n\n// ── Validaciones de tipo y formato ──────────────────────────────────────────\nif (typeof clasificacion.es_urgente !== 'boolean') clasificacion.es_urgente = false;\nif (!clasificacion.horas_sla || isNaN(clasificacion.horas_sla)) clasificacion.horas_sla = 120;\nif (!clasificacion.nivel_riesgo) clasificacion.nivel_riesgo = 'ninguno';\nif (!clasificacion.ley_aplicable) clasificacion.ley_aplicable = 'Ley 1755/2015';\n\n// ── Reglas defensivas SLA ────────────────────────────────────────────────────\n\n// QUEJA: nunca puede tener nivel_riesgo=ninguno ni horas_sla=120\nif (clasificacion.tipo_pqr === 'queja') {\n  if (!['vital','priorizado','simple'].includes(clasificacion.nivel_riesgo)) {\n    clasificacion.nivel_riesgo = 'simple';\n    clasificacion.horas_sla    = 72;\n    clasificacion.es_urgente   = false;\n  }\n  if (clasificacion.nivel_riesgo === 'vital'      && clasificacion.horas_sla !== 24)  clasificacion.horas_sla = 24;\n  if (clasificacion.nivel_riesgo === 'priorizado' && clasificacion.horas_sla !== 48)  clasificacion.horas_sla = 48;\n  if (clasificacion.nivel_riesgo === 'simple'     && clasificacion.horas_sla !== 72)  clasificacion.horas_sla = 72;\n  if (clasificacion.nivel_riesgo === 'vital' || clasificacion.nivel_riesgo === 'priorizado') {\n    clasificacion.es_urgente = true;\n  } else {\n    clasificacion.es_urgente = false;\n  }\n}\n\n// DENUNCIA: siempre 120h hábiles\nif (clasificacion.tipo_pqr === 'denuncia') {\n  clasificacion.horas_sla     = 120;\n  clasificacion.nivel_riesgo  = 'ninguno';\n  clasificacion.es_urgente    = false;\n  clasificacion.ley_aplicable = 'Ley 1755/2015 + vigilancia sanitaria';\n}\n\n// PETICIÓN con nivel vital/priorizado → reclasificar como queja\nif (clasificacion.tipo_pqr === 'peticion' &&\n    ['vital','priorizado'].includes(clasificacion.nivel_riesgo)) {\n  clasificacion.tipo_pqr      = 'queja';\n  clasificacion.ley_aplicable = 'Ley 1755/2015';\n  clasificacion.es_urgente    = true;\n}\n\n// RECLAMO: ley y horas correctas\nif (clasificacion.tipo_pqr === 'reclamo') {\n  clasificacion.ley_aplicable = 'Ley 1755/2015 + Ley 1751/2015';\n  if (!clasificacion.horas_sla || clasificacion.horas_sla !== 120) clasificacion.horas_sla = 120;\n}\n\nreturn [{ json: { correo_id: correoId, ...clasificacion } }];"
+      },
+      "id": "f2e3950f-412f-4092-addb-b1726b4d25e8",
+      "name": "Parsear JSON de GPT1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calcula fecha límite SLA considerando horas hábiles Colombia\n// <64h = horas corridas (queja vital 24h, queja priorizada 48h, queja simple 72h)\n// >=64h = horas hábiles lun-vie 8am-6pm UTC-5 Bogotá\n\nconst horasSla = $json.horas_sla || 120;\nconst esHabilSolo = horasSla >= 64;\n\nfunction addBusinessHours(date, hours) {\n  const TZ_OFFSET = -5;\n  let remaining = hours;\n  let current = new Date(date);\n  while (remaining > 0) {\n    current.setHours(current.getHours() + 1);\n    const localHour = (current.getUTCHours() + 24 + TZ_OFFSET) % 24;\n    const dow = current.getUTCDay();\n    const isWorkday = dow >= 1 && dow <= 5;\n    const isWorkHour = localHour >= 8 && localHour < 18;\n    if (esHabilSolo ? (isWorkday && isWorkHour) : true) remaining--;\n  }\n  return current;\n}\n\nconst fechaLimite = addBusinessHours(new Date(), horasSla);\n\nreturn [{ json: {\n  ...$input.first().json,\n  fecha_limite_sla: fechaLimite.toISOString()\n}}];"
+      },
+      "id": "b5d7ea30-0519-479d-b5d1-4f37bb95347c",
+      "name": "Calcular fecha_limite_sla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?id=eq.{{ $json.correo_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"tipo_pqr\":         \"{{ $json.tipo_pqr }}\",\n  \"prioridad\":        \"{{ $json.prioridad }}\",\n  \"sentimiento\":      \"{{ $json.sentimiento }}\",\n  \"categoria_ia\":     \"{{ $json.categoria_ia }}\",\n  \"resumen_corto\":    \"{{ $json.resumen_corto }}\",\n  \"es_urgente\":       {{ $json.es_urgente }},\n  \"nivel_riesgo\":     \"{{ $json.nivel_riesgo }}\",\n  \"ley_aplicable\":    \"{{ $json.ley_aplicable }}\",\n  \"horas_sla\":        {{ $json.horas_sla }},\n  \"fecha_limite_sla\": \"{{ $json.fecha_limite_sla }}\",\n  \"origen\":           \"clasificado\"\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      },
+      "id": "5a30e563-399a-470c-9e1d-31e9b83834ba",
+      "name": "UPDATE correo con clasificación + SLA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        760,
+        432
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "PADCchCXZ8moH0XN",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "id": "3f218ee8-9dd6-40f9-9a4a-bedd36ce3f7d",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        600
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b841bd5e-4cce-4809-9a0b-9949032c403d",
+      "name": "Log Error F02-ClasificacionIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F02-ClasificacionIA: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F02-ClasificacionIA\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Revisar Nuevos (cada 2 min)1": {
+      "main": [
+        [
+          {
+            "node": "Obtener PQR sin clasificar1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener PQR sin clasificar1": {
+      "main": [
+        [
+          {
+            "node": "¿Hay PQR para clasificar?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay PQR para clasificar?1": {
+      "main": [
+        [
+          {
+            "node": "Limpiar HTML → texto plano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limpiar HTML → texto plano": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o-mini Clasificar + SLA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o-mini Clasificar + SLA": {
+      "main": [
+        [
+          {
+            "node": "Parsear JSON de GPT1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear JSON de GPT1": {
+      "main": [
+        [
+          {
+            "node": "Calcular fecha_limite_sla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular fecha_limite_sla": {
+      "main": [
+        [
+          {
+            "node": "UPDATE correo con clasificación + SLA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F02-ClasificacionIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "67822a5d-9220-4054-bf69-e7f4594c7bcd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fca1950383745f5d8e08873df2371ef6cedd6355117a98cfed35530b594323f0"
+  },
+  "id": "dEIAWkxfy8U8PbsIcTwzl",
+  "tags": [
+    {
+      "updatedAt": "2026-03-16T20:37:22.885Z",
+      "createdAt": "2026-03-16T20:37:22.885Z",
+      "id": "6TcPdWakg1ImUx3k",
+      "name": "Módulo2-SLA"
+    },
+    {
+      "updatedAt": "2026-03-08T18:23:42.926Z",
+      "createdAt": "2026-03-08T18:23:42.926Z",
+      "id": "uwqUc9gGN7ha8svA",
+      "name": "PQR-IA"
+    }
+  ]
+}
