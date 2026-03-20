@@ -1,0 +1,425 @@
+{
+  "name": "F03 — Asignación Agente (PROD v3)",
+  "nodes": [
+    {
+      "id": "f3-schedule",
+      "name": "Revisar PQR sin agente (cada 3 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f3-get-sin-agente",
+      "name": "PQR clasificadas sin agente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?origen=eq.clasificado&agente_id=is.null&select=id,tipo_pqr,prioridad,ticket_id&limit=20",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "f3-check",
+      "name": "¿Hay PQR sin asignar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f3-split",
+      "name": "Una a una",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        860,
+        200
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "f3-get-agente",
+      "name": "Agente con menos carga",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1080,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/agentes?activo=eq.true&select=id,nombre,correo,carga_actual&order=carga_actual.asc&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "f3-check-agente",
+      "name": "¿Hay agente disponible?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        200
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json[0].id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f3-prepare",
+      "name": "Preparar datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const pqr    = $('Una a una').first().json;\nconst agente = $input.first().json[0];\nreturn [{ json: { pqr_id: pqr.id, ticket_id: pqr.ticket_id, agente_id: agente.id, agente_correo: agente.correo, agente_nombre: agente.nombre, carga_actual: agente.carga_actual } }];"
+      }
+    },
+    {
+      "id": "f3-update-correo",
+      "name": "Asignar agente al correo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1740,
+        100
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?id=eq.{{ $json.pqr_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"agente_id\": \"{{ $json.agente_id }}\", \"estado\": \"asignado\", \"origen\": \"asignado\" }",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "f3-update-agente",
+      "name": "Incrementar carga del agente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1960,
+        100
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/agentes?id=eq.{{ $('Preparar datos').first().json.agente_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"carga_actual\": {{ $('Preparar datos').first().json.carga_actual + 1 }} }",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 2000
+          }
+        }
+      }
+    },
+    {
+      "id": "b0d8ada0-50f5-4679-9e7e-b1fb48327a10",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        600
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "663f7c1c-766c-4d52-a899-b30dd86b9ecb",
+      "name": "Log Error F03-AsignacionAgente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        600
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F03-AsignacionAgente: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F03-AsignacionAgente\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Revisar PQR sin agente (cada 3 min)": {
+      "main": [
+        [
+          {
+            "node": "PQR clasificadas sin agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PQR clasificadas sin agente": {
+      "main": [
+        [
+          {
+            "node": "¿Hay PQR sin asignar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay PQR sin asignar?": {
+      "main": [
+        [
+          {
+            "node": "Una a una",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Una a una": {
+      "main": [
+        [
+          {
+            "node": "Agente con menos carga",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente con menos carga": {
+      "main": [
+        [
+          {
+            "node": "¿Hay agente disponible?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay agente disponible?": {
+      "main": [
+        [
+          {
+            "node": "Preparar datos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Preparar datos": {
+      "main": [
+        [
+          {
+            "node": "Asignar agente al correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asignar agente al correo": {
+      "main": [
+        [
+          {
+            "node": "Incrementar carga del agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F03-AsignacionAgente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-Core"
+    }
+  ]
+}
