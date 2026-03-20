@@ -726,7 +726,7 @@ async function selectEmail(id) {
     </div>
     <div id="hiloArea"></div>
     <div id="replyBoxArea"></div>
-    ${email.has_attachments?`<div class="adj-section" style="margin-bottom:12px"><div class="adj-title">📎 Adjuntos</div><div id="adjGrid"><span style="font-size:12px;color:var(--ink3)">Cargando...</span></div></div>`:''}
+    <div class="adj-section" style="margin-bottom:12px;display:none" id="adjSection"><div class="adj-title">📎 Adjuntos</div><div id="adjGrid"></div></div>
     <div class="ev-body">
       ${email.body_type==='html'?`<iframe srcdoc="${esc(email.body_content||'')}" sandbox="allow-same-origin" style="width:100%;height:100%;min-height:260px;border:none"></iframe>`:
         `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`}
@@ -783,7 +783,8 @@ async function selectEmail(id) {
 
   // Timeline
   await loadTicketTimeline(id);
-  if(email.has_attachments) loadAttachments(id);
+  // Siempre intentar cargar adjuntos
+  loadAttachments(id);
 }
 
 async function loadTicketTimeline(correoId) {
@@ -863,11 +864,27 @@ function row(l,v){return `<div class="tl-detail-row"><div class="tl-detail-label
 
 async function loadAttachments(correoId) {
   const el=document.getElementById('adjGrid');
+  const section=document.getElementById('adjSection');
   if(!el) return;
   try {
-    const adjs=await sb(`adjuntos?correo_id=eq.${correoId}`)||[];
-    el.innerHTML=adjs.length?adjs.map(a=>`<div class="adj-pill" onclick="window.open('${esc(a.storage_url||a.url||a.content_url||'#')}')">${getFileIcon(a.nombre||a.name)} ${esc(a.nombre||a.name||'Archivo')}</div>`).join(''):'<span style="font-size:11px;color:var(--ink3)">Sin adjuntos</span>';
-  } catch { el.innerHTML=''; }
+    const adjs=await sb(`adjuntos?correo_id=eq.${correoId}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
+    const visibles=adjs.filter(a=>{
+      const esInline=a.es_inline===true;
+      const esImagen=(a.tipo_contenido||'').toLowerCase().startsWith('image/');
+      if(esInline&&esImagen&&(a.tamano_bytes||0)<10000) return false;
+      return true;
+    });
+    if(!visibles.length){ if(section) section.style.display='none'; return; }
+    if(section) section.style.display='';
+    el.innerHTML=visibles.map(a=>{
+      const url=a.storage_url||'#';
+      const size=(a.tamano_bytes||0)>1048576?(a.tamano_bytes/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||0)/1024)+' KB';
+      return `<div class="adj-pill" onclick="window.open('${esc(url)}','_blank')" title="${esc(a.nombre||'Archivo')} · ${size}">
+        ${getFileIcon(a.nombre||'')} ${esc(a.nombre||'Archivo')}
+        <span style="font-size:9px;color:var(--ink3);margin-left:2px">${size}</span>
+      </div>`;
+    }).join('');
+  } catch(err){ console.warn('[loadAttachments]',err); if(section) section.style.display='none'; }
 }
 
 // ──────────────────────────────────────────────
@@ -1646,32 +1663,36 @@ async function abrirPreviewCorreo(id) {
   document.getElementById('mpReplyBoxArea').innerHTML='';
   document.getElementById('mpHiloArea').innerHTML='';
 
-  // Adjuntos
+  // Adjuntos — siempre consultar, mostrar barra solo si hay resultados
   const adjBar = document.getElementById('mpAdjuntosBar');
   const adjGrid = document.getElementById('mpAdjuntosGrid');
   adjGrid.innerHTML='';
-  if(email.has_attachments) {
-    adjBar.style.display='';
-    adjGrid.innerHTML='<span style="font-size:11px;color:var(--ink3)">Cargando…</span>';
-    sb(`adjuntos?correo_id=eq.${id}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion`)
-      .then(adjs=>{
-        if(!adjs?.length){adjGrid.innerHTML='<span style="font-size:11px;color:var(--ink3)">Sin adjuntos</span>';return;}
-        adjGrid.innerHTML=adjs.map(a=>{
-          const url=a.storage_url||'#';
-          const size=a.tamano_bytes>1048576?(a.tamano_bytes/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||0)/1024)+' KB';
-          return `<div onclick="mpPreviewAdj('${esc(url)}','${esc(a.nombre||'archivo')}','${esc(a.tipo_contenido||'')}')"
-            style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;max-width:210px;transition:border-color .15s"
-            onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'"
-            title="Clic para previsualizar">
-            <span style="font-size:15px">${getFileIcon(a.nombre||'')}</span>
-            <div style="min-width:0">
-              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)">${esc(a.nombre||'Archivo')}</div>
-              <div style="color:var(--ink3)">${size}</div>
-            </div>
-          </div>`;
-        }).join('');
-      }).catch(()=>{adjBar.style.display='none';});
-  } else { adjBar.style.display='none'; }
+  adjBar.style.display='none';
+  sb(`adjuntos?correo_id=eq.${id}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)
+    .then(adjs=>{
+      const visibles=(adjs||[]).filter(a=>{
+        const esInline=a.es_inline===true;
+        const esImagen=(a.tipo_contenido||'').toLowerCase().startsWith('image/');
+        if(esInline&&esImagen&&(a.tamano_bytes||0)<10000) return false;
+        return true;
+      });
+      if(!visibles.length) return;
+      adjBar.style.display='';
+      adjGrid.innerHTML=visibles.map(a=>{
+        const url=a.storage_url||'#';
+        const size=(a.tamano_bytes||0)>1048576?(a.tamano_bytes/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||0)/1024)+' KB';
+        return `<div onclick="mpPreviewAdj('${esc(url)}','${esc(a.nombre||'archivo')}','${esc(a.tipo_contenido||'')}')"
+          style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;max-width:210px;transition:border-color .15s"
+          onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'"
+          title="Clic para previsualizar">
+          <span style="font-size:15px">${getFileIcon(a.nombre||'')}</span>
+          <div style="min-width:0">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)">${esc(a.nombre||'Archivo')}</div>
+            <div style="color:var(--ink3)">${size}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }).catch(()=>{ /* silencioso */ });
 
   // Abrir modal
   document.getElementById('modalCorreoPreview').classList.add('show');
