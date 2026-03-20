@@ -1,0 +1,257 @@
+{
+  "name": "F10 — Confirmación Universal (PROD v3)",
+  "nodes": [
+    {
+      "id": "f10-start",
+      "name": "Inicio (llamado por otros flujos)",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "f10-get-config",
+      "name": "Obtener branding empresa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/configuracion_sistema?select=nombre_empresa,logo_url,color_primario,correo_atencion&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f10-build-html",
+      "name": "Construir HTML del correo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "jsCode": "// Parámetros recibidos del flujo que nos llamó\nconst params       = $('Inicio (llamado por otros flujos)').first().json;\nconst config       = $('Obtener branding empresa').first().json[0] || {};\n\nconst para          = params.para          || '';\nconst nombre        = params.nombre        || 'Usuario';\nconst ticket_id     = params.ticket_id     || '';\nconst tipo_pqr      = params.tipo_pqr      || 'solicitud';\nconst asunto_extra  = params.asunto_extra  || '';\nconst mensaje_extra = params.mensaje_extra || '';\nconst tipo_evento   = params.tipo_evento   || 'confirmacion'; // confirmacion | respuesta | cierre | escalada\n\nconst empresa       = config.nombre_empresa || 'Tododrogas';\nconst color         = config.color_primario || '#006D77';\nconst correo_resp   = config.correo_atencion || 'pqrsmirror@tododrogas.com.co';\n\n// Títulos según evento\nconst titulos = {\n  confirmacion: `✅ Tu ${tipo_pqr} fue radicada`,\n  respuesta:    `📩 Respuesta a tu ${tipo_pqr}`,\n  cierre:       `✔️ Tu ${tipo_pqr} fue cerrada`,\n  escalada:     `⚡ Tu ${tipo_pqr} fue escalada`,\n};\nconst titulo = titulos[tipo_evento] || titulos.confirmacion;\n\nconst html = `\n<!DOCTYPE html>\n<html lang=\"es\">\n<head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width\"></head>\n<body style=\"margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;\">\n<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f3f4f6;padding:30px 0;\">\n  <tr><td align=\"center\">\n    <table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);\">\n      <!-- HEADER -->\n      <tr><td style=\"background:${color};padding:28px 32px;\">\n        <h1 style=\"color:#fff;margin:0;font-size:22px;font-weight:700;\">${empresa}</h1>\n        <p style=\"color:rgba(255,255,255,0.8);margin:6px 0 0;font-size:13px;\">Sistema de Atención al Cliente — PQR</p>\n      </td></tr>\n      <!-- TÍTULO EVENTO -->\n      <tr><td style=\"padding:28px 32px 0;\">\n        <h2 style=\"color:${color};margin:0;font-size:20px;\">${titulo}</h2>\n        <p style=\"color:#374151;margin:12px 0 0;\">Hola <strong>${nombre}</strong>,</p>\n      </td></tr>\n      <!-- TICKET BOX -->\n      ${ticket_id ? `\n      <tr><td style=\"padding:20px 32px;\">\n        <div style=\"background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;\">\n          <p style=\"margin:0 0 6px;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;\">Número de Radicado</p>\n          <p style=\"margin:0;font-size:26px;font-weight:800;color:${color};letter-spacing:3px;\">${ticket_id}</p>\n        </div>\n      </td></tr>` : ''}\n      <!-- MENSAJE EXTRA -->\n      ${mensaje_extra ? `\n      <tr><td style=\"padding:0 32px 20px;\">\n        <p style=\"color:#374151;line-height:1.6;\">${mensaje_extra}</p>\n      </td></tr>` : ''}\n      <!-- INFO ESTÁNDAR -->\n      <tr><td style=\"padding:0 32px 24px;\">\n        <table width=\"100%\" cellpadding=\"8\" style=\"background:#f9fafb;border-radius:8px;font-size:13px;color:#6b7280;\">\n          <tr><td>📋 <strong>Tipo:</strong></td><td style=\"text-transform:capitalize;color:#111;\">${tipo_pqr}</td></tr>\n          <tr><td>📅 <strong>Fecha:</strong></td><td style=\"color:#111;\">${new Date().toLocaleDateString('es-CO',{year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td></tr>\n          <tr><td>⏱️ <strong>Tiempo de respuesta:</strong></td><td style=\"color:#111;\">Máximo 15 días hábiles</td></tr>\n          <tr><td>📧 <strong>Contacto:</strong></td><td style=\"color:#111;\">${correo_resp}</td></tr>\n        </table>\n      </td></tr>\n      <!-- FOOTER -->\n      <tr><td style=\"background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;\">\n        <p style=\"margin:0;font-size:12px;color:#9ca3af;text-align:center;\">\n          Este correo fue enviado automáticamente por el sistema PQR de ${empresa}.<br>\n          Por favor no responda directamente a este mensaje.\n        </p>\n      </td></tr>\n    </table>\n  </td></tr>\n</table>\n</body></html>`;\n\nconst asunto = asunto_extra || `${titulo} — ${ticket_id || empresa}`;\n\nreturn [{ json: { html, asunto, para, nombre, ticket_id } }];"
+      }
+    },
+    {
+      "id": "f10-send",
+      "name": "Enviar correo via Graph API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/users/pqrsmirror@tododrogas.com.co/sendMail",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.microsoftGraphToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"subject\": \"{{ $json.asunto }}\",\n    \"body\": {\n      \"contentType\": \"HTML\",\n      \"content\": {{ JSON.stringify($json.html) }}\n    },\n    \"toRecipients\": [\n      { \"emailAddress\": { \"address\": \"{{ $json.para }}\" } }\n    ]\n  },\n  \"saveToSentItems\": false\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f10-log",
+      "name": "Registrar en historial_admin",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_admin",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"accion\": \"correo_enviado\",\n  \"usuario\": \"sistema\",\n  \"detalle\": {\n    \"para\": \"{{ $('Construir HTML del correo').first().json.para }}\",\n    \"ticket_id\": \"{{ $('Construir HTML del correo').first().json.ticket_id }}\",\n    \"asunto\": \"{{ $('Construir HTML del correo').first().json.asunto }}\"\n  }\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f021e42d-088e-454a-bf90-84df9936c533",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d5fc0a6a-5cf0-4343-b834-72a147a35008",
+      "name": "Log Error F10-Confirmacion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F10-Confirmacion: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F10-Confirmacion\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Inicio (llamado por otros flujos)": {
+      "main": [
+        [
+          {
+            "node": "Obtener branding empresa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener branding empresa": {
+      "main": [
+        [
+          {
+            "node": "Construir HTML del correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir HTML del correo": {
+      "main": [
+        [
+          {
+            "node": "Enviar correo via Graph API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar correo via Graph API": {
+      "main": [
+        [
+          {
+            "node": "Registrar en historial_admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F10-Confirmacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-Core"
+    }
+  ],
+  "_readme": "CÓMO LLAMAR ESTE FLUJO desde otro flujo n8n:\nUsar nodo 'Execute Workflow' con estos parámetros:\n{\n  para:          correo destino,\n  nombre:        nombre del ciudadano,\n  ticket_id:     TD-XXXXXXXX-XXXX,\n  tipo_pqr:      peticion | queja | reclamo | sugerencia,\n  tipo_evento:   confirmacion | respuesta | cierre | escalada,\n  asunto_extra:  (opcional) asunto personalizado,\n  mensaje_extra: (opcional) párrafo adicional en el cuerpo\n}"
+}
