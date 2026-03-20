@@ -1,0 +1,344 @@
+{
+  "name": "F06 — Vigilante SLA (PROD v3)",
+  "nodes": [
+    {
+      "id": "f6-schedule",
+      "name": "Cada hora",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f6-get-riesgo",
+      "name": "PQR próximas a vencer (4h)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?estado=not.in.(resuelto,cerrado,solucionado)&select=id,ticket_id,nombre,tipo_pqr,prioridad,estado,fecha_limite_sla,agente_id&order=fecha_limite_sla.asc",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f6-filtrar",
+      "name": "Filtrar vencidas y en riesgo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const ahora = new Date();\nconst en4h  = new Date(ahora.getTime() + 4 * 3600000);\nconst pqrs  = $input.all().map(i => i.json);\n\nconst vencidas = pqrs.filter(p => p.fecha_limite_sla && new Date(p.fecha_limite_sla) < ahora);\nconst en_riesgo = pqrs.filter(p => p.fecha_limite_sla && new Date(p.fecha_limite_sla) >= ahora && new Date(p.fecha_limite_sla) <= en4h);\n\nif (vencidas.length === 0 && en_riesgo.length === 0) {\n  return [{ json: { sin_alertas: true, vencidas: [], en_riesgo: [] } }];\n}\n\nreturn [{ json: { sin_alertas: false, vencidas, en_riesgo, total_criticas: vencidas.length + en_riesgo.length } }];"
+      }
+    },
+    {
+      "id": "f6-check",
+      "name": "¿Hay alertas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.sin_alertas }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f6-update-vencidas",
+      "name": "Actualizar vencidas a alta prioridad",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        180
+      ],
+      "parameters": {
+        "jsCode": "const { vencidas } = $input.first().json;\nconst results = [];\nfor (const pqr of vencidas) {\n  results.push({ json: { id: pqr.id, estado: 'vencida', prioridad: 'alta' } });\n}\nreturn results.length ? results : [{ json: { skipped: true } }];"
+      }
+    },
+    {
+      "id": "f6-send-alerta",
+      "name": "Enviar alerta SLA al admin",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1320,
+        180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/users/pqrsmirror@tododrogas.com.co/sendMail",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.microsoftGraphToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"subject\": \"⚠️ ALERTA SLA — {{ $('Filtrar vencidas y en riesgo').first().json.total_criticas }} PQR requieren atención\",\n    \"body\": {\n      \"contentType\": \"HTML\",\n      \"content\": \"<div style='font-family:Arial,sans-serif;max-width:700px;'><div style='background:#dc2626;padding:16px;border-radius:8px 8px 0 0;'><h2 style='color:#fff;margin:0;'>⚠️ Alerta de SLA — Tododrogas PQR</h2></div><div style='border:1px solid #fca5a5;padding:20px;background:#fff;'><p><strong>Vencidas ({{ $('Filtrar vencidas y en riesgo').first().json.vencidas.length }}):</strong></p><ul>{{ $('Filtrar vencidas y en riesgo').first().json.vencidas.map(p => '<li><strong>' + p.ticket_id + '</strong> — ' + p.tipo_pqr + ' — ' + p.nombre + '</li>').join('') }}</ul><p><strong>En riesgo próximas 4h ({{ $('Filtrar vencidas y en riesgo').first().json.en_riesgo.length }}):</strong></p><ul>{{ $('Filtrar vencidas y en riesgo').first().json.en_riesgo.map(p => '<li><strong>' + p.ticket_id + '</strong> — vence: ' + new Date(p.fecha_limite_sla).toLocaleString('es-CO') + '</li>').join('') }}</ul><p><a href='https://tododrogas.online/admin_v9.html' style='background:#dc2626;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;'>Ver Panel Admin →</a></p></div></div>\"\n    },\n    \"toRecipients\": [{ \"emailAddress\": { \"address\": \"pqrsmirror@tododrogas.com.co\" } }]\n  },\n  \"saveToSentItems\": false\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?id=eq.{{ $json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"prioridad\": \"alta\",\n  \"estado\": \"{{ $json.estado === 'vencida' ? 'vencida' : $json.estado }}\"\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      },
+      "id": "f6-patch-supabase",
+      "name": "PATCH vencidas en Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1080,
+        300
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "PADCchCXZ8moH0XN",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "id": "24453855-ad63-4f2f-9000-8e0a5b54841a",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ded6fe40-ceaf-469a-a857-749ca4d014cd",
+      "name": "Log Error F06-VigilanteSLA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F06-VigilanteSLA: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F06-VigilanteSLA\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Cada hora": {
+      "main": [
+        [
+          {
+            "node": "PQR próximas a vencer (4h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PQR próximas a vencer (4h)": {
+      "main": [
+        [
+          {
+            "node": "Filtrar vencidas y en riesgo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar vencidas y en riesgo": {
+      "main": [
+        [
+          {
+            "node": "¿Hay alertas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay alertas?": {
+      "main": [
+        [
+          {
+            "node": "Actualizar vencidas a alta prioridad",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Actualizar vencidas a alta prioridad": {
+      "main": [
+        [
+          {
+            "node": "PATCH vencidas en Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PATCH vencidas en Supabase": {
+      "main": [
+        [
+          {
+            "node": "Enviar alerta SLA al admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F06-VigilanteSLA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-SLA"
+    }
+  ]
+}
