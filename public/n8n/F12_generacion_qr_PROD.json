@@ -1,0 +1,325 @@
+{
+  "name": "F12 — Generación QR (PROD v3)",
+  "nodes": [
+    {
+      "id": "f12-wh",
+      "name": "Webhook Generar QR",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "admin/generar-qr",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "f12-check-key",
+      "name": "Verificar admin_key",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.body.admin_key }}",
+              "rightValue": "={{ $credentials.adminWebhookKey }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f12-generate",
+      "name": "Generar imagen QR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        640,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.qrserver.com/v1/create-qr-code/?size=400x400&format=png&ecc=M&data={{ encodeURIComponent($json.body.url_destino) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f12-upload",
+      "name": "Subir QR a Supabase Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        860,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/storage/v1/object/logos-config/qr_code.png",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "image/png"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f12-update-config",
+      "name": "Actualizar configuracion_sistema",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1080,
+        200
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/configuracion_sistema",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"qr_destino\": \"{{ $('Webhook Generar QR').first().json.body.url_destino }}\",\n  \"qr_url\": \"https://lyosqaqhihwgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/qr_code.png\",\n  \"updated_at\": \"{{ new Date().toISOString() }}\"\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f12-ok",
+      "name": "Responder con URL del QR",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"qr_url\": \"https://lyosqaqhihwgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/qr_code.png\", \"url_destino\": \"{{ $('Webhook Generar QR').first().json.body.url_destino }}\" }",
+        "options": {}
+      }
+    },
+    {
+      "id": "f12-unauthorized",
+      "name": "No autorizado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        640,
+        420
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"error\": \"No autorizado\" }",
+        "options": {
+          "responseCode": 401
+        }
+      }
+    },
+    {
+      "id": "0f384cc4-d458-42b4-bc35-0355342bf77e",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a736fcae-ca52-401d-8e36-bb4a59bf0bbc",
+      "name": "Log Error F12-GeneracionQR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F12-GeneracionQR: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F12-GeneracionQR\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Generar QR": {
+      "main": [
+        [
+          {
+            "node": "Verificar admin_key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar admin_key": {
+      "main": [
+        [
+          {
+            "node": "Generar imagen QR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No autorizado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar imagen QR": {
+      "main": [
+        [
+          {
+            "node": "Subir QR a Supabase Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subir QR a Supabase Storage": {
+      "main": [
+        [
+          {
+            "node": "Actualizar configuracion_sistema",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar configuracion_sistema": {
+      "main": [
+        [
+          {
+            "node": "Responder con URL del QR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F12-GeneracionQR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-Admin"
+    }
+  ]
+}
