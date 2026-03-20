@@ -1534,6 +1534,9 @@ function estadoLabel(s){
 // ──────────────────────────────────────────────
 async function selectEmail(id) {
   state.selectedId = id;
+  // Limpiar búsqueda para que la lista no desaparezca al seleccionar
+  const searchEl = document.getElementById('searchInput');
+  if(searchEl && searchEl.value) searchEl.value = '';
   renderEmailList();
   const email = state.emails.find(e=>e.id===id);
   if(!email) return;
@@ -1972,8 +1975,7 @@ async function generarConNovaTD(correoId) {
   area.innerHTML = `<div style="background:#f5f3ff;border:1px solid #7c3aed;border-radius:8px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border:2px solid #7c3aed;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><span style="color:#7c3aed;font-weight:600;font-size:13px">✦ Nova TD generando respuesta...</span></div>`;
   try {
     const agent = state.agents.find(a=>a.id===email.asignado_a);
-    const N8N_BASE_NOVA = window.N8N_WEBHOOK_BASE || 'https://tododrogas.online/webhook';
-    const res = await fetch(`${N8N_BASE_NOVA}/nova-td-respuesta`, {
+    const res = await fetch('https://n8n.srv1278939.hstgr.cloud/webhook/nova-td-respuesta', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         correo_id: email.id,
