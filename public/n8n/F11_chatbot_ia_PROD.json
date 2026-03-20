@@ -1,0 +1,350 @@
+{
+  "name": "F11 — Chatbot IA Nova (PROD v3)",
+  "nodes": [
+    {
+      "id": "f11-wh",
+      "name": "Webhook Chatbot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatbot",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "f11-get-config",
+      "name": "Obtener configuración y FAQ",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/configuracion_sistema?select=chatbot_contexto,faq,chatbot_activo&limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f11-check-activo",
+      "name": "¿Chatbot activo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json[0].chatbot_activo }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f11-upsert-sesion",
+      "name": "Crear/actualizar sesión",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        860,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/chatbot_sesiones?on_conflict=session_id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"session_id\": \"{{ $('Webhook Chatbot').first().json.body.session_id }}\",\n  \"canal_origen\": \"{{ $('Webhook Chatbot').first().json.body.canal || 'tablet' }}\"\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f11-gpt",
+      "name": "GPT-4o-mini Responder",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        200
+      ],
+      "parameters": {
+        "operation": "message",
+        "modelId": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "={{ $('Obtener configuración y FAQ').first().json[0].chatbot_contexto }}\n\nFAQ disponible para responder:\n{{ JSON.stringify($('Obtener configuración y FAQ').first().json[0].faq) }}\n\nSi el usuario quiere RADICAR una PQR, responde exactamente con: [MOSTRAR_CANALES]\nResponde siempre en español, de forma amable y concisa (máximo 3 párrafos).\nNo inventes información que no esté en el FAQ."
+            },
+            {
+              "role": "user",
+              "content": "={{ $('Webhook Chatbot').first().json.body.mensaje }}"
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 400,
+          "temperature": 0.4
+        }
+      }
+    },
+    {
+      "id": "f11-parse",
+      "name": "Detectar intención",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const respuesta = $input.first().json.message.content || '';\nconst mostrar_canales = respuesta.includes('[MOSTRAR_CANALES]');\nconst respuesta_limpia = respuesta.replace('[MOSTRAR_CANALES]', '').trim() || \n  'Entendido. Te mostraré los canales disponibles para radicar tu PQR.';\n\nreturn [{ json: {\n  respuesta: respuesta_limpia,\n  mostrar_canales,\n  session_id: $('Webhook Chatbot').first().json.body.session_id\n} }];"
+      }
+    },
+    {
+      "id": "f11-respond",
+      "name": "Responder al chat",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        200
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"respuesta\":       \"{{ $json.respuesta }}\",\n  \"mostrar_canales\": {{ $json.mostrar_canales }},\n  \"session_id\":      \"{{ $json.session_id }}\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "f11-offline",
+      "name": "Chatbot desactivado",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        860,
+        420
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"respuesta\": \"El asistente virtual no está disponible en este momento. Por favor usa los canales de atención.\", \"mostrar_canales\": true }",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "34401ebd-2647-4b9d-85b9-aec3443ade60",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7b6a65fb-e22b-4440-af55-03aadb5ca5a4",
+      "name": "Log Error F11-ChatbotIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F11-ChatbotIA: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F11-ChatbotIA\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Chatbot": {
+      "main": [
+        [
+          {
+            "node": "Obtener configuración y FAQ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener configuración y FAQ": {
+      "main": [
+        [
+          {
+            "node": "¿Chatbot activo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Chatbot activo?": {
+      "main": [
+        [
+          {
+            "node": "Crear/actualizar sesión",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chatbot desactivado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear/actualizar sesión": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o-mini Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o-mini Responder": {
+      "main": [
+        [
+          {
+            "node": "Detectar intención",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detectar intención": {
+      "main": [
+        [
+          {
+            "node": "Responder al chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F11-ChatbotIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-Chatbot"
+    }
+  ]
+}
