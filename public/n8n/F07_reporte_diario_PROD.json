@@ -1,0 +1,213 @@
+{
+  "name": "F07 — Reporte Diario (PROD v3)",
+  "nodes": [
+    {
+      "id": "f7-schedule",
+      "name": "7AM lunes a viernes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * 1-5"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f7-kpis",
+      "name": "KPIs del día anterior",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?created_at=gte.{{ new Date(Date.now()-86400000).toISOString().split('T')[0] }}&select=id,tipo_pqr,estado,prioridad,created_at,agente_id",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f7-procesar",
+      "name": "Calcular métricas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const pqrs = $input.all().map(i => i.json);\nconst ayer = new Date(Date.now()-86400000).toLocaleDateString('es-CO', {year:'numeric',month:'long',day:'numeric'});\n\nconst total = pqrs.length;\nconst byTipo = {};\nconst byEstado = {};\nconst byPrioridad = {};\n\nfor (const p of pqrs) {\n  byTipo[p.tipo_pqr]       = (byTipo[p.tipo_pqr]       || 0) + 1;\n  byEstado[p.estado]       = (byEstado[p.estado]       || 0) + 1;\n  byPrioridad[p.prioridad] = (byPrioridad[p.prioridad] || 0) + 1;\n}\n\nconst filasTipo = Object.entries(byTipo).map(([k,v]) => `<tr><td style='padding:8px;border:1px solid #e5e7eb;text-transform:capitalize;'>${k}</td><td style='padding:8px;border:1px solid #e5e7eb;text-align:center;font-weight:bold;'>${v}</td><td style='padding:8px;border:1px solid #e5e7eb;text-align:center;'>${((v/total)*100).toFixed(1)}%</td></tr>`).join('');\nconst filasEstado = Object.entries(byEstado).map(([k,v]) => `<tr><td style='padding:8px;border:1px solid #e5e7eb;text-transform:capitalize;'>${k}</td><td style='padding:8px;border:1px solid #e5e7eb;text-align:center;font-weight:bold;'>${v}</td></tr>`).join('');\n\nconst html = `\n<div style='font-family:Arial,sans-serif;max-width:700px;'>\n  <div style='background:#1e3a5f;padding:20px;border-radius:8px 8px 0 0;'>\n    <h1 style='color:#fff;margin:0;font-size:20px;'>📊 Reporte Diario PQR — ${ayer}</h1>\n    <p style='color:#93c5fd;margin:4px 0 0;font-size:13px;'>Tododrogas CIA SAS</p>\n  </div>\n  <div style='border:1px solid #ddd;padding:24px;background:#fff;'>\n    <div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:24px;'>\n      <div style='background:#eff6ff;border-radius:8px;padding:16px;text-align:center;'>\n        <div style='font-size:36px;font-weight:bold;color:#1d4ed8;'>${total}</div>\n        <div style='font-size:13px;color:#6b7280;'>PQR Recibidas</div>\n      </div>\n      <div style='background:#f0fdf4;border-radius:8px;padding:16px;text-align:center;'>\n        <div style='font-size:36px;font-weight:bold;color:#16a34a;'>${byEstado.resuelto||byEstado.solucionado||0}</div>\n        <div style='font-size:13px;color:#6b7280;'>Resueltas</div>\n      </div>\n      <div style='background:#fef2f2;border-radius:8px;padding:16px;text-align:center;'>\n        <div style='font-size:36px;font-weight:bold;color:#dc2626;'>${byPrioridad.alta||0}</div>\n        <div style='font-size:13px;color:#6b7280;'>Alta Prioridad</div>\n      </div>\n    </div>\n    <h3 style='color:#374151;'>Por Tipo:</h3>\n    <table style='width:100%;border-collapse:collapse;'>\n      <tr style='background:#f9fafb;'><th style='padding:8px;border:1px solid #e5e7eb;text-align:left;'>Tipo</th><th style='padding:8px;border:1px solid #e5e7eb;'>Cantidad</th><th style='padding:8px;border:1px solid #e5e7eb;'>%</th></tr>\n      ${filasTipo}\n    </table>\n    <h3 style='color:#374151;margin-top:20px;'>Por Estado:</h3>\n    <table style='width:100%;border-collapse:collapse;'>\n      <tr style='background:#f9fafb;'><th style='padding:8px;border:1px solid #e5e7eb;text-align:left;'>Estado</th><th style='padding:8px;border:1px solid #e5e7eb;'>Cantidad</th></tr>\n      ${filasEstado}\n    </table>\n    <p style='margin-top:20px;'><a href='https://tododrogas.online/admin_v9.html' style='background:#1e3a5f;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;'>Ver Panel Completo →</a></p>\n  </div>\n</div>`;\n\nreturn [{ json: { html, fecha: ayer, total } }];"
+      }
+    },
+    {
+      "id": "f7-enviar",
+      "name": "Enviar reporte a gerencia",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/users/pqrsmirror@tododrogas.com.co/sendMail",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.microsoftGraphToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"subject\": \"📊 Reporte PQR del día — {{ $json.fecha }} ({{ $json.total }} casos)\",\n    \"body\": { \"contentType\": \"HTML\", \"content\": {{ JSON.stringify($json.html) }} },\n    \"toRecipients\": [{ \"emailAddress\": { \"address\": \"pqrsmirror@tododrogas.com.co\" } }]\n  },\n  \"saveToSentItems\": false\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "8e229263-7725-4fe2-bba3-b31e0dc34575",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "29c88903-bfd3-4aa0-89bd-25e6712c0d37",
+      "name": "Log Error F07-ReporteDiario",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F07-ReporteDiario: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F07-ReporteDiario\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "7AM lunes a viernes": {
+      "main": [
+        [
+          {
+            "node": "KPIs del día anterior",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KPIs del día anterior": {
+      "main": [
+        [
+          {
+            "node": "Calcular métricas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular métricas": {
+      "main": [
+        [
+          {
+            "node": "Enviar reporte a gerencia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F07-ReporteDiario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-Reportes"
+    }
+  ]
+}
