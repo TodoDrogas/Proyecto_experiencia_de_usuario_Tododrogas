@@ -1,0 +1,309 @@
+{
+  "name": "F04 — Acuse Ciudadano (PROD v3)",
+  "nodes": [
+    {
+      "id": "f4-schedule",
+      "name": "Revisar PQR nuevas sin acuse (cada 5 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f4-get",
+      "name": "PQR sin acuse enviado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?acuse_enviado=is.null&estado=neq.borrador&correo=not.is.null&select=id,nombre,correo,ticket_id,tipo_pqr,created_at&limit=20",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f4-check",
+      "name": "¿Hay pendientes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f4-split",
+      "name": "Una por una",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        860,
+        200
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "f4-send-email",
+      "name": "Enviar acuse por Graph API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1080,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/users/pqrsmirror@tododrogas.com.co/sendMail",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.microsoftGraphToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"subject\": \"Radicado {{ $json.ticket_id }} recibido — Tododrogas PQR\",\n    \"body\": {\n      \"contentType\": \"HTML\",\n      \"content\": \"<div style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;'><div style='background:#006D77;padding:20px;border-radius:8px 8px 0 0;'><h1 style='color:#fff;margin:0;font-size:22px;'>Tododrogas</h1><p style='color:#E8F8F8;margin:4px 0 0;font-size:13px;'>Sistema de Atención al Cliente</p></div><div style='background:#fff;border:1px solid #e0e0e0;padding:24px;border-radius:0 0 8px 8px;'><h2 style='color:#006D77;'>¡Hemos recibido tu solicitud!</h2><p>Hola <strong>{{ $json.nombre }}</strong>,</p><p>Tu <strong>{{ $json.tipo_pqr }}</strong> ha sido radicada exitosamente en nuestro sistema.</p><div style='background:#f0f8f8;border-left:4px solid #006D77;padding:16px;margin:20px 0;border-radius:0 8px 8px 0;'><p style='margin:0 0 8px;font-size:13px;color:#666;'>Número de Radicado</p><p style='margin:0;font-size:28px;font-weight:bold;color:#006D77;letter-spacing:2px;'>{{ $json.ticket_id }}</p></div><p>📅 <strong>Fecha de radicación:</strong> {{ new Date($json.created_at).toLocaleDateString('es-CO', {year:'numeric',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'}) }}</p><p>⏱️ <strong>Tiempo de respuesta:</strong> Máximo 15 días hábiles según normativa.</p><p>Puedes hacer seguimiento usando tu número de radicado.</p><hr style='border:none;border-top:1px solid #e0e0e0;margin:20px 0;'><p style='font-size:12px;color:#888;'>Equipo de Atención al Cliente — Tododrogas CIA SAS<br>📧 pqrsmirror@tododrogas.com.co</p></div></div>\"\n    },\n    \"toRecipients\": [{ \"emailAddress\": { \"address\": \"{{ $json.correo }}\" } }]\n  },\n  \"saveToSentItems\": false\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f4-mark-sent",
+      "name": "Marcar acuse enviado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1300,
+        200
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?id=eq.{{ $('Una por una').first().json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"acuse_enviado\": true }",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "7e0cf00d-8ce9-4efc-bd5d-2ef68f98995f",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e28d4ccd-c9e5-47ad-b76f-a0cbf6125076",
+      "name": "Log Error F04-AcuseCiudadano",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F04-AcuseCiudadano: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F04-AcuseCiudadano\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Revisar PQR nuevas sin acuse (cada 5 min)": {
+      "main": [
+        [
+          {
+            "node": "PQR sin acuse enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PQR sin acuse enviado": {
+      "main": [
+        [
+          {
+            "node": "¿Hay pendientes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay pendientes?": {
+      "main": [
+        [
+          {
+            "node": "Una por una",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Una por una": {
+      "main": [
+        [
+          {
+            "node": "Enviar acuse por Graph API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar acuse por Graph API": {
+      "main": [
+        [
+          {
+            "node": "Marcar acuse enviado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F04-AcuseCiudadano",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-Core"
+    }
+  ]
+}
