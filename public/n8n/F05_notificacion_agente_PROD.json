@@ -1,0 +1,354 @@
+{
+  "name": "F05 — Notificación Agente (PROD v3)",
+  "nodes": [
+    {
+      "id": "f5-schedule",
+      "name": "Revisar asignaciones sin notificar (cada 5 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f5-get",
+      "name": "PQR asignadas sin notificación",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?estado=eq.asignado&notif_agente=is.null&agente_id=not.is.null&select=id,nombre,correo,ticket_id,tipo_pqr,prioridad,descripcion,agente_id,fecha_limite_sla&limit=20",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f5-check",
+      "name": "¿Hay asignaciones?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "f5-split",
+      "name": "Separar",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        860,
+        200
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "f5-get-agente",
+      "name": "Obtener datos del agente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1080,
+        200
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/agentes?id=eq.{{ $json.agente_id }}&select=nombre,correo",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f5-send",
+      "name": "Notificar agente por email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1300,
+        200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.microsoft.com/v1.0/users/pqrsmirror@tododrogas.com.co/sendMail",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.microsoftGraphToken }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message\": {\n    \"subject\": \"🔔 Nueva PQR asignada: {{ $('Separar').first().json.ticket_id }}\",\n    \"body\": {\n      \"contentType\": \"HTML\",\n      \"content\": \"<div style='font-family:Arial,sans-serif;max-width:600px;'><div style='background:#1d4ed8;padding:16px;border-radius:8px 8px 0 0;'><h2 style='color:#fff;margin:0;'>Nueva PQR Asignada</h2></div><div style='border:1px solid #ddd;padding:20px;'><p>Hola <strong>{{ $json[0].nombre }}</strong>,</p><p>Se te ha asignado una nueva PQR:</p><table style='width:100%;border-collapse:collapse;'><tr style='background:#f0f4ff;'><td style='padding:8px;font-weight:bold;'>Ticket</td><td style='padding:8px;font-size:18px;color:#1d4ed8;font-weight:bold;'>{{ $('Separar').first().json.ticket_id }}</td></tr><tr><td style='padding:8px;font-weight:bold;'>Tipo</td><td style='padding:8px;text-transform:capitalize;'>{{ $('Separar').first().json.tipo_pqr }}</td></tr><tr style='background:#f0f4ff;'><td style='padding:8px;font-weight:bold;'>Prioridad</td><td style='padding:8px;'>{{ $('Separar').first().json.prioridad }}</td></tr><tr><td style='padding:8px;font-weight:bold;'>Ciudadano</td><td style='padding:8px;'>{{ $('Separar').first().json.nombre }}</td></tr><tr style='background:#f0f4ff;'><td style='padding:8px;font-weight:bold;'>Vence</td><td style='padding:8px;'>{{ new Date($('Separar').first().json.fecha_limite_sla).toLocaleDateString('es-CO') }}</td></tr></table><p><strong>Descripción:</strong><br>{{ $('Separar').first().json.descripcion.substring(0,300) }}...</p><p><a href='https://tododrogas.online/agente_v8.html' style='background:#1d4ed8;color:#fff;padding:10px 20px;text-decoration:none;border-radius:6px;display:inline-block;'>Ver en Panel de Agente →</a></p></div></div>\"\n    },\n    \"toRecipients\": [{ \"emailAddress\": { \"address\": \"{{ $json[0].correo }}\" } }]\n  },\n  \"saveToSentItems\": false\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f5-mark",
+      "name": "Marcar notificación enviada",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        1520,
+        200
+      ],
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?id=eq.{{ $('Separar').first().json.id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"notif_agente\": true }",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "d76eb361-3a3f-4806-a278-62113af16d1d",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "47e9ee42-3115-4e20-8b18-eb04d556579e",
+      "name": "Log Error F05-NotifAgente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F05-NotifAgente: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F05-NotifAgente\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Revisar asignaciones sin notificar (cada 5 min)": {
+      "main": [
+        [
+          {
+            "node": "PQR asignadas sin notificación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PQR asignadas sin notificación": {
+      "main": [
+        [
+          {
+            "node": "¿Hay asignaciones?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay asignaciones?": {
+      "main": [
+        [
+          {
+            "node": "Separar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Separar": {
+      "main": [
+        [
+          {
+            "node": "Obtener datos del agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener datos del agente": {
+      "main": [
+        [
+          {
+            "node": "Notificar agente por email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar agente por email": {
+      "main": [
+        [
+          {
+            "node": "Marcar notificación enviada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F05-NotifAgente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-Core"
+    }
+  ]
+}
