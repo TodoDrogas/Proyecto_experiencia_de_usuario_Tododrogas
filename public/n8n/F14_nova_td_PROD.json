@@ -1,0 +1,431 @@
+{
+  "name": "F14 — Nova TD Agente IA (PROD v3)",
+  "nodes": [
+    {
+      "id": "f14-webhook",
+      "name": "Webhook Nova TD",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        400
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nova-td-respuesta",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "f14-historial",
+      "name": "1. Historial del ticket",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        440,
+        100
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos?correo_id=eq.{{ $json.correo_id }}&select=evento,subject,from_email,created_at&order=created_at.asc&limit=15",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f14-anteriores",
+      "name": "2. Correos anteriores del remitente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        440,
+        260
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?from_email=eq.{{ $('Webhook Nova TD').first().json.remitente }}&select=subject,tipo_pqr,estado,resumen_corto,created_at&order=created_at.desc&limit=5",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f14-knowledge",
+      "name": "3. Knowledge base ejemplos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        440,
+        420
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/knowledge_base?tipo_pqr=eq.{{ $('Webhook Nova TD').first().json.tipo_pqr }}&activo=eq.true&select=situacion,respuesta_modelo,veces_usado&order=veces_usado.desc&limit=3",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f14-similares",
+      "name": "4. Casos similares resueltos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        440,
+        580
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/correos?estado=eq.solucionado&tipo_pqr=eq.{{ $('Webhook Nova TD').first().json.tipo_pqr }}&select=subject,resumen_corto&order=created_at.desc&limit=3",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "supabaseApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": []
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f14-hilo",
+      "name": "5. Hilo completo Graph",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        440,
+        740
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.microsoft.com/v1.0/users/pqrsmirror@tododrogas.com.co/mailFolders/allItems/messages?$filter=conversationId eq '{{ $('Webhook Nova TD').first().json.conversation_id }}'&$select=subject,from,bodyPreview,receivedDateTime&$top=10&$orderby=receivedDateTime asc",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.microsoftGraphOAuth2Api }}"
+            }
+          ]
+        },
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 5000
+          }
+        }
+      }
+    },
+    {
+      "id": "f14-ensamblar",
+      "name": "Ensamblar contexto enriquecido",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        400
+      ],
+      "parameters": {
+        "jsCode": "const body = $('Webhook Nova TD').first().json;\n\n// Funcion segura para obtener items de un nodo\nfunction safeGet(nodeName) {\n  try { return $(nodeName).all().map(i=>i.json).filter(i=>!i.error); }\n  catch(e) { return []; }\n}\n\n// 1. Historial del ticket\nconst historial = safeGet('1. Historial del ticket');\nconst historialTexto = historial.length\n  ? historial.map(h=>`[${new Date(h.created_at).toLocaleDateString('es-CO')}] ${h.evento||''}: ${h.subject||''} ${h.from_email?'('+h.from_email+')':''}`).join('\\n')\n  : 'Sin historial previo';\n\n// 2. Correos anteriores del remitente\nconst anteriores = safeGet('2. Correos anteriores del remitente');\nconst anterioresTexto = anteriores.length\n  ? `Este remitente tiene ${anteriores.length} PQR anteriores:\\n` + anteriores.map(c=>`- ${c.tipo_pqr||''}: ${c.resumen_corto||c.subject||''} [${c.estado}]`).join('\\n')\n  : 'Primer contacto del remitente';\n\n// 3. Knowledge base\nconst kb = safeGet('3. Knowledge base ejemplos');\nconst kbTexto = kb.length\n  ? `PLANTILLAS APROBADAS (usar como base y adaptar):\\n` + kb.map((k,i)=>`Plantilla ${i+1} (situacion: ${k.situacion||'general'}, usada ${k.veces_usado} veces):\\n${k.respuesta_modelo}`).join('\\n\\n')\n  : '';\n\n// 4. Casos similares\nconst similares = safeGet('4. Casos similares resueltos');\nconst similaresTexto = similares.length\n  ? `CASOS SIMILARES RESUELTOS:\\n` + similares.map((s,i)=>`Caso ${i+1}: ${s.resumen_corto||s.subject||''}`).join('\\n')\n  : '';\n\n// 5. Hilo Graph\nlet hiloTexto = '';\ntry {\n  const hiloRaw = $('5. Hilo completo Graph').first().json;\n  const hiloMsgs = hiloRaw?.value || [];\n  if (hiloMsgs.length > 1) {\n    hiloTexto = `HILO DE CONVERSACION (${hiloMsgs.length} mensajes):\\n` + hiloMsgs.map(m=>`[${m.receivedDateTime?.substring(0,10)||''}] ${m.from?.emailAddress?.name||''}: ${m.bodyPreview?.substring(0,200)||''}`).join('\\n');\n  }\n} catch(e) { hiloTexto = ''; }\n\n// Limpiar HTML del contenido\nconst contenidoLimpio = (body.body_content||'')\n  .replace(/<[^>]+>/g,' ')\n  .replace(/&nbsp;/g,' ')\n  .replace(/&gt;/g,'>')\n  .replace(/&lt;/g,'<')\n  .replace(/\\s+/g,' ')\n  .trim()\n  .substring(0,3000);\n\n// Ensamblar contexto completo\nconst partes = [\n  `=== INFORMACION DEL TICKET ===`,\n  `Ticket ID: ${body.ticket_id||body.correo_id||''}`,\n  `Asunto: ${body.asunto||body.subject||''}`,\n  `Remitente: ${body.remitente_nombre||'Ciudadano'}`,\n  `Agente asignado: ${body.agente_nombre||'Equipo PQRSFD'}`,\n  `Tipo PQR: ${body.tipo_pqr||'No clasificado'}`,\n  `Categoria: ${body.categoria_ia||''}`,\n  `Prioridad: ${body.prioridad||'media'}`,\n  `Urgente: ${body.es_urgente?'SI - ATENCION INMEDIATA REQUERIDA':'NO'}`,\n  `Nivel riesgo: ${body.nivel_riesgo||'ninguno'}`,\n  `Ley aplicable: ${body.ley_aplicable||'Ley 1755/2015'}`,\n  `Fecha limite SLA: ${body.fecha_limite_sla||'No definida'}`,\n  ``,\n  `=== CONTENIDO DEL CORREO ===`,\n  contenidoLimpio,\n  ``,\n  `=== HISTORIAL DE GESTIONES ===`,\n  historialTexto,\n  ``,\n  `=== PERFIL DEL REMITENTE ===`,\n  anterioresTexto\n];\n\nif (hiloTexto) { partes.push(''); partes.push(hiloTexto); }\nif (kbTexto) { partes.push(''); partes.push(kbTexto); }\nif (similaresTexto) { partes.push(''); partes.push(similaresTexto); }\n\nconst contexto = partes.join('\\n');\n\nreturn [{ json: { contexto, ...body, _kb_disponible: kb.length > 0, _hilo_disponible: hiloTexto.length > 0 } }];"
+      }
+    },
+    {
+      "id": "f14-gpt",
+      "name": "GPT-4o Nova TD Pro",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        960,
+        400
+      ],
+      "parameters": {
+        "resource": "chat",
+        "model": "gpt-4o",
+        "prompt": {
+          "messages": [
+            {
+              "role": "system",
+              "content": "Eres Nova TD, redactor profesional de respuestas PQRSFD de INVERSIONES TODO DROGAS S.A.S., operador logístico farmacéutico colombiano con presencia nacional.\n\nCONTEXTO QUE RECIBIRÁS:\n- Correo original completo del ciudadano\n- Historial de gestiones del ticket\n- Perfil del remitente (PQRs anteriores, frecuencia)\n- Hilo completo de la conversación (si existe)\n- Plantillas aprobadas de la base de conocimiento (KB)\n- Casos similares resueltos exitosamente\n\nJERARQUÍA DE USO:\n1. Si hay plantilla KB con >80% similitud → úsala como base, adapta al caso específico\n2. Si hay casos similares resueltos → toma el tono y estructura\n3. Si no hay referencias → redacta desde cero con las instrucciones\n\nNORMAS OBLIGATORIAS:\n- Personaliza SIEMPRE con nombre del remitente y ticket ID real\n- Si es urgente (riesgo vital/priorizado): primer párrafo reconoce urgencia explícitamente\n- Si el remitente tiene historial → reconócelo cuando sea relevante (\"Como en su solicitud anterior...\")\n- NUNCA inventes información médica, precios, fechas de entrega específicas, ni nombres de personal\n- Máximo 3 párrafos. Tono: corporativo, cordial, empático\n- Cierra SIEMPRE con: pqrsfd@tododrogas.com.co\n\nNORMATIVA TODODROGAS:\n- Ley 1755/2015: petición, queja, reclamo, sugerencia → 15 días hábiles\n- Ley 1751/2015: derecho fundamental a la salud (medicamentos)\n- Decreto 2591/1991: tutelas → 10 días calendario\n- Queja riesgo vital → 24 horas\n- Queja riesgo priorizado → 48 horas\n- Queja simple → 72 horas\n\nFORMATO HTML OBLIGATORIO (solo el body del correo):\n<p>Estimado(a) [nombre],</p>\n<p>[Párrafo 1: acuse de recibo + urgencia si aplica + referencia al ticket ID]</p>\n<p>[Párrafo 2: acciones concretas que se tomarán + plazo normativo exacto]</p>\n<p>[Párrafo 3: cierre empático + invitación a comunicarse]</p>\n<p>Atentamente,<br><strong>Equipo PQRSFD - Experiencia de Servicio al Cliente</strong><br>INVERSIONES TODO DROGAS S.A.S.<br>pqrsfd@tododrogas.com.co</p>\n\nRESPONDE ÚNICAMENTE con el HTML del cuerpo. Sin bloques markdown. Sin texto antes ni después del HTML."
+            },
+            {
+              "role": "user",
+              "content": "={{ $json.contexto }}"
+            }
+          ]
+        },
+        "simplifyOutput": false,
+        "options": {
+          "maxTokens": 1500,
+          "temperature": 0.2
+        }
+      }
+    },
+    {
+      "id": "f14-procesar",
+      "name": "Procesar y calcular confianza",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1180,
+        400
+      ],
+      "parameters": {
+        "jsCode": "const body = $('Webhook Nova TD').first().json;\nconst ensamblado = $('Ensamblar contexto enriquecido').first().json;\nconst raw = $input.first().json.choices?.[0]?.message?.content || $input.first().json.message?.content || '';\nconst respuesta_html = raw.replace(/```html|```/g,'').trim();\n\nlet confianza = 65;\nconst advertencias = [];\n\n// Bonus por fuentes\nif (ensamblado._kb_disponible) confianza += 20;\nif (ensamblado._hilo_disponible) confianza += 5;\nif (body.body_content && body.body_content.length > 200) confianza += 5;\nif (body.tipo_pqr) confianza += 5;\n\n// Penalizaciones\nif (!body.body_content || body.body_content.length < 50) {\n  confianza -= 20;\n  advertencias.push('Contenido del correo muy corto');\n}\nif (body.es_urgente) {\n  const tieneUrgencia = ['urgent','inmediata','priorit','horas','vital','critico'].some(w=>respuesta_html.toLowerCase().includes(w));\n  if (!tieneUrgencia) {\n    advertencias.push('Ticket urgente — verifica que la respuesta refleje la urgencia');\n    confianza -= 15;\n  }\n}\nif (respuesta_html.length < 300) {\n  confianza -= 15;\n  advertencias.push('Respuesta muy corta — considera ampliarla');\n}\nif (!respuesta_html.includes('pqrsfd@tododrogas.com.co')) {\n  advertencias.push('Falta el correo de contacto');\n  confianza -= 5;\n}\n\nconfianza = Math.max(10, Math.min(100, confianza));\n\nreturn [{ json: {\n  respuesta_html,\n  confianza,\n  advertencias,\n  ticket_id: body.ticket_id || body.correo_id || '',\n  generado_en: new Date().toISOString(),\n  fuentes_usadas: {\n    kb: ensamblado._kb_disponible,\n    historial: true,\n    perfil_remitente: true,\n    hilo_graph: ensamblado._hilo_disponible\n  }\n} }];"
+      }
+    },
+    {
+      "id": "f14-responder",
+      "name": "Responder al panel",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ respuesta_html: $json.respuesta_html, confianza: $json.confianza, advertencias: $json.advertencias, ticket_id: $json.ticket_id, generado_en: $json.generado_en, fuentes_usadas: $json.fuentes_usadas }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "57bbf3dd-d710-4062-b810-a2284417cd2b",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        1200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "aa70bed2-8d3c-4c98-8626-c5a2eaad9bd6",
+      "name": "Log Error F14-NovaTD",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        1200
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F14-NovaTD: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F14-NovaTD\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Nova TD": {
+      "main": [
+        [
+          {
+            "node": "1. Historial del ticket",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "2. Correos anteriores del remitente",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "3. Knowledge base ejemplos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "4. Casos similares resueltos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "5. Hilo completo Graph",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Historial del ticket": {
+      "main": [
+        [
+          {
+            "node": "Ensamblar contexto enriquecido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Correos anteriores del remitente": {
+      "main": [
+        [
+          {
+            "node": "Ensamblar contexto enriquecido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Knowledge base ejemplos": {
+      "main": [
+        [
+          {
+            "node": "Ensamblar contexto enriquecido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Casos similares resueltos": {
+      "main": [
+        [
+          {
+            "node": "Ensamblar contexto enriquecido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "5. Hilo completo Graph": {
+      "main": [
+        [
+          {
+            "node": "Ensamblar contexto enriquecido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensamblar contexto enriquecido": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o-mini Super Nova TD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o-mini Super Nova TD": {
+      "main": [
+        [
+          {
+            "node": "Procesar y calcular confianza",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar y calcular confianza": {
+      "main": [
+        [
+          {
+            "node": "Responder al panel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F14-NovaTD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "Modulo3-NovaTD"
+    },
+    {
+      "name": "PQR-IA"
+    }
+  ]
+}
