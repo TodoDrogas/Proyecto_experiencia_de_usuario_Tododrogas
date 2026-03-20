@@ -504,14 +504,15 @@ const SB_URL = window.SUPABASE_URL || 'https://TU_PROYECTO.supabase.co';
 const SB_KEY = window.SUPABASE_KEY || 'TU_ANON_KEY';
 
 async function sb(path, method='GET', body=null) {
+  const headers = {
+    'apikey': SB_KEY,
+    'Authorization': 'Bearer ' + SB_KEY,
+    'Content-Type': 'application/json',
+  };
+  if (method !== 'GET') headers['Prefer'] = 'return=minimal';
   const r = await fetch(`${SB_URL}/rest/v1/${path}`, {
     method,
-    headers: {
-      'apikey': SB_KEY,
-      'Authorization': 'Bearer ' + SB_KEY,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal',
-    },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!r.ok && r.status !== 201 && r.status !== 204) throw new Error(await r.text());
@@ -660,9 +661,6 @@ function renderEmailList() {
 // ──────────────────────────────────────────────
 async function selectEmail(id) {
   state.selectedId = id;
-  // Limpiar búsqueda para que la lista no desaparezca al seleccionar
-  const searchEl = document.getElementById('searchInput');
-  if(searchEl && searchEl.value) searchEl.value = '';
   renderEmailList();
   const email = state.emails.find(e=>e.id===id);
   if(!email) return;
