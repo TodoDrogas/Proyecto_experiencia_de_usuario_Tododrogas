@@ -1,0 +1,239 @@
+{
+  "name": "F09 — Canal Audio (PROD v3)",
+  "nodes": [
+    {
+      "id": "f9-wh",
+      "name": "Webhook Audio",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pqr-audio",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "f9-upload",
+      "name": "Subir audio a Supabase Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/storage/v1/object/audios/audio_{{ Date.now() }}.webm",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "audio/webm"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body.audio_base64 }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f9-whisper",
+      "name": "Whisper — Transcribir audio",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "operation": "transcribe",
+        "binaryPropertyName": "data",
+        "options": {
+          "language": "es",
+          "responseFormat": "json"
+        }
+      }
+    },
+    {
+      "id": "f9-call-f1",
+      "name": "Llamar Flujo 1 — Radicar PQR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://tododrogas.online/webhook/pqr-recepcion",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"nombre\":         \"{{ $('Webhook Audio').first().json.body.nombre }}\",\n  \"correo\":         \"{{ $('Webhook Audio').first().json.body.correo }}\",\n  \"telefono\":       \"{{ $('Webhook Audio').first().json.body.telefono }}\",\n  \"tipo_pqr\":       \"peticion\",\n  \"descripcion\":    \"{{ $json.text }}\",\n  \"canal_contacto\": \"verbal_audio\",\n  \"origen\":         \"audio\",\n  \"transcripcion\":  \"{{ $json.text }}\",\n  \"audio_url\":      \"{{ $('Subir audio a Supabase Storage').first().json.Key }}\"\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f9-respond",
+      "name": "Responder con transcripción",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"ticket_id\": \"{{ $json.ticket_id }}\",\n  \"transcripcion\": \"{{ $('Whisper — Transcribir audio').first().json.text }}\"\n}",
+        "options": {}
+      }
+    },
+    {
+      "id": "dbc02928-b1a7-49b6-88a7-a2cf359d1e68",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7a6f757a-6e9b-4b47-8ab6-d790758e80f3",
+      "name": "Log Error F09-CanalAudio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F09-CanalAudio: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F09-CanalAudio\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Audio": {
+      "main": [
+        [
+          {
+            "node": "Subir audio a Supabase Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subir audio a Supabase Storage": {
+      "main": [
+        [
+          {
+            "node": "Whisper — Transcribir audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper — Transcribir audio": {
+      "main": [
+        [
+          {
+            "node": "Llamar Flujo 1 — Radicar PQR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Llamar Flujo 1 — Radicar PQR": {
+      "main": [
+        [
+          {
+            "node": "Responder con transcripción",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F09-CanalAudio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-Canales"
+    }
+  ]
+}
