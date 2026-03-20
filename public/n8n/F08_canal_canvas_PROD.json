@@ -1,0 +1,255 @@
+{
+  "name": "F08 — Canal Canvas (PROD v3)",
+  "nodes": [
+    {
+      "id": "f8-wh",
+      "name": "Webhook Canvas",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pqr-canvas",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "f8-upload",
+      "name": "Subir imagen a Supabase Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        420,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://lyosqaqhihwgvjigvqtc.supabase.co/storage/v1/object/canvas-images/canvas_{{ Date.now() }}.png",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $credentials.supabaseServiceKey }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "image/png"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body.imagen_base64 }}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f8-vision",
+      "name": "GPT-4o Vision — Transcribir escritura",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        640,
+        300
+      ],
+      "parameters": {
+        "operation": "message",
+        "modelId": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "Transcribe EXACTAMENTE el texto que aparece escrito en esta imagen. Es una nota manuscrita o texto escrito a mano de un ciudadano que quiere presentar una PQR (petición, queja o reclamo) a Tododrogas. Si no puedes leer algo, indícalo con [ilegible]. Transcribe solo el texto, sin comentarios adicionales.",
+              "contentType": "multipart",
+              "multipartParts": [
+                {
+                  "type": "image_url",
+                  "image_url": {
+                    "url": "={{ $('Webhook Canvas').first().json.body.imagen_base64 }}"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "maxTokens": 500
+        }
+      }
+    },
+    {
+      "id": "f8-call-f1",
+      "name": "Llamar Flujo 1 — Radicar PQR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        860,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://tododrogas.online/webhook/pqr-recepcion",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"nombre\":         \"{{ $('Webhook Canvas').first().json.body.nombre }}\",\n  \"correo\":         \"{{ $('Webhook Canvas').first().json.body.correo }}\",\n  \"telefono\":       \"{{ $('Webhook Canvas').first().json.body.telefono }}\",\n  \"tipo_pqr\":       \"peticion\",\n  \"descripcion\":    \"{{ $json.message.content }}\",\n  \"canal_contacto\": \"buzon_virtual\",\n  \"origen\":         \"canvas\",\n  \"transcripcion\":  \"{{ $json.message.content }}\",\n  \"canvas_url\":     \"{{ $('Subir imagen a Supabase Storage').first().json.Key }}\"\n}",
+        "options": {
+          "retry": {
+            "enabled": true,
+            "maxTries": 3,
+            "waitBetweenTries": 3000
+          }
+        }
+      }
+    },
+    {
+      "id": "f8-respond",
+      "name": "Responder OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        300
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true, \"ticket_id\": \"{{ $json.ticket_id }}\", \"transcripcion\": \"{{ $('GPT-4o Vision — Transcribir escritura').first().json.message.content.substring(0,100) }}...\" }",
+        "options": {}
+      }
+    },
+    {
+      "id": "e96bd918-5275-4d18-b684-1e6d47493a9b",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "137a8a1c-75fd-49ee-a242-270744c70a9a",
+      "name": "Log Error F08-CanalCanvas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        40,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F08-CanalCanvas: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F08-CanalCanvas\", \"error\": $json.execution.error.message}\n}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Canvas": {
+      "main": [
+        [
+          {
+            "node": "Subir imagen a Supabase Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subir imagen a Supabase Storage": {
+      "main": [
+        [
+          {
+            "node": "GPT-4o Vision — Transcribir escritura",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GPT-4o Vision — Transcribir escritura": {
+      "main": [
+        [
+          {
+            "node": "Llamar Flujo 1 — Radicar PQR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Llamar Flujo 1 — Radicar PQR": {
+      "main": [
+        [
+          {
+            "node": "Responder OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error F08-CanalCanvas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "PQR-Canales"
+    }
+  ]
+}
