@@ -1604,7 +1604,7 @@ async function selectEmail(id) {
     </div>
     <div id="hiloArea"></div>
     <div id="replyBoxArea"></div>
-    ${email.has_attachments?`<div class="adj-section" style="margin-bottom:14px"><div class="adj-title">📎 Adjuntos</div><div class="adj-grid" id="adjGrid"><span style="font-size:12px;color:var(--ink3)">Cargando adjuntos...</span></div></div>`:''}
+    <div class="adj-section" style="margin-bottom:14px;display:none" id="adjSection"><div class="adj-title">📎 Adjuntos</div><div class="adj-grid" id="adjGrid"></div></div>
     <div class="ev-body" id="evBody">
       ${email.body_type==='html'?`<iframe srcdoc="${esc(email.body_content||'')}" sandbox="allow-same-origin" style="width:100%;height:100%;min-height:280px;border:none"></iframe>`:
         `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`}
@@ -1667,8 +1667,8 @@ async function selectEmail(id) {
   // Load timeline
   await loadTicketTimeline(id, email.message_id);
 
-  // Load attachments if any
-  if(email.has_attachments) loadAttachments(id, email.message_id);
+  // Siempre intentar cargar adjuntos — no depender solo de has_attachments
+  loadAttachments(id, email.message_id);
 }
 
 async function loadTicketTimeline(correoId, messageId) {
@@ -1772,16 +1772,34 @@ function row(label, val) {
 
 async function loadAttachments(correoId, messageId) {
   const el = document.getElementById('adjGrid');
+  const section = document.getElementById('adjSection');
   if(!el) return;
   try {
-    const adjs = await sb(`adjuntos?correo_id=eq.${correoId}`)||[];
-    if(!adjs.length) { el.innerHTML='<span style="font-size:11px;color:var(--ink3)">Sin adjuntos registrados</span>'; return; }
-    el.innerHTML = adjs.map(a=>`
-      <div class="adj-pill" onclick="window.open('${esc(a.storage_url||a.url||a.content_url||'#')}')">
-        ${getFileIcon(a.nombre||a.name)} ${esc(a.nombre||a.name||'Archivo')}
-      </div>`).join('');
-  } catch {
-    el.innerHTML='<span style="font-size:11px;color:var(--ink3)">No se pudieron cargar adjuntos</span>';
+    const adjs = await sb(`adjuntos?correo_id=eq.${correoId}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
+    // Filtrar adjuntos inline muy pequeños (logos/firmas de email) para la vista
+    const visibles = adjs.filter(a => {
+      const esInline = a.es_inline === true;
+      const esImagen = (a.tipo_contenido||'').toLowerCase().startsWith('image/');
+      // Solo ocultar si es inline Y imagen Y muy pequeña (logo/firma)
+      if (esInline && esImagen && (a.tamano_bytes||0) < 10000) return false;
+      return true;
+    });
+    if(!visibles.length) {
+      if(section) section.style.display = 'none';
+      return;
+    }
+    if(section) section.style.display = '';
+    el.innerHTML = visibles.map(a=>{
+      const url = a.storage_url||'#';
+      const size = (a.tamano_bytes||0)>1048576?(a.tamano_bytes/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||0)/1024)+' KB';
+      return `<div class="adj-pill" onclick="window.open('${esc(url)}','_blank')" title="${esc(a.nombre||'Archivo')} · ${size}">
+        ${getFileIcon(a.nombre||'')} ${esc(a.nombre||'Archivo')}
+        <span style="font-size:9px;color:var(--ink3);margin-left:2px">${size}</span>
+      </div>`;
+    }).join('');
+  } catch(err) {
+    console.warn('[loadAttachments]', err);
+    if(section) section.style.display = 'none';
   }
 }
 
@@ -2592,34 +2610,37 @@ async function abrirPreviewCorreo(id) {
   document.getElementById('mpAsignarMsg').textContent = '';
   document.getElementById('mpAsignarMsg').style.color = '';
 
-  // Adjuntos
+  // Adjuntos — siempre consultar, mostrar barra solo si hay resultados
   const adjBar = document.getElementById('mpAdjuntosBar');
   const adjGrid = document.getElementById('mpAdjuntosGrid');
   adjGrid.innerHTML = '';
-  if(email.has_attachments) {
-    adjBar.style.display = '';
-    adjGrid.innerHTML = '<span style="font-size:11px;color:var(--ink3)">Cargando adjuntos…</span>';
-    sb(`adjuntos?correo_id=eq.${id}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion`)
-      .then(adjs=>{
-        if(!adjs?.length){ adjGrid.innerHTML='<span style="font-size:11px;color:var(--ink3)">Sin adjuntos registrados</span>'; return; }
-        adjGrid.innerHTML = adjs.map(a=>{
-          const url = a.storage_url||'#';
-          const size = a.tamano_bytes>1048576?(a.tamano_bytes/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||0)/1024)+' KB';
-          return `<div onclick="mpPreviewAdjunto('${esc(url)}','${esc(a.nombre||'archivo')}','${esc(a.tipo_contenido||'')}',this)"
-            style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;max-width:220px;transition:all .15s"
-            onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'"
-            title="Clic para previsualizar">
-            <span style="font-size:16px">${getFileIcon(a.nombre||'')}</span>
-            <div style="min-width:0">
-              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)">${esc(a.nombre||'Archivo')}</div>
-              <div style="color:var(--ink3)">${size}${a.direccion&&a.direccion!=='entrante'?' · '+a.direccion:''}</div>
-            </div>
-          </div>`;
-        }).join('');
-      }).catch(()=>{ adjGrid.innerHTML=''; adjBar.style.display='none'; });
-  } else {
-    adjBar.style.display = 'none';
-  }
+  adjBar.style.display = 'none';
+  sb(`adjuntos?correo_id=eq.${id}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)
+    .then(adjs=>{
+      // Filtrar logos/firmas inline muy pequeñas
+      const visibles = (adjs||[]).filter(a => {
+        const esInline = a.es_inline === true;
+        const esImagen = (a.tipo_contenido||'').toLowerCase().startsWith('image/');
+        if (esInline && esImagen && (a.tamano_bytes||0) < 10000) return false;
+        return true;
+      });
+      if(!visibles.length) return;
+      adjBar.style.display = '';
+      adjGrid.innerHTML = visibles.map(a=>{
+        const url = a.storage_url||'#';
+        const size = (a.tamano_bytes||0)>1048576?(a.tamano_bytes/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||0)/1024)+' KB';
+        return `<div onclick="mpPreviewAdjunto('${esc(url)}','${esc(a.nombre||'archivo')}','${esc(a.tipo_contenido||'')}',this)"
+          style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;max-width:220px;transition:all .15s"
+          onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'"
+          title="Clic para previsualizar">
+          <span style="font-size:16px">${getFileIcon(a.nombre||'')}</span>
+          <div style="min-width:0">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)">${esc(a.nombre||'Archivo')}</div>
+            <div style="color:var(--ink3)">${size}${a.direccion&&a.direccion!=='entrante'?' · '+a.direccion:''}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }).catch(()=>{ /* silencioso */ });
 
   document.getElementById('modalCorreoPreview').classList.add('show');
 
