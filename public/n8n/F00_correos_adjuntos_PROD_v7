@@ -1,0 +1,817 @@
+{
+  "name": "F00 — Correos + Adjuntos (PROD v3)",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// INYECTAR IDs - version definitiva\n// messageId: del @odata.context (siempre en respuesta Graph)\n// correoId: GET a Supabase garantizado\n\nconst SB_URL = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/rest/v1';\nconst SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NDAxMjUsImV4cCI6MjA4OTQxNjEyNX0.DAaYGxf-Hbb9VW4J71_cu9w0ZD0iqTO0jHi5DT5__yg';\n\nconst respGraph = $input.first().json;\nconst todosAdjuntos = respGraph.value || [];\nif (!todosAdjuntos.length) return [];\n\n// PASO 1: extraer messageId del @odata.context de la respuesta de Graph\nlet messageId = '';\nconst ctx = respGraph['@odata.context'] || '';\nconst ctxMatch = ctx.match(/messages\\('([^']+)'\\)/);\nif (ctxMatch) messageId = decodeURIComponent(ctxMatch[1]);\n\n// PASO 2: intento rapido desde nodo anterior\nlet correoId = '';\ntry {\n  const c = $('¿Tiene Adjuntos?').item.json;\n  if (c.id) correoId = c.id;\n  if (!messageId && c.message_id) messageId = c.message_id;\n} catch(e) {}\n\n// PASO 3: GET a Supabase - garantizado\nif (!correoId && messageId) {\n  try {\n    const rows = await this.helpers.request({\n      method: 'GET',\n      url: SB_URL + '/correos?message_id=eq.' + messageId + '&select=id&limit=1',\n      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },\n      json: true\n    });\n    if (Array.isArray(rows) && rows[0]) correoId = rows[0].id || '';\n  } catch(e) {}\n}\n\nif (!correoId) {\n  throw new Error('Sin correo_id para messageId:' + messageId);\n}\n\n// Filtrar firmas inline y tracking pixels\nconst adjuntos = todosAdjuntos.filter(adj => {\n  const esInline = adj.isInline === true;\n  const esImagen = (adj.contentType || '').toLowerCase().startsWith('image/');\n  if (esInline && esImagen) return false;\n  if (esImagen && (adj.size || 0) < 5000) return false;\n  return true;\n});\n\nif (!adjuntos.length) return [];\n\nreturn adjuntos.map(adj => ({\n  json: { ...adj, _message_id: messageId, _correo_id: correoId }\n}));"
+      },
+      "id": "2974734d-0d7d-4f21-a79c-7efea179f57c",
+      "name": "Inyectar IDs en Adjuntos1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1056,
+        544
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {},
+      "id": "c0c4a71c-b483-4673-ac2f-c6e0155dceff",
+      "name": "Fin (adjunto sin contenido)1",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convierte base64 → binario para subir a Supabase Storage\nconst items = [];\n\nfor (const item of $input.all()) {\n  const base64      = item.json.contentBytes || '';\n  const nombre      = (item.json.name || 'adjunto').replace(/[^a-zA-Z0-9._\\-]/g, '_');\n  const contentType = item.json.contentType  || 'application/octet-stream';\n  const attachId    = item.json.id           || '';\n  const size        = item.json.size         || 0;\n  const isInline    = item.json.isInline     || false;\n\n  // Obtener message_id — viene inyectado como _message_id\n  // Lo sanitizamos: quitamos chars inválidos y limitamos longitud\n  const rawMsgId  = item.json._message_id || item.json.message_id || 'sin-id';\n  const messageId = rawMsgId\n    .replace(/[^a-zA-Z0-9\\-_]/g, '')\n    .substring(0, 80);\n\n  const correoId  = item.json._correo_id || item.json.correo_id || '';\n\n  // Nombre sanitizado para storage\n  const nombreSafe    = nombre;\n  const storagePath   = `${messageId}/${nombreSafe}`;\n  const storageUrl    = `https://lyosqaqhihwgvjigvqtc.supabase.co/storage/v1/object/public/adjuntos-pqr/${storagePath}`;\n\n  if (!base64) {\n    items.push({\n      json: {\n        attachment_id: attachId,\n        nombre: nombreSafe,\n        contentType,\n        size,\n        isInline,\n        message_id:   rawMsgId,\n        correo_id:    correoId,\n        storage_path: storagePath,\n        storage_url:  storageUrl,\n        sin_contenido: true\n      }\n    });\n    continue;\n  }\n\n  const buffer     = Buffer.from(base64, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(buffer, nombreSafe, contentType);\n\n  items.push({\n    json: {\n      attachment_id: attachId,\n      nombre:        nombreSafe,\n      contentType,\n      size,\n      isInline,\n      message_id:   rawMsgId,\n      correo_id:    correoId,\n      storage_path: storagePath,\n      storage_url:  storageUrl,\n      sin_contenido: false\n    },\n    binary: { data: binaryData }\n  });\n}\n\nreturn items;"
+      },
+      "id": "57f6e3c1-5fac-47d8-8359-be7eebf47bdf",
+      "name": "Preparar Binario",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/adjuntos-pqr/{{ $json.storage_path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllaXVwY3VtdmR2ZHN3Zmhjb3R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjY2NjgsImV4cCI6MjA4NzcwMjY2OH0.2M5OXYOm03yIJTypGn-C1dQVBl-QnZX1IkBz_pNAmxk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllaXVwY3VtdmR2ZHN3Zmhjb3R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjY2NjgsImV4cCI6MjA4NzcwMjY2OH0.2M5OXYOm03yIJTypGn-C1dQVBl-QnZX1IkBz_pNAmxk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "={{ $json.contentType }}"
+            },
+            {
+              "name": "x-upsert",
+              "value": "true"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "2ab5e93f-90f9-4c04-a303-a92da070f661",
+      "name": "Subir a Supabase Storage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -400,
+        656
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "fh9faeIsK5PEK8K6",
+          "name": "Custom Auth account 3"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhiwhgvjigvqtc.supabase.co/rest/v1/adjuntos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllaXVwY3VtdmR2ZHN3Zmhjb3R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjY2NjgsImV4cCI6MjA4NzcwMjY2OH0.2M5OXYOm03yIJTypGn-C1dQVBl-QnZX1IkBz_pNAmxk"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllaXVwY3VtdmR2ZHN3Zmhjb3R5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMjY2NjgsImV4cCI6MjA4NzcwMjY2OH0.2M5OXYOm03yIJTypGn-C1dQVBl-QnZX1IkBz_pNAmxk"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\":      \"{{ $('Preparar Binario').item.json.correo_id }}\",\n  \"message_id\":     \"{{ $('Preparar Binario').item.json.message_id }}\",\n  \"attachment_id\":  \"{{ $('Preparar Binario').item.json.attachment_id }}\",\n  \"nombre\":         {{ JSON.stringify($('Preparar Binario').item.json.nombre || '') }},\n  \"tipo_contenido\": \"{{ $('Preparar Binario').item.json.contentType || '' }}\",\n  \"tamano_bytes\":   {{ $('Preparar Binario').item.json.size || 0 }},\n  \"es_inline\":      {{ $('Preparar Binario').item.json.isInline || false }},\n  \"storage_url\":    \"{{ $('Preparar Binario').item.json.storage_url }}\"\n}",
+        "options": {}
+      },
+      "id": "f44f51bf-d5b6-46cf-a573-57505b654b42",
+      "name": "Registrar Adjunto en BD",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -80,
+        640
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "fh9faeIsK5PEK8K6",
+          "name": "Custom Auth account 3"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-sin-contenido",
+              "leftValue": "={{ $json.sin_contenido }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "91bc0d31-0d31-4e9f-8dd5-a97813ca8ed6",
+      "name": "¿Tiene Contenido Binario?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.baseUrl }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "$filter",
+              "value": "={{ 'isDraft eq false and receivedDateTime ge ' + $json.desde }}"
+            },
+            {
+              "name": "$orderby",
+              "value": "receivedDateTime desc"
+            },
+            {
+              "name": "$top",
+              "value": "999"
+            },
+            {
+              "name": "$select",
+              "value": "id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,isRead,isDraft,conversationId,conversationIndex,importance,internetMessageId,replyTo,categories,flag"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            },
+            {
+              "name": "ConsistencyLevel",
+              "value": "eventual"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "491d5a18-7d28-422d-9594-915c7e584432",
+      "name": "Traer Correos Graph API (24h)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2960,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst accessToken = $('Calcular Ventana 5h').first().json.access_token;\nconst items = [];\n\nif (data.value && Array.isArray(data.value)) {\n  for (const correo of data.value) {\n    items.push({\n      json: {\n        ...correo,\n        _access_token: accessToken,\n        _nextLink: data['@odata.nextLink'] || null\n      }\n    });\n  }\n}\n\nif (items.length === 0) {\n  return [{ json: { _sin_correos: true } }];\n}\n\nreturn items;"
+      },
+      "id": "c6757104-81ff-4cb2-a125-c627923126cd",
+      "name": "Procesar y Separar Correos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2720,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-no-emails",
+              "leftValue": "={{ $json._sin_correos }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fe5e0e21-b0a6-4585-a2de-988ab5606967",
+      "name": "¿Hay Correos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -2480,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhiwhgvjigvqtc.supabase.co/rest/v1/correos?on_conflict=message_id",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Prefer",
+              "value": "return=representation,resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"message_id\": \"{{ $json.id }}\",\n  \"internet_message_id\": \"{{ $json.internetMessageId }}\",\n  \"conversation_id\": \"{{ $json.conversationId }}\",\n  \"subject\": {{ JSON.stringify($json.subject || '') }},\n  \"from_email\": \"{{ $json.from?.emailAddress?.address || '' }}\",\n  \"from_name\": {{ JSON.stringify($json.from?.emailAddress?.name || '') }},\n  \"to_recipients\": {{ JSON.stringify($json.toRecipients || []) }},\n  \"cc_recipients\": {{ JSON.stringify($json.ccRecipients || []) }},\n  \"bcc_recipients\": {{ JSON.stringify($json.bccRecipients || []) }},\n  \"reply_to\": {{ JSON.stringify($json.replyTo || []) }},\n  \"received_at\": \"{{ $json.receivedDateTime }}\",\n  \"sent_at\": \"{{ $json.sentDateTime }}\",\n  \"body_preview\": {{ JSON.stringify($json.bodyPreview || '') }},\n  \"body_content\": {{ JSON.stringify($json.body?.content || '') }},\n  \"body_type\": \"{{ $json.body?.contentType || 'text' }}\",\n  \"has_attachments\": {{ $json.hasAttachments || false }},\n  \"is_read\": {{ $json.isRead || false }},\n  \"is_draft\": {{ $json.isDraft || false }},\n  \"importance\": \"{{ $json.importance || 'normal' }}\",\n  \"categories\": {{ JSON.stringify($json.categories || []) }},\n  \"flag_status\": \"{{ $json.flag?.flagStatus || 'notFlagged' }}\",\n  \"raw_payload\": {{ JSON.stringify($json) }}\n}",
+        "options": {}
+      },
+      "id": "68f6d688-8529-42b5-8773-e449d1f10857",
+      "name": "Upsert Correo en Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2240,
+        432
+      ],
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "WGJj7xLizW68yn0L",
+          "name": "Custom Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of $input.all()) {\n  const raw = item.json;\n  const correo = Array.isArray(raw) ? raw[0] : raw;\n  \n  if (!correo || !correo.id) continue;\n\n  const cAt = correo.created_at ? new Date(correo.created_at).getTime() : 0;\n  const uAt = correo.updated_at ? new Date(correo.updated_at).getTime() : 0;\n  const esNuevo = (uAt === 0) || (Math.abs(cAt - uAt) < 3000);\n\n  const hasAtt = correo.has_attachments === true\n               || correo.has_attachments === 'true'\n               || correo.has_attachments === 1\n               || correo.has_attachments === '1';\n\n  results.push({\n    json: {\n      ...correo,\n      has_attachments: hasAtt,\n      _es_nuevo: esNuevo\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "f0ef3fa3-43a1-4427-a14f-f82cc4e090cb",
+      "name": "¿Es Correo Nuevo?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2000,
+        432
+      ],
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "cond-is-new",
+              "leftValue": "={{ $json._es_nuevo }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9e448415-40cd-46fa-a2d6-cd17c530e86a",
+      "name": "Solo si es Nuevo",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1760,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhiwhgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mzg0MDEyNSwiZXhwIjoyMDg5NDE2MTI1fQ.IoFTm2ffiwcH9ENjB4GKZV9HWN48fIviUIb6tgGrOnA"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mzg0MDEyNSwiZXhwIjoyMDg5NDE2MTI1fQ.IoFTm2ffiwcH9ENjB4GKZV9HWN48fIviUIb6tgGrOnA"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "correo_id",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "evento",
+              "value": "recibido"
+            },
+            {
+              "name": "from_email",
+              "value": "={{ $json.from_email }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json.subject }}"
+            },
+            {
+              "name": "descripcion",
+              "value": "Correo recibido y registrado en el sistema"
+            },
+            {
+              "name": "datos_extra",
+              "value": "={{ { \"message_id\": $json.message_id, \"has_attachments\": $json.has_attachments, \"importance\": $json.importance } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "28ea3304-00bd-47ab-9c9a-bedde310db21",
+      "name": "Registrar en Historial Eventos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1520,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = [];\n\nfor (const item of $input.all()) {\n  const hasAtt = item.json.has_attachments === true \n              || item.json.has_attachments === 'true'\n              || item.json.has_attachments === 1\n              || item.json.has_attachments === '1';\n  if (hasAtt) {\n    results.push({ json: item.json });\n  }\n}\n\nreturn results;"
+      },
+      "id": "870ad533-ab51-4a5e-8e03-c9e47a71b7cd",
+      "name": "¿Tiene Adjuntos?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1520,
+        544
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.microsoft.com/v1.0/users/pqrsmirror@tododrogas.com.co/messages/{{ $json.message_id }}/attachments?$top=150",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Procesar y Separar Correos').first().json._access_token }}"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {}
+          }
+        }
+      },
+      "id": "e32887d1-087f-45ff-8df1-249a5301a02a",
+      "name": "Traer Adjuntos de Graph API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1280,
+        544
+      ],
+      "retryOnFail": false,
+      "executeOnce": false,
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        720
+      ],
+      "id": "f740fff4-9b28-4f66-b635-84e340382ffd",
+      "name": "Fin (correo ya existía)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -2448,
+        848
+      ],
+      "id": "79696702-9aed-4f98-aa37-4417d162e7c0",
+      "name": "Fin (sin correos nuevos)"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 3
+            }
+          ]
+        }
+      },
+      "id": "679e8e17-e295-4c8f-9ff8-97239de6a70a",
+      "name": "Cada 5 Minutos1",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -3680,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://login.microsoftonline.com/0351007f-06a6-4822-8c83-17f7907f830f/oauth2/v2.0/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "grant_type",
+              "value": "client_credentials"
+            },
+            {
+              "name": "client_id",
+              "value": "1255d11a-f3e0-47e4-ab3a-a32584e8eea4"
+            },
+            {
+              "name": "client_secret",
+              "value": "....."
+            },
+            {
+              "name": "scope",
+              "value": "https://graph.microsoft.com/.default"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0bfa46d3-ed8a-41e0-a9c9-1f199699351d",
+      "name": "Obtener Token Microsoft1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3440,
+        560
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "1583f2fd-6d0e-4865-a873-0bcdd18b2082",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -3696,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://lyosqaqhihwgvjigvqtc.supabase.co/rest/v1/historial_eventos",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=minimal"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"ERROR Flujo-00 Correos: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"flujo_00_correos\", \"error\": $json.execution.error.message, \"node\": $json.execution.lastNodeExecuted}\n}",
+        "options": {}
+      },
+      "id": "19d11e99-39c8-4125-a2f7-595bd5cdee9d",
+      "name": "Log Error Correos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -3440,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ahora = new Date();\nconst horas = 1; // ← CAMBIA ESTE NÚMERO para ajustar la ventana\nconst desde = new Date(ahora.getTime() - horas * 60 * 60 * 1000)\n              .toISOString().replace(/\\.\\d{3}Z$/, 'Z');\n\nreturn [{\n  json: {\n    access_token: $input.first().json.access_token,\n    desde: desde,\n    baseUrl: 'https://graph.microsoft.com/v1.0/users/pqrsmirror@tododrogas.com.co/messages'\n  }\n}];"
+      },
+      "id": "3e43bf3b-334c-4d8d-9b44-54f25709b22a",
+      "name": "Calcular Ventana 5h",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3200,
+        560
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Inyectar IDs en Adjuntos1": {
+      "main": [
+        [
+          {
+            "node": "Preparar Binario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Binario": {
+      "main": [
+        [
+          {
+            "node": "¿Tiene Contenido Binario?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Subir a Supabase Storage": {
+      "main": [
+        [
+          {
+            "node": "Registrar Adjunto en BD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tiene Contenido Binario?": {
+      "main": [
+        [
+          {
+            "node": "Fin (adjunto sin contenido)1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Subir a Supabase Storage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traer Correos Graph API (24h)": {
+      "main": [
+        [
+          {
+            "node": "Procesar y Separar Correos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar y Separar Correos": {
+      "main": [
+        [
+          {
+            "node": "¿Hay Correos?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay Correos?": {
+      "main": [
+        [
+          {
+            "node": "Fin (sin correos nuevos)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Upsert Correo en Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Correo en Supabase": {
+      "main": [
+        [
+          {
+            "node": "¿Es Correo Nuevo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es Correo Nuevo?": {
+      "main": [
+        [
+          {
+            "node": "Solo si es Nuevo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solo si es Nuevo": {
+      "main": [
+        [
+          {
+            "node": "Registrar en Historial Eventos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "¿Tiene Adjuntos?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fin (correo ya existía)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tiene Adjuntos?": {
+      "main": [
+        [
+          {
+            "node": "Traer Adjuntos de Graph API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Traer Adjuntos de Graph API": {
+      "main": [
+        [
+          {
+            "node": "Inyectar IDs en Adjuntos1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cada 5 Minutos1": {
+      "main": [
+        [
+          {
+            "node": "Obtener Token Microsoft1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Token Microsoft1": {
+      "main": [
+        [
+          {
+            "node": "Calcular Ventana 5h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error Correos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calcular Ventana 5h": {
+      "main": [
+        [
+          {
+            "node": "Traer Correos Graph API (24h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "4040df4a-331e-472e-bf83-58a9efb5ff33",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a09ff7bc0c5e2d52aa8e25fe6761ad46e4880f02dbe5bbf7ff8352e604ddc15f"
+  },
+  "id": "AlGGDCjmuhuCS0I6",
+  "tags": []
+}
