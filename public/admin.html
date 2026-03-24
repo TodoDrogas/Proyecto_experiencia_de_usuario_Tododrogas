@@ -2622,23 +2622,30 @@ async function abrirPreviewCorreo(id) {
   const _mpRenderAdjBar = (visibles) => {
     if(!visibles.length){ adjBar.style.display='none'; return; }
     adjBar.style.display='';
-    adjGrid.innerHTML = visibles.map(a=>{
-      const url = a.storage_url||a._graphUrl||'#';
-      const nombre = a.nombre||a.name||'Archivo';
-      const tipo = a.tipo_contenido||a.contentType||'';
-      const dir = a.direccion||'';
-      const size = (a.tamano_bytes||a.size||0)>1048576?((a.tamano_bytes||a.size)/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||a.size||0)/1024)+' KB';
-      return `<div onclick="mpPreviewAdjunto('${esc(url)}','${esc(nombre)}','${esc(tipo)}',this)"
-        style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;max-width:220px;transition:all .15s"
-        onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'"
-        title="Clic para previsualizar">
-        <span style="font-size:16px">${getFileIcon(nombre)}</span>
-        <div style="min-width:0">
-          <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)">${esc(nombre)}</div>
-          <div style="color:var(--ink3)">${size}${dir&&dir!=='entrante'?' · '+dir:''}</div>
-        </div>
-      </div>`;
-    }).join('');
+    const totalBytes = visibles.reduce((s,a)=>s+(a.tamano_bytes||a.size||0),0);
+    const totalSize = totalBytes>=1048576?(totalBytes/1048576).toFixed(1)+' MB':Math.round(totalBytes/1024)+' KB';
+    const contador = visibles.length===1?'1 archivo adjunto':`${visibles.length} archivos adjuntos`;
+    adjGrid.innerHTML =
+      `<div style="font-size:11px;color:var(--ink3);font-weight:600;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)">📎 ${contador} (${totalSize})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">` +
+      visibles.map(a=>{
+        const url = a.storage_url||a._graphUrl||'#';
+        const nombre = a.nombre||a.name||'Archivo';
+        const tipo = a.tipo_contenido||a.contentType||'';
+        const bytes = a.tamano_bytes||a.size||0;
+        const size = bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':bytes>=1024?Math.round(bytes/1024)+' KB':bytes+' B';
+        return `<div onclick="mpPreviewAdjunto('${esc(url)}','${esc(nombre)}','${esc(tipo)}',this)"
+          style="display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;min-width:140px;max-width:210px;transition:all .15s;box-shadow:var(--shadow)"
+          onmouseover="this.style.borderColor='var(--blue)';this.style.background='var(--blue-l)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--surface)'"
+          title="${esc(nombre)}">
+          <span style="font-size:22px;flex-shrink:0">${getFileIcon(nombre)}</span>
+          <div style="min-width:0;flex:1">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink);font-size:11px">${esc(nombre)}</div>
+            <div style="color:var(--ink3);font-size:10px;margin-top:1px">${size}</div>
+          </div>
+        </div>`;
+      }).join('') + `</div>`;
   };
   (async()=>{
     try{
