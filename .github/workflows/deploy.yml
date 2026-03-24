@@ -1,14 +1,11 @@
 name: 🚀 Deploy PQR Producción — Tododrogas
-
 on:
   push:
     branches: [main]
   workflow_dispatch:
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       # ── 1. Checkout ──────────────────────────────────────────
       - name: Checkout código
@@ -34,7 +31,47 @@ jobs:
           window.ADMIN_PASS          = '${{ secrets.ADMIN_PASS }}';
           CONFIGEOF
 
-      # ── 3. Validar que no haya secrets vacíos ────────────────
+      # ── 3. Generar api-token.php con secrets reales ──────────
+      #    Proxy PHP para obtener token de Microsoft Graph API.
+      #    Necesario porque Microsoft bloquea llamadas directas
+      #    desde el navegador (CORS). NUNCA se sube al repo.
+      - name: Generar api-token.php
+        run: |
+          cat > public/api-token.php << 'PHPEOF'
+          <?php
+          header('Content-Type: application/json');
+          header('Access-Control-Allow-Origin: *');
+          header('Access-Control-Allow-Methods: POST, OPTIONS');
+          header('Access-Control-Allow-Headers: Content-Type');
+          if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
+
+          $tenant_id     = '${{ secrets.AZURE_TENANT_ID }}';
+          $client_id     = '${{ secrets.AZURE_CLIENT_ID }}';
+          $client_secret = '${{ secrets.AZURE_CLIENT_SECRET }}';
+
+          $url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
+          $body = http_build_query([
+              'grant_type'    => 'client_credentials',
+              'client_id'     => $client_id,
+              'client_secret' => $client_secret,
+              'scope'         => 'https://graph.microsoft.com/.default',
+          ]);
+          $ch = curl_init($url);
+          curl_setopt_array($ch, [
+              CURLOPT_POST           => true,
+              CURLOPT_POSTFIELDS     => $body,
+              CURLOPT_RETURNTRANSFER => true,
+              CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+              CURLOPT_TIMEOUT        => 15,
+          ]);
+          $response = curl_exec($ch);
+          $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+          curl_close($ch);
+          http_response_code($httpCode);
+          echo $response;
+          PHPEOF
+
+      # ── 4. Validar que no haya secrets vacíos ────────────────
       - name: Validar secrets
         run: |
           EMPTY=$(grep -P "=\s*''" public/config.js || true)
@@ -45,7 +82,7 @@ jobs:
           fi
           echo "✅ Todos los secrets están presentes"
 
-      # ── 4. Preparar directorios en VPS Web ───────────────────
+      # ── 5. Preparar VPS: directorios + PHP-FPM ───────────────
       - name: Preparar VPS
         uses: appleboy/ssh-action@v1
         with:
@@ -54,9 +91,22 @@ jobs:
           key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
             mkdir -p /var/www/pqr/assets/{css,js,img}
-            echo "✅ Directorios listos"
+            # Asegurar PHP-FPM instalado y corriendo
+            if ! systemctl is-active --quiet php8.3-fpm; then
+              echo "⚙️ Instalando/iniciando PHP-FPM..."
+              apt-get update -qq && apt-get install -y -qq php8.3-fpm php8.3-curl
+              systemctl enable php8.3-fpm
+              systemctl start php8.3-fpm
+            fi
+            # Asegurar bloque PHP en Nginx
+            if ! grep -q "fastcgi_pass" /etc/nginx/sites-enabled/pqr; then
+              echo "⚙️ Configurando PHP en Nginx..."
+              sed -i 's|location / {|location ~ \\.php$ {\n        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n    location / {|' /etc/nginx/sites-enabled/pqr
+              nginx -t && systemctl reload nginx
+            fi
+            echo "✅ VPS listo"
 
-      # ── 5. Copiar archivos al VPS Web ────────────────────────
+      # ── 6. Copiar archivos al VPS Web ────────────────────────
       - name: Copiar archivos
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -67,8 +117,8 @@ jobs:
           target:   /var/www/pqr/
           strip_components: 1
 
-      # ── 6. Recargar Nginx ────────────────────────────────────
-      - name: Recargar Nginx
+      # ── 7. Recargar Nginx y verificar ────────────────────────
+      - name: Recargar Nginx y verificar
         uses: appleboy/ssh-action@v1
         with:
           host:     ${{ secrets.VPS_WEB_HOST }}
@@ -76,6 +126,15 @@ jobs:
           key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
             nginx -t && systemctl reload nginx
+            # Verificar que api-token.php responde correctamente
+            RESP=$(curl -s -X POST https://tododrogas.online/api-token.php)
+            if echo "$RESP" | grep -q "access_token"; then
+              echo "✅ api-token.php OK — token Microsoft obtenido"
+            else
+              echo "❌ api-token.php ERROR:"
+              echo "$RESP" | head -c 200
+              exit 1
+            fi
             echo "✅ Deploy completo en producción"
             echo "📁 Archivos desplegados:"
             ls -la /var/www/pqr/
