@@ -866,24 +866,43 @@ async function loadAttachments(correoId) {
   const el=document.getElementById('adjGrid');
   const section=document.getElementById('adjSection');
   if(!el) return;
-  try {
-    const adjs=await sb(`adjuntos?correo_id=eq.${correoId}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
-    const visibles=adjs.filter(a=>{
-      const esInline=a.es_inline===true;
-      const esImagen=(a.tipo_contenido||'').toLowerCase().startsWith('image/');
-      if(esInline&&esImagen&&(a.tamano_bytes||0)<10000) return false;
-      return true;
-    });
+  const renderAdjs = (visibles) => {
     if(!visibles.length){ if(section) section.style.display='none'; return; }
     if(section) section.style.display='';
     el.innerHTML=visibles.map(a=>{
-      const url=a.storage_url||'#';
-      const size=(a.tamano_bytes||0)>1048576?(a.tamano_bytes/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||0)/1024)+' KB';
-      return `<div class="adj-pill" onclick="window.open('${esc(url)}','_blank')" title="${esc(a.nombre||'Archivo')} · ${size}">
-        ${getFileIcon(a.nombre||'')} ${esc(a.nombre||'Archivo')}
+      const url=a.storage_url||a._graphUrl||'#';
+      const size=(a.tamano_bytes||a.size||0)>1048576?((a.tamano_bytes||a.size)/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||a.size||0)/1024)+' KB';
+      return `<div class="adj-pill" onclick="window.open('${esc(url)}','_blank')" title="${esc(a.nombre||a.name||'Archivo')} · ${size}">
+        ${getFileIcon(a.nombre||a.name||'')} ${esc(a.nombre||a.name||'Archivo')}
         <span style="font-size:9px;color:var(--ink3);margin-left:2px">${size}</span>
       </div>`;
     }).join('');
+  };
+  const filtrar = (lista) => lista.filter(a=>{
+    const esInline=a.es_inline===true||a.isInline===true;
+    const esImagen=(a.tipo_contenido||a.contentType||'').toLowerCase().startsWith('image/');
+    if(esInline&&esImagen&&(a.tamano_bytes||a.size||0)<10000) return false;
+    return true;
+  });
+  try {
+    // 1. Buscar en Supabase (fuente principal)
+    const adjs=await sb(`adjuntos?correo_id=eq.${correoId}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
+    const visibles=filtrar(adjs);
+    if(visibles.length){ renderAdjs(visibles); return; }
+    // 2. Fallback: Graph API directo (correos que aún no pasaron por n8n)
+    const email=state.emails.find(e=>e.id===correoId);
+    const msgId=email?.message_id;
+    if(!msgId){ if(section) section.style.display='none'; return; }
+    const token=await getGraphToken();
+    if(!token){ if(section) section.style.display='none'; return; }
+    const userId=window.GRAPH_USER_ID||'';
+    const resp=await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments?$select=id,name,contentType,size,isInline`,{
+      headers:{Authorization:'Bearer '+token}
+    });
+    if(!resp.ok){ if(section) section.style.display='none'; return; }
+    const data=await resp.json();
+    const graphAdjs=(data.value||[]).map(a=>({...a,_graphUrl:`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments/${a.id}/$value`}));
+    renderAdjs(filtrar(graphAdjs));
   } catch(err){ console.warn('[loadAttachments]',err); if(section) section.style.display='none'; }
 }
 
@@ -1667,32 +1686,52 @@ async function abrirPreviewCorreo(id) {
   const adjBar = document.getElementById('mpAdjuntosBar');
   const adjGrid = document.getElementById('mpAdjuntosGrid');
   adjGrid.innerHTML='';
+  const _mpRenderAdjBar = (visibles) => {
+    if(!visibles.length){ adjBar.style.display='none'; return; }
+    adjBar.style.display='';
+    adjGrid.innerHTML=visibles.map(a=>{
+      const url=a.storage_url||a._graphUrl||'#';
+      const nombre=a.nombre||a.name||'Archivo';
+      const tipo=a.tipo_contenido||a.contentType||'';
+      const size=(a.tamano_bytes||a.size||0)>1048576?((a.tamano_bytes||a.size)/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||a.size||0)/1024)+' KB';
+      return `<div onclick="mpPreviewAdj('${esc(url)}','${esc(nombre)}','${esc(tipo)}')"
+        style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;max-width:210px;transition:border-color .15s"
+        onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'"
+        title="Clic para previsualizar">
+        <span style="font-size:15px">${getFileIcon(nombre)}</span>
+        <div style="min-width:0">
+          <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)">${esc(nombre)}</div>
+          <div style="color:var(--ink3)">${size}</div>
+        </div>
+      </div>`;
+    }).join('');
+  };
+  const _mpFiltrarAdjs = (lista) => lista.filter(a=>{
+    const esInline=a.es_inline===true||a.isInline===true;
+    const esImagen=(a.tipo_contenido||a.contentType||'').toLowerCase().startsWith('image/');
+    if(esInline&&esImagen&&(a.tamano_bytes||a.size||0)<10000) return false;
+    return true;
+  });
   adjBar.style.display='none';
-  sb(`adjuntos?correo_id=eq.${id}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)
-    .then(adjs=>{
-      const visibles=(adjs||[]).filter(a=>{
-        const esInline=a.es_inline===true;
-        const esImagen=(a.tipo_contenido||'').toLowerCase().startsWith('image/');
-        if(esInline&&esImagen&&(a.tamano_bytes||0)<10000) return false;
-        return true;
-      });
-      if(!visibles.length) return;
-      adjBar.style.display='';
-      adjGrid.innerHTML=visibles.map(a=>{
-        const url=a.storage_url||'#';
-        const size=(a.tamano_bytes||0)>1048576?(a.tamano_bytes/1048576).toFixed(1)+' MB':Math.round((a.tamano_bytes||0)/1024)+' KB';
-        return `<div onclick="mpPreviewAdj('${esc(url)}','${esc(a.nombre||'archivo')}','${esc(a.tipo_contenido||'')}')"
-          style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;max-width:210px;transition:border-color .15s"
-          onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'"
-          title="Clic para previsualizar">
-          <span style="font-size:15px">${getFileIcon(a.nombre||'')}</span>
-          <div style="min-width:0">
-            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink)">${esc(a.nombre||'Archivo')}</div>
-            <div style="color:var(--ink3)">${size}</div>
-          </div>
-        </div>`;
-      }).join('');
-    }).catch(()=>{ /* silencioso */ });
+  (async()=>{
+    try{
+      const adjs=await sb(`adjuntos?correo_id=eq.${id}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
+      const visibles=_mpFiltrarAdjs(adjs);
+      if(visibles.length){ _mpRenderAdjBar(visibles); return; }
+      // Fallback Graph API
+      const emailObj=state.emails.find(e=>e.id===id);
+      const msgId=emailObj?.message_id;
+      if(!msgId) return;
+      const token=await getGraphToken();
+      if(!token) return;
+      const userId=window.GRAPH_USER_ID||'';
+      const resp=await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments?$select=id,name,contentType,size,isInline`,{headers:{Authorization:'Bearer '+token}});
+      if(!resp.ok) return;
+      const data=await resp.json();
+      const graphAdjs=(data.value||[]).map(a=>({...a,_graphUrl:`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments/${a.id}/$value`}));
+      _mpRenderAdjBar(_mpFiltrarAdjs(graphAdjs));
+    }catch(e){ console.warn('[mpAdjBar]',e); }
+  })();
 
   // Abrir modal
   document.getElementById('modalCorreoPreview').classList.add('show');
@@ -2309,14 +2348,16 @@ async function verHiloCompleto(conversationId, correoId) {
 function logout(){sessionStorage.clear();window.location.href='login.html';}
 async function getGraphToken(){
   try{
-    const r=await fetch('/api/token',{
+    const r=await fetch('/api-token.php',{
       method:'POST',
       headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:`client_id=${window.CLIENT_ID||''}&client_secret=${window.CLIENT_SECRET||''}&scope=https://graph.microsoft.com/.default&grant_type=client_credentials`
+      body:`client_id=${window.AZURE_CLIENT_ID||window.CLIENT_ID||''}&client_secret=${window.AZURE_CLIENT_SECRET||window.CLIENT_SECRET||''}&tenant_id=${window.AZURE_TENANT_ID||window.TENANT_ID||''}&scope=https://graph.microsoft.com/.default&grant_type=client_credentials`
     });
-    const d=await r.json();
+    const text=await r.text();
+    let d;
+    try{ d=JSON.parse(text); }catch(e){ console.error('Token response no es JSON:',text.substring(0,200)); return ''; }
     if(!d.access_token) console.error('Token response:',d);
-    return d.access_token;
+    return d.access_token||'';
   }catch(e){console.error('Error obteniendo token:',e);return '';}
 }
 </script>
