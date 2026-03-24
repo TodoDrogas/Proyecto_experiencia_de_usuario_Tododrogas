@@ -813,9 +813,9 @@ function renderTimeline(events, container) {
     const color=getColor(ev);
     const fecha=ev.created_at||ev.fecha||'';
     const accion=ev.evento||ev.accion||'Evento';
-    const meta=ev.metadata||{};
+    const meta=ev.datos_extra||ev.metadata||{};
     const agente=meta.agente_nombre||ev.agente_nombre||'';
-    const obs=meta.observaciones||ev.detalle||ev.observaciones||'';
+    const obs=meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
     return `<div class="timeline-item" onclick="openTlDetail(${i})">
       <div class="tl-dot color-${color}"></div>
       <div class="tl-content">
@@ -833,7 +833,7 @@ function openTlDetail(idx) {
   const el = document.getElementById('ticketTimeline');
   const events = el._events;
   if(!events||!events[idx]) return;
-  const ev=events[idx],meta=ev.metadata||{};
+  const ev=events[idx],meta=ev.datos_extra||ev.metadata||{};
   const fecha=ev.created_at||ev.fecha||'';
 
   let adjuntosHTML = '';
@@ -853,7 +853,7 @@ function openTlDetail(idx) {
     ${row('Fecha',fecha?new Date(fecha).toLocaleString('es-CO'):'—')}
     ${row('Acción',ev.evento||ev.accion||'—')}
     ${row('Agente',meta.agente_nombre||ev.agente_nombre||'—')}
-    ${row('Observaciones',meta.observaciones||ev.detalle||ev.observaciones||'—')}
+    ${row('Observaciones',meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'—')}
     ${adjuntosHTML}
     <div style="margin-top:14px;padding:10px 12px;background:var(--bg2);border-radius:8px;font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px">
       🔒 Esta gestión no puede ser editada ni eliminada
@@ -879,14 +879,17 @@ async function loadAttachments(correoId) {
     }).join('');
   };
   const filtrar = (lista) => lista.filter(a=>{
+    // Solo mostrar adjuntos del correo entrante — excluir firmas y salientes
+    const dir = a.direccion||'';
+    if(dir && dir !== 'entrante') return false;
     const esInline=a.es_inline===true||a.isInline===true;
     const esImagen=(a.tipo_contenido||a.contentType||'').toLowerCase().startsWith('image/');
     if(esInline&&esImagen&&(a.tamano_bytes||a.size||0)<10000) return false;
     return true;
   });
   try {
-    // 1. Buscar en Supabase (fuente principal)
-    const adjs=await sb(`adjuntos?correo_id=eq.${correoId}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
+    // 1. Buscar en Supabase — solo adjuntos entrantes
+    const adjs=await sb(`adjuntos?correo_id=eq.${correoId}&direccion=eq.entrante&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
     const visibles=filtrar(adjs);
     if(visibles.length){ renderAdjs(visibles); return; }
     // 2. Fallback: Graph API directo (correos que aún no pasaron por n8n)
@@ -1707,6 +1710,8 @@ async function abrirPreviewCorreo(id) {
     }).join('');
   };
   const _mpFiltrarAdjs = (lista) => lista.filter(a=>{
+    const dir = a.direccion||'';
+    if(dir && dir !== 'entrante') return false;
     const esInline=a.es_inline===true||a.isInline===true;
     const esImagen=(a.tipo_contenido||a.contentType||'').toLowerCase().startsWith('image/');
     if(esInline&&esImagen&&(a.tamano_bytes||a.size||0)<10000) return false;
@@ -1715,7 +1720,7 @@ async function abrirPreviewCorreo(id) {
   adjBar.style.display='none';
   (async()=>{
     try{
-      const adjs=await sb(`adjuntos?correo_id=eq.${id}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
+      const adjs=await sb(`adjuntos?correo_id=eq.${id}&direccion=eq.entrante&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
       const visibles=_mpFiltrarAdjs(adjs);
       if(visibles.length){ _mpRenderAdjBar(visibles); return; }
       // Fallback Graph API
@@ -1822,9 +1827,9 @@ async function _mpLoadTimeline(correoId) {
       const color=getColor(ev);
       const fecha=ev.created_at||ev.fecha||'';
       const accion=ev.evento||ev.accion||'Evento';
-      const meta=ev.metadata||{};
+      const meta=ev.datos_extra||ev.metadata||{};
       const agente=meta.agente_nombre||ev.agente_nombre||'';
-      const obs=meta.observaciones||ev.detalle||ev.observaciones||'';
+      const obs=meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
       return `<div class="timeline-item" onclick="mpOpenTlDetail(${i})" data-mp-idx="${i}">
         <div class="tl-dot color-${color}"></div>
         <div class="tl-content">
@@ -1843,7 +1848,7 @@ function mpOpenTlDetail(idx) {
   const el = document.getElementById('mpTimeline');
   const events = el._events;
   if(!events||!events[idx]) return;
-  const ev=events[idx], meta=ev.metadata||{};
+  const ev=events[idx], meta=ev.datos_extra||ev.metadata||{};
   const fecha=ev.created_at||ev.fecha||'';
   let adjHTML='';
   if(meta.firma_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
