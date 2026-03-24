@@ -1253,7 +1253,7 @@ async function exportarExcel() {
 
     // HOJA 1 — Gestiones detalle
     const h1=H.map(ev=>{
-      const meta=ev.metadata||{}, f=ev.created_at||ev.fecha||'';
+      const meta=ev.datos_extra||ev.metadata||{}, f=ev.created_at||ev.fecha||'';
       const fo=f?new Date(f):null;
       const email=state.emails.find(e=>e.id===ev.correo_id);
       const ag=state.agents.find(a=>a.id===meta.agente_id);
@@ -1263,7 +1263,7 @@ async function exportarExcel() {
         'Fecha_Hora':fo?fo.toLocaleString('es-CO'):'',
         'Dia_Semana':fo?['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][fo.getDay()]:'',
         'Agente_ID':meta.agente_id||'','Agente_Nombre':meta.agente_nombre||ev.agente_nombre||'','Agente_Email':ag?ag.email||'':'',
-        'Accion':ev.evento||ev.accion||'','Observaciones':meta.observaciones||ev.detalle||ev.observaciones||'','Por':meta.por||'',
+        'Accion':ev.evento||ev.accion||'','Observaciones':meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'','Por':meta.por||'',
         'Asunto_Correo':email?.asunto||ev.subject||'','Remitente':email?.remitente||ev.from_email||'','Remitente_Nombre':email?.remitente_nombre||'',
         'Estado_Ticket':email?.estado||'','Prioridad':email?.prioridad||'',
         'Fecha_Recepcion':email?.fecha?new Date(email.fecha).toLocaleDateString('es-CO'):'',
@@ -1714,9 +1714,9 @@ function renderTimeline(events, container) {
     const color = getColor(ev);
     const fecha = ev.created_at||ev.fecha||'';
     const accion = ev.evento||ev.accion||'Evento';
-    const meta = ev.metadata||{};
+    const meta = ev.datos_extra||ev.metadata||{};
     const agente = meta.agente_nombre||ev.agente_nombre||'';
-    const obs = meta.observaciones||ev.detalle||ev.observaciones||'';
+    const obs = meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
     return `<div class="timeline-item" onclick="openTlDetail(${i})" data-idx="${i}">
       <div class="tl-dot color-${color}"></div>
       <div class="tl-content">
@@ -1737,7 +1737,7 @@ function openTlDetail(idx) {
   const events = el._events;
   if(!events||!events[idx]) return;
   const ev = events[idx];
-  const meta = ev.metadata||{};
+  const meta = ev.datos_extra||ev.metadata||{};
   const fecha = ev.created_at||ev.fecha||'';
 
   let adjuntosHTML = '';
@@ -1758,7 +1758,7 @@ function openTlDetail(idx) {
       ${row('Fecha',fecha?new Date(fecha).toLocaleString('es-CO'):'')}
       ${row('Acción',ev.evento||ev.accion||'')}
       ${row('Agente',meta.agente_nombre||ev.agente_nombre||'—')}
-      ${row('Observaciones',meta.observaciones||ev.detalle||ev.observaciones||'—')}
+      ${row('Observaciones',meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'—')}
       ${row('Por',meta.por||'—')}
       ${adjuntosHTML}
     </div>`;
@@ -1775,7 +1775,7 @@ async function loadAttachments(correoId, messageId) {
   const section = document.getElementById('adjSection');
   if(!el) return;
   try {
-    const adjs = await sb(`adjuntos?correo_id=eq.${correoId}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
+    const adjs = await sb(`adjuntos?correo_id=eq.${correoId}&direccion=eq.entrante&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
     const visibles = filtrar(adjs);
     if(visibles.length){ renderList(visibles); return; }
     // 2. Fallback: Graph API directo
@@ -2612,6 +2612,8 @@ async function abrirPreviewCorreo(id) {
   adjGrid.innerHTML = '';
   adjBar.style.display = 'none';
   const _mpFiltrarAdjs = (lista) => lista.filter(a => {
+    const dir = a.direccion||'';
+    if(dir && dir !== 'entrante') return false;
     const esInline = a.es_inline===true||a.isInline===true;
     const esImagen = (a.tipo_contenido||a.contentType||'').toLowerCase().startsWith('image/');
     if(esInline && esImagen && (a.tamano_bytes||a.size||0) < 10000) return false;
@@ -2640,7 +2642,7 @@ async function abrirPreviewCorreo(id) {
   };
   (async()=>{
     try{
-      const adjs = await sb(`adjuntos?correo_id=eq.${id}&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
+      const adjs = await sb(`adjuntos?correo_id=eq.${id}&direccion=eq.entrante&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
       const visibles = _mpFiltrarAdjs(adjs);
       if(visibles.length){ _mpRenderAdjBar(visibles); return; }
       // Fallback: Graph API directo
@@ -2678,9 +2680,9 @@ async function _mpLoadTimeline(correoId) {
     el.innerHTML=evs.map((ev,i)=>{
       const color=getC(ev), fecha=ev.created_at||ev.fecha||'';
       const accion=ev.evento||ev.accion||'Evento';
-      const meta=ev.metadata||{};
+      const meta=ev.datos_extra||ev.metadata||{};
       const agente=meta.agente_nombre||ev.agente_nombre||'';
-      const obs=meta.observaciones||ev.detalle||ev.observaciones||'';
+      const obs=meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
       return `<div class="timeline-item" onclick="mpOpenTlDetail(${i})" style="cursor:pointer">
         <div class="tl-dot color-${color}"></div>
         <div class="tl-content">
@@ -2699,7 +2701,7 @@ function mpOpenTlDetail(idx) {
   const el = document.getElementById('mpTimeline');
   const events = el?._events;
   if(!events||!events[idx]) return;
-  const ev=events[idx], meta=ev.metadata||{};
+  const ev=events[idx], meta=ev.datos_extra||ev.metadata||{};
   const fecha=ev.created_at||ev.fecha||'';
   let adjHTML='';
   if(meta.firma_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
@@ -2711,7 +2713,7 @@ function mpOpenTlDetail(idx) {
       ${row('Fecha',fecha?new Date(fecha).toLocaleString('es-CO'):'')}
       ${row('Acción',ev.evento||ev.accion||'')}
       ${row('Agente',meta.agente_nombre||ev.agente_nombre||'—')}
-      ${row('Observaciones',meta.observaciones||ev.detalle||ev.observaciones||'—')}
+      ${row('Observaciones',meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'—')}
       ${adjHTML}
     </div>`;
   document.getElementById('modalTlDetail').classList.add('show');
