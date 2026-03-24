@@ -927,7 +927,7 @@ function marcarSolucionado() {
   const email=state.emails.find(e=>e.id===id);
   if(!confirm('¿Marcar este ticket como "Pendiente por firma"?\n\nDeberás adjuntar la firma de cierre para cerrar definitivamente.')) return;
   sb(`correos?id=eq.${id}`,'PATCH',{estado:'pendiente_firma'}).then(()=>{
-    sb('historial_eventos','POST',{correo_id:id,message_id:email?.message_id,evento:'pendiente_firma',from_email:email?.remitente,subject:email?.asunto,metadata:{agente_id:AGENT_ID,agente_nombre:AGENT_NAME,por:'agente',observaciones:'Ticket marcado como pendiente de firma de cierre'}}).catch(()=>{});
+    sb('historial_eventos','POST',{correo_id:id,agente_id:AGENT_ID,evento:'pendiente_firma',from_email:email?.remitente,subject:email?.asunto,descripcion:'Ticket marcado como pendiente de firma de cierre',datos_extra:{agente_nombre:AGENT_NAME,por:'agente'}}).catch(()=>{});
     const em=state.emails.find(e=>e.id===id);
     if(em) em.estado='pendiente_firma';
     document.getElementById('mgmtEstadoBadge').className='badge pendiente_firma';
@@ -1008,7 +1008,7 @@ async function confirmarFirma() {
     // 4. Cambiar estado a solucionado
     await sb(`correos?id=eq.${id}`,'PATCH',{estado:'solucionado',fecha_resolucion:new Date().toISOString()});
     // 5. Historial
-    await sb('historial_eventos','POST',{correo_id:id,message_id:email?.message_id,evento:'firma_confirmada',from_email:email?.remitente,subject:email?.asunto,metadata:{agente_id:AGENT_ID,agente_nombre:AGENT_NAME,por:'agente',firma_archivo:file.name,firma_url:firmaUrl,observaciones:obs||'Firma de cierre adjuntada'}});
+    await sb('historial_eventos','POST',{correo_id:id,agente_id:AGENT_ID,evento:'firma_confirmada',from_email:email?.remitente,subject:email?.asunto,descripcion:obs||'Firma de cierre adjuntada',datos_extra:{agente_nombre:AGENT_NAME,por:'agente',firma_archivo:file.name,firma_url:firmaUrl}});
     // 6. Actualizar UI
     const em=state.emails.find(e=>e.id===id);
     if(em) em.estado='solucionado';
@@ -1155,11 +1155,12 @@ async function saveGestion() {
     try {
       await sb('historial_eventos','POST',{
         correo_id:id,
-        message_id:email?.message_id,
+        agente_id:AGENT_ID,
         evento:accion||'Observación añadida',
         from_email:email?.remitente,
         subject:email?.asunto,
-        metadata,
+        descripcion:obs||accion||'Observación añadida',
+        datos_extra:metadata||{},
       });
     } catch {
       await sb('historial','POST',{correo_id:id,accion:accion||'Observación añadida',detalle:obs,fecha:new Date().toISOString()});
@@ -1381,17 +1382,16 @@ async function sendReply() {
 
       try{ await sb('historial_eventos','POST',{
         correo_id:id,
-        message_id:email.message_id,
+        agente_id:AGENT_ID,
         evento:'correo_respondido',
         from_email:email.remitente,
         subject:email.asunto,
-        metadata:{
-          agente_id:AGENT_ID,
+        descripcion:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,80),
+        datos_extra:{
           agente_nombre:AGENT_NAME,
           por:'agente',
           adjuntos:totalAdj,
-          adjuntos_nombres:[..._attachedFiles.keys()],
-          observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,80)
+          adjuntos_nombres:[..._attachedFiles.keys()]
         }
       }); }catch{}
       _attachedFiles.clear();
