@@ -12,9 +12,6 @@ jobs:
         uses: actions/checkout@v4
 
       # ── 2. Generar config.js con secrets reales ──────────────
-      #    Se genera en la RAÍZ de public/ porque todos los HTMLs
-      #    lo cargan con <script src="config.js"> (ruta relativa).
-      #    Este archivo NUNCA se sube al repo. Lo genera CI/CD.
       - name: Generar config.js
         run: |
           mkdir -p public/assets/js
@@ -31,10 +28,9 @@ jobs:
           window.ADMIN_PASS          = '${{ secrets.ADMIN_PASS }}';
           CONFIGEOF
 
-      # ── 3. Generar api-token.php con secrets reales ──────────
-      #    Proxy PHP para obtener token de Microsoft Graph API.
-      #    Necesario porque Microsoft bloquea llamadas directas
-      #    desde el navegador (CORS). NUNCA se sube al repo.
+      # ── 3. Generar api-token.php ──────────────────────────────
+      #    Proxy para obtener token Microsoft desde el browser.
+      #    Microsoft bloquea CORS en llamadas directas del browser.
       - name: Generar api-token.php
         run: |
           cat > public/api-token.php << 'PHPEOF'
@@ -71,7 +67,78 @@ jobs:
           echo $response;
           PHPEOF
 
-      # ── 4. Validar que no haya secrets vacíos ────────────────
+      # ── 4. Generar adj-proxy.php ──────────────────────────────
+      #    Proxy para descargar adjuntos de Graph API desde el browser.
+      #    El browser no puede enviar Authorization: Bearer a graph.microsoft.com
+      #    directamente — CORS bloquea. Este PHP hace el streaming autenticado.
+      - name: Generar adj-proxy.php
+        run: |
+          cat > public/adj-proxy.php << 'PHPEOF'
+          <?php
+          // Solo aceptar URLs de Graph API — validación de seguridad
+          $url = $_GET['url'] ?? '';
+          if (!$url || !str_starts_with($url, 'https://graph.microsoft.com/')) {
+              http_response_code(400);
+              echo json_encode(['error' => 'URL invalida']);
+              exit;
+          }
+
+          $tenant_id     = '${{ secrets.AZURE_TENANT_ID }}';
+          $client_id     = '${{ secrets.AZURE_CLIENT_ID }}';
+          $client_secret = '${{ secrets.AZURE_CLIENT_SECRET }}';
+
+          // Paso 1: obtener token Microsoft
+          $token_url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
+          $token_body = http_build_query([
+              'grant_type'    => 'client_credentials',
+              'client_id'     => $client_id,
+              'client_secret' => $client_secret,
+              'scope'         => 'https://graph.microsoft.com/.default',
+          ]);
+          $tok_ch = curl_init($token_url);
+          curl_setopt_array($tok_ch, [
+              CURLOPT_POST           => true,
+              CURLOPT_POSTFIELDS     => $token_body,
+              CURLOPT_RETURNTRANSFER => true,
+              CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+              CURLOPT_TIMEOUT        => 15,
+          ]);
+          $tok_resp = curl_exec($tok_ch);
+          curl_close($tok_ch);
+          $tok_data = json_decode($tok_resp);
+
+          if (empty($tok_data->access_token)) {
+              http_response_code(502);
+              echo json_encode(['error' => 'No se pudo obtener token']);
+              exit;
+          }
+
+          // Paso 2: stream del archivo desde Graph API con autenticación
+          $file_ch = curl_init($url);
+          curl_setopt_array($file_ch, [
+              CURLOPT_HTTPHEADER     => ["Authorization: Bearer {$tok_data->access_token}"],
+              CURLOPT_RETURNTRANSFER => false,
+              CURLOPT_FOLLOWLOCATION => true,
+              CURLOPT_TIMEOUT        => 120,
+              CURLOPT_HEADERFUNCTION => function($ch, $header) {
+                  $h = trim($header);
+                  // Reenviar al browser los headers de tipo y nombre de archivo
+                  if (preg_match('/^(Content-Type|Content-Disposition|Content-Length):/i', $h)) {
+                      header($h);
+                  }
+                  return strlen($header);
+              },
+          ]);
+          curl_exec($file_ch);
+          $httpCode = curl_getinfo($file_ch, CURLINFO_HTTP_CODE);
+          curl_close($file_ch);
+
+          if ($httpCode !== 200) {
+              http_response_code($httpCode);
+          }
+          PHPEOF
+
+      # ── 5. Validar secrets ────────────────────────────────────
       - name: Validar secrets
         run: |
           EMPTY=$(grep -P "=\s*''" public/config.js || true)
@@ -82,7 +149,7 @@ jobs:
           fi
           echo "✅ Todos los secrets están presentes"
 
-      # ── 5. Preparar VPS: directorios + PHP-FPM ───────────────
+      # ── 6. Preparar VPS: directorios + PHP-FPM ───────────────
       - name: Preparar VPS
         uses: appleboy/ssh-action@v1
         with:
@@ -98,7 +165,7 @@ jobs:
               systemctl enable php8.3-fpm
               systemctl start php8.3-fpm
             fi
-            # Asegurar bloque PHP en Nginx
+            # Asegurar bloque PHP en Nginx (idempotente)
             if ! grep -q "fastcgi_pass" /etc/nginx/sites-enabled/pqr; then
               echo "⚙️ Configurando PHP en Nginx..."
               sed -i 's|location / {|location ~ \\.php$ {\n        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n    location / {|' /etc/nginx/sites-enabled/pqr
@@ -106,7 +173,7 @@ jobs:
             fi
             echo "✅ VPS listo"
 
-      # ── 6. Copiar archivos al VPS Web ────────────────────────
+      # ── 7. Copiar archivos al VPS ─────────────────────────────
       - name: Copiar archivos
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -117,7 +184,7 @@ jobs:
           target:   /var/www/pqr/
           strip_components: 1
 
-      # ── 7. Recargar Nginx y verificar ────────────────────────
+      # ── 8. Recargar Nginx y verificar ────────────────────────
       - name: Recargar Nginx y verificar
         uses: appleboy/ssh-action@v1
         with:
@@ -126,15 +193,25 @@ jobs:
           key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
             nginx -t && systemctl reload nginx
-            # Verificar que api-token.php responde correctamente
+
+            # Verificar api-token.php responde con token
             RESP=$(curl -s -X POST https://tododrogas.online/api-token.php)
             if echo "$RESP" | grep -q "access_token"; then
-              echo "✅ api-token.php OK — token Microsoft obtenido"
+              echo "✅ api-token.php OK"
             else
-              echo "❌ api-token.php ERROR:"
-              echo "$RESP" | head -c 200
+              echo "❌ api-token.php ERROR:" && echo "$RESP" | head -c 200
               exit 1
             fi
+
+            # Verificar adj-proxy.php existe y rechaza URLs inválidas
+            ADJ=$(curl -s "https://tododrogas.online/adj-proxy.php?url=https://evil.com")
+            if echo "$ADJ" | grep -q "invalida"; then
+              echo "✅ adj-proxy.php OK — validación de seguridad activa"
+            else
+              echo "❌ adj-proxy.php ERROR o seguridad no activa"
+              exit 1
+            fi
+
             echo "✅ Deploy completo en producción"
-            echo "📁 Archivos desplegados:"
-            ls -la /var/www/pqr/
+            echo "📁 Archivos PHP en VPS:"
+            ls -la /var/www/pqr/*.php 2>/dev/null
