@@ -1938,20 +1938,22 @@ async function reabrirTicket() {
 async function addHistorialEvent(correoId, email, evento, metadata={}) {
   try {
     await sb('historial_eventos','POST',{
-      correo_id:correoId,
-      message_id:email?.message_id,
+      correo_id: correoId,
+      agente_id: metadata.agente_id || null,
       evento,
-      from_email:email?.remitente,
-      subject:email?.asunto,
-      metadata,
+      from_email: email?.remitente || email?.from_email || null,
+      subject:    email?.asunto    || email?.subject    || null,
+      descripcion: metadata.observaciones || metadata.agente_nombre || evento,
+      datos_extra: metadata,
     });
-  } catch {
+  } catch(e) {
+    console.warn('[historial_eventos] Error:', e?.message||e);
     try {
       await sb('historial','POST',{
-        correo_id:correoId,
-        accion:evento,
-        detalle:metadata.observaciones||metadata.agente_nombre||evento,
-        fecha:new Date().toISOString(),
+        correo_id: correoId,
+        accion:    evento,
+        detalle:   metadata.observaciones||metadata.agente_nombre||evento,
+        fecha:     new Date().toISOString(),
       });
     } catch {}
   }
