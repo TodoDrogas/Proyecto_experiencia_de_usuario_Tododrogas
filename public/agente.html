@@ -880,7 +880,7 @@ async function loadAttachments(correoId) {
         const nombre=a.nombre||a.name||'Archivo';
         const bytes=a.tamano_bytes||a.size||0;
         const size=bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':bytes>=1024?Math.round(bytes/1024)+' KB':bytes+' B';
-        return `<div class="adj-pill" onclick="window.open('${esc(url)}','_blank')" title="${esc(nombre)} · ${size}">
+        return `<div class="adj-pill" onclick="previewAdjunto('${esc(url)}','${esc(nombre)}','${esc(a.tipo_contenido||a.contentType||'')}',this)" title="${esc(nombre)} · ${size}">
           <span style="font-size:14px;flex-shrink:0">${getFileIcon(nombre)}</span>
           <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px">${esc(nombre)}</span>
           <span style="font-size:9px;color:var(--ink3);flex-shrink:0">${size}</span>
@@ -916,6 +916,27 @@ async function loadAttachments(correoId) {
     const graphAdjs=(data.value||[]).map(a=>({...a,_graphUrl:`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments/${a.id}/$value`}));
     renderAdjs(filtrar(graphAdjs));
   } catch(err){ console.warn('[loadAttachments]',err); if(section) section.style.display='none'; }
+}
+
+// ──────────────────────────────────────────────
+// VISOR DE ADJUNTOS TIPO OUTLOOK
+// ──────────────────────────────────────────────
+function previewAdjunto(url, nombre, tipo, el) {
+  if(url === '#' || !url) { showToast('URL del adjunto no disponible', 'error'); return; }
+  const isPDF = tipo.includes('pdf') || nombre.toLowerCase().endsWith('.pdf');
+  const isImg = tipo.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(nombre);
+  if(isPDF || isImg) {
+    const w = window.open('', '_blank', 'width=860,height=700,resizable=yes,scrollbars=yes');
+    if(!w) { window.open(url, '_blank'); return; }
+    if(isPDF) {
+      w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659}iframe{width:100%;height:100vh;border:none}</style></head><body><iframe src="${url}#toolbar=1&navpanes=0"></iframe></body></html>`);
+    } else {
+      w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${url}" alt="${nombre}"></body></html>`);
+    }
+    w.document.close();
+  } else {
+    window.open(url, '_blank');
+  }
 }
 
 // ──────────────────────────────────────────────
