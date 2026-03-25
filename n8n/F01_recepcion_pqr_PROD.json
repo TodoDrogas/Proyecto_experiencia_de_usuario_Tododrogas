@@ -2,59 +2,36 @@
   "name": "F01 — Recepción PQR (PROD v3)",
   "nodes": [
     {
-      "id": "96f1cb69-965b-4102-b1e4-c969bf24f6a5",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pqr-recepcion",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "7b2b4a95-e22f-4160-bcae-b23bf74f28b8",
       "name": "Webhook PQR",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        0,
-        200
+        288,
+        -192
       ],
-      "parameters": {
-        "path": "pqr-recepcion",
-        "httpMethod": "POST",
-        "responseMode": "responseNode",
-        "options": {}
-      }
+      "webhookId": "60a65598-745f-4d4b-b904-d354352e8881"
     },
     {
-      "id": "86ec2d49-bb28-4f61-96cf-f3c2df58df81",
-      "name": "Webhook Test",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [
-        0,
-        340
-      ],
       "parameters": {
-        "path": "pqr-recepcion",
-        "httpMethod": "POST",
-        "responseMode": "responseNode",
-        "options": {}
-      }
-    },
-    {
-      "id": "afb3b3f6-0bcd-4fe3-9db8-51f65e7612af",
+        "jsCode": "// Generar ticket ID único TD-YYYYMMDD-XXXX\nconst now = new Date();\nconst pad = (n,l=2) => String(n).padStart(l,'0');\nconst fecha = now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate());\nconst rand = Math.floor(Math.random()*9000)+1000;\nconst ticket_id = `TD-${fecha}-${rand}`;\n\nconst body = $input.first().json.body || $input.first().json;\n\nreturn [{json: {\n  ticket_id,\n  nombre:       body.nombre        || body.name       || '',\n  correo:       body.correo        || body.email       || '',\n  telefono:     body.telefono      || body.phone       || '',\n  descripcion:  body.descripcion   || body.description || '',\n  tipo_pqr:     body.tipo_pqr      || body.tipo        || 'peticion',\n  origen:       body.origen        || 'web',\n  canal_contacto: body.canal       || 'formulario_web',\n  audio_url:    body.audio_url     || null,\n  canvas_url:   body.canvas_url    || null,\n  transcripcion: body.transcripcion || null,\n  subject:      `[${ticket_id}] PQR - ${body.nombre || 'Ciudadano'}`,\n  estado:       'pendiente',\n  prioridad:    'media',\n  received_at:  now.toISOString(),\n  created_at:   now.toISOString(),\n  updated_at:   now.toISOString()\n}}];"
+      },
+      "id": "e422560a-9049-4e5a-ae09-634e41c13d8b",
       "name": "Generar Ticket ID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        240,
-        200
-      ],
-      "parameters": {
-        "jsCode": "// Generar ticket ID único TD-YYYYMMDD-XXXX\nconst now = new Date();\nconst pad = (n,l=2) => String(n).padStart(l,'0');\nconst fecha = now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate());\nconst rand = Math.floor(Math.random()*9000)+1000;\nconst ticket_id = `TD-${fecha}-${rand}`;\n\nconst body = $input.first().json.body || $input.first().json;\n\nreturn [{json: {\n  ticket_id,\n  nombre:       body.nombre        || body.name       || '',\n  correo:       body.correo        || body.email       || '',\n  telefono:     body.telefono      || body.phone       || '',\n  descripcion:  body.descripcion   || body.description || '',\n  tipo_pqr:     body.tipo_pqr      || body.tipo        || 'peticion',\n  origen:       body.origen        || 'web',\n  canal_contacto: body.canal       || 'formulario_web',\n  audio_url:    body.audio_url     || null,\n  canvas_url:   body.canvas_url    || null,\n  transcripcion: body.transcripcion || null,\n  subject:      `[${ticket_id}] PQR - ${body.nombre || 'Ciudadano'}`,\n  estado:       'pendiente',\n  prioridad:    'media',\n  received_at:  now.toISOString(),\n  created_at:   now.toISOString(),\n  updated_at:   now.toISOString()\n}}];"
-      }
+        496,
+        -192
+      ]
     },
     {
-      "id": "e4a7d078-204e-4b65-8df1-7641cf887f06",
-      "name": "INSERT PQR en Supabase",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        480,
-        200
-      ],
       "parameters": {
         "method": "POST",
         "url": "https://lyosqaqhiwhgvjigvqtc.supabase.co/rest/v1/correos",
@@ -63,11 +40,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SB_SERVICE_KEY }}"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mzg0MDEyNSwiZXhwIjoyMDg5NDE2MTI1fQ.IoFTm2ffiwcH9ENjB4GKZV9HWN48fIviUIb6tgGrOnA"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mzg0MDEyNSwiZXhwIjoyMDg5NDE2MTI1fQ.IoFTm2ffiwcH9ENjB4GKZV9HWN48fIviUIb6tgGrOnA"
             },
             {
               "name": "Content-Type",
@@ -81,53 +58,47 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
-        "options": {
-          "retry": {
-            "enabled": true,
-            "maxTries": 3,
-            "waitBetweenTries": 2000
-          }
-        }
-      }
+        "jsonBody": "{\n  \"ticket_id\":         \"={{ $json.ticket_id }}\",\n  \"from_email\":        \"={{ $json.correo }}\",\n  \"from_name\":         \"={{ $json.nombre }}\",\n  \"nombre\":            \"={{ $json.nombre }}\",\n  \"correo\":            \"={{ $json.correo }}\",\n  \"telefono_contacto\": \"={{ $json.telefono }}\",\n  \"subject\":           \"={{ $json.subject }}\",\n  \"descripcion\":       \"={{ $json.descripcion }}\",\n  \"body_preview\":      \"={{ $json.descripcion }}\",\n  \"body_content\":      \"={{ $json.descripcion }}\",\n  \"body_type\":         \"text\",\n  \"tipo_pqr\":          \"={{ $json.tipo_pqr }}\",\n  \"canal_contacto\":    \"={{ $json.canal_contacto }}\",\n  \"origen\":            \"formulario_web\",\n  \"transcripcion\":     \"={{ $json.transcripcion }}\",\n  \"audio_url\":         \"={{ $json.audio_url }}\",\n  \"canvas_url\":        \"={{ $json.canvas_url }}\",\n  \"estado\":            \"pendiente\",\n  \"prioridad\":         \"media\",\n  \"has_attachments\":   false,\n  \"is_read\":           false,\n  \"received_at\":       \"={{ $json.received_at }}\",\n  \"created_at\":        \"={{ $json.created_at }}\",\n  \"updated_at\":        \"={{ $json.updated_at }}\"\n}",
+        "options": {}
+      },
+      "id": "85932948-2c02-4f5f-bd5e-36ff1ee02eee",
+      "name": "INSERT PQR en Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        736,
+        -192
+      ]
     },
     {
-      "id": "11e38bbd-84ed-438f-8757-deae13cea116",
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"radicado\":\"{{ $('Generar Ticket ID').first().json.ticket_id }}\",\"ticket_id\":\"{{ $('Generar Ticket ID').first().json.ticket_id }}\",\"mensaje\":\"Tu solicitud fue recibida exitosamente. Radicado: {{ $('Generar Ticket ID').first().json.ticket_id }}\"}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "b6cb0330-5664-405c-9d19-5e6d175dbabc",
       "name": "Responder al Formulario",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        720,
-        200
-      ],
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\"ok\":true,\"ticket_id\":\"{{ $('Generar Ticket ID').first().json.ticket_id }}\",\"mensaje\":\"Tu solicitud fue recibida. Ticket: {{ $('Generar Ticket ID').first().json.ticket_id }}\"}",
-        "options": {
-          "responseCode": 200
-        }
-      }
+        976,
+        -192
+      ]
     },
     {
-      "id": "13f5a9ce-a7df-40a1-b85e-a19d340b0c3c",
+      "parameters": {},
+      "id": "edef982f-cb98-4e34-bc58-7fc1a8e298be",
       "name": "Error Trigger",
       "type": "n8n-nodes-base.errorTrigger",
       "typeVersion": 1,
       "position": [
-        -200,
-        400
-      ],
-      "parameters": {}
+        304,
+        64
+      ]
     },
     {
-      "id": "8e3e3777-e44c-4024-9977-8db3a4afe55e",
-      "name": "Log Error F01-RecepcionPQR",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4,
-      "position": [
-        40,
-        400
-      ],
       "parameters": {
         "method": "POST",
         "url": "https://lyosqaqhiwhgvjigvqtc.supabase.co/rest/v1/historial_eventos",
@@ -136,11 +107,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "={{ $env.SB_SERVICE_KEY }}"
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mzg0MDEyNSwiZXhwIjoyMDg5NDE2MTI1fQ.IoFTm2ffiwcH9ENjB4GKZV9HWN48fIviUIb6tgGrOnA"
             },
             {
               "name": "Authorization",
-              "value": "=Bearer {{ $env.SB_SERVICE_KEY }}"
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mzg0MDEyNSwiZXhwIjoyMDg5NDE2MTI1fQ.IoFTm2ffiwcH9ENjB4GKZV9HWN48fIviUIb6tgGrOnA"
             },
             {
               "name": "Content-Type",
@@ -154,35 +125,22 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"correo_id\": null,\n  \"evento\": \"error_flujo\",\n  \"descripcion\": \"F01-RecepcionPQR: \" + $json.execution.error.message,\n  \"datos_extra\": {\"flujo\": \"F01-RecepcionPQR\", \"error\": $json.execution.error.message}\n}",
+        "jsonBody": "{\"correo_id\": null, \"evento\": \"error_flujo\", \"descripcion\": \"F01-RecepcionPQR error\"}",
         "options": {}
-      }
+      },
+      "id": "532870e1-e677-4c32-b1b5-d0d33c2487ba",
+      "name": "Log Error F01-RecepcionPQR",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        560,
+        64
+      ]
     }
   ],
+  "pinData": {},
   "connections": {
-    "Error Trigger": {
-      "main": [
-        [
-          {
-            "node": "Log Error F01-RecepcionPQR",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Webhook PQR": {
-      "main": [
-        [
-          {
-            "node": "Generar Ticket ID",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Webhook Test": {
       "main": [
         [
           {
@@ -218,7 +176,14 @@
   },
   "active": true,
   "settings": {
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
   },
+  "versionId": "46223c0f-5c8c-443b-bcf7-1e24f6129d2c",
+  "meta": {
+    "instanceId": "a09ff7bc0c5e2d52aa8e25fe6761ad46e4880f02dbe5bbf7ff8352e604ddc15f"
+  },
+  "id": "inVBgdbhSKiwzJQK",
   "tags": []
 }
