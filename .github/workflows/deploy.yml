@@ -7,10 +7,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+
+      # ── 1. Checkout ──────────────────────────────────────────────────
       - name: Checkout código
         uses: actions/checkout@v4
 
-      # ── Generar config.js ─────────────────────────────────────
+      # ── 2. Generar config.js ─────────────────────────────────────────
       - name: Generar config.js
         run: |
           cat > public/config.js << 'CONFIGEOF'
@@ -26,17 +28,24 @@ jobs:
           window.ADMIN_PASS          = '${{ secrets.ADMIN_PASS }}';
           CONFIGEOF
 
-      # ── Inyectar secrets en PHP ───────────────────────────────
+      # ── 3. Inyectar secrets en PHP ───────────────────────────────────
       - name: Inyectar secrets en PHP
         run: |
-          for f in public/radicar-pqr.php public/nova-td-respuesta.php public/transcribir-audio.php public/procesar-canvas.php public/chatbot.php; do
-            sed -i "s|__SB_URL__|${{ secrets.SUPABASE_URL }}|g"   $f
-            sed -i "s|__SB_KEY__|${{ secrets.SUPABASE_KEY_SERVICE }}|g" $f
-            sed -i "s|__OPENAI_KEY__|${{ secrets.OPENAI_KEY }}|g"  $f
+          for f in public/radicar-pqr.php public/nova-td-respuesta.php \
+                   public/transcribir-audio.php public/procesar-canvas.php \
+                   public/chatbot.php; do
+            [ -f "$f" ] || continue
+            sed -i "s|__SB_URL__|${{ secrets.SUPABASE_URL }}|g"               $f
+            sed -i "s|__SB_KEY__|${{ secrets.SUPABASE_KEY_SERVICE }}|g"       $f
+            sed -i "s|__OPENAI_KEY__|${{ secrets.OPENAI_KEY }}|g"             $f
+            sed -i "s|__AZURE_TENANT_ID__|${{ secrets.AZURE_TENANT_ID }}|g"   $f
+            sed -i "s|__AZURE_CLIENT_ID__|${{ secrets.AZURE_CLIENT_ID }}|g"   $f
+            sed -i "s|__AZURE_CLIENT_SECRET__|${{ secrets.AZURE_CLIENT_SECRET }}|g" $f
+            sed -i "s|__GRAPH_USER_ID__|${{ secrets.GRAPH_USER_ID }}|g"       $f
           done
           echo "✅ Secrets inyectados en PHP"
 
-      # ── Generar api-token.php ─────────────────────────────────
+      # ── 4. Generar api-token.php ─────────────────────────────────────
       - name: Generar api-token.php
         run: |
           cat > public/api-token.php << 'PHPEOF'
@@ -50,9 +59,20 @@ jobs:
           $client_id     = '${{ secrets.AZURE_CLIENT_ID }}';
           $client_secret = '${{ secrets.AZURE_CLIENT_SECRET }}';
           $url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
-          $body = http_build_query(['grant_type'=>'client_credentials','client_id'=>$client_id,'client_secret'=>$client_secret,'scope'=>'https://graph.microsoft.com/.default']);
+          $body = http_build_query([
+              'grant_type'    => 'client_credentials',
+              'client_id'     => $client_id,
+              'client_secret' => $client_secret,
+              'scope'         => 'https://graph.microsoft.com/.default',
+          ]);
           $ch = curl_init($url);
-          curl_setopt_array($ch, [CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded'],CURLOPT_TIMEOUT=>15]);
+          curl_setopt_array($ch, [
+              CURLOPT_POST           => true,
+              CURLOPT_POSTFIELDS     => $body,
+              CURLOPT_RETURNTRANSFER => true,
+              CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+              CURLOPT_TIMEOUT        => 15,
+          ]);
           $response = curl_exec($ch);
           $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
           curl_close($ch);
@@ -60,40 +80,64 @@ jobs:
           echo $response;
           PHPEOF
 
-      # ── Generar adj-proxy.php ─────────────────────────────────
+      # ── 5. Generar adj-proxy.php ─────────────────────────────────────
       - name: Generar adj-proxy.php
         run: |
           cat > public/adj-proxy.php << 'PHPEOF'
           <?php
           $url = $_GET['url'] ?? '';
-          if (!$url || !str_starts_with($url, 'https://graph.microsoft.com/')) { http_response_code(400); echo json_encode(['error'=>'URL invalida']); exit; }
+          if (!$url || !str_starts_with($url, 'https://graph.microsoft.com/')) {
+              http_response_code(400); echo json_encode(['error' => 'URL invalida']); exit;
+          }
           $tenant_id     = '${{ secrets.AZURE_TENANT_ID }}';
           $client_id     = '${{ secrets.AZURE_CLIENT_ID }}';
           $client_secret = '${{ secrets.AZURE_CLIENT_SECRET }}';
           $token_url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
-          $token_body = http_build_query(['grant_type'=>'client_credentials','client_id'=>$client_id,'client_secret'=>$client_secret,'scope'=>'https://graph.microsoft.com/.default']);
+          $token_body = http_build_query([
+              'grant_type' => 'client_credentials', 'client_id' => $client_id,
+              'client_secret' => $client_secret, 'scope' => 'https://graph.microsoft.com/.default',
+          ]);
           $tok_ch = curl_init($token_url);
-          curl_setopt_array($tok_ch, [CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$token_body,CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded'],CURLOPT_TIMEOUT=>15]);
+          curl_setopt_array($tok_ch, [CURLOPT_POST=>true, CURLOPT_POSTFIELDS=>$token_body,
+              CURLOPT_RETURNTRANSFER=>true, CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded'],
+              CURLOPT_TIMEOUT=>15]);
           $tok_resp = curl_exec($tok_ch); curl_close($tok_ch);
           $tok_data = json_decode($tok_resp);
-          if (empty($tok_data->access_token)) { http_response_code(502); echo json_encode(['error'=>'No token']); exit; }
+          if (empty($tok_data->access_token)) {
+              http_response_code(502); echo json_encode(['error' => 'No token']); exit;
+          }
           $file_ch = curl_init($url);
-          curl_setopt_array($file_ch, [CURLOPT_HTTPHEADER=>["Authorization: Bearer {$tok_data->access_token}"],CURLOPT_RETURNTRANSFER=>false,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_TIMEOUT=>120,CURLOPT_HEADERFUNCTION=>function($ch,$header){$h=trim($header);if(preg_match('/^(Content-Type|Content-Disposition|Content-Length):/i',$h))header($h);return strlen($header);}]);
+          curl_setopt_array($file_ch, [
+              CURLOPT_HTTPHEADER     => ["Authorization: Bearer {$tok_data->access_token}"],
+              CURLOPT_RETURNTRANSFER => false,
+              CURLOPT_FOLLOWLOCATION => true,
+              CURLOPT_TIMEOUT        => 120,
+              CURLOPT_HEADERFUNCTION => function($ch, $header) {
+                  $h = trim($header);
+                  if (preg_match('/^(Content-Type|Content-Disposition|Content-Length):/i', $h)) header($h);
+                  return strlen($header);
+              },
+          ]);
           curl_exec($file_ch);
           curl_close($file_ch);
           PHPEOF
 
-      # ── Validar secrets ───────────────────────────────────────
+      # ── 6. Validar secrets ───────────────────────────────────────────
       - name: Validar secrets
         run: |
           EMPTY=$(grep -P "=\s*''" public/config.js || true)
-          if [ -n "$EMPTY" ]; then echo "❌ Secrets vacíos:" && echo "$EMPTY" && exit 1; fi
+          if [ -n "$EMPTY" ]; then
+            echo "❌ Secrets vacíos en config.js:" && echo "$EMPTY" && exit 1
+          fi
           for f in public/radicar-pqr.php public/nova-td-respuesta.php; do
-            if grep -q '__OPENAI_KEY__\|__SB_KEY__' $f; then echo "❌ Placeholder sin reemplazar en $f" && exit 1; fi
+            [ -f "$f" ] || continue
+            if grep -q '__OPENAI_KEY__\|__SB_KEY__\|__AZURE_' "$f"; then
+              echo "❌ Placeholder sin reemplazar en $f" && exit 1
+            fi
           done
           echo "✅ Todos los secrets están presentes"
 
-      # ── Preparar VPS ──────────────────────────────────────────
+      # ── 7. Preparar VPS ──────────────────────────────────────────────
       - name: Preparar VPS
         uses: appleboy/ssh-action@v1
         with:
@@ -102,17 +146,24 @@ jobs:
           key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
             mkdir -p /var/www/pqr/assets/{css,js,img}
+            # PHP-FPM con mbstring
             if ! systemctl is-active --quiet php8.3-fpm; then
-              apt-get update -qq && apt-get install -y -qq php8.3-fpm php8.3-curl php8.3-mbstring
-              systemctl enable php8.3-fpm && systemctl start php8.3-fpm
+              apt-get update -qq
+              apt-get install -y -qq php8.3-fpm php8.3-curl php8.3-mbstring
+              systemctl enable php8.3-fpm
+              systemctl start php8.3-fpm
+            else
+              # Asegurar mbstring instalado aunque fpm ya esté activo
+              php -m | grep -q mbstring || apt-get install -y -qq php8.3-mbstring
             fi
+            # PHP en Nginx (idempotente)
             if ! grep -q "fastcgi_pass" /etc/nginx/sites-enabled/pqr 2>/dev/null; then
               sed -i 's|location / {|location ~ \\.php$ {\n        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n    location / {|' /etc/nginx/sites-enabled/pqr
               nginx -t && systemctl reload nginx
             fi
             echo "✅ VPS listo"
 
-      # ── Copiar archivos ───────────────────────────────────────
+      # ── 8. Copiar archivos al VPS ────────────────────────────────────
       - name: Copiar archivos
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -123,7 +174,7 @@ jobs:
           target:   /var/www/pqr/
           strip_components: 1
 
-      # ── Verificar deploy ──────────────────────────────────────
+      # ── 9. Verificar deploy ──────────────────────────────────────────
       - name: Verificar deploy
         uses: appleboy/ssh-action@v1
         with:
@@ -136,9 +187,10 @@ jobs:
             # Test radicar-pqr.php
             RESP=$(curl -s -X POST https://tododrogas.online/radicar-pqr.php \
               -H "Content-Type: application/json" \
-              -d '{"nombre":"Deploy Test","correo":"test@test.com","telefono":"123","descripcion":"test deploy","tipo_pqr":"peticion"}')
+              -d '{"nombre":"Deploy Test","correo":"test@tododrogas.com.co","telefono":"3001234567","descripcion":"Prueba automática deploy CI/CD","tipo_pqr":"peticion"}')
             if echo "$RESP" | grep -q '"ok":true'; then
-              echo "✅ radicar-pqr.php OK"
+              RADICADO=$(echo "$RESP" | grep -o '"radicado":"[^"]*"' | cut -d'"' -f4)
+              echo "✅ radicar-pqr.php OK — Radicado: $RADICADO"
             else
               echo "❌ radicar-pqr.php ERROR: $RESP" && exit 1
             fi
@@ -148,8 +200,23 @@ jobs:
             if echo "$RESP" | grep -q "access_token"; then
               echo "✅ api-token.php OK"
             else
-              echo "❌ api-token.php ERROR"
+              echo "⚠️  api-token.php no devolvió token (revisar credenciales Azure)"
             fi
 
-            echo "✅ Deploy completo"
-            ls -la /var/www/pqr/*.php
+            # Test adj-proxy seguridad
+            ADJ=$(curl -s "https://tododrogas.online/adj-proxy.php?url=https://evil.com")
+            if echo "$ADJ" | grep -q "invalida"; then
+              echo "✅ adj-proxy.php OK — validación seguridad activa"
+            fi
+
+            # Test nova-td-respuesta.php existe
+            if [ -f /var/www/pqr/nova-td-respuesta.php ]; then
+              echo "✅ nova-td-respuesta.php presente"
+            else
+              echo "❌ nova-td-respuesta.php NO encontrado"
+            fi
+
+            echo ""
+            echo "✅ Deploy completo — Sistema PQR Nova TD v3"
+            echo "📁 PHP en VPS:"
+            ls -la /var/www/pqr/*.php 2>/dev/null
