@@ -500,8 +500,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 // ──────────────────────────────────────────────
 // CONFIG
 // ──────────────────────────────────────────────
-const SB_URL = window.SUPABASE_URL || 'https://lyosqaqhiwhgvjigvqtc.supabase.co';
-const SB_KEY = window.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NDAxMjUsImV4cCI6MjA4OTQxNjEyNX0.DAaYGxf-Hbb9VW4J71_cu9w0ZD0iqTO0jHi5DT5__yg';
+const SB_URL = window.SUPABASE_URL || 'https://TU_PROYECTO.supabase.co';
+const SB_KEY = window.SUPABASE_KEY || 'TU_ANON_KEY';
 
 async function sb(path, method='GET', body=null) {
   const headers = {
@@ -647,7 +647,11 @@ function renderEmailList() {
       ondblclick="abrirPreviewCorreo('${e.id}')">
       ${!e.is_read?'<div class="unread-pip"></div>':''}
       ${(e.es_urgente||e.tipo_pqr||e.fecha_limite_sla)?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin:3px 0">${e.es_urgente?'<span style="background:#fee2e2;color:#dc2626;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px">⚠ URGENTE</span>':''  }${e.tipo_pqr?'<span style="background:var(--bg2);color:var(--ink2);font-size:9px;font-weight:600;padding:1px 6px;border-radius:99px;text-transform:capitalize;border:1px solid var(--border)">'+e.tipo_pqr+'</span>':''  }${e.fecha_limite_sla?(()=>{const fin=new Date(e.fecha_limite_sla).getTime();const ahora=Date.now();const hRest=Math.max(0,Math.round((fin-ahora)/3600000));const vencido=fin<ahora;const color=vencido?'#dc2626':hRest<24?'#ca8a04':'#16a34a';const bg=vencido?'#fee2e2':hRest<24?'#fef9c3':'#dcfce7';return '<span style="background:'+bg+';color:'+color+';font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px">'+( vencido?'⚠ Vencido':'⏱ '+hRest+'h')+'</span>';})():''  }</div>`:''}
-      <div class="ei-from">${esc(e.remitente_nombre||e.remitente)}</div>
+      <div class="ei-from">${
+        e.canal_contacto==='audio'?'🎤 ':
+        e.canal_contacto==='canvas'?'✏️ ':
+        (e.audio_url?'🎤 ':e.canvas_url?'✏️ ':'')
+      }${esc(e.remitente_nombre||e.remitente)}</div>
       <div class="ei-subj">${esc(e.asunto)}</div>
       <div class="ei-foot">
         <span class="ei-time">${formatDate(new Date(e.fecha))}</span>
@@ -728,16 +732,10 @@ async function selectEmail(id) {
     <div id="replyBoxArea"></div>
     <div class="adj-section" style="margin-bottom:12px;display:none" id="adjSection"><div class="adj-title">📎 Adjuntos</div><div id="adjGrid"></div></div>
     <div class="ev-body">
-      ${email.body_type==='html'?`<iframe id="evBodyFrame" sandbox="allow-same-origin" style="width:100%;height:100%;min-height:260px;border:none"></iframe>`:
+      ${email.body_type==='html'?`<iframe srcdoc="${esc(email.body_content||'')}" sandbox="allow-same-origin" style="width:100%;height:100%;min-height:260px;border:none"></iframe>`:
         `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`}
     </div>
   `;
-
-  // Asignar srcdoc via JS — Edge falla cuando srcdoc va como atributo HTML con &quot; escapados
-  if(email.body_type==='html') {
-    const evFrame = document.getElementById('evBodyFrame');
-    if(evFrame) evFrame.srcdoc = procesarBodyConImagenes(email.body_content || '');
-  }
 
   // Mgmt panel
   document.getElementById('mgmtEstadoBadge').className='badge '+email.estado;
@@ -1092,7 +1090,7 @@ async function generarConNovaTD(correoId) {
   const area = document.getElementById('replyBoxArea');
   area.innerHTML = `<div style="background:#f5f3ff;border:1px solid #7c3aed;border-radius:8px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border:2px solid #7c3aed;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><span style="color:#7c3aed;font-weight:600;font-size:13px">✦ Nova TD generando respuesta...</span></div>`;
   try {
-    const res = await fetch('https://n8n.srv1278939.hstgr.cloud/webhook/nova-td-respuesta', {
+    const res = await fetch('/nova-td-respuesta.php', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({
         correo_id: email.id,
@@ -1508,17 +1506,6 @@ async function syncAll() {
 function estadoLabel(s){return {pendiente:'Pendiente',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-
-// Reemplazar URLs de Graph API en imágenes inline por adj-proxy.php
-// Outlook incrusta imágenes con src="https://graph.microsoft.com/..." que requieren auth
-function procesarBodyConImagenes(html) {
-  if(!html) return '';
-  return html
-    .replace(/src="(https:\/\/graph\.microsoft\.com\/[^"]+)"/gi,
-      (_, u) => `src="/adj-proxy.php?url=${encodeURIComponent(u)}"`)
-    .replace(/src='(https:\/\/graph\.microsoft\.com\/[^']+)'/gi,
-      (_, u) => `src='/adj-proxy.php?url=${encodeURIComponent(u)}'`);
-}
 function getFileIcon(n=''){
   const e=(n.split('.').pop()||'').toLowerCase();
   if(['pdf'].includes(e))return '📄';
@@ -1725,13 +1712,7 @@ async function abrirPreviewCorreo(id) {
   // Cuerpo
   const bodyEl = document.getElementById('mpBody');
   if(email.body_type==='html') {
-    // Crear iframe via JS y asignar srcdoc como propiedad — Edge falla con srcdoc como atributo HTML
-    const mpFrame = document.createElement('iframe');
-    mpFrame.sandbox = 'allow-same-origin';
-    mpFrame.style.cssText = 'width:100%;min-height:320px;border:none;border-radius:var(--r2)';
-    bodyEl.innerHTML = '';
-    bodyEl.appendChild(mpFrame);
-    mpFrame.srcdoc = procesarBodyConImagenes(email.body_content || '');
+    bodyEl.innerHTML = `<iframe srcdoc="${esc(email.body_content||'')}" sandbox="allow-same-origin" style="width:100%;min-height:320px;border:none;border-radius:var(--r2)"></iframe>`;
   } else {
     bodyEl.innerHTML = `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`;
   }
