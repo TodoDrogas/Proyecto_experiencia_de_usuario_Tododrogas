@@ -5,8 +5,8 @@ header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
-$SB_URL = 'https://lyosqaqhiwhgvjigvqtc.supabase.co';
-$SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mzg0MDEyNSwiZXhwIjoyMDg5NDE2MTI1fQ.IoFTm2ffiwcH9ENjB4GKZV9HWN48fIviUIb6tgGrOnA';
+$SB_URL = '__SB_URL__';
+$SB_KEY = '__SB_KEY__';
 
 $body = json_decode(file_get_contents('php://input'), true);
 if (!$body) { http_response_code(400); echo json_encode(['error'=>'Invalid JSON']); exit; }
@@ -24,18 +24,18 @@ $payload = [
     'from_name'         => $nombre,
     'nombre'            => $nombre,
     'correo'            => $correo,
-    'telefono_contacto' => $body['telefono']    ?? '',
+    'telefono_contacto' => $body['telefono']     ?? '',
     'subject'           => "[{$ticket_id}] PQR - {$nombre}",
-    'descripcion'       => $body['descripcion'] ?? '',
-    'body_preview'      => $body['descripcion'] ?? '',
-    'body_content'      => $body['descripcion'] ?? '',
+    'descripcion'       => $body['descripcion']  ?? '',
+    'body_preview'      => $body['descripcion']  ?? '',
+    'body_content'      => $body['descripcion']  ?? '',
     'body_type'         => 'text',
-    'tipo_pqr'          => $body['tipo_pqr']    ?? 'peticion',
-    'canal_contacto'    => $body['canal']       ?? 'formulario_web',
+    'tipo_pqr'          => $body['tipo_pqr']     ?? 'peticion',
+    'canal_contacto'    => $body['canal']        ?? 'formulario_web',
     'origen'            => 'formulario_web',
     'transcripcion'     => $body['transcripcion'] ?? null,
-    'audio_url'         => $body['audio_url']   ?? null,
-    'canvas_url'        => $body['canvas_url']  ?? null,
+    'audio_url'         => $body['audio_url']    ?? null,
+    'canvas_url'        => $body['canvas_url']   ?? null,
     'estado'            => 'pendiente',
     'prioridad'         => 'media',
     'has_attachments'   => false,
