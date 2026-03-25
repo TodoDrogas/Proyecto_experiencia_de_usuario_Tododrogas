@@ -736,7 +736,7 @@ async function selectEmail(id) {
   // Asignar srcdoc via JS — Edge falla cuando srcdoc va como atributo HTML con &quot; escapados
   if(email.body_type==='html') {
     const evFrame = document.getElementById('evBodyFrame');
-    if(evFrame) evFrame.srcdoc = email.body_content || '';
+    if(evFrame) evFrame.srcdoc = procesarBodyConImagenes(email.body_content || '');
   }
 
   // Mgmt panel
@@ -1508,6 +1508,17 @@ async function syncAll() {
 function estadoLabel(s){return {pendiente:'Pendiente',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// Reemplazar URLs de Graph API en imágenes inline por adj-proxy.php
+// Outlook incrusta imágenes con src="https://graph.microsoft.com/..." que requieren auth
+function procesarBodyConImagenes(html) {
+  if(!html) return '';
+  return html
+    .replace(/src="(https:\/\/graph\.microsoft\.com\/[^"]+)"/gi,
+      (_, u) => `src="/adj-proxy.php?url=${encodeURIComponent(u)}"`)
+    .replace(/src='(https:\/\/graph\.microsoft\.com\/[^']+)'/gi,
+      (_, u) => `src='/adj-proxy.php?url=${encodeURIComponent(u)}'`);
+}
 function getFileIcon(n=''){
   const e=(n.split('.').pop()||'').toLowerCase();
   if(['pdf'].includes(e))return '📄';
@@ -1720,7 +1731,7 @@ async function abrirPreviewCorreo(id) {
     mpFrame.style.cssText = 'width:100%;min-height:320px;border:none;border-radius:var(--r2)';
     bodyEl.innerHTML = '';
     bodyEl.appendChild(mpFrame);
-    mpFrame.srcdoc = email.body_content || '';
+    mpFrame.srcdoc = procesarBodyConImagenes(email.body_content || '');
   } else {
     bodyEl.innerHTML = `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`;
   }
