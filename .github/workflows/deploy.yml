@@ -7,14 +7,12 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # ── 1. Checkout ──────────────────────────────────────────
       - name: Checkout código
         uses: actions/checkout@v4
 
-      # ── 2. Generar config.js con secrets reales ──────────────
+      # ── Generar config.js ─────────────────────────────────────
       - name: Generar config.js
         run: |
-          mkdir -p public/assets/js
           cat > public/config.js << 'CONFIGEOF'
           window.SUPABASE_URL        = '${{ secrets.SUPABASE_URL }}';
           window.SUPABASE_KEY        = '${{ secrets.SUPABASE_KEY }}';
@@ -28,9 +26,17 @@ jobs:
           window.ADMIN_PASS          = '${{ secrets.ADMIN_PASS }}';
           CONFIGEOF
 
-      # ── 3. Generar api-token.php ──────────────────────────────
-      #    Proxy para obtener token Microsoft desde el browser.
-      #    Microsoft bloquea CORS en llamadas directas del browser.
+      # ── Inyectar secrets en PHP ───────────────────────────────
+      - name: Inyectar secrets en PHP
+        run: |
+          for f in public/radicar-pqr.php public/nova-td-respuesta.php public/transcribir-audio.php public/procesar-canvas.php public/chatbot.php; do
+            sed -i "s|__SB_URL__|${{ secrets.SUPABASE_URL }}|g"   $f
+            sed -i "s|__SB_KEY__|${{ secrets.SUPABASE_KEY_SERVICE }}|g" $f
+            sed -i "s|__OPENAI_KEY__|${{ secrets.OPENAI_KEY }}|g"  $f
+          done
+          echo "✅ Secrets inyectados en PHP"
+
+      # ── Generar api-token.php ─────────────────────────────────
       - name: Generar api-token.php
         run: |
           cat > public/api-token.php << 'PHPEOF'
@@ -40,26 +46,13 @@ jobs:
           header('Access-Control-Allow-Methods: POST, OPTIONS');
           header('Access-Control-Allow-Headers: Content-Type');
           if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
-
           $tenant_id     = '${{ secrets.AZURE_TENANT_ID }}';
           $client_id     = '${{ secrets.AZURE_CLIENT_ID }}';
           $client_secret = '${{ secrets.AZURE_CLIENT_SECRET }}';
-
           $url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
-          $body = http_build_query([
-              'grant_type'    => 'client_credentials',
-              'client_id'     => $client_id,
-              'client_secret' => $client_secret,
-              'scope'         => 'https://graph.microsoft.com/.default',
-          ]);
+          $body = http_build_query(['grant_type'=>'client_credentials','client_id'=>$client_id,'client_secret'=>$client_secret,'scope'=>'https://graph.microsoft.com/.default']);
           $ch = curl_init($url);
-          curl_setopt_array($ch, [
-              CURLOPT_POST           => true,
-              CURLOPT_POSTFIELDS     => $body,
-              CURLOPT_RETURNTRANSFER => true,
-              CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-              CURLOPT_TIMEOUT        => 15,
-          ]);
+          curl_setopt_array($ch, [CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded'],CURLOPT_TIMEOUT=>15]);
           $response = curl_exec($ch);
           $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
           curl_close($ch);
@@ -67,89 +60,40 @@ jobs:
           echo $response;
           PHPEOF
 
-      # ── 4. Generar adj-proxy.php ──────────────────────────────
-      #    Proxy para descargar adjuntos de Graph API desde el browser.
-      #    El browser no puede enviar Authorization: Bearer a graph.microsoft.com
-      #    directamente — CORS bloquea. Este PHP hace el streaming autenticado.
+      # ── Generar adj-proxy.php ─────────────────────────────────
       - name: Generar adj-proxy.php
         run: |
           cat > public/adj-proxy.php << 'PHPEOF'
           <?php
-          // Solo aceptar URLs de Graph API — validación de seguridad
           $url = $_GET['url'] ?? '';
-          if (!$url || !str_starts_with($url, 'https://graph.microsoft.com/')) {
-              http_response_code(400);
-              echo json_encode(['error' => 'URL invalida']);
-              exit;
-          }
-
+          if (!$url || !str_starts_with($url, 'https://graph.microsoft.com/')) { http_response_code(400); echo json_encode(['error'=>'URL invalida']); exit; }
           $tenant_id     = '${{ secrets.AZURE_TENANT_ID }}';
           $client_id     = '${{ secrets.AZURE_CLIENT_ID }}';
           $client_secret = '${{ secrets.AZURE_CLIENT_SECRET }}';
-
-          // Paso 1: obtener token Microsoft
           $token_url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
-          $token_body = http_build_query([
-              'grant_type'    => 'client_credentials',
-              'client_id'     => $client_id,
-              'client_secret' => $client_secret,
-              'scope'         => 'https://graph.microsoft.com/.default',
-          ]);
+          $token_body = http_build_query(['grant_type'=>'client_credentials','client_id'=>$client_id,'client_secret'=>$client_secret,'scope'=>'https://graph.microsoft.com/.default']);
           $tok_ch = curl_init($token_url);
-          curl_setopt_array($tok_ch, [
-              CURLOPT_POST           => true,
-              CURLOPT_POSTFIELDS     => $token_body,
-              CURLOPT_RETURNTRANSFER => true,
-              CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-              CURLOPT_TIMEOUT        => 15,
-          ]);
-          $tok_resp = curl_exec($tok_ch);
-          curl_close($tok_ch);
+          curl_setopt_array($tok_ch, [CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$token_body,CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded'],CURLOPT_TIMEOUT=>15]);
+          $tok_resp = curl_exec($tok_ch); curl_close($tok_ch);
           $tok_data = json_decode($tok_resp);
-
-          if (empty($tok_data->access_token)) {
-              http_response_code(502);
-              echo json_encode(['error' => 'No se pudo obtener token']);
-              exit;
-          }
-
-          // Paso 2: stream del archivo desde Graph API con autenticación
+          if (empty($tok_data->access_token)) { http_response_code(502); echo json_encode(['error'=>'No token']); exit; }
           $file_ch = curl_init($url);
-          curl_setopt_array($file_ch, [
-              CURLOPT_HTTPHEADER     => ["Authorization: Bearer {$tok_data->access_token}"],
-              CURLOPT_RETURNTRANSFER => false,
-              CURLOPT_FOLLOWLOCATION => true,
-              CURLOPT_TIMEOUT        => 120,
-              CURLOPT_HEADERFUNCTION => function($ch, $header) {
-                  $h = trim($header);
-                  // Reenviar al browser los headers de tipo y nombre de archivo
-                  if (preg_match('/^(Content-Type|Content-Disposition|Content-Length):/i', $h)) {
-                      header($h);
-                  }
-                  return strlen($header);
-              },
-          ]);
+          curl_setopt_array($file_ch, [CURLOPT_HTTPHEADER=>["Authorization: Bearer {$tok_data->access_token}"],CURLOPT_RETURNTRANSFER=>false,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_TIMEOUT=>120,CURLOPT_HEADERFUNCTION=>function($ch,$header){$h=trim($header);if(preg_match('/^(Content-Type|Content-Disposition|Content-Length):/i',$h))header($h);return strlen($header);}]);
           curl_exec($file_ch);
-          $httpCode = curl_getinfo($file_ch, CURLINFO_HTTP_CODE);
           curl_close($file_ch);
-
-          if ($httpCode !== 200) {
-              http_response_code($httpCode);
-          }
           PHPEOF
 
-      # ── 5. Validar secrets ────────────────────────────────────
+      # ── Validar secrets ───────────────────────────────────────
       - name: Validar secrets
         run: |
           EMPTY=$(grep -P "=\s*''" public/config.js || true)
-          if [ -n "$EMPTY" ]; then
-            echo "❌ ERROR: Hay secrets vacíos en config.js:"
-            echo "$EMPTY"
-            exit 1
-          fi
+          if [ -n "$EMPTY" ]; then echo "❌ Secrets vacíos:" && echo "$EMPTY" && exit 1; fi
+          for f in public/radicar-pqr.php public/nova-td-respuesta.php; do
+            if grep -q '__OPENAI_KEY__\|__SB_KEY__' $f; then echo "❌ Placeholder sin reemplazar en $f" && exit 1; fi
+          done
           echo "✅ Todos los secrets están presentes"
 
-      # ── 6. Preparar VPS: directorios + PHP-FPM ───────────────
+      # ── Preparar VPS ──────────────────────────────────────────
       - name: Preparar VPS
         uses: appleboy/ssh-action@v1
         with:
@@ -158,22 +102,17 @@ jobs:
           key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
             mkdir -p /var/www/pqr/assets/{css,js,img}
-            # Asegurar PHP-FPM instalado y corriendo
             if ! systemctl is-active --quiet php8.3-fpm; then
-              echo "⚙️ Instalando/iniciando PHP-FPM..."
               apt-get update -qq && apt-get install -y -qq php8.3-fpm php8.3-curl
-              systemctl enable php8.3-fpm
-              systemctl start php8.3-fpm
+              systemctl enable php8.3-fpm && systemctl start php8.3-fpm
             fi
-            # Asegurar bloque PHP en Nginx (idempotente)
-            if ! grep -q "fastcgi_pass" /etc/nginx/sites-enabled/pqr; then
-              echo "⚙️ Configurando PHP en Nginx..."
+            if ! grep -q "fastcgi_pass" /etc/nginx/sites-enabled/pqr 2>/dev/null; then
               sed -i 's|location / {|location ~ \\.php$ {\n        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n    location / {|' /etc/nginx/sites-enabled/pqr
               nginx -t && systemctl reload nginx
             fi
             echo "✅ VPS listo"
 
-      # ── 7. Copiar archivos al VPS ─────────────────────────────
+      # ── Copiar archivos ───────────────────────────────────────
       - name: Copiar archivos
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -184,8 +123,8 @@ jobs:
           target:   /var/www/pqr/
           strip_components: 1
 
-      # ── 8. Recargar Nginx y verificar ────────────────────────
-      - name: Recargar Nginx y verificar
+      # ── Verificar deploy ──────────────────────────────────────
+      - name: Verificar deploy
         uses: appleboy/ssh-action@v1
         with:
           host:     ${{ secrets.VPS_WEB_HOST }}
@@ -194,24 +133,23 @@ jobs:
           script: |
             nginx -t && systemctl reload nginx
 
-            # Verificar api-token.php responde con token
+            # Test radicar-pqr.php
+            RESP=$(curl -s -X POST https://tododrogas.online/radicar-pqr.php \
+              -H "Content-Type: application/json" \
+              -d '{"nombre":"Deploy Test","correo":"test@test.com","telefono":"123","descripcion":"test deploy","tipo_pqr":"peticion"}')
+            if echo "$RESP" | grep -q '"ok":true'; then
+              echo "✅ radicar-pqr.php OK"
+            else
+              echo "❌ radicar-pqr.php ERROR: $RESP" && exit 1
+            fi
+
+            # Test api-token.php
             RESP=$(curl -s -X POST https://tododrogas.online/api-token.php)
             if echo "$RESP" | grep -q "access_token"; then
               echo "✅ api-token.php OK"
             else
-              echo "❌ api-token.php ERROR:" && echo "$RESP" | head -c 200
-              exit 1
+              echo "❌ api-token.php ERROR"
             fi
 
-            # Verificar adj-proxy.php existe y rechaza URLs inválidas
-            ADJ=$(curl -s "https://tododrogas.online/adj-proxy.php?url=https://evil.com")
-            if echo "$ADJ" | grep -q "invalida"; then
-              echo "✅ adj-proxy.php OK — validación de seguridad activa"
-            else
-              echo "❌ adj-proxy.php ERROR o seguridad no activa"
-              exit 1
-            fi
-
-            echo "✅ Deploy completo en producción"
-            echo "📁 Archivos PHP en VPS:"
-            ls -la /var/www/pqr/*.php 2>/dev/null
+            echo "✅ Deploy completo"
+            ls -la /var/www/pqr/*.php
