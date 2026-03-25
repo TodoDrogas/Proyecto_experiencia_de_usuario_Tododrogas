@@ -5,8 +5,17 @@ header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
-$n8n_url = 'https://n8n.srv1490847.hstgr.cloud/webhook/pqr-recepcion';
-$body = file_get_contents('php://input');
+$path    = $_GET['path'] ?? 'pqr-recepcion';
+$allowed = ['pqr-recepcion', 'transcribir-audio', 'procesar-canvas'];
+
+if (!in_array($path, $allowed)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Ruta no permitida']);
+    exit;
+}
+
+$n8n_url = 'https://n8n.srv1490847.hstgr.cloud/webhook/' . $path;
+$body    = file_get_contents('php://input');
 
 $ch = curl_init($n8n_url);
 curl_setopt_array($ch, [
