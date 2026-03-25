@@ -935,8 +935,8 @@ table.agents-tbl tr:hover td{background:var(--bg)}
 // ──────────────────────────────────────────────
 // CONFIG
 // ──────────────────────────────────────────────
-const SB_URL = window.SUPABASE_URL || 'https://TU_PROYECTO.supabase.co';
-const SB_KEY = window.SUPABASE_KEY || 'TU_ANON_KEY';
+const SB_URL = window.SUPABASE_URL || 'https://lyosqaqhiwhgvjigvqtc.supabase.co';
+const SB_KEY = window.SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5b3NxYXFoaXdoZ3ZqaWd2cXRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NDAxMjUsImV4cCI6MjA4OTQxNjEyNX0.DAaYGxf-Hbb9VW4J71_cu9w0ZD0iqTO0jHi5DT5__yg';
 
 async function sb(path, method='GET', body=null) {
   const headers = {
@@ -3431,4 +3431,22 @@ async function getGraphToken(){
     try{ d=JSON.parse(text); }catch(e){ console.error('Token response no es JSON:',text.substring(0,200)); return ''; }
     if(!d.access_token) console.error('Token response:',d);
     return d.access_token||'';
-  }catch(e){console.error('Erro
+  }catch(e){console.error('Error obteniendo token:',e);return '';}
+}
+
+// ──────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────
+(async()=>{
+  // Auth check
+  if(sessionStorage.getItem('pqr_role')!=='admin') {
+    window.location.href='login.html'; return;
+  }
+  await Promise.all([loadEmails(), loadAgents(), loadHistorial()]);
+  document.getElementById('lastSync').textContent=`sync ${new Date().toLocaleTimeString('es-CO')}`;
+  // Auto-refresh
+  setInterval(()=>{ loadEmails(); loadHistorial(); }, 90000);
+})();
+</script>
+</body>
+</html>
