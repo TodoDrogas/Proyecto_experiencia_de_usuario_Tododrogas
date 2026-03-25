@@ -6,7 +6,7 @@ header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
 $path    = $_GET['path'] ?? 'radicar-pqr';
-$allowed = ['pqr-recepcion', 'transcribir-audio', 'procesar-canvas'];
+$allowed = ['radicar-pqr', 'pqr-recepcion', 'transcribir-audio', 'procesar-canvas'];
 
 if (!in_array($path, $allowed)) {
     http_response_code(400);
@@ -14,8 +14,14 @@ if (!in_array($path, $allowed)) {
     exit;
 }
 
-$n8n_url = 'https://n8n.srv1490847.hstgr.cloud/webhook/' . $path;
-$body    = file_get_contents('php://input');
+// Mapear alias → path real en n8n
+$map = [
+    'radicar-pqr' => 'pqr-recepcion'
+];
+$n8n_path = $map[$path] ?? $path;
+$n8n_url  = 'https://n8n.srv1490847.hstgr.cloud/webhook/' . $n8n_path;
+
+$body = file_get_contents('php://input');
 
 $ch = curl_init($n8n_url);
 curl_setopt_array($ch, [
@@ -28,5 +34,6 @@ curl_setopt_array($ch, [
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
+
 http_response_code($httpCode);
 echo $response;
