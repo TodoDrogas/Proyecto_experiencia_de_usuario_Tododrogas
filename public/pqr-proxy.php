@@ -41,9 +41,14 @@ if ($curlError) {
     exit;
 }
 
-if (empty($response)) {
+// n8n devuelve body vacío cuando el flujo falla antes del nodo de respuesta
+if (empty(trim($response))) {
     http_response_code(502);
-    echo json_encode(['error' => 'respuesta_vacia', 'httpCode' => $httpCode]);
+    echo json_encode([
+        'error'   => 'n8n_sin_respuesta',
+        'detalle' => 'El flujo llegó a n8n (HTTP '.$httpCode.') pero no ejecutó el nodo de respuesta. Revisa los logs en n8n.',
+        'httpCode' => $httpCode
+    ]);
     exit;
 }
 
