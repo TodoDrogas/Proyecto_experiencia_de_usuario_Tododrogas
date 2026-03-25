@@ -14,12 +14,7 @@ if (!in_array($path, $allowed)) {
     exit;
 }
 
-// Mapear alias → path real en n8n
-$map = [
-    'radicar-pqr'      => 'pqr-recepcion',
-    'transcribir-audio' => 'transcribir-audio',
-    'procesar-canvas'  => 'procesar-canvas'
-];
+$map = ['radicar-pqr' => 'pqr-recepcion'];
 $n8n_path = $map[$path] ?? $path;
 $n8n_url  = 'https://n8n.srv1490847.hstgr.cloud/webhook/' . $n8n_path;
 
@@ -35,7 +30,18 @@ curl_setopt_array($ch, [
 ]);
 $response = curl_exec($ch);
 $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$error    = curl_error($ch);
 curl_close($ch);
+
+if (empty($response)) {
+    echo json_encode([
+        'error'    => 'n8n devolvio respuesta vacia',
+        'httpCode' => $httpCode,
+        'curlError'=> $error,
+        'n8n_url'  => $n8n_url
+    ]);
+    exit;
+}
 
 http_response_code($httpCode);
 echo $response;
