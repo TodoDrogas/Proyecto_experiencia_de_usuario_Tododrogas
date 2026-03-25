@@ -16,7 +16,9 @@ if (!in_array($path, $allowed)) {
 
 // Mapear alias → path real en n8n
 $map = [
-    'radicar-pqr' => 'pqr-recepcion'
+    'radicar-pqr'      => 'pqr-recepcion',
+    'transcribir-audio' => 'transcribir-audio',
+    'procesar-canvas'  => 'procesar-canvas'
 ];
 $n8n_path = $map[$path] ?? $path;
 $n8n_url  = 'https://n8n.srv1490847.hstgr.cloud/webhook/' . $n8n_path;
