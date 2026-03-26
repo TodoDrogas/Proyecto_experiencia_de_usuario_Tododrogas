@@ -1005,6 +1005,9 @@ function launchSlide4(medio){
   updateCarousel(3);
   updateProgress(3);
 
+  // Sincronizar UI del correo con el canal elegido (obligatorio vs opcional)
+  document.dispatchEvent(new CustomEvent('canalChanged', {detail: S.canal}));
+
   // Inicializar según medio
   if(medio==='lapiz') setTimeout(initCanvas,120);
   if(medio==='audio') initWaveform();
@@ -1605,11 +1608,13 @@ function showToast(msg,type='info'){
   // Actualizar cuando cambia el canal (correo puede volverse obligatorio)
   document.addEventListener('canalChanged', function(e){
     const canal = e.detail;
+    const val = inp.value.trim();
     if(canal === 'correo'){
       correoReq.style.display = 'inline';
       correoOpc.style.display = 'none';
       noteSinCorreo.style.display = 'none';
-      noteConCorreo.style.display = 'flex';
+      // Mostrar nota de confirmación solo si ya hay correo escrito
+      noteConCorreo.style.display = val ? 'flex' : 'none';
       // Resaltar campo correo como obligatorio
       const fCorreoEl = document.getElementById('fCorreo');
       if(fCorreoEl) { fCorreoEl.style.borderColor = 'var(--blue)'; fCorreoEl.placeholder = 'ejemplo@correo.com (obligatorio)'; }
@@ -1619,7 +1624,14 @@ function showToast(msg,type='info'){
       // Volver correo a estado opcional
       const fCorreoEl = document.getElementById('fCorreo');
       if(fCorreoEl) { fCorreoEl.style.borderColor = ''; fCorreoEl.placeholder = 'ejemplo@correo.com'; }
-      updateCorreoUI();
+      // Si no tiene correo → mostrar aviso de que no habrá confirmación automática
+      if(val){
+        noteConCorreo.style.display = 'flex';
+        noteSinCorreo.style.display = 'none';
+      } else {
+        noteConCorreo.style.display = 'none';
+        noteSinCorreo.style.display = 'block';
+      }
     }
   });
 
