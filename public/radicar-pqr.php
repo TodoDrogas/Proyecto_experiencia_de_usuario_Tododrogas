@@ -176,7 +176,7 @@ $horas_sla    = 15 * 24; // 15 días por defecto
 
 if ($OPENAI_KEY && $texto_pqr) {
     $prompt = <<<PROMPT
-Analiza esta PQR de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
+Analiza esta solicitud de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
 
 TIPO DECLARADO POR EL USUARIO: $tipo_pqr_raw
 TEXTO EXACTO: $texto_pqr
@@ -193,15 +193,16 @@ JSON requerido:
   "horas_sla": numero entero
 }
 
-REGLAS CRITICAS DE SENTIMIENTO Y TONO:
-1. Lee el texto completo antes de clasificar. El tono emocional predomina sobre las palabras sueltas.
-2. sentimiento=negativo + tono=enojado: si hay exclamaciones, palabras como horrible/pesimo/increible/incumplieron/nunca/siempre (en negativo)/no pueden/es el colmo/que verguenza/abusivos/ladrones/estafadores o frases que expresan ira o indignacion.
-3. sentimiento=negativo + tono=frustrado: quejas sin ira explicita, insatisfaccion repetida, 'no me atienden', 'llevo dias esperando'.
-4. sentimiento=urgente: riesgo de salud, error en medicamento, reaccion adversa, urgencia medica. Prioridad siempre critica.
-5. sentimiento=positivo + tono=agradecido: felicitaciones, gracias, elogios. Prioridad siempre baja. horas_sla=360.
-6. sentimiento=neutro: SOLO peticiones informativas sin carga emocional (pedir un documento, consultar horario).
-7. prioridad segun tipo: felicitacion/sugerencia=baja, peticion=media, queja/reclamo=alta, denuncia/urgente=critica.
-8. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4.
+REGLAS CRITICAS — LEER TODAS ANTES DE CLASIFICAR:
+1. EL CONTENIDO DEL TEXTO MANDA sobre el tipo declarado. Si el usuario seleccionó "queja" pero el texto es claramente una felicitación, clasificar por el contenido real del texto.
+2. sentimiento=positivo + tono=agradecido: cuando el texto contiene felicitaciones, agradecimientos, elogios, "muchas gracias", "buen servicio", "los felicito", "excelente atención". Prioridad siempre=baja. horas_sla=360. SIN IMPORTAR el tipo declarado.
+3. sentimiento=negativo + tono=enojado: exclamaciones, palabras como horrible/pesimo/increible/incumplieron/nunca/es el colmo/abusivos/ladrones o frases de ira/indignación explícita.
+4. sentimiento=negativo + tono=frustrado: quejas sin ira explícita, insatisfacción repetida, "no me atienden", "llevo días esperando", "siempre pasa lo mismo".
+5. sentimiento=urgente: riesgo de salud, error en medicamento, reacción adversa, urgencia médica. Prioridad siempre=critica.
+6. sentimiento=neutro: peticiones informativas sin carga emocional (pedir documento, consultar horario, solicitar información).
+7. prioridad según contenido real: si el texto es positivo → baja; peticion/sugerencia → media; queja/reclamo con inconformidad → alta; urgente/denuncia → critica.
+8. horas_sla: texto_positivo/felicitacion=360, sugerencia=360, peticion=120, queja_real=72, reclamo=72, denuncia=24, urgente=4.
+9. nivel_riesgo: si sentimiento=positivo → bajo. Si urgente → critico. Si negativo+alta → medio. Si reclamo económico → medio.
 PROMPT;
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
@@ -212,7 +213,7 @@ PROMPT;
             'max_tokens'  => 300,
             'temperature' => 0.1,
             'messages'    => [
-                ['role' => 'system', 'content' => 'Eres clasificador de PQRs colombianas. Responde SOLO JSON valido con los campos exactos solicitados incluyendo tono. CRITICO: detecta ira y frustracion en el texto aunque no usen palabras explicitas de queja. Si el tipo es felicitacion, sentimiento=positivo+tono=agradecido+prioridad=baja siempre.'],
+                ['role' => 'system', 'content' => 'Eres clasificador de solicitudes colombianas de drogueria. Responde SOLO JSON valido con los campos exactos solicitados. CRITICO: el contenido del texto SIEMPRE prevalece sobre el tipo que el usuario declaró en el formulario. Si el texto es positivo/agradecido (felicitaciones, gracias, buen servicio) clasificar como sentimiento=positivo+tono=agradecido+prioridad=baja+horas_sla=360 SIN IMPORTAR el tipo declarado. Si el texto muestra ira/frustración real, clasificar como negativo aunque el tipo diga petición.'],
                 ['role' => 'user',   'content' => $prompt],
             ],
         ]),
@@ -538,10 +539,11 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     ];
 
     // Adjuntar su propio audio/canvas como evidencia
+    // Audio: adjuntar solo si es < 3MB (límite Graph API inline attachment)
     if ($audio_url) {
         if (strpos($audio_url, 'data:audio') === 0) {
             preg_match('/data:audio\/([^;]+);base64,(.+)/s', $audio_url, $aum);
-            if ($aum) {
+            if ($aum && strlen($aum[2]) < 3*1024*1024) { // <3MB base64
                 $acuse_payload['attachments'][] = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
                     'name'         => "su_audio_{$ticket_id}.{$aum[1]}",
@@ -551,7 +553,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
             }
         } else {
             $audio_ev = fetchUrlBytes($audio_url, $SB_KEY);
-            if ($audio_ev && strlen($audio_ev) < 4*1024*1024) {
+            if ($audio_ev && strlen($audio_ev) < 2*1024*1024) { // <2MB
                 $acuse_payload['attachments'][] = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
                     'name'         => "su_audio_{$ticket_id}.webm",
@@ -636,5 +638,7 @@ echo json_encode([
     'prioridad'       => $prioridad,
     'categoria'       => $categoria_ia,
     'correo_enviado'  => $correo_enviado,
+    'acuse_enviado'   => isset(\$acuse_enviado) ? \$acuse_enviado : null,
+    'acuse_code'      => isset(\$acuse_code) ? \$acuse_code : null,
     'mensaje'         => "Tu solicitud fue recibida exitosamente. Radicado: {$ticket_id}",
 ]);
