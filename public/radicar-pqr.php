@@ -82,6 +82,22 @@ function getGraphToken($tenant, $client_id, $client_secret) {
     return $data['access_token'] ?? null;
 }
 
+// ── LOGO desde Supabase configuracion_sistema ───────────────────────
+$logo_url      = '';
+$logo_img_html = '';
+try {
+    $ch_cfg = curl_init("$SB_URL/rest/v1/configuracion_sistema?id=eq.main&select=data");
+    curl_setopt_array($ch_cfg, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
+        CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Accept: application/json']]);
+    $cfg_resp = curl_exec($ch_cfg); curl_close($ch_cfg);
+    $cfg_rows = json_decode($cfg_resp, true);
+    $cfg_data = $cfg_rows[0]['data'] ?? [];
+    if (!empty($cfg_data['logo'])) {
+        $logo_url      = $cfg_data['logo'];
+        $logo_img_html = "<img src="{$logo_url}" alt="Tododrogas" style="height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px">";
+    }
+} catch (Exception $e) { /* sin logo */ }
+
 // ── LEER INPUT ───────────────────────────────────────────────────────
 $body = json_decode(file_get_contents('php://input'), true);
 if (!$body) { http_response_code(400); echo json_encode(['error' => 'Invalid JSON']); exit; }
@@ -95,18 +111,17 @@ $nombre       = trim($body['nombre']       ?? '');
 $correo       = trim($body['correo']       ?? '');
 $telefono     = trim($body['telefono']     ?? '');
 $descripcion  = trim($body['descripcion']  ?? '');
-$tipo_pqr     = strtolower(trim($body['tipo_pqr'] ?? 'peticion'));
+$tipo_pqr_raw = trim($body['tipo_pqr'] ?? $body['tipo'] ?? 'peticion');
+$tipo_pqr     = strtolower($tipo_pqr_raw);
 $transcripcion = trim($body['transcripcion'] ?? '');
 $audio_url    = trim($body['audio_url']    ?? '');
 $canvas_url   = trim($body['canvas_url']   ?? '');
 
-// FIX: leer 'medio' que envía el formulario ANTES de que lleguen los webhooks async
+// FIX: leer medio declarado por el formulario
 $medio_form   = strtolower(trim($body['medio'] ?? ''));
 $tiene_audio  = !empty($body['tiene_audio']);
 $tiene_canvas = !empty($body['tiene_canvas']);
 
-// Detectar canal según medio declarado — no depender de audio_url/canvas_url
-// porque esos webhooks llegan DESPUÉS de radicar
 $canal = 'escrito';
 if      ($medio_form === 'audio'  || $tiene_audio)  $canal = 'audio';
 elseif  ($medio_form === 'lapiz'  || $tiene_canvas) $canal = 'canvas';
@@ -129,37 +144,42 @@ $ley_aplicable = 'Ley 1755/2015';
 $horas_sla    = 15 * 24; // 15 días por defecto
 
 if ($OPENAI_KEY && $texto_pqr) {
-    $prompt = "Analiza esta PQR de un ciudadano colombiano a una drogueria y responde SOLO en JSON valido sin markdown.
+    $prompt = "Analiza esta PQR de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
 
-TIPO DECLARADO: $tipo_pqr
-TEXTO: $texto_pqr
+TIPO DECLARADO POR EL USUARIO: $tipo_pqr_raw
+TEXTO EXACTO: $texto_pqr
 
-Responde exactamente con este JSON:
+JSON requerido:
 {
   \"sentimiento\": \"positivo|neutro|negativo|urgente\",
+  \"tono\": \"enojado|frustrado|triste|ansioso|neutro|satisfecho|agradecido\",
   \"prioridad\": \"baja|media|alta|critica\",
-  \"categoria\": \"string corto en espanol (ej: Servicio al cliente, Precios, Disponibilidad medicamentos)\",
+  \"categoria\": \"frase corta en espanol\",
   \"nivel_riesgo\": \"bajo|medio|alto|critico\",
-  \"resumen\": \"maximo 100 caracteres resumiendo el caso\",
-  \"ley\": \"ley colombiana aplicable (ej: Ley 1755/2015, Ley 100/1993)\",
-  \"horas_sla\": numero de horas limite segun urgencia y ley
+  \"resumen\": \"maximo 100 caracteres\",
+  \"ley\": \"ley colombiana aplicable\",
+  \"horas_sla\": numero entero
 }
 
-REGLAS DE SENTIMIENTO OBLIGATORIAS:
-- positivo: felicitaciones, agradecimientos, elogios, buena atencion, amabilidad. Palabras clave: felicitar, agradecer, excelente, muy bien, gracias, amable, buen servicio, satisfecho, recomiendo. Si hay alguna -> SIEMPRE positivo.
-- negativo: quejas, reclamos, insatisfaccion, mal servicio, problemas sin resolver.
-- urgente: riesgo de salud, error en medicamento, reaccion adversa, urgencia medica.
-- neutro: SOLO peticiones o consultas sin carga emocional. NUNCA si hay elogio o agradecimiento.";
+REGLAS CRITICAS DE SENTIMIENTO Y TONO:
+1. Lee el texto completo antes de clasificar. El tono emocional predomina sobre las palabras sueltas.
+2. sentimiento=negativo + tono=enojado: si hay exclamaciones, palabras como horrible/pesimo/increible/incumplieron/nunca/siempre (en negativo)/no pueden/es el colmo/que verguenza/abusivos/ladrones/estafadores o frases que expresan ira o indignacion.
+3. sentimiento=negativo + tono=frustrado: quejas sin ira explicita, insatisfaccion repetida, 'no me atienden', 'llevo dias esperando'.
+4. sentimiento=urgente: riesgo de salud, error en medicamento, reaccion adversa, urgencia medica. Prioridad siempre critica.
+5. sentimiento=positivo + tono=agradecido: felicitaciones, gracias, elogios. Prioridad siempre baja. horas_sla=360.
+6. sentimiento=neutro: SOLO peticiones informativas sin carga emocional (pedir un documento, consultar horario).
+7. prioridad segun tipo: felicitacion/sugerencia=baja, peticion=media, queja/reclamo=alta, denuncia/urgente=critica.
+8. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4."
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => json_encode([
             'model'       => 'gpt-4o-mini',
-            'max_tokens'  => 200,
+            'max_tokens'  => 300,
             'temperature' => 0.1,
             'messages'    => [
-                ['role' => 'system', 'content' => 'Eres un clasificador de PQRs colombianas. Responde SOLO JSON valido. Regla critica: si el texto contiene felicitacion, agradecimiento o elogio, el sentimiento DEBE ser positivo, nunca neutro.'],
+                ['role' => 'system', 'content' => 'Eres clasificador de PQRs colombianas. Responde SOLO JSON valido con los campos exactos solicitados incluyendo tono. CRITICO: detecta ira y frustracion en el texto aunque no usen palabras explicitas de queja. Si el tipo es felicitacion, sentimiento=positivo+tono=agradecido+prioridad=baja siempre.'],
                 ['role' => 'user',   'content' => $prompt],
             ],
         ]),
@@ -177,6 +197,7 @@ REGLAS DE SENTIMIENTO OBLIGATORIAS:
 
     if ($ia) {
         $sentimiento   = $ia['sentimiento']  ?? $sentimiento;
+        $tono_ia       = $ia['tono']          ?? 'neutro';
         $prioridad     = $ia['prioridad']    ?? $prioridad;
         $categoria_ia  = $ia['categoria']    ?? $categoria_ia;
         $nivel_riesgo  = $ia['nivel_riesgo'] ?? $nivel_riesgo;
@@ -218,6 +239,7 @@ $payload_correo = [
     'tipo_pqr'          => $tipo_pqr,
     'categoria_ia'      => $categoria_ia,
     'sentimiento'       => $sentimiento,
+    'datos_legales'     => json_encode(['tono' => $tono_ia ?? 'neutro']),
     'nivel_riesgo'      => $nivel_riesgo,
     'resumen_corto'     => $resumen_corto,
     'ley_aplicable'     => $ley_aplicable,
@@ -263,8 +285,9 @@ if ($token) {
     $cuerpo_html = "
 <div style='font-family:Arial,sans-serif;max-width:680px;margin:0 auto;color:#1f2937'>
   <div style='background:#1e40af;padding:20px 28px;border-radius:8px 8px 0 0'>
-    <h2 style='color:#fff;margin:0;font-size:18px'>🏥 Tododrogas CIA SAS — Nueva PQR Recibida</h2>
-    <p style='color:#bfdbfe;margin:6px 0 0;font-size:13px'>Sistema PQR Inteligente · Plataforma Nova TD</p>
+    {$logo_img_html}
+    <h2 style='color:#fff;margin:4px 0 0;font-size:20px;font-weight:700'>Nueva PQR Recibida</h2>
+    <p style='color:#bfdbfe;margin:4px 0 0;font-size:12px;letter-spacing:.5px'>Sistema PQR Inteligente · Plataforma Nova TD</p>
   </div>
   <div style='background:#f8fafc;padding:24px 28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px'>
     <p style='margin:0 0 16px'>Estimado equipo PQRSFD,</p>
@@ -395,12 +418,139 @@ if ($token) {
     $mail_code = 0;
 }
 
+// ── PASO 3B: ACUSE AL USUARIO ───────────────────────────────────────
+if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+    $fecha_fmt_u = date('d/m/Y H:i', strtotime($now));
+    $dias_resp   = round($horas_sla / 24);
+    $fecha_lim_u = date('d/m/Y H:i', strtotime($fecha_limite_sla));
+
+    $tipo_label_u = strtoupper($tipo_pqr_raw);
+    $emoji_tipo_u = ['PETICIÓN'=>'💡','QUEJA'=>'😤','RECLAMO'=>'⚠️','SUGERENCIA'=>'💬','FELICITACIÓN'=>'⭐','DENUNCIA'=>'🚨'][strtoupper($tipo_pqr_raw)] ?? '📋';
+
+    $cuerpo_acuse = "
+<!DOCTYPE html><html><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
+<tr><td align='center'>
+<table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%'>
+
+  <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
+    ".($logo_img_html ?: "")."
+    <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Sistema PQR</p>
+    <h2 style='color:#fff;margin:6px 0 0;font-size:20px;font-weight:700'>Su solicitud fue recibida</h2>
+  </td></tr>
+
+  <tr><td style='background:#1e3a8a;padding:20px 32px;text-align:center'>
+    <p style='color:#93c5fd;margin:0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase'>Su número de radicado</p>
+    <p style='color:#fff;margin:6px 0;font-size:30px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_id}</p>
+    <p style='color:#93c5fd;margin:0;font-size:11px'>Guárdelo para hacer seguimiento</p>
+  </td></tr>
+
+  <tr><td style='background:#fff;padding:24px 32px;border:1px solid #e2e8f0;border-top:none'>
+    <p style='margin:0 0 16px;color:#374151;font-size:14px'>Estimado/a <strong>{$nombre}</strong>,</p>
+    <p style='margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6'>Hemos recibido su solicitud. Queremos que sepa que para nosotros su bienestar es lo más importante y estamos comprometidos a darle una respuesta oportuna y de calidad.</p>
+
+    <table width='100%' cellpadding='8' cellspacing='0' style='font-size:13px;border-collapse:collapse;margin-bottom:20px'>
+      <tr><td style='color:#6b7280;width:160px;border-bottom:1px solid #f3f4f6'>Fecha de radicado</td>
+          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$fecha_fmt_u} (hora Colombia)</td></tr>
+      <tr><td style='color:#6b7280;border-bottom:1px solid #f3f4f6'>Tipo de solicitud</td>
+          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$emoji_tipo_u} {$tipo_label_u} — {$categoria_ia}</td></tr>
+      <tr><td style='color:#6b7280;border-bottom:1px solid #f3f4f6'>Tiempo de respuesta</td>
+          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$dias_resp} días hábiles<br><span style='font-size:11px;color:#6b7280;font-weight:400'>Fecha límite: {$fecha_lim_u}</span></td></tr>
+      <tr><td style='color:#6b7280'>Canal de contacto</td>
+          <td style='color:#111827;font-weight:600'>{$canal_contacto}</td></tr>
+    </table>
+
+    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:20px'>
+      <p style='margin:0 0 8px;font-size:13px;font-weight:700;color:#166534'>¿Qué sigue?</p>
+      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Su caso será revisado por uno de nuestros asesores especializados.</p>
+      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Recibirá respuesta a este correo en el plazo indicado.</p>
+      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Si necesita información urgente, responda este correo con su número de radicado.</p>
+    </div>
+
+    ".( ($audio_url || $canvas_url || $texto_pqr) ? "
+    <div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #7c3aed;border-radius:4px;padding:14px 16px;margin-bottom:20px'>
+      <p style='margin:0 0 6px;font-size:12px;font-weight:700;color:#7c3aed'>📋 Copia de su mensaje (para su referencia)</p>
+      <p style='margin:0;font-size:12px;color:#374151;line-height:1.6'>".htmlspecialchars(mb_substr($texto_pqr, 0, 500)).(strlen($texto_pqr)>500?'…':'')."</p>
+      ".($audio_url || $canvas_url ? "<p style='margin:8px 0 0;font-size:11px;color:#6b7280'>📎 Su ".($audio_url?'audio':'imagen')." fue adjuntado a este correo como evidencia.</p>" : "")."
+    </div>" : "")."
+
+  </td></tr>
+  <tr><td style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center'>
+    <p style='font-size:11px;color:#9ca3af;margin:0'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente<br>
+    Este es un mensaje automático, no responda directamente a este correo.</p>
+  </td></tr>
+
+</table></td></tr></table></body></html>";
+
+    $acuse_payload = [
+        'subject'      => "Su solicitud fue recibida · Radicado {$ticket_id} · Tododrogas CIA SAS",
+        'importance'   => 'normal',
+        'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_acuse],
+        'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
+        'attachments'  => [],
+    ];
+
+    // Adjuntar su propio audio/canvas como evidencia
+    if ($audio_url) {
+        $audio_ev = @file_get_contents($audio_url);
+        if ($audio_ev && strlen($audio_ev) < 4*1024*1024) {
+            $acuse_payload['attachments'][] = [
+                '@odata.type'  => '#microsoft.graph.fileAttachment',
+                'name'         => "su_audio_{$ticket_id}.webm",
+                'contentType'  => 'audio/webm',
+                'contentBytes' => base64_encode($audio_ev),
+            ];
+        }
+    }
+    if ($canvas_url && strpos($canvas_url, 'data:image') === 0) {
+        preg_match('/data:image\/(\w+);base64,(.+)/', $canvas_url, $mc);
+        if ($mc) {
+            $acuse_payload['attachments'][] = [
+                '@odata.type'  => '#microsoft.graph.fileAttachment',
+                'name'         => "su_escrito_{$ticket_id}.{$mc[1]}",
+                'contentType'  => "image/{$mc[1]}",
+                'contentBytes' => $mc[2],
+            ];
+        }
+    } elseif ($canvas_url) {
+        $canvas_ev = @file_get_contents($canvas_url);
+        if ($canvas_ev && strlen($canvas_ev) < 4*1024*1024) {
+            $acuse_payload['attachments'][] = [
+                '@odata.type'  => '#microsoft.graph.fileAttachment',
+                'name'         => "su_escrito_{$ticket_id}.png",
+                'contentType'  => 'image/png',
+                'contentBytes' => base64_encode($canvas_ev),
+            ];
+        }
+    }
+
+    $ch_acuse = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
+    curl_setopt_array($ch_acuse, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode(['message' => $acuse_payload, 'saveToSentItems' => true]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    $acuse_resp = curl_exec($ch_acuse);
+    $acuse_code = curl_getinfo($ch_acuse, CURLINFO_HTTP_CODE);
+    curl_close($ch_acuse);
+
+    $acuse_enviado = ($acuse_code === 202);
+    if ($correo_id && $acuse_enviado) {
+        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
+            'acuse_enviado' => true,
+            'updated_at'    => date('c'),
+        ]);
+    }
+}
+
 // ── PASO 4: HISTORIAL EVENTOS ────────────────────────────────────────
 if ($correo_id) {
     sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
         'correo_id'   => $correo_id,
         'evento'      => 'pqr_recibida',
-        'descripcion' => "PQR recibida vía {$canal} ({$canal_contacto}). Clasificada: {$sentimiento} / {$prioridad}. Correo a pqrsfd: " . ($correo_enviado ? 'enviado' : 'pendiente'),
+        'descripcion' => "PQR recibida via {$canal} ({$canal_contacto}). Clasificada: {$sentimiento} / {$prioridad}. Correo PQRSFD: " . ($correo_enviado ? 'OK' : 'error') . ". Acuse usuario: " . (isset($acuse_enviado) && $acuse_enviado ? 'OK' : ($correo ? 'error' : 'sin correo')),
         'from_email'  => $correo ?: $telefono,
         'subject'     => $subject,
         'datos_extra' => json_encode([
