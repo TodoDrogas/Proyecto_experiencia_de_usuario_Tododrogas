@@ -1918,40 +1918,53 @@ async function confirmarFirma() {
     const ts = Date.now();
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
     const storagePath = `firmas/${id}/${ts}_${safeName}`;
-    // 1. Subir a Storage
-    const uploadRes = await fetch(`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`, {
-      method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},
-      body: file,
-    });
-    if(!uploadRes.ok) throw new Error('Error subiendo firma: '+await uploadRes.text());
-    // 2. URL firmada 10 años
-    const signRes = await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`, {
-      method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-      body: JSON.stringify({expiresIn:315360000}),
-    });
-    const signData = signRes.ok ? await signRes.json() : {};
-    const firmaUrl = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
-    // 3. Registrar en tabla adjuntos
-    await sb('adjuntos','POST',{
-      correo_id:id, attachment_id:`firma_${id}_${ts}`,
-      nombre:file.name, tipo_contenido:file.type||'application/octet-stream',
-      tamano_bytes:file.size, es_inline:false, storage_url:firmaUrl,
-      direccion:'firma_cierre', enviado_por:agentId,
-    });
-    // 4. Cambiar estado a solucionado
+    let firmaUrl = '';
+
+    // 1. Intentar subir a Storage (no-fatal si falla)
+    try {
+      const uploadRes = await fetch(`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`, {
+        method:'POST',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},
+        body: file,
+      });
+      if(uploadRes.ok) {
+        // URL firmada 10 años
+        const signRes = await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`, {
+          method:'POST',
+          headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+          body: JSON.stringify({expiresIn:315360000}),
+        });
+        const signData = signRes.ok ? await signRes.json() : {};
+        firmaUrl = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
+        // Registrar en tabla adjuntos
+        await sb('adjuntos','POST',{
+          correo_id:id, attachment_id:`firma_${id}_${ts}`,
+          nombre:file.name, tipo_contenido:file.type||'application/octet-stream',
+          tamano_bytes:file.size, es_inline:false, storage_url:firmaUrl,
+          direccion:'firma_cierre', enviado_por:agentId,
+        });
+      } else {
+        console.warn('[firma] Storage upload failed, continuando sin URL:', await uploadRes.text());
+      }
+    } catch(uploadErr) {
+      console.warn('[firma] Storage error (non-fatal):', uploadErr?.message);
+    }
+
+    // 2. Cambiar estado a solucionado (SIEMPRE)
     await sb(`correos?id=eq.${id}`,'PATCH',{estado:'solucionado',fecha_resolucion:new Date().toISOString()});
-    // 5. Historial
+
+    // 3. Historial (SIEMPRE)
     await addHistorialEvent(id, email, 'firma_confirmada', {
       por:'admin', agente_id:agentId,
-      firma_archivo:file.name, firma_url:firmaUrl,
-      observaciones:obs||'Firma de cierre adjuntada',
+      firma_archivo:file.name, firma_url:firmaUrl||'(sin URL)',
+      observaciones:obs||'Firma de cierre adjuntada — ticket cerrado',
     });
+
     showToast('Ticket cerrado con firma ✅','success');
     closeModal('modalFirma');
     await loadEmails();
-    selectEmail(id);
+    // Force reload timeline since email moved to solucionado folder
+    await loadTicketTimeline(id, email?.message_id);
   } catch(e) {
     errorEl.textContent = '⚠️ '+e.message.substring(0,100);
     errorEl.style.display = 'block';
