@@ -83,8 +83,9 @@ function getGraphToken($tenant, $client_id, $client_secret) {
 }
 
 // ── LOGO desde Supabase configuracion_sistema ───────────────────────
-$logo_url      = '';
-$logo_img_html = '';
+$logo_url          = '';
+$logo_img_html     = '';
+$logo_img_html_b64 = '';
 try {
     $ch_cfg = curl_init("$SB_URL/rest/v1/configuracion_sistema?id=eq.main&select=data");
     curl_setopt_array($ch_cfg, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
@@ -94,17 +95,35 @@ try {
     $cfg_data = $cfg_rows[0]['data'] ?? [];
     if (!empty($cfg_data['logo'])) {
         $logo_url = $cfg_data['logo'];
-        // Intentar embeber como base64 para que funcione en clientes de correo sin autenticación
+        // Estrategia: usar URL firmada (10 años) como fuente principal para máxima compatibilidad
+        // Los clientes de correo cargan la imagen desde la URL — funciona en Gmail, Outlook, etc.
+        $logo_signed_url = '';
+        // Extraer bucket y path de la URL de Supabase Storage
+        if (preg_match('#/storage/v1/object/(?:public|sign)/([^?]+)#', $logo_url, $lm)) {
+            $logo_path = $lm[1];
+            $sign_ch = curl_init("$SB_URL/storage/v1/object/sign/$logo_path");
+            curl_setopt_array($sign_ch, [CURLOPT_POST=>true, CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
+                CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Content-Type: application/json'],
+                CURLOPT_POSTFIELDS=>json_encode(['expiresIn'=>315360000])]);
+            $sign_resp = curl_exec($sign_ch); curl_close($sign_ch);
+            $sign_data = json_decode($sign_resp, true);
+            if (!empty($sign_data['signedURL'])) {
+                $logo_signed_url = $SB_URL . '/storage/v1' . $sign_data['signedURL'];
+            }
+        }
+        // Usar URL firmada si la obtuvimos, o la URL original si ya es pública
+        $logo_display_url = $logo_signed_url ?: $logo_url;
+        $logo_img_html = "<img src=\"{$logo_display_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+        // Fallback base64 para clientes que bloquean URLs externas (Outlook legacy)
         $logo_data = fetchUrlBytes($logo_url, $SB_KEY);
         if ($logo_data && strlen($logo_data) < 200*1024) {
-            // Detectar tipo de imagen
             $finfo = new finfo(FILEINFO_MIME_TYPE);
             $logo_mime = $finfo->buffer($logo_data) ?: 'image/png';
             $logo_b64  = base64_encode($logo_data);
-            $logo_img_html = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+            // Usar base64 para PQRSFD (Outlook), URL firmada para acuse usuario (Gmail)
+            $logo_img_html_b64 = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
         } else {
-            // Fallback a URL directa
-            $logo_img_html = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+            $logo_img_html_b64 = $logo_img_html;
         }
     }
 } catch (Exception $e) { /* sin logo */ }
@@ -119,6 +138,7 @@ $rand        = str_pad(rand(1000, 9999), 4, '0', STR_PAD_LEFT);
 $ticket_id   = "TD-{$fecha}-{$rand}";
 
 $nombre       = trim($body['nombre']       ?? '');
+$documento    = trim($body['documento']    ?? '');
 $correo       = trim($body['correo']       ?? '');
 $telefono     = trim($body['telefono']     ?? '');
 $descripcion  = trim($body['descripcion']  ?? '');
@@ -259,6 +279,7 @@ $payload_correo = [
     'ticket_id'         => $ticket_id,
     'from_email'        => $correo ?: ($telefono . '@whatsapp'),
     'from_name'         => $nombre,
+    'documento'         => $documento ?: null,
     'nombre'            => $nombre,
     'correo'            => $correo ?: null,
     'telefono_contacto' => $telefono,
@@ -319,7 +340,7 @@ if ($token) {
     $cuerpo_html = "
 <div style='font-family:Poppins,Arial,sans-serif;max-width:680px;margin:0 auto;color:#1f2937'>
   <div style='background:#1e40af;padding:20px 28px;border-radius:8px 8px 0 0'>
-    {$logo_img_html}
+    {$logo_img_html_b64}
     <h2 style='color:#fff;margin:4px 0 0;font-size:20px;font-weight:700'>Nueva PQRSFD Recibida</h2>
     <p style='color:#bfdbfe;margin:4px 0 0;font-size:12px;letter-spacing:.5px'>Experiencia de Servicio al Cliente · Nova TD</p>
   </div>
@@ -349,6 +370,7 @@ if ($token) {
     <div style='background:#fff;border:1px solid #e2e8f0;border-left:4px solid #1e40af;border-radius:4px;padding:16px 20px;margin-bottom:20px'>
       <p style='margin:0 0 8px;font-weight:700;color:#1e40af'>👤 Datos del ciudadano</p>
       <p style='margin:2px 0;font-size:13px'><strong>Nombre:</strong> {$nombre}</p>" .
+      ($documento ? "<p style='margin:2px 0;font-size:13px'><strong>Documento:</strong> {$documento}</p>" : "") ." .
       ($correo ? "<p style='margin:2px 0;font-size:13px'><strong>Correo:</strong> {$correo}</p>" : "") .
       ($telefono ? "<p style='margin:2px 0;font-size:13px'><strong>Celular:</strong> {$telefono}</p>" : "") .
       "<p style='margin:2px 0;font-size:13px'><strong>Canal de contacto preferido:</strong> {$canal_contacto}</p>
