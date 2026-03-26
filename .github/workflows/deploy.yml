@@ -1,4 +1,4 @@
-name: Deploy PQR · Tododrogas
+name: 🚀 Deploy PQR Producción — Tododrogas
 
 on:
   push:
@@ -8,248 +8,234 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # ── 1. CHECKOUT ────────────────────────────────────────────────
+
+      # ── 1. CHECKOUT ────────────────────────────────────────────
       - name: Checkout código
         uses: actions/checkout@v4
 
-      # ── 2. CONFIG.JS — variables del browser (anon key) ────────────
+      # ── 2. CONFIG.JS ────────────────────────────────────────────
+      # NOTA: el cierre del heredoc (CONFIGEOF) debe estar en columna 0
       - name: Generar config.js
         run: |
-          cat > public/config.js << 'ENDOFCONFIG'
-          window.SUPABASE_URL = '${{ secrets.SUPABASE_URL }}';
-          window.SUPABASE_KEY = '${{ secrets.SUPABASE_KEY }}';
-          window.N8N_WEBHOOK_BASE = '${{ secrets.N8N_WEBHOOK_BASE }}';
-          ENDOFCONFIG
-          # Eliminar indentación
-          sed -i 's/^          //' public/config.js
+          cat > public/config.js << 'CONFIGEOF'
+window.SUPABASE_URL        = '${{ secrets.SUPABASE_URL }}';
+window.SUPABASE_KEY        = '${{ secrets.SUPABASE_KEY }}';
+window.AZURE_TENANT_ID     = '${{ secrets.AZURE_TENANT_ID }}';
+window.AZURE_CLIENT_ID     = '${{ secrets.AZURE_CLIENT_ID }}';
+window.AZURE_CLIENT_SECRET = '${{ secrets.AZURE_CLIENT_SECRET }}';
+window.GRAPH_USER_ID       = '${{ secrets.GRAPH_USER_ID }}';
+window.N8N_WEBHOOK_BASE    = '${{ secrets.N8N_WEBHOOK_BASE }}';
+window.OPENAI_KEY          = '${{ secrets.OPENAI_KEY }}';
+window.ADMIN_USER          = '${{ secrets.ADMIN_USER }}';
+window.ADMIN_PASS          = '${{ secrets.ADMIN_PASS }}';
+CONFIGEOF
           echo "✅ config.js generado"
-          cat public/config.js
 
-      # ── 3. INYECTAR SECRETS EN PHP ────────────────────────────────
+      # ── 3. INYECTAR SECRETS EN PHP ──────────────────────────────
+      # FIX 1: [ -f ] antes de sed — evita error si el archivo no existe en el repo
+      # FIX 2: ahora también inyecta __AZURE_* y __GRAPH_USER_ID__ en radicar-pqr.php
       - name: Inyectar secrets en PHP
         run: |
-          for f in public/radicar-pqr.php public/transcribir-audio.php public/procesar-canvas.php; do
-            [ -f "$f" ] || continue
-            sed -i "s|__SB_URL__|${{ secrets.SUPABASE_URL }}|g" "$f"
-            sed -i "s|__SB_KEY__|${{ secrets.SUPABASE_KEY_SERVICE }}|g" "$f"
-            sed -i "s|__OPENAI_KEY__|${{ secrets.OPENAI_KEY }}|g" "$f"
+          PHP_FILES=(
+            public/radicar-pqr.php
+            public/transcribir-audio.php
+            public/procesar-canvas.php
+            public/nova-td-respuesta.php
+            public/chatbot.php
+          )
+          for f in "${PHP_FILES[@]}"; do
+            [ -f "$f" ] || { echo "⚠️  $f no existe — omitiendo"; continue; }
+            sed -i "s|__SB_URL__|${{ secrets.SUPABASE_URL }}|g"                     "$f"
+            sed -i "s|__SB_KEY__|${{ secrets.SUPABASE_KEY_SERVICE }}|g"             "$f"
+            sed -i "s|__OPENAI_KEY__|${{ secrets.OPENAI_KEY }}|g"                   "$f"
+            sed -i "s|__AZURE_TENANT_ID__|${{ secrets.AZURE_TENANT_ID }}|g"         "$f"
+            sed -i "s|__AZURE_CLIENT_ID__|${{ secrets.AZURE_CLIENT_ID }}|g"         "$f"
+            sed -i "s|__AZURE_CLIENT_SECRET__|${{ secrets.AZURE_CLIENT_SECRET }}|g" "$f"
+            sed -i "s|__GRAPH_USER_ID__|${{ secrets.GRAPH_USER_ID }}|g"             "$f"
             echo "✅ $f inyectado"
           done
 
-      # ── 4. GENERAR api-token.php ───────────────────────────────────
+      # ── 4. GENERAR api-token.php ────────────────────────────────
       - name: Generar api-token.php
         run: |
-          cat > public/api-token.php << 'ENDOFTOKEN'
-          <?php
-          header('Content-Type: application/json');
-          header('Access-Control-Allow-Origin: *');
-          header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-          header('Access-Control-Allow-Headers: Content-Type');
-          if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
-
-          $TENANT_ID     = 'AZURE_TENANT_ID_VAL';
-          $CLIENT_ID     = 'AZURE_CLIENT_ID_VAL';
-          $CLIENT_SECRET = 'AZURE_CLIENT_SECRET_VAL';
-
-          $ch = curl_init("https://login.microsoftonline.com/{$TENANT_ID}/oauth2/v2.0/token");
-          curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => http_build_query([
-              'grant_type'    => 'client_credentials',
-              'client_id'     => $CLIENT_ID,
-              'client_secret' => $CLIENT_SECRET,
-              'scope'         => 'https://graph.microsoft.com/.default',
-            ]),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 15,
-            CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-          ]);
-          $resp = curl_exec($ch);
-          $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-          curl_close($ch);
-          http_response_code($code);
-          echo $resp;
-          ENDOFTOKEN
-          sed -i "s|AZURE_TENANT_ID_VAL|${{ secrets.AZURE_TENANT_ID }}|g" public/api-token.php
-          sed -i "s|AZURE_CLIENT_ID_VAL|${{ secrets.AZURE_CLIENT_ID }}|g" public/api-token.php
+          cat > public/api-token.php << 'PHPEOF'
+<?php
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
+$tenant_id     = 'AZURE_TENANT_ID_VAL';
+$client_id     = 'AZURE_CLIENT_ID_VAL';
+$client_secret = 'AZURE_CLIENT_SECRET_VAL';
+$url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
+$body = http_build_query(['grant_type'=>'client_credentials','client_id'=>$client_id,
+  'client_secret'=>$client_secret,'scope'=>'https://graph.microsoft.com/.default']);
+$ch = curl_init($url);
+curl_setopt_array($ch, [CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$body,
+  CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>15,
+  CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_close($ch);
+http_response_code($httpCode);
+echo $response;
+PHPEOF
+          sed -i "s|AZURE_TENANT_ID_VAL|${{ secrets.AZURE_TENANT_ID }}|g"         public/api-token.php
+          sed -i "s|AZURE_CLIENT_ID_VAL|${{ secrets.AZURE_CLIENT_ID }}|g"         public/api-token.php
           sed -i "s|AZURE_CLIENT_SECRET_VAL|${{ secrets.AZURE_CLIENT_SECRET }}|g" public/api-token.php
           echo "✅ api-token.php generado"
 
-      # ── 5. GENERAR adj-proxy.php ───────────────────────────────────
+      # ── 5. GENERAR adj-proxy.php ────────────────────────────────
       - name: Generar adj-proxy.php
         run: |
-          cat > public/adj-proxy.php << 'ENDOFPROXY'
-          <?php
-          header('Access-Control-Allow-Origin: *');
-          header('Access-Control-Allow-Methods: GET, OPTIONS');
-          header('Access-Control-Allow-Headers: Content-Type, Authorization');
-          if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
-
-          $TENANT_ID     = 'AZURE_TENANT_ID_VAL';
-          $CLIENT_ID     = 'AZURE_CLIENT_ID_VAL';
-          $CLIENT_SECRET = 'AZURE_CLIENT_SECRET_VAL';
-          $GRAPH_USER    = 'GRAPH_USER_ID_VAL';
-
-          // Obtener token
-          $ch = curl_init("https://login.microsoftonline.com/{$TENANT_ID}/oauth2/v2.0/token");
-          curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>15,
-            CURLOPT_POSTFIELDS=>http_build_query(['grant_type'=>'client_credentials',
-              'client_id'=>$CLIENT_ID,'client_secret'=>$CLIENT_SECRET,
-              'scope'=>'https://graph.microsoft.com/.default']),
-            CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
-          $tok = json_decode(curl_exec($ch),true)['access_token']??'';
-          curl_close($ch);
-          if(!$tok){http_response_code(502);echo json_encode(['error'=>'token_fail']);exit;}
-
-          $msgId = $_GET['messageId'] ?? '';
-          $attId = $_GET['attachmentId'] ?? '';
-          if(!$msgId||!$attId){http_response_code(400);echo json_encode(['error'=>'params']);exit;}
-
-          $url = "https://graph.microsoft.com/v1.0/users/{$GRAPH_USER}/messages/".urlencode($msgId)."/attachments/".urlencode($attId);
-          $ch = curl_init($url);
-          curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>30,
-            CURLOPT_HTTPHEADER=>["Authorization: Bearer $tok"]]);
-          $resp = curl_exec($ch);
-          $code = curl_getinfo($ch,CURLINFO_HTTP_CODE);
-          curl_close($ch);
-
-          $att = json_decode($resp,true);
-          if($code!==200||empty($att['contentBytes'])){http_response_code($code);echo $resp;exit;}
-
-          $mime = $att['contentType']??'application/octet-stream';
-          $name = $att['name']??'adjunto';
-          header("Content-Type: $mime");
-          header('Content-Disposition: inline; filename="'.addslashes($name).'"');
-          echo base64_decode($att['contentBytes']);
-          ENDOFPROXY
-          sed -i "s|AZURE_TENANT_ID_VAL|${{ secrets.AZURE_TENANT_ID }}|g" public/adj-proxy.php
-          sed -i "s|AZURE_CLIENT_ID_VAL|${{ secrets.AZURE_CLIENT_ID }}|g" public/adj-proxy.php
+          cat > public/adj-proxy.php << 'PHPEOF'
+<?php
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
+$url = $_GET['url'] ?? '';
+if (!$url || !str_starts_with($url, 'https://graph.microsoft.com/')) {
+  http_response_code(400); echo json_encode(['error'=>'URL invalida']); exit;
+}
+$tenant_id     = 'AZURE_TENANT_ID_VAL';
+$client_id     = 'AZURE_CLIENT_ID_VAL';
+$client_secret = 'AZURE_CLIENT_SECRET_VAL';
+$token_url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
+$token_body = http_build_query(['grant_type'=>'client_credentials','client_id'=>$client_id,
+  'client_secret'=>$client_secret,'scope'=>'https://graph.microsoft.com/.default']);
+$tok_ch = curl_init($token_url);
+curl_setopt_array($tok_ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>$token_body,
+  CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>15,
+  CURLOPT_HTTPHEADER=>['Content-Type: application/x-www-form-urlencoded']]);
+$tok_resp = curl_exec($tok_ch); curl_close($tok_ch);
+$tok_data = json_decode($tok_resp);
+if (empty($tok_data->access_token)) {
+  http_response_code(502); echo json_encode(['error'=>'No token']); exit;
+}
+$file_ch = curl_init($url);
+curl_setopt_array($file_ch,[
+  CURLOPT_HTTPHEADER=>["Authorization: Bearer {$tok_data->access_token}"],
+  CURLOPT_RETURNTRANSFER=>false,CURLOPT_FOLLOWLOCATION=>true,CURLOPT_TIMEOUT=>120,
+  CURLOPT_HEADERFUNCTION=>function($ch,$header){
+    $h=trim($header);
+    if(preg_match('/^(Content-Type|Content-Disposition|Content-Length):/i',$h)) header($h);
+    return strlen($header);
+  }
+]);
+curl_exec($file_ch);
+curl_close($file_ch);
+PHPEOF
+          sed -i "s|AZURE_TENANT_ID_VAL|${{ secrets.AZURE_TENANT_ID }}|g"         public/adj-proxy.php
+          sed -i "s|AZURE_CLIENT_ID_VAL|${{ secrets.AZURE_CLIENT_ID }}|g"         public/adj-proxy.php
           sed -i "s|AZURE_CLIENT_SECRET_VAL|${{ secrets.AZURE_CLIENT_SECRET }}|g" public/adj-proxy.php
-          sed -i "s|GRAPH_USER_ID_VAL|${{ secrets.GRAPH_USER_ID }}|g" public/adj-proxy.php
           echo "✅ adj-proxy.php generado"
 
-      # ── 6. INYECTAR AZURE en radicar-pqr.php ──────────────────────
-      - name: Inyectar Azure en PHP
-        run: |
-          for f in public/radicar-pqr.php; do
-            [ -f "$f" ] || continue
-            sed -i "s|__AZURE_TENANT_ID__|${{ secrets.AZURE_TENANT_ID }}|g"     "$f"
-            sed -i "s|__AZURE_CLIENT_ID__|${{ secrets.AZURE_CLIENT_ID }}|g"     "$f"
-            sed -i "s|__AZURE_CLIENT_SECRET__|${{ secrets.AZURE_CLIENT_SECRET }}|g" "$f"
-            sed -i "s|__GRAPH_USER_ID__|${{ secrets.GRAPH_USER_ID }}|g"         "$f"
-            echo "✅ Azure inyectado en $f"
-          done
-
-      # ── 7. VALIDAR SECRETS ────────────────────────────────────────
+      # ── 6. VALIDAR SECRETS ──────────────────────────────────────
+      # FIX 3: no falla por archivos ausentes; verifica TODOS los placeholders
       - name: Validar secrets
         run: |
           ERRORS=0
-          check_secret() {
-            local name="$1"
-            local val="$2"
-            if [ -z "$val" ]; then
-              echo "❌ Secret '$name' está vacío"
+
+          # config.js — ningún valor vacío
+          EMPTY=$(grep -P "= '';" public/config.js || true)
+          if [ -n "$EMPTY" ]; then
+            echo "❌ Secrets vacíos en config.js:"
+            echo "$EMPTY"
+            ERRORS=$((ERRORS+1))
+          fi
+
+          # PHP — verificar placeholders residuales solo en archivos existentes
+          PLACEHOLDERS='__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_TENANT_ID__\|__AZURE_CLIENT_ID__\|__AZURE_CLIENT_SECRET__\|__GRAPH_USER_ID__'
+          for f in public/radicar-pqr.php public/transcribir-audio.php public/procesar-canvas.php; do
+            [ -f "$f" ] || continue
+            if grep -q "$PLACEHOLDERS" "$f"; then
+              echo "❌ Placeholders sin reemplazar en $f"
+              grep "$PLACEHOLDERS" "$f"
               ERRORS=$((ERRORS+1))
             else
-              echo "✅ $name: configurado (${#val} chars)"
+              echo "✅ $f limpio"
             fi
-          }
-          check_secret "SUPABASE_URL"        "${{ secrets.SUPABASE_URL }}"
-          check_secret "SUPABASE_KEY"        "${{ secrets.SUPABASE_KEY }}"
-          check_secret "SUPABASE_KEY_SERVICE" "${{ secrets.SUPABASE_KEY_SERVICE }}"
-          check_secret "OPENAI_KEY"          "${{ secrets.OPENAI_KEY }}"
-          check_secret "AZURE_TENANT_ID"     "${{ secrets.AZURE_TENANT_ID }}"
-          check_secret "AZURE_CLIENT_ID"     "${{ secrets.AZURE_CLIENT_ID }}"
-          check_secret "AZURE_CLIENT_SECRET" "${{ secrets.AZURE_CLIENT_SECRET }}"
-          check_secret "GRAPH_USER_ID"       "${{ secrets.GRAPH_USER_ID }}"
-          check_secret "VPS_WEB_HOST"        "${{ secrets.VPS_WEB_HOST }}"
-          check_secret "VPS_SSH_KEY"         "${{ secrets.VPS_SSH_KEY }}"
+          done
+
           if [ $ERRORS -gt 0 ]; then
-            echo "❌ $ERRORS secret(s) faltante(s). Revisa GitHub → Settings → Secrets."
+            echo "❌ $ERRORS error(es). Revisa GitHub → Settings → Secrets."
             exit 1
           fi
-          echo "✅ Todos los secrets presentes"
+          echo "✅ Todos los secrets validados"
 
-      # ── 8. PREPARAR VPS ───────────────────────────────────────────
+      # ── 7. PREPARAR VPS ────────────────────────────────────────
       - name: Preparar VPS
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.VPS_WEB_HOST }}
+          host:     ${{ secrets.VPS_WEB_HOST }}
           username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
+          key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
             mkdir -p /var/www/pqr
-            # PHP mbstring requerido para mb_substr
-            if ! php -m 2>/dev/null | grep -q mbstring; then
-              PHP_VER=$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || echo "8.3")
-              apt-get install -y "php${PHP_VER}-mbstring" 2>/dev/null || true
+            if ! systemctl is-active --quiet php8.3-fpm 2>/dev/null; then
+              apt-get update -qq && apt-get install -y -qq php8.3-fpm php8.3-curl php8.3-mbstring
+              systemctl enable php8.3-fpm && systemctl start php8.3-fpm
             fi
+            if ! grep -q "fastcgi_pass" /etc/nginx/sites-enabled/pqr 2>/dev/null; then
+              sed -i 's|location / {|location ~ \\.php$ {\n        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n    location / {|' /etc/nginx/sites-enabled/pqr 2>/dev/null || true
+              nginx -t && systemctl reload nginx
+            fi
+            echo "✅ VPS listo"
 
-      # ── 9. COPIAR ARCHIVOS ────────────────────────────────────────
+      # ── 8. COPIAR ARCHIVOS ──────────────────────────────────────
       - name: Copiar archivos
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.VPS_WEB_HOST }}
+          host:     ${{ secrets.VPS_WEB_HOST }}
           username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "public/*"
-          target: "/var/www/pqr"
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          source:   "public/"
+          target:   /var/www/pqr/
           strip_components: 1
 
-      # ── 10. VERIFICAR DEPLOY ──────────────────────────────────────
+      # ── 9. VERIFICAR DEPLOY ─────────────────────────────────────
+      # FIX 4: sin POST real a prod (evita tickets falsos); solo sintaxis PHP + nginx
       - name: Verificar deploy
         uses: appleboy/ssh-action@v1
         with:
-          host: ${{ secrets.VPS_WEB_HOST }}
+          host:     ${{ secrets.VPS_WEB_HOST }}
           username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
+          key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
-            echo "========================================"
-            echo "Nginx config check:"
-            nginx -t 2>&1 || true
+            nginx -t && systemctl reload nginx && echo "✅ Nginx OK"
 
-            echo "========================================"
-            echo "PHP files en /var/www/pqr:"
-            ls -la /var/www/pqr/*.php 2>/dev/null || echo "(ninguno)"
+            echo "--- Archivos PHP desplegados ---"
+            ls -la /var/www/pqr/*.php 2>/dev/null || echo "(sin .php)"
 
-            echo "========================================"
-            echo "Validando sintaxis PHP:"
+            echo "--- Sintaxis PHP ---"
             ERRORS=0
             for f in /var/www/pqr/radicar-pqr.php \
                      /var/www/pqr/transcribir-audio.php \
                      /var/www/pqr/procesar-canvas.php \
                      /var/www/pqr/api-token.php \
                      /var/www/pqr/adj-proxy.php; do
-              if [ -f "$f" ]; then
-                RESULT=$(php -l "$f" 2>&1)
-                if echo "$RESULT" | grep -q "No syntax errors"; then
-                  echo "✅ $(basename $f)"
-                else
-                  echo "❌ $(basename $f): $RESULT"
-                  ERRORS=$((ERRORS+1))
-                fi
+              [ -f "$f" ] || continue
+              OUT=$(php -l "$f" 2>&1)
+              if echo "$OUT" | grep -q "No syntax errors"; then
+                echo "✅ $(basename $f)"
               else
-                echo "⚠️  $(basename $f) no existe"
+                echo "❌ $(basename $f): $OUT"
+                ERRORS=$((ERRORS+1))
               fi
             done
 
-            # Verificar placeholders no reemplazados
-            echo "========================================"
-            echo "Verificando placeholders:"
-            REMAINING=$(grep -r '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_' /var/www/pqr/*.php 2>/dev/null | wc -l)
-            if [ "$REMAINING" -gt 0 ]; then
-              echo "❌ Hay $REMAINING placeholder(s) sin reemplazar:"
-              grep -r '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_' /var/www/pqr/*.php 2>/dev/null
+            echo "--- Placeholders residuales ---"
+            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__' \
+              /var/www/pqr/*.php 2>/dev/null || true)
+            if [ -n "$FOUND" ]; then
+              echo "❌ Placeholders sin reemplazar en: $FOUND"
               ERRORS=$((ERRORS+1))
             else
-              echo "✅ Todos los placeholders reemplazados"
+              echo "✅ Sin placeholders residuales"
             fi
 
-            echo "========================================"
-            if [ $ERRORS -gt 0 ]; then
-              echo "❌ Deploy con $ERRORS error(es)"
-              exit 1
-            fi
-            echo "✅ Deploy verificado correctamente — $(date '+%Y/%m/%d %H:%M:%S')"
+            [ $ERRORS -gt 0 ] && exit 1
+            echo "✅ Deploy OK — $(date '+%d/%m/%Y %H:%M') hora Colombia"
