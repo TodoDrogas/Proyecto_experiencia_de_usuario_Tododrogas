@@ -799,34 +799,6 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
               El asesor te informará tu número de radicado cuando te contacte.
             </div>
           </div>
-
-          <!-- SELECTOR DE SEDE -->
-          <div class="field-wrap" id="sedeWrap" style="margin-top:8px">
-            <label>Sede que le atendió <span class="req">*</span></label>
-            <div style="position:relative">
-              <input class="pqr-input" type="text" id="fSedeSearch"
-                placeholder="🔍 Escribe tu municipio o busca tu sede..."
-                autocomplete="off"
-                oninput="filtrarSedes(this.value)"
-                onfocus="mostrarDropdownSede()"
-                style="padding-right:36px">
-              <span id="sedeGeoBtn" onclick="geolocalizarSede()"
-                title="Encontrar sede más cercana"
-                style="position:absolute;right:10px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;user-select:none">📍</span>
-            </div>
-            <div id="sedeDropdown" style="display:none;position:absolute;z-index:999;background:#fff;border:1.5px solid #2563eb;border-radius:10px;box-shadow:0 8px 32px rgba(37,99,235,.13);max-height:220px;overflow-y:auto;width:calc(100% - 0px);margin-top:2px"></div>
-            <div id="sedeSeleccionada" style="display:none;margin-top:6px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;font-size:13px;color:#1e40af">
-              <span id="sedeSelNombre" style="font-weight:700"></span><br>
-              <span id="sedeSelDirec" style="color:#374151;font-size:12px"></span>
-              <span id="sedeSelHora" style="color:#6b7280;font-size:11px;display:block"></span>
-            </div>
-            <input type="hidden" id="fSedeId" value="">
-            <input type="hidden" id="fSedeNombre" value="">
-            <input type="hidden" id="fSedeCiudad" value="">
-            <input type="hidden" id="fSedeLat" value="">
-            <input type="hidden" id="fSedeLng" value="">
-          </div>
-
         </div>
       </div>
 
@@ -1337,20 +1309,58 @@ const FRASES_DEMO=[
   "El producto que adquirí presenta falla de fabricación. Solicito cambio o devolución del dinero según la garantía.",
 ];
 let twT=null;
-function convertToText(){
+async function convertToText(){
   const hasContent = pages.some(p=>p.strokes.length>0);
   if(!hasContent){ showToast('Escribe algo primero en el cuaderno','error'); return; }
   const box=document.getElementById('aiBox');
-  box.innerHTML='<span style="color:var(--blue);font-size:12px;">✨ Analizando páginas con IA…</span>';
-  setTimeout(()=>{
-    const txt=FRASES_DEMO[Math.floor(Math.random()*FRASES_DEMO.length)];
+  box.innerHTML='<span style="color:var(--blue);font-size:12px;">✨ Leyendo tu escritura con IA…</span>';
+
+  try {
+    // Combinar todas las páginas con contenido en un solo canvas
+    const pagesWithContent = pages.filter(p=>p.strokes.length>0);
+    const combined = document.createElement('canvas');
+    combined.width  = pages[0].cvs.width;
+    combined.height = pages[0].cvs.height * pagesWithContent.length;
+    const cctx = combined.getContext('2d');
+    // Fondo blanco
+    cctx.fillStyle = '#fff';
+    cctx.fillRect(0, 0, combined.width, combined.height);
+    pagesWithContent.forEach((p,i)=>{ cctx.drawImage(p.cvs, 0, i * p.cvs.height); });
+    const imgB64 = combined.toDataURL('image/png');
+
+    // Llamar a /procesar-canvas.php con un pqr_id temporal para obtener transcripción
+    // Usamos un endpoint temporal que solo transcribe sin guardar
+    const resp = await fetch('/procesar-canvas.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ imagen_base64: imgB64, pqr_id: 'preview_' + Date.now() })
+    });
+    const data = await resp.json();
+    const txt = data.transcripcion || data.texto || '';
+
+    if (!txt) {
+      box.innerHTML='<span style="color:#ca8a04;font-size:12px;">⚠️ No se detectó texto claro. Intenta escribir más grande.</span>';
+      return;
+    }
+
+    // Animación typewriter con el texto real
     box.innerHTML='';
     let i=0; clearInterval(twT);
     twT=setInterval(()=>{
-      if(i>=txt.length){clearInterval(twT);box.innerHTML=txt+'<span class="rec-cursor"></span>';return;}
-      box.innerHTML=txt.slice(0,i+1)+'<span class="rec-cursor"></span>';i++;
-    },28);
-  },900);
+      if(i>=txt.length){
+        clearInterval(twT);
+        box.innerHTML=txt+'<span class="rec-cursor"></span>';
+        // Guardar transcripción para usar al radicar
+        S._canvasTranscripcion = txt;
+        return;
+      }
+      box.innerHTML=txt.slice(0,i+1)+'<span class="rec-cursor"></span>';
+      i++;
+    },18);
+
+  } catch(err) {
+    box.innerHTML='<span style="color:#dc2626;font-size:12px;">❌ Error al procesar: ' + err.message + '</span>';
+  }
 }
 
 // ══════════════════════════════════════════
@@ -1396,21 +1406,18 @@ async function submitPQR(){
   try{
     const payload={
       tipo:       S.tipo,
-      sede_id:    document.getElementById('fSedeId').value||'',
-      sede_nombre:document.getElementById('fSedeNombre').value||'',
-      sede_ciudad:document.getElementById('fSedeCiudad').value||'',
-      sede_lat:   parseFloat(document.getElementById('fSedeLat').value)||null,
-      sede_lng:   parseFloat(document.getElementById('fSedeLng').value)||null,
-      canal:      S.canal,           // Canal preferido por el usuario (WhatsApp / correo / llamada)
+      medio:      S.medio,           // 'texto' | 'audio' | 'lapiz' — canal de entrada real
+      canal:      S.canal,           // canal de contacto preferido (WhatsApp / correo / llamada)
       nombre,
       documento,
       correo,
       telefono,
-      descripcion: msgText||(S.medio==='audio'?'[Audio adjunto]':'[Lápiz virtual adjunto]'),
-      // n8n usará estos campos para contactar al usuario según su preferencia
+      descripcion: msgText||(S.medio==='audio'?'[Audio adjunto]':(S._canvasTranscripcion||'[Lápiz virtual adjunto]')),
+      tiene_audio:  S.medio==='audio'  && !!S.audioB64,
+      tiene_canvas: S.medio==='lapiz'  && pages.some(p=>p.strokes.length>0),
       contacto_preferido: S.canal,
-      confirmacion_correo: correo || null,  // null si no tiene correo — n8n usará solo el celular
-      sin_correo: !correo,                  // flag para n8n: true = notificar solo por cel/WA
+      confirmacion_correo: correo || null,
+      sin_correo: !correo,
     };
 
     const res=await fetch(WEBHOOK_PQR,{
@@ -1547,103 +1554,22 @@ setTimeout(()=>{document.body.style.opacity='1';},50);
 window.addEventListener('load', ()=>updateCarousel(0));
 window.addEventListener('resize', ()=>updateCarousel(currentSlide));
 
-// ══════════════════════════════════════════════════════
-// SELECTOR DE SEDE — Geolocalización + Búsqueda
-// ══════════════════════════════════════════════════════
-const SEDES_DATA = [{"nombre": "SERVICIO FARMACÉUTICO TODODROGAS ABEJORRAL", "municipio": "Abejorral", "ciudad": "Abejorral, Antioquia", "direccion": "CARRERA SANTANDER # 48 - 11", "telefono": "3117491230", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 5.7939, "lng": -75.4314, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS AMAGA", "municipio": "Amaga", "ciudad": "Amaga, Antioquia", "direccion": "CALLE 51 N 51 BLOQUE 1 PRIMER PISO", "telefono": "3117501961", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.0383, "lng": -75.6989, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS ANDES", "municipio": "Andes", "ciudad": "Andes, Antioquia", "direccion": "CARRERA 50 # 49-68 LOCAL 102", "telefono": "3222813532", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 5.6567, "lng": -75.8739, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS APARTADO", "municipio": "Apartado", "ciudad": "Apartado, Antioquia", "direccion": "CARRERA 102 # 92-16/18 BARRIO INDUSTRIALES", "telefono": "3122701332", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 7.8797, "lng": -76.6267, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS CAREPA", "municipio": "Carepa", "ciudad": "Carepa, Antioquia", "direccion": "CALLE 81 CON CARRERA 74-12/14 BARRIO PUEBLO NUEVO", "telefono": "3137557913", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 7.7608, "lng": -76.6558, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS CAUCASIA", "municipio": "Caucasia", "ciudad": "Caucasia, Antioquia", "direccion": "CARRERA 20 # 3-76 CC CAUCA CENTRO", "telefono": "3016160031", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 7.9886, "lng": -75.1961, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS CHIGORODO", "municipio": "Chigorodo", "ciudad": "Chigorodo, Antioquia", "direccion": "CALLE 95 # 97 04 LOCAL 2", "telefono": "3205041364", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 7.6742, "lng": -76.6883, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS CIUDAD BOLIVAR", "municipio": "Ciudad Bolivar", "ciudad": "Ciudad Bolivar, Antioquia", "direccion": "CALLE 49 # 50-57 LOCAL 104", "telefono": "3225040536", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 5.8603, "lng": -76.0211, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS EL BAGRE", "municipio": "El Bagre", "ciudad": "El Bagre, Antioquia", "direccion": "CALLE 50 #47A-31", "telefono": "3013893746", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 7.5842, "lng": -74.8097, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN", "municipio": "Medellin", "ciudad": "Medellin, Antioquia", "direccion": "CARRERA 49 # 48-57", "telefono": "3013893490", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.2442, "lng": -75.5812, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN 2", "municipio": "Medellin", "ciudad": "Medellin, Antioquia", "direccion": "CALLE 48 # 48-03", "telefono": "3042975293", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.2442, "lng": -75.5812, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS PUERTO BERRIO", "municipio": "Puerto Berrio", "ciudad": "Puerto Berrio, Antioquia", "direccion": "CALLE 48 # 4-56 BARRIO EL HOYO", "telefono": "3117505009", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.4897, "lng": -74.4042, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS SANTA BARBARA", "municipio": "Santa Barbara", "ciudad": "Santa Barbara, Antioquia", "direccion": "CARRERA 50 # 48-17", "telefono": "3126909496", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 5.8744, "lng": -75.5711, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS SANTA FE ANTIOQUIA", "municipio": "Santa Fe De Antioquia", "ciudad": "Santa Fe De Antioquia, Antioquia", "direccion": "CALLE 10 # 7-49", "telefono": "312799746", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.5539, "lng": -75.8267, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS SEGOVIA", "municipio": "Segovia", "ciudad": "Segovia, Antioquia", "direccion": "CALLE 52 N 48-69", "telefono": "3117511200", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 7.0783, "lng": -74.7061, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS TAMESIS", "municipio": "Tamesis", "ciudad": "Tamesis, Antioquia", "direccion": "CARRERA 10 # 9-47 PRIMER PISO LOCAL 1", "telefono": "3126512620", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 5.6736, "lng": -75.7219, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS TURBO", "municipio": "Turbo", "ciudad": "Turbo, Antioquia", "direccion": "CALLE 101 # 15-14 BARRIO BALTAZAR", "telefono": "3117505168", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 8.0986, "lng": -76.7283, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS YARUMAL", "municipio": "Yarumal", "ciudad": "Yarumal, Antioquia", "direccion": "CARRERA 21 # 17-17 MALL CUBOX LC 102", "telefono": "3126572574", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.9686, "lng": -75.4186, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS YOLOMBO", "municipio": "Yolombo", "ciudad": "Yolombo, Antioquia", "direccion": "CARRERA 24 CALLE 18-04 LOCAL 2", "telefono": "3117511090", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.6, "lng": -75.0167, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS ZARAGOZA", "municipio": "Zaragoza", "ciudad": "Zaragoza, Antioquia", "direccion": "CALLE PRINCIPAL SAN GREGORIO 36-20", "telefono": "3127989950", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 7.4894, "lng": -74.8619, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS NECHI", "municipio": "Nechi", "ciudad": "Nechi, Antioquia", "direccion": "CL 25 N 31A-16 BARRIO SAN NICOLAS", "telefono": "3127998860", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 8.0983, "lng": -74.7731, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS RIONEGRO", "municipio": "Rionegro", "ciudad": "Rionegro, Antioquia", "direccion": "CL 52 #45-70 Local 2006", "telefono": "3043482192", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.1544, "lng": -75.3742, "activa": true}, {"nombre": "SERVICIO FARMACÉUTICO TODODROGAS LA CEJA", "municipio": "La Ceja", "ciudad": "La Ceja, Antioquia", "direccion": "CARRERA 24 19 40", "telefono": "3012653746", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.0283, "lng": -75.4403, "activa": true}, {"nombre": "SERVICIO FARMACEUTICO TODODROGAS SOPETRAN", "municipio": "Sopetran", "ciudad": "Sopetran, Antioquia", "direccion": "CARRERA 10 # 11-65", "telefono": "3016164255", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "PROPIO", "eps": "TODAS", "lat": 6.5058, "lng": -75.75, "activa": true}, {"nombre": "DROGUERIA FARMAVIDA", "municipio": "Amalfi", "ciudad": "Amalfi, Antioquia", "direccion": "CALLE 23 # 29-54", "telefono": "3127775081", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SAVIA-COOSALUD", "lat": 6.9125, "lng": -75.0764, "activa": true}, {"nombre": "DROGUERIA COOPRIACHON", "municipio": "Angostura", "ciudad": "Angostura, Antioquia", "direccion": "CARRERA 10 # 9-20", "telefono": "3017558749", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SAVIA-COOSALUD", "lat": 6.8667, "lng": -75.3333, "activa": true}, {"nombre": "DROGUERIA SAN RAFAEL", "municipio": "Anori", "ciudad": "Anori, Antioquia", "direccion": "AVENIDA 31 N 30-16", "telefono": "3117502301", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SAVIA-COOSALUD", "lat": 7.07, "lng": -75.14, "activa": true}, {"nombre": "DROGUERIA FRONTIFARMA", "municipio": "Frontino", "ciudad": "Frontino, Antioquia", "direccion": "CARRERA 30 #38-47", "telefono": "3117502100", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SAVIA-COOSALUD", "lat": 6.78, "lng": -76.13, "activa": true}, {"nombre": "DROGUERIA LA SOLIDARIA", "municipio": "Barbosa", "ciudad": "Barbosa, Antioquia", "direccion": "CALLE 15 No. 17-22", "telefono": "6044065478", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SALUD TOTAL", "lat": 6.4372, "lng": -75.33, "activa": true}, {"nombre": "DROGUERIA FAMILIAR E&M", "municipio": "Girardota", "ciudad": "Girardota, Antioquia", "direccion": "CARRERA 15 No. 5-42", "telefono": "3242548560", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SALUD TOTAL", "lat": 6.3742, "lng": -75.445, "activa": true}, {"nombre": "DROGUERIAS ORIENTE", "municipio": "Rionegro", "ciudad": "Rionegro, Antioquia", "direccion": "CARRERA 48 # 51-15 CENTRO", "telefono": "6046146969", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SALUD TOTAL", "lat": 6.1544, "lng": -75.3742, "activa": true}, {"nombre": "DROGUERIA SAN ANTONIO JERICO", "municipio": "Jerico", "ciudad": "Jerico, Antioquia", "direccion": "CARRERA 5 #6-09", "telefono": "3137557911", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "COOSALUD", "lat": 5.7906, "lng": -75.7811, "activa": true}, {"nombre": "DROGUERIA BIENESTAR CACERES", "municipio": "Caceres", "ciudad": "Caceres, Antioquia", "direccion": "CALLE 49 #51-36 BRR CENTRO", "telefono": "3147942070", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "COOSALUD", "lat": 7.5731, "lng": -75.3358, "activa": true}, {"nombre": "DROGUERIA KIRIUS LA BOMBA", "municipio": "Taraza", "ciudad": "Taraza, Antioquia", "direccion": "CARRERA 28 #27-26", "telefono": "3127989952", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "COOSALUD", "lat": 7.5833, "lng": -75.4, "activa": true}, {"nombre": "DROGUERIA MACRODESCUENTOS 9", "municipio": "Jardin", "ciudad": "Jardin, Antioquia", "direccion": "CALLE 9 # 2-59", "telefono": "3016161590", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SAVIA", "lat": 5.5983, "lng": -75.8244, "activa": true}, {"nombre": "DROGUERIA FAMIDROGAS", "municipio": "Betulia", "ciudad": "Betulia, Antioquia", "direccion": "CALLE 21 # 21-42", "telefono": "3102731216", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SAVIA", "lat": 6.11, "lng": -75.98, "activa": true}, {"nombre": "DROGUERIA FAMILIAR EDDY", "municipio": "Mutata", "ciudad": "Mutata, Antioquia", "direccion": "CARRERA 10 # 10-41-43", "telefono": "3117491234", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SAVIA-COOSALUD", "lat": 7.25, "lng": -76.4333, "activa": true}, {"nombre": "DROGUERIA LA PILDORA", "municipio": "Necocli", "ciudad": "Necocli, Antioquia", "direccion": "CALLE 51 # 48-38 BARRIO CENTRO", "telefono": "3117491257", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SAVIA-COOSALUD", "lat": 8.43, "lng": -76.78, "activa": true}, {"nombre": "FARMAX LA DROGUERIA", "municipio": "Remedios", "ciudad": "Remedios, Antioquia", "direccion": "CALLE 11 # 8-12", "telefono": "3127983675", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "IN HOUSE", "eps": "SAVIA-COOSALUD", "lat": 6.9667, "lng": -74.6833, "activa": true}, {"nombre": "DROGUERIA MACEFARMA", "municipio": "Yarumal", "ciudad": "Yarumal, Antioquia", "direccion": "CALLE LIBERTADOR # 9-92", "telefono": "3146916108", "horario": "L-V 7:00-15:30, S 8:00-11:00", "modelo": "ALIADO", "eps": "SAVIA-COOSALUD", "lat": 6.9686, "lng": -75.4186, "activa": true}];
-
-function distanciaKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;
-  const dLat = (lat2-lat1)*Math.PI/180;
-  const dLng = (lng2-lng1)*Math.PI/180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-
-function renderSedeItem(sede, distKm) {
-  const dist = distKm !== undefined ? `<span style="color:#6b7280;font-size:10px;float:right">${distKm.toFixed(1)} km</span>` : '';
-  const badge = sede.modelo==='PROPIO'
-    ? `<span style="background:#dbeafe;color:#1e40af;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:4px">PROPIO</span>`
-    : `<span style="background:#f3e8ff;color:#7c3aed;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;margin-left:4px">ALIADO</span>`;
-  return `<div onclick="seleccionarSede('${sede.nombre}','${sede.direccion}','${sede.ciudad}','${sede.lat}','${sede.lng}','${sede.horario}')"
-    style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;transition:background .1s"
-    onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='#fff'">
-    <div style="font-weight:600;font-size:13px;color:#1e3a5f">${sede.nombre}${badge}${dist}</div>
-    <div style="font-size:11px;color:#6b7280;margin-top:2px">📍 ${sede.direccion} — ${sede.municipio}</div>
-    <div style="font-size:10px;color:#9ca3af">🕐 ${sede.horario}</div>
-  </div>`;
-}
-
-function filtrarSedes(q) {
-  const dd = document.getElementById('sedeDropdown');
-  if (!q || q.length < 1) { dd.style.display='none'; return; }
-  const ql = q.toLowerCase();
-  const matches = SEDES_DATA.filter(s =>
-    s.nombre.toLowerCase().includes(ql) ||
-    s.municipio.toLowerCase().includes(ql) ||
-    s.ciudad.toLowerCase().includes(ql) ||
-    s.direccion.toLowerCase().includes(ql)
-  ).slice(0, 12);
-  if (!matches.length) {
-    dd.innerHTML = '<div style="padding:12px;color:#9ca3af;text-align:center;font-size:13px">Sin resultados. Prueba con el municipio.</div>';
-  } else {
-    dd.innerHTML = matches.map(s => renderSedeItem(s)).join('');
-  }
-  dd.style.display = 'block';
-}
-
-function mostrarDropdownSede() {
-  const q = document.getElementById('fSedeSearch').value;
-  if (q.length > 0) filtrarSedes(q);
-}
-
-function seleccionarSede(nombre, direccion, ciudad, lat, lng, horario) {
-  document.getElementById('fSedeSearch').value = nombre;
-  document.getElementById('fSedeId').value = nombre;
-  document.getElementById('fSedeNombre').value = nombre;
-  document.getElementById('fSedeCiudad').value = ciudad;
-  document.getElementById('fSedeLat').value = lat;
-  document.getElementById('fSedeLng').value = lng;
-  document.getElementById('sedeSelNombre').textContent = nombre;
-  document.getElementById('sedeSelDirec').textContent = '📍 ' + direccion + ' — ' + ciudad;
-  document.getElementById('sedeSelHora').textContent = '🕐 ' + horario;
-  document.getElementById('sedeSeleccionada').style.display = 'block';
-  document.getElementById('sedeDropdown').style.display = 'none';
-}
-
-async function geolocalizarSede() {
-  const btn = document.getElementById('sedeGeoBtn');
-  btn.textContent = '⏳';
+// ── Helper: URL firmada Supabase para buckets privados ──────────────
+async function getSignedUrl(path, bucket) {
+  const SB_URL = window.SUPABASE_URL || '';
+  const SB_KEY = window.SUPABASE_KEY || '';
+  if (!SB_URL || !SB_KEY || !path) return path;
   try {
-    const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, {timeout:8000}));
-    const lat = pos.coords.latitude, lng = pos.coords.longitude;
-    const conDist = SEDES_DATA.map(s => ({...s, dist: distanciaKm(lat, lng, s.lat, s.lng)}));
-    conDist.sort((a,b) => a.dist - b.dist);
-    const cercanas = conDist.slice(0, 8);
-    const dd = document.getElementById('sedeDropdown');
-    dd.innerHTML = `<div style="padding:8px 14px;background:#f0fdf4;font-size:11px;font-weight:700;color:#166534;border-bottom:1px solid #bbf7d0">📍 Sedes más cercanas a ti</div>` +
-      cercanas.map(s => renderSedeItem(s, s.dist)).join('');
-    dd.style.display = 'block';
-    // Auto-seleccionar la más cercana
-    const top = cercanas[0];
-    document.getElementById('fSedeSearch').value = top.nombre;
-    seleccionarSede(top.nombre, top.direccion, top.ciudad, top.lat, top.lng, top.horario);
-    btn.textContent = '✅';
-    setTimeout(() => btn.textContent = '📍', 2000);
-  } catch(e) {
-    btn.textContent = '📍';
-    const dd = document.getElementById('sedeDropdown');
-    dd.innerHTML = '<div style="padding:12px;color:#dc2626;font-size:12px">No se pudo obtener tu ubicación. Busca tu municipio manualmente.</div>';
-    dd.style.display = 'block';
-  }
+    const r = await fetch(`${SB_URL}/storage/v1/object/sign/${bucket}/${path}`, {
+      method: 'POST',
+      headers: {'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json'},
+      body: JSON.stringify({expiresIn: 3600})
+    });
+    if (!r.ok) return path;
+    const d = await r.json();
+    return d.signedURL ? `${SB_URL}/storage/v1${d.signedURL}` : path;
+  } catch { return path; }
 }
-
-// Cerrar dropdown al hacer click fuera
-document.addEventListener('click', function(e) {
-  if (!e.target.closest('#sedeWrap')) {
-    document.getElementById('sedeDropdown').style.display = 'none';
-  }
-});
 
 </script>
 </body>
