@@ -191,7 +191,7 @@ REGLAS CRITICAS DE SENTIMIENTO Y TONO:
 6. sentimiento=neutro: SOLO peticiones informativas sin carga emocional (pedir un documento, consultar horario).
 7. prioridad segun tipo: felicitacion/sugerencia=baja, peticion=media, queja/reclamo=alta, denuncia/urgente=critica.
 8. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4.
-PROMPT
+PROMPT;
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
     curl_setopt_array($ch, [
