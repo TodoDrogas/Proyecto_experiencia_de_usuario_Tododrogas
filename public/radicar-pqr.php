@@ -274,8 +274,8 @@ $payload_correo = [
     'body_content'      => $texto_pqr,
     'body_type'         => 'text',
     'transcripcion'     => $transcripcion ?: null,
-    'audio_url'         => (strpos($audio_url,'data:')===0 ? null : ($audio_url?:null)),
-    'canvas_url'        => $canvas_url    ?: null,
+    'audio_url'         => (strpos($audio_url,'data:')===0  ? null : ($audio_url  ?: null)),
+    'canvas_url'        => (strpos($canvas_url,'data:')===0 ? null : ($canvas_url ?: null)),
     'tipo_pqr'          => $tipo_pqr,
     'categoria_ia'      => $categoria_ia,
     'sentimiento'       => $sentimiento,
@@ -305,8 +305,17 @@ if ($sb_result['code'] < 400) {
     $correo_id = $inserted[0]['id'] ?? null;
 } else {
     // Error crítico — no se pudo guardar en BD
+    // Loguear detalle completo para diagnóstico
+    $sb_error_detail = $sb_result['body'];
+    $sb_error_parsed = json_decode($sb_error_detail, true);
+    $sb_error_msg    = $sb_error_parsed['message'] ?? $sb_error_parsed['hint'] ?? $sb_error_detail;
     http_response_code(502);
-    echo json_encode(['error' => 'supabase_error', 'code' => $sb_result['code'], 'detalle' => $sb_result['body']]);
+    echo json_encode([
+        'error'   => 'supabase_error',
+        'code'    => $sb_result['code'],
+        'mensaje' => $sb_error_msg,
+        'detalle' => $sb_error_detail,
+    ]);
     exit;
 }
 
