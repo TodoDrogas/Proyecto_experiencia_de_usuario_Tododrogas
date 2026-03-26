@@ -968,7 +968,7 @@ function marcarSolucionado() {
   const email=state.emails.find(e=>e.id===id);
   if(!confirm('¿Marcar este ticket como "Pendiente por firma"?\n\nDeberás adjuntar la firma de cierre para cerrar definitivamente.')) return;
   sb(`correos?id=eq.${id}`,'PATCH',{estado:'pendiente_firma'}).then(()=>{
-    sb('historial_eventos','POST',{correo_id:id,agente_id:AGENT_ID,evento:'pendiente_firma',from_email:email?.remitente,subject:email?.asunto,descripcion:'Ticket marcado como pendiente de firma de cierre',datos_extra:{agente_nombre:AGENT_NAME,por:'agente'}}).catch(e=>console.error('[agente] pendiente_firma error:',e?.message));
+    sb('historial_eventos','POST',{correo_id:id,agente_id:AGENT_ID,evento:'pendiente_firma',from_email:email?.remitente,subject:email?.asunto,descripcion:'Ticket marcado como pendiente de firma de cierre',datos_extra:JSON.stringify({agente_nombre:AGENT_NAME,por:'agente'})}).catch(e=>console.error('[agente] pendiente_firma error:',e?.message));
     const em=state.emails.find(e=>e.id===id);
     if(em) em.estado='pendiente_firma';
     document.getElementById('mgmtEstadoBadge').className='badge pendiente_firma';
@@ -1050,9 +1050,14 @@ async function confirmarFirma() {
     await sb(`correos?id=eq.${id}`,'PATCH',{estado:'solucionado',fecha_resolucion:new Date().toISOString()});
     // 5. Historial
     try {
-      await sb('historial_eventos','POST',{correo_id:id,agente_id:AGENT_ID,evento:'firma_confirmada',from_email:email?.remitente,subject:email?.asunto,descripcion:obs||'Firma de cierre adjuntada — ticket cerrado',datos_extra:{agente_nombre:AGENT_NAME,por:'agente',firma_archivo:file.name,firma_url:firmaUrl||'(sin URL)'}});
+      const _agId = (AGENT_ID && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(AGENT_ID)) ? AGENT_ID : null;
+      const _payFirma = {correo_id:id,evento:'firma_confirmada',from_email:email?.remitente,subject:email?.asunto,descripcion:obs||'Firma de cierre adjuntada — ticket cerrado',datos_extra:JSON.stringify({agente_nombre:AGENT_NAME,por:'agente',firma_archivo:file.name,firma_url:firmaUrl||'(sin URL)'})};
+      if(_agId) _payFirma.agente_id = _agId;
+      await sb('historial_eventos','POST',_payFirma);
     } catch(e) {
       console.error('[agente] firma_confirmada historial error:', e?.message);
+      // Minimal fallback
+      try { await sb('historial_eventos','POST',{correo_id:id,evento:'firma_confirmada',descripcion:obs||'Firma adjuntada'}); } catch{}
     }
     // 6. Actualizar UI
     const em=state.emails.find(e=>e.id===id);
@@ -1435,12 +1440,12 @@ async function sendReply() {
         from_email:email.remitente,
         subject:email.asunto,
         descripcion:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,80),
-        datos_extra:{
+        datos_extra:JSON.stringify({
           agente_nombre:AGENT_NAME,
           por:'agente',
           adjuntos:totalAdj,
           adjuntos_nombres:[..._attachedFiles.keys()]
-        }
+        })
       }); }catch{}
       _attachedFiles.clear();
       document.getElementById('replyBoxArea').innerHTML='';
