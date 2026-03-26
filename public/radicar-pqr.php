@@ -9,9 +9,6 @@
  * 5. Envía correo inteligente a pqrsfd@tododrogas.com.co vía Graph API
  *    con asunto formateado, cuerpo formal y adjunto según canal
  * 6. Registra en historial_eventos
- *
- * NOTA v3: audio_url y canvas_url llegan ya validadas desde
- * transcribir-audio.php / procesar-canvas.php (solo se pasan si storage_ok=true)
  */
 
 header('Content-Type: application/json');
@@ -21,13 +18,13 @@ header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
 // ── CREDENCIALES (inyectadas por deploy.yml) ─────────────────────────
-$SB_URL        = '__SB_URL__';
-$SB_KEY        = '__SB_KEY__';
-$OPENAI_KEY    = '__OPENAI_KEY__';
-$TENANT_ID     = '__AZURE_TENANT_ID__';
-$CLIENT_ID     = '__AZURE_CLIENT_ID__';
+$SB_URL      = '__SB_URL__';
+$SB_KEY      = '__SB_KEY__';
+$OPENAI_KEY  = '__OPENAI_KEY__';
+$TENANT_ID   = '__AZURE_TENANT_ID__';
+$CLIENT_ID   = '__AZURE_CLIENT_ID__';
 $CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
-$BUZÓN_PQRS    = 'pqrsfd@tododrogas.com.co';
+$BUZÓN_PQRS  = 'pqrsfd@tododrogas.com.co';
 $GRAPH_USER_ID = '__GRAPH_USER_ID__';
 
 // ── HELPERS ──────────────────────────────────────────────────────────
@@ -103,14 +100,23 @@ $transcripcion = trim($body['transcripcion'] ?? '');
 $audio_url    = trim($body['audio_url']    ?? '');
 $canvas_url   = trim($body['canvas_url']   ?? '');
 
-// Detectar canal
+// FIX: leer 'medio' que envía el formulario ANTES de que lleguen los webhooks async
+$medio_form   = strtolower(trim($body['medio'] ?? ''));
+$tiene_audio  = !empty($body['tiene_audio']);
+$tiene_canvas = !empty($body['tiene_canvas']);
+
+// Detectar canal según medio declarado — no depender de audio_url/canvas_url
+// porque esos webhooks llegan DESPUÉS de radicar
 $canal = 'escrito';
-if ($audio_url)           $canal = 'audio';
-elseif ($canvas_url)      $canal = 'canvas';
-elseif ($transcripcion)   $canal = 'audio';
+if      ($medio_form === 'audio'  || $tiene_audio)  $canal = 'audio';
+elseif  ($medio_form === 'lapiz'  || $tiene_canvas) $canal = 'canvas';
+elseif  ($audio_url)                                $canal = 'audio';
+elseif  ($canvas_url)                               $canal = 'canvas';
+elseif  ($transcripcion)                            $canal = 'audio';
 
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 
+// Texto final para clasificar (transcripción si hay, sino descripción)
 $texto_pqr = $transcripcion ?: $descripcion;
 
 // ── PASO 1: CLASIFICACIÓN IA ─────────────────────────────────────────
@@ -120,10 +126,30 @@ $categoria_ia = ucfirst($tipo_pqr);
 $nivel_riesgo = 'bajo';
 $resumen_corto = mb_substr($texto_pqr, 0, 120);
 $ley_aplicable = 'Ley 1755/2015';
-$horas_sla    = 15 * 24;
+$horas_sla    = 15 * 24; // 15 días por defecto
 
 if ($OPENAI_KEY && $texto_pqr) {
-    $prompt = "Analiza esta PQR de un ciudadano colombiano a una droguería y responde SOLO en JSON válido sin markdown.\n\nTIPO DECLARADO: $tipo_pqr\nTEXTO: $texto_pqr\n\nResponde exactamente con este JSON:\n{\n  \"sentimiento\": \"positivo|neutro|negativo|urgente\",\n  \"prioridad\": \"baja|media|alta|critica\",\n  \"categoria\": \"string corto en español (ej: Servicio al cliente, Precios, Disponibilidad medicamentos)\",\n  \"nivel_riesgo\": \"bajo|medio|alto|critico\",\n  \"resumen\": \"máximo 100 caracteres resumiendo el caso\",\n  \"ley\": \"ley colombiana aplicable (ej: Ley 1755/2015, Ley 100/1993)\",\n  \"horas_sla\": número de horas límite de respuesta según urgencia y ley\n}";
+    $prompt = "Analiza esta PQR de un ciudadano colombiano a una drogueria y responde SOLO en JSON valido sin markdown.
+
+TIPO DECLARADO: $tipo_pqr
+TEXTO: $texto_pqr
+
+Responde exactamente con este JSON:
+{
+  \"sentimiento\": \"positivo|neutro|negativo|urgente\",
+  \"prioridad\": \"baja|media|alta|critica\",
+  \"categoria\": \"string corto en espanol (ej: Servicio al cliente, Precios, Disponibilidad medicamentos)\",
+  \"nivel_riesgo\": \"bajo|medio|alto|critico\",
+  \"resumen\": \"maximo 100 caracteres resumiendo el caso\",
+  \"ley\": \"ley colombiana aplicable (ej: Ley 1755/2015, Ley 100/1993)\",
+  \"horas_sla\": numero de horas limite segun urgencia y ley
+}
+
+REGLAS DE SENTIMIENTO OBLIGATORIAS:
+- positivo: felicitaciones, agradecimientos, elogios, buena atencion, amabilidad. Palabras clave: felicitar, agradecer, excelente, muy bien, gracias, amable, buen servicio, satisfecho, recomiendo. Si hay alguna -> SIEMPRE positivo.
+- negativo: quejas, reclamos, insatisfaccion, mal servicio, problemas sin resolver.
+- urgente: riesgo de salud, error en medicamento, reaccion adversa, urgencia medica.
+- neutro: SOLO peticiones o consultas sin carga emocional. NUNCA si hay elogio o agradecimiento.";
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
     curl_setopt_array($ch, [
@@ -133,7 +159,7 @@ if ($OPENAI_KEY && $texto_pqr) {
             'max_tokens'  => 200,
             'temperature' => 0.1,
             'messages'    => [
-                ['role' => 'system', 'content' => 'Eres un clasificador de PQRs. Responde SOLO JSON válido.'],
+                ['role' => 'system', 'content' => 'Eres un clasificador de PQRs colombianas. Responde SOLO JSON valido. Regla critica: si el texto contiene felicitacion, agradecimiento o elogio, el sentimiento DEBE ser positivo, nunca neutro.'],
                 ['role' => 'user',   'content' => $prompt],
             ],
         ]),
@@ -160,17 +186,20 @@ if ($OPENAI_KEY && $texto_pqr) {
     }
 }
 
+// Fecha límite SLA
 $fecha_limite_sla = date('c', strtotime("+{$horas_sla} hours"));
 
-$emoji_sent  = ['positivo'=>'😊','neutro'=>'😐','negativo'=>'😤','urgente'=>'🚨'][$sentimiento] ?? '📋';
-$emoji_prio  = ['baja'=>'🟢','media'=>'🟡','alta'=>'🟠','critica'=>'🔴'][$prioridad] ?? '🟡';
+// Emojis para el asunto
+$emoji_sent = ['positivo'=>'😊','neutro'=>'😐','negativo'=>'😤','urgente'=>'🚨'][$sentimiento] ?? '📋';
+$emoji_prio = ['baja'=>'🟢','media'=>'🟡','alta'=>'🟠','critica'=>'🔴'][$prioridad] ?? '🟡';
 $emoji_canal = ['audio'=>'🎤','canvas'=>'✏️','escrito'=>'📝'][$canal] ?? '📝';
 $tipo_label  = strtoupper($tipo_pqr);
 $canal_label = strtoupper($canal);
 
+// Asunto formateado completo
 $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} ".strtoupper($sentimiento)." | {$emoji_prio} ".strtoupper($prioridad);
 
-// ── PASO 2: INSERTAR EN SUPABASE ─────────────────────────────────────
+// ── PASO 2: INSERTAR EN SUPABASE ────────────────────────────────────
 $payload_correo = [
     'ticket_id'         => $ticket_id,
     'from_email'        => $correo ?: ($telefono . '@whatsapp'),
@@ -213,21 +242,23 @@ if ($sb_result['code'] < 400) {
     $inserted = json_decode($sb_result['body'], true);
     $correo_id = $inserted[0]['id'] ?? null;
 } else {
+    // Error crítico — no se pudo guardar en BD
     http_response_code(502);
     echo json_encode(['error' => 'supabase_error', 'code' => $sb_result['code'], 'detalle' => $sb_result['body']]);
     exit;
 }
 
-// ── PASO 3: ENVIAR CORREO vía Graph API ──────────────────────────────
+// ── PASO 3: ENVIAR CORREO A pqrsfd via Graph API ─────────────────────
 $token = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
 
 if ($token) {
+    // Cuerpo del correo HTML
     $fecha_fmt  = date('d/m/Y H:i', strtotime($now));
     $canal_txt  = ['audio' => 'mensaje de voz', 'canvas' => 'escritura con lápiz inteligente', 'escrito' => 'texto escrito'][$canal] ?? 'formulario web';
 
-    $badge_sent  = "<span style='background:".(['positivo'=>'#dcfce7','neutro'=>'#f3f4f6','negativo'=>'#fee2e2','urgente'=>'#fef3c7'][$sentimiento]??'#f3f4f6').";color:".(['positivo'=>'#166534','neutro'=>'#374151','negativo'=>'#991b1b','urgente'=>'#92400e'][$sentimiento]??'#374151').";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_sent} ".strtoupper($sentimiento)."</span>";
-    $badge_prio  = "<span style='background:".(['baja'=>'#dcfce7','media'=>'#fef9c3','alta'=>'#fed7aa','critica'=>'#fee2e2'][$prioridad]??'#fef9c3').";color:".(['baja'=>'#166534','media'=>'#854d0e','alta'=>'#9a3412','critica'=>'#991b1b'][$prioridad]??'#854d0e').";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_prio} ".strtoupper($prioridad)."</span>";
-    $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} ".strtoupper($canal)."</span>";
+    $badge_sent  = "<span style='background:" . (['positivo'=>'#dcfce7','neutro'=>'#f3f4f6','negativo'=>'#fee2e2','urgente'=>'#fef3c7'][$sentimiento]??'#f3f4f6') . ";color:" . (['positivo'=>'#166534','neutro'=>'#374151','negativo'=>'#991b1b','urgente'=>'#92400e'][$sentimiento]??'#374151') . ";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_sent} " . strtoupper($sentimiento) . "</span>";
+    $badge_prio  = "<span style='background:" . (['baja'=>'#dcfce7','media'=>'#fef9c3','alta'=>'#fed7aa','critica'=>'#fee2e2'][$prioridad]??'#fef9c3') . ";color:" . (['baja'=>'#166534','media'=>'#854d0e','alta'=>'#9a3412','critica'=>'#991b1b'][$prioridad]??'#854d0e') . ";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_prio} " . strtoupper($prioridad) . "</span>";
+    $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} " . strtoupper($canal) . "</span>";
 
     $cuerpo_html = "
 <div style='font-family:Arial,sans-serif;max-width:680px;margin:0 auto;color:#1f2937'>
@@ -238,6 +269,7 @@ if ($token) {
   <div style='background:#f8fafc;padding:24px 28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px'>
     <p style='margin:0 0 16px'>Estimado equipo PQRSFD,</p>
     <p style='margin:0 0 16px'>Mediante la <strong>Plataforma Inteligente Nova TD</strong> se ha recibido el siguiente caso radicado:</p>
+
     <table style='width:100%;border-collapse:collapse;margin-bottom:20px'>
       <tr><td style='padding:8px 12px;background:#eff6ff;font-weight:700;width:160px;border:1px solid #dbeafe'>Radicado</td>
           <td style='padding:8px 12px;border:1px solid #dbeafe;font-weight:700;color:#1e40af;font-size:16px'>{$ticket_id}</td></tr>
@@ -246,51 +278,58 @@ if ($token) {
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Canal</td>
           <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$badge_canal}</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Tipo</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'><strong>".strtoupper($tipo_pqr)."</strong> — {$categoria_ia}</td></tr>
+          <td style='padding:8px 12px;border:1px solid #e2e8f0'><strong>" . strtoupper($tipo_pqr) . "</strong> — {$categoria_ia}</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Sentimiento</td>
           <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$badge_sent}</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Prioridad</td>
           <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$badge_prio}</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>SLA</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$horas_sla}h · Límite: ".date('d/m/Y H:i', strtotime($fecha_limite_sla))."</td></tr>
+          <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$horas_sla}h · Límite: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Ley aplicable</td>
           <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$ley_aplicable}</td></tr>
     </table>
+
     <div style='background:#fff;border:1px solid #e2e8f0;border-left:4px solid #1e40af;border-radius:4px;padding:16px 20px;margin-bottom:20px'>
       <p style='margin:0 0 8px;font-weight:700;color:#1e40af'>👤 Datos del ciudadano</p>
-      <p style='margin:2px 0;font-size:13px'><strong>Nombre:</strong> {$nombre}</p>".
-      ($correo ? "<p style='margin:2px 0;font-size:13px'><strong>Correo:</strong> {$correo}</p>" : "").
-      ($telefono ? "<p style='margin:2px 0;font-size:13px'><strong>Celular:</strong> {$telefono}</p>" : "").
+      <p style='margin:2px 0;font-size:13px'><strong>Nombre:</strong> {$nombre}</p>" .
+      ($correo ? "<p style='margin:2px 0;font-size:13px'><strong>Correo:</strong> {$correo}</p>" : "") .
+      ($telefono ? "<p style='margin:2px 0;font-size:13px'><strong>Celular:</strong> {$telefono}</p>" : "") .
       "<p style='margin:2px 0;font-size:13px'><strong>Canal de contacto preferido:</strong> {$canal_contacto}</p>
     </div>
+
     <div style='background:#fff;border:1px solid #e2e8f0;border-left:4px solid #7c3aed;border-radius:4px;padding:16px 20px;margin-bottom:20px'>
       <p style='margin:0 0 8px;font-weight:700;color:#7c3aed'>{$emoji_canal} Mensaje recibido via {$canal_txt}</p>
-      <p style='margin:0;font-size:14px;line-height:1.6;color:#374151'>".nl2br(htmlspecialchars($texto_pqr))."</p>".
-      ($resumen_corto ? "<p style='margin:10px 0 0;font-size:12px;color:#6b7280;font-style:italic'>📌 Resumen IA: {$resumen_corto}</p>" : "").
+      <p style='margin:0;font-size:14px;line-height:1.6;color:#374151'>" . nl2br(htmlspecialchars($texto_pqr)) . "</p>" .
+      ($resumen_corto ? "<p style='margin:10px 0 0;font-size:12px;color:#6b7280;font-style:italic'>📌 Resumen IA: {$resumen_corto}</p>" : "") .
       "
-    </div>".
-    ($audio_url || $canvas_url ? "<div style='background:#fefce8;border:1px solid #fde68a;border-radius:4px;padding:12px 16px;margin-bottom:20px;font-size:13px'>
-      <strong>📎 Adjunto incluido:</strong> ".($audio_url ? "Archivo de audio (🎤 .webm)" : "Imagen del lápiz inteligente (✏️)")." — ver adjunto en este correo.
-    </div>" : "")."
-    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:12px 16px;margin-bottom:20px;font-size:12px;color:#166534'>
-      ✅ Este caso ha sido <strong>guardado automáticamente en el sistema</strong>.
     </div>
+
+    " . ($audio_url || $canvas_url ? "<div style='background:#fefce8;border:1px solid #fde68a;border-radius:4px;padding:12px 16px;margin-bottom:20px;font-size:13px'>
+      <strong>📎 Adjunto incluido:</strong> " . ($audio_url ? "Archivo de audio (🎤 .webm)" : "Imagen del lápiz inteligente (✏️)") . " — ver adjunto en este correo.
+    </div>" : "") . "
+
+    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:12px 16px;margin-bottom:20px;font-size:12px;color:#166534'>
+      ✅ Este caso ha sido <strong>guardado automáticamente en el sistema</strong>. 
+      Si hay problemas de conectividad, el registro persiste en la base de datos y estará disponible cuando se recupere la conexión.
+    </div>
+
     <p style='font-size:12px;color:#9ca3af;margin:0;border-top:1px solid #e5e7eb;padding-top:12px'>
-      Sistema PQR Inteligente · Tododrogas CIA SAS · Nova TD v3 · {$fecha_fmt}<br>
-      Radicado: <strong>{$ticket_id}</strong> · ID interno: ".($correo_id ?? 'N/A')."
+      Sistema PQR Inteligente · Tododrogas CIA SAS · Nova TD v4 · {$fecha_fmt}<br>
+      Radicado: <strong>{$ticket_id}</strong> · ID interno: " . ($correo_id ?? 'N/A') . "
     </p>
   </div>
 </div>";
 
+    // Construir mensaje Graph API
     $mail_payload = [
-        'subject'      => $subject,
-        'importance'   => in_array($prioridad, ['alta', 'critica']) ? 'high' : 'normal',
-        'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_html],
+        'subject' => $subject,
+        'importance' => in_array($prioridad, ['alta', 'critica']) ? 'high' : 'normal',
+        'body' => ['contentType' => 'HTML', 'content' => $cuerpo_html],
         'toRecipients' => [['emailAddress' => ['address' => $BUZÓN_PQRS]]],
-        'attachments'  => [],
+        'attachments' => [],
     ];
 
-    // Adjuntar audio si existe y es accesible (máx 4MB)
+    // Adjuntar audio si existe (máx 4MB inline)
     if ($audio_url) {
         $audio_data = @file_get_contents($audio_url);
         if ($audio_data && strlen($audio_data) < 4 * 1024 * 1024) {
@@ -303,8 +342,9 @@ if ($token) {
         }
     }
 
-    // Adjuntar canvas si existe
+    // Adjuntar imagen canvas si existe
     if ($canvas_url) {
+        // Si es base64 data URL
         if (strpos($canvas_url, 'data:image') === 0) {
             preg_match('/data:image\/(\w+);base64,(.+)/', $canvas_url, $m);
             if ($m) {
@@ -316,6 +356,7 @@ if ($token) {
                 ];
             }
         } else {
+            // URL externa — descargar
             $img_data = @file_get_contents($canvas_url);
             if ($img_data && strlen($img_data) < 4 * 1024 * 1024) {
                 $mail_payload['attachments'][] = [
@@ -328,6 +369,7 @@ if ($token) {
         }
     }
 
+    // Enviar correo
     $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
@@ -342,20 +384,23 @@ if ($token) {
 
     $correo_enviado = ($mail_code === 202);
 
+    // Actualizar BD con datos de clasificación y correo_enviado
     if ($correo_id) {
-        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", ['updated_at' => date('c')]);
+        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
+            'updated_at' => date('c'),
+        ]);
     }
 } else {
     $correo_enviado = false;
     $mail_code = 0;
 }
 
-// ── PASO 4: HISTORIAL ────────────────────────────────────────────────
+// ── PASO 4: HISTORIAL EVENTOS ────────────────────────────────────────
 if ($correo_id) {
     sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
         'correo_id'   => $correo_id,
         'evento'      => 'pqr_recibida',
-        'descripcion' => "PQR recibida vía {$canal} ({$canal_contacto}). Clasificada: {$sentimiento} / {$prioridad}. Correo a pqrsfd: ".($correo_enviado ? 'enviado' : 'pendiente'),
+        'descripcion' => "PQR recibida vía {$canal} ({$canal_contacto}). Clasificada: {$sentimiento} / {$prioridad}. Correo a pqrsfd: " . ($correo_enviado ? 'enviado' : 'pendiente'),
         'from_email'  => $correo ?: $telefono,
         'subject'     => $subject,
         'datos_extra' => json_encode([
@@ -374,13 +419,13 @@ if ($correo_id) {
 // ── RESPUESTA FINAL ──────────────────────────────────────────────────
 http_response_code(200);
 echo json_encode([
-    'ok'             => true,
-    'radicado'       => $ticket_id,
-    'ticket_id'      => $ticket_id,
-    'canal'          => $canal,
-    'sentimiento'    => $sentimiento,
-    'prioridad'      => $prioridad,
-    'categoria'      => $categoria_ia,
-    'correo_enviado' => $correo_enviado,
-    'mensaje'        => "Tu solicitud fue recibida exitosamente. Radicado: {$ticket_id}",
+    'ok'              => true,
+    'radicado'        => $ticket_id,
+    'ticket_id'       => $ticket_id,
+    'canal'           => $canal,
+    'sentimiento'     => $sentimiento,
+    'prioridad'       => $prioridad,
+    'categoria'       => $categoria_ia,
+    'correo_enviado'  => $correo_enviado,
+    'mensaje'         => "Tu solicitud fue recibida exitosamente. Radicado: {$ticket_id}",
 ]);
