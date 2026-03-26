@@ -94,19 +94,36 @@ try {
     $cfg_rows = json_decode($cfg_resp, true);
     $cfg_data = $cfg_rows[0]['data'] ?? [];
     if (!empty($cfg_data['logo'])) {
-        $logo_url  = $cfg_data['logo'];
-        // Descargar logo con autenticación y embeber como base64
-        // Esto funciona en TODOS los clientes de correo (Gmail, Outlook, Apple Mail)
-        // porque no depende de URLs externas ni autenticación del receptor
+        $logo_url = $cfg_data['logo'];
+        // Estrategia: usar URL firmada (10 años) como fuente principal para máxima compatibilidad
+        // Los clientes de correo cargan la imagen desde la URL — funciona en Gmail, Outlook, etc.
+        $logo_signed_url = '';
+        // Extraer bucket y path de la URL de Supabase Storage
+        if (preg_match('#/storage/v1/object/(?:public|sign)/([^?]+)#', $logo_url, $lm)) {
+            $logo_path = $lm[1];
+            $sign_ch = curl_init("$SB_URL/storage/v1/object/sign/$logo_path");
+            curl_setopt_array($sign_ch, [CURLOPT_POST=>true, CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
+                CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Content-Type: application/json'],
+                CURLOPT_POSTFIELDS=>json_encode(['expiresIn'=>315360000])]);
+            $sign_resp = curl_exec($sign_ch); curl_close($sign_ch);
+            $sign_data = json_decode($sign_resp, true);
+            if (!empty($sign_data['signedURL'])) {
+                $logo_signed_url = $SB_URL . '/storage/v1' . $sign_data['signedURL'];
+            }
+        }
+        // Usar URL firmada si la obtuvimos, o la URL original si ya es pública
+        $logo_display_url = $logo_signed_url ?: $logo_url;
+        $logo_img_html = "<img src=\"{$logo_display_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+        // Fallback base64 para clientes que bloquean URLs externas (Outlook legacy)
         $logo_data = fetchUrlBytes($logo_url, $SB_KEY);
-        if ($logo_data && strlen($logo_data) < 300*1024) {
-            // Detectar tipo MIME real del archivo
-            $finfo     = new finfo(FILEINFO_MIME_TYPE);
+        if ($logo_data && strlen($logo_data) < 200*1024) {
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
             $logo_mime = $finfo->buffer($logo_data) ?: 'image/png';
             $logo_b64  = base64_encode($logo_data);
-            $logo_tag  = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
-            $logo_img_html     = $logo_tag; // para acuse usuario
-            $logo_img_html_b64 = $logo_tag; // para email PQRSFD
+            // Usar base64 para PQRSFD (Outlook), URL firmada para acuse usuario (Gmail)
+            $logo_img_html_b64 = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+        } else {
+            $logo_img_html_b64 = $logo_img_html;
         }
     }
 } catch (Exception $e) { /* sin logo */ }
