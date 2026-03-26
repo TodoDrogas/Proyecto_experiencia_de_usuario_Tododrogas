@@ -1670,7 +1670,6 @@ async function selectEmail(id) {
 
   // Siempre intentar cargar adjuntos — no depender solo de has_attachments
   loadAttachments(id, email.message_id);
-  renderMediaFormulario(email);
 }
 
 async function loadTicketTimeline(correoId, messageId) {
@@ -3427,53 +3426,106 @@ async function getGraphToken(){
   setInterval(()=>{ loadEmails(); loadHistorial(); }, 90000);
 })();
 
-// ── MULTIMEDIA FORMULARIO WEB ─────────────────────────────────────
-function renderMediaFormulario(email) {
+// ── MULTIMEDIA FORMULARIO WEB — con URL firmada para buckets privados ──
+async function getSignedStorageUrl(publicUrl) {
+  // Extrae bucket y path de una URL de Supabase Storage
+  // /storage/v1/object/public/audios/correo_id/file.webm
+  // → genera URL firmada válida por 1 hora
+  const SB_URL = window.SUPABASE_URL || '';
+  const SB_KEY = window.SUPABASE_KEY || '';
+  if (!publicUrl || !SB_URL) return publicUrl;
+  
+  // Si ya es URL firmada, devolver tal cual
+  if (publicUrl.includes('/object/sign/')) return publicUrl;
+  
+  // Extraer bucket y path
+  const m = publicUrl.match(/\/storage\/v1\/object\/(?:public\/)?([^/]+)\/(.+)$/);
+  if (!m) return publicUrl;
+  const [, bucket, path] = m;
+  
+  try {
+    const r = await fetch(`${SB_URL}/storage/v1/object/sign/${bucket}/${path}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ expiresIn: 3600 })
+    });
+    if (!r.ok) return publicUrl;
+    const d = await r.json();
+    return d.signedURL ? `${SB_URL}/storage/v1${d.signedURL}` : publicUrl;
+  } catch { return publicUrl; }
+}
+
+async function renderMediaFormulario(email) {
   const el = document.getElementById('mediaFormulario');
   if (!el) return;
   const audio = email.raw?.audio_url || email.audio_url || '';
   const canvas = email.raw?.canvas_url || email.canvas_url || '';
-  const trans = email.raw?.transcripcion || email.transcripcion || '';
-  const canal = email.raw?.canal_contacto || '';
+  const trans  = email.raw?.transcripcion || email.transcripcion || '';
 
-  if (!audio && !canvas && !trans) { el.style.display='none'; return; }
+  if (!audio && !canvas && !trans) { el.style.display = 'none'; return; }
   el.style.display = '';
 
+  // Mostrar loading
+  el.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--ink3)">⏳ Cargando adjuntos del formulario...</div>`;
+
+  // Obtener URLs firmadas para buckets privados
+  let audioUrl  = audio  ? await getSignedStorageUrl(audio)  : '';
+  let canvasUrl = canvas ? await getSignedStorageUrl(canvas) : '';
+
   let html = `<div style="margin-bottom:14px">
-    <div style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:10px">
-      📎 Adjuntos del formulario
+    <div style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+      📎 Adjuntos del formulario web
     </div>`;
 
-  if (audio) {
-    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px">
-      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:8px">🎤 Audio original</div>
-      <audio controls style="width:100%;height:36px;border-radius:6px">
-        <source src="${audio}" type="audio/webm">
-        <source src="${audio}" type="audio/mp4">
-        Tu navegador no soporta audio.
+  if (audioUrl) {
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        🎤 <span>Audio original</span>
+      </div>
+      <audio controls style="width:100%;height:36px;border-radius:6px;accent-color:var(--blue)">
+        <source src="${audioUrl}" type="audio/webm">
+        <source src="${audioUrl}" type="audio/mp4">
+        Tu navegador no soporta reproducción de audio.
       </audio>
-      <a href="${audio}" download target="_blank"
-        style="display:inline-block;margin-top:6px;font-size:11px;color:var(--blue)">⬇ Descargar audio</a>
+      <div style="margin-top:6px;display:flex;gap:10px;align-items:center">
+        <a href="${audioUrl}" download target="_blank"
+          style="font-size:11px;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+          ⬇ Descargar audio
+        </a>
+      </div>
     </div>`;
   }
 
-  if (canvas) {
-    const isImg = canvas.match(/\.(png|jpg|jpeg|gif|webp)$/i) || canvas.startsWith('data:image');
-    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px">
-      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:8px">✏️ Lápiz inteligente</div>
-      ${isImg
-        ? `<img src="${canvas}" alt="Canvas" style="width:100%;max-height:300px;object-fit:contain;border-radius:6px;cursor:pointer;border:1px solid var(--border)"
-            onclick="mpPreviewAdjunto('${canvas}','canvas.png','image/png',this)">`
-        : `<a href="${canvas}" target="_blank" style="font-size:12px;color:var(--blue)">📄 Ver archivo canvas</a>`}
-      <a href="${canvas}" download target="_blank"
-        style="display:inline-block;margin-top:6px;font-size:11px;color:var(--blue)">⬇ Descargar imagen</a>
+  if (canvasUrl) {
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        ✏️ <span>Lápiz inteligente</span>
+      </div>
+      <img src="${canvasUrl}" alt="Canvas"
+        style="width:100%;max-height:280px;object-fit:contain;border-radius:6px;border:1px solid var(--border);cursor:zoom-in;background:#fff"
+        onclick="window.open('${canvasUrl}','_blank','width=900,height=700,resizable=yes')"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <div style="display:none;padding:8px;background:#fff3cd;border-radius:4px;font-size:12px;color:#856404">
+        ⚠️ No se puede mostrar la imagen. <a href="${canvasUrl}" target="_blank" style="color:var(--blue)">Abrir directamente</a>
+      </div>
+      <div style="margin-top:6px">
+        <a href="${canvasUrl}" download target="_blank"
+          style="font-size:11px;color:var(--blue);text-decoration:none">⬇ Descargar imagen</a>
+      </div>
     </div>`;
   }
 
   if (trans) {
-    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:8px">
-      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:6px">📝 Transcripción IA</div>
-      <div style="font-size:12px;color:var(--ink);line-height:1.6;white-space:pre-wrap;background:#fff;border-radius:4px;padding:8px;border:1px solid var(--border)">${esc(trans)}</div>
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:6px;display:flex;align-items:center;gap:6px">
+        📝 <span>Transcripción IA</span>
+        <span style="font-size:9px;background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:99px;font-weight:600">Whisper / GPT-4o Vision</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink);line-height:1.7;white-space:pre-wrap;background:#fff;border-radius:4px;padding:10px 12px;border:1px solid var(--border)">${esc(trans)}</div>
     </div>`;
   }
 
