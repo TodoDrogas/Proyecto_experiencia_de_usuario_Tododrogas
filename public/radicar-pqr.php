@@ -134,6 +134,26 @@ $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_w
 // Texto final para clasificar (transcripción si hay, sino descripción)
 $texto_pqr = $transcripcion ?: $descripcion;
 
+
+// ── Descarga autenticada de Supabase Storage ─────────────────────────────
+function fetchUrlBytes(string $url, string $sbKey = ''): string {
+    $ch = curl_init($url);
+    $headers = ['Accept: */*'];
+    if ($sbKey) {
+        $headers[] = "apikey: $sbKey";
+        $headers[] = "Authorization: Bearer $sbKey";
+    }
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_HTTPHEADER     => $headers,
+    ]);
+    $data = curl_exec($ch);
+    curl_close($ch);
+    return ($data && strlen($data) > 0) ? $data : '';
+}
+
 // ── PASO 1: CLASIFICACIÓN IA ─────────────────────────────────────────
 $sentimiento  = 'neutro';
 $prioridad    = 'media';
@@ -171,7 +191,7 @@ REGLAS CRITICAS DE SENTIMIENTO Y TONO:
 6. sentimiento=neutro: SOLO peticiones informativas sin carga emocional (pedir un documento, consultar horario).
 7. prioridad segun tipo: felicitacion/sugerencia=baja, peticion=media, queja/reclamo=alta, denuncia/urgente=critica.
 8. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4.
-PROMPT;
+PROMPT
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
     curl_setopt_array($ch, [
@@ -356,7 +376,7 @@ if ($token) {
 
     // Adjuntar audio si existe (máx 4MB inline)
     if ($audio_url) {
-        $audio_data = @file_get_contents($audio_url);
+        $audio_data = fetchUrlBytes($audio_url, $SB_KEY);
         if ($audio_data && strlen($audio_data) < 4 * 1024 * 1024) {
             $mail_payload['attachments'][] = [
                 '@odata.type'  => '#microsoft.graph.fileAttachment',
@@ -382,7 +402,7 @@ if ($token) {
             }
         } else {
             // URL externa — descargar
-            $img_data = @file_get_contents($canvas_url);
+            $img_data = fetchUrlBytes($canvas_url, $SB_KEY);
             if ($img_data && strlen($img_data) < 4 * 1024 * 1024) {
                 $mail_payload['attachments'][] = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
@@ -429,57 +449,58 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     $tipo_label_u = strtoupper($tipo_pqr_raw);
     $emoji_tipo_u = ['PETICIÓN'=>'💡','QUEJA'=>'😤','RECLAMO'=>'⚠️','SUGERENCIA'=>'💬','FELICITACIÓN'=>'⭐','DENUNCIA'=>'🚨'][strtoupper($tipo_pqr_raw)] ?? '📋';
 
-    $evidencia_tipo = $audio_url ? '🎤 audio de voz' : ($canvas_url ? '✏️ escrito con lápiz inteligente' : '');
     $cuerpo_acuse = "
-<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'></head>
-<body style='margin:0;padding:0;background:#eef2f7;font-family:Arial,Helvetica,sans-serif'>
-<table width='100%' cellpadding='0' cellspacing='0' style='background:#eef2f7;padding:32px 16px'>
+<!DOCTYPE html><html><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
 <tr><td align='center'>
-<table width='600' cellpadding='0' cellspacing='0' style='max-width:600px;width:100%;border-radius:14px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10)'>
-  <tr><td style='background:linear-gradient(135deg,#1e3a8a 0%,#1e40af 60%,#2563eb 100%);padding:30px 36px 24px;text-align:center'>
-    ".($logo_img_html ? "<div style='margin-bottom:14px'>{$logo_img_html}</div>" : "<div style='margin-bottom:14px'><span style='color:#fff;font-size:22px;font-weight:800;letter-spacing:1px'>TODODROGAS</span></div>")."
-    <p style='color:#93c5fd;margin:0;font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:600'>Sistema PQR · Servicio al Cliente</p>
-    <h1 style='color:#fff;margin:10px 0 0;font-size:22px;font-weight:700'>✅ Solicitud Recibida Exitosamente</h1>
+<table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%'>
+
+  <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
+    ".($logo_img_html ?: "")."
+    <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Sistema PQR</p>
+    <h2 style='color:#fff;margin:6px 0 0;font-size:20px;font-weight:700'>Su solicitud fue recibida</h2>
   </td></tr>
-  <tr><td style='background:#1e3a8a;padding:22px 36px;text-align:center;border-top:1px solid rgba(255,255,255,0.1)'>
-    <p style='color:#93c5fd;margin:0 0 6px;font-size:11px;letter-spacing:2px;text-transform:uppercase;font-weight:600'>Su número de radicado</p>
-    <p style='color:#fff;margin:0;font-size:32px;font-weight:800;letter-spacing:4px;font-family:Courier New,monospace'>{$ticket_id}</p>
-    <p style='color:#bfdbfe;margin:8px 0 0;font-size:12px'>📌 Guárdelo — lo necesitará para consultar el estado de su caso</p>
+
+  <tr><td style='background:#1e3a8a;padding:20px 32px;text-align:center'>
+    <p style='color:#93c5fd;margin:0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase'>Su número de radicado</p>
+    <p style='color:#fff;margin:6px 0;font-size:30px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_id}</p>
+    <p style='color:#93c5fd;margin:0;font-size:11px'>Guárdelo para hacer seguimiento</p>
   </td></tr>
-  <tr><td style='background:#fff;padding:28px 36px'>
-    <p style='margin:0 0 18px;color:#111827;font-size:15px'>Estimado/a <strong style='color:#1e40af'>{$nombre}</strong>,</p>
-    <p style='margin:0 0 20px;color:#374151;font-size:14px;line-height:1.7'>Hemos recibido su solicitud a través de nuestra <strong>Plataforma Inteligente Nova TD</strong>. Estamos comprometidos con brindarle una respuesta oportuna y de calidad. A continuación el resumen de su caso:</p>
-    <table width='100%' cellpadding='0' cellspacing='0' style='font-size:13px;border-collapse:collapse;margin-bottom:24px;border-radius:8px;overflow:hidden;border:1px solid #e5e7eb'>
-      <tr style='background:#eff6ff'><td style='padding:10px 14px;font-weight:700;color:#1e40af;width:170px;border-bottom:1px solid #dbeafe'>📅 Fecha de radicado</td>
-          <td style='padding:10px 14px;color:#111827;font-weight:600;border-bottom:1px solid #dbeafe'>{$fecha_fmt_u} (hora Colombia)</td></tr>
-      <tr style='background:#f9fafb'><td style='padding:10px 14px;font-weight:700;color:#374151;border-bottom:1px solid #f3f4f6'>{$emoji_tipo_u} Tipo</td>
-          <td style='padding:10px 14px;color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$tipo_label_u} — {$categoria_ia}</td></tr>
-      <tr style='background:#fff'><td style='padding:10px 14px;font-weight:700;color:#374151;border-bottom:1px solid #f3f4f6'>⏱ Tiempo de respuesta</td>
-          <td style='padding:10px 14px;color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$dias_resp} días hábiles<br><span style='font-size:11px;color:#6b7280;font-weight:400'>Fecha límite: {$fecha_lim_u}</span></td></tr>
-      <tr style='background:#f9fafb'><td style='padding:10px 14px;font-weight:700;color:#374151'>📲 Contacto preferido</td>
-          <td style='padding:10px 14px;color:#111827;font-weight:600'>{$canal_contacto}</td></tr>
+
+  <tr><td style='background:#fff;padding:24px 32px;border:1px solid #e2e8f0;border-top:none'>
+    <p style='margin:0 0 16px;color:#374151;font-size:14px'>Estimado/a <strong>{$nombre}</strong>,</p>
+    <p style='margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6'>Hemos recibido su solicitud. Queremos que sepa que para nosotros su bienestar es lo más importante y estamos comprometidos a darle una respuesta oportuna y de calidad.</p>
+
+    <table width='100%' cellpadding='8' cellspacing='0' style='font-size:13px;border-collapse:collapse;margin-bottom:20px'>
+      <tr><td style='color:#6b7280;width:160px;border-bottom:1px solid #f3f4f6'>Fecha de radicado</td>
+          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$fecha_fmt_u} (hora Colombia)</td></tr>
+      <tr><td style='color:#6b7280;border-bottom:1px solid #f3f4f6'>Tipo de solicitud</td>
+          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$emoji_tipo_u} {$tipo_label_u} — {$categoria_ia}</td></tr>
+
+      <tr><td style='color:#6b7280'>Canal de contacto</td>
+          <td style='color:#111827;font-weight:600'>{$canal_contacto}</td></tr>
     </table>
-    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:18px 20px;margin-bottom:22px'>
-      <p style='margin:0 0 10px;font-size:13px;font-weight:700;color:#166534'>¿Qué pasa ahora con su solicitud?</p>
-      <p style='margin:4px 0;font-size:13px;color:#166534'>→ Un asesor especializado revisará su caso.</p>
-      <p style='margin:4px 0;font-size:13px;color:#166534'>→ Recibirá respuesta a <strong>{$correo}</strong> en el plazo indicado.</p>
-      <p style='margin:4px 0;font-size:13px;color:#166534'>→ Para urgencias, responda este correo indicando su radicado <strong>{$ticket_id}</strong>.</p>
+
+    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:20px'>
+      <p style='margin:0 0 8px;font-size:13px;font-weight:700;color:#166534'>¿Qué sigue?</p>
+      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Su caso será revisado por uno de nuestros asesores especializados.</p>
+      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Recibirá respuesta a este correo en el plazo indicado.</p>
+      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Si necesita información urgente, responda este correo con su número de radicado.</p>
     </div>
-    ".($texto_pqr ? "
-    <div style='background:#fafafa;border:1px solid #e5e7eb;border-left:4px solid #7c3aed;border-radius:6px;padding:16px 18px;margin-bottom:22px'>
-      <p style='margin:0 0 8px;font-size:12px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.5px'>📋 Copia de su mensaje</p>
-      <p style='margin:0;font-size:13px;color:#374151;line-height:1.7'>".htmlspecialchars(mb_substr($texto_pqr,0,600)).(strlen($texto_pqr)>600?'…':'')."</p>
+
+    ".( ($audio_url || $canvas_url || $texto_pqr) ? "
+    <div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #7c3aed;border-radius:4px;padding:14px 16px;margin-bottom:20px'>
+      <p style='margin:0 0 6px;font-size:12px;font-weight:700;color:#7c3aed'>📋 Copia de su mensaje (para su referencia)</p>
+      <p style='margin:0;font-size:12px;color:#374151;line-height:1.6'>".htmlspecialchars(mb_substr($texto_pqr, 0, 500)).(strlen($texto_pqr)>500?'…':'')."</p>
+      ".($audio_url || $canvas_url ? "<p style='margin:8px 0 0;font-size:11px;color:#6b7280'>📎 Su ".($audio_url?'audio':'imagen')." fue adjuntado a este correo como evidencia.</p>" : "")."
     </div>" : "")."
-    ".($audio_url || $canvas_url ? "
-    <div style='background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid #f97316;border-radius:6px;padding:14px 18px;margin-bottom:22px'>
-      <p style='margin:0 0 6px;font-size:12px;font-weight:700;color:#c2410c;text-transform:uppercase;letter-spacing:.5px'>🔒 Evidencia adjunta de su solicitud</p>
-      <p style='margin:0;font-size:13px;color:#7c2d12;line-height:1.6'>Su <strong>{$evidencia_tipo}</strong> ha sido adjuntado a este correo como constancia de lo que manifestó. Esta evidencia queda registrada en nuestro sistema y garantiza la fidelidad de su solicitud.</p>
-    </div>" : "")."
+
   </td></tr>
-  <tr><td style='background:#f8fafc;border-top:1px solid #e5e7eb;padding:18px 36px;text-align:center'>
-    <p style='font-size:11px;color:#9ca3af;margin:0 0 4px'><strong style='color:#6b7280'>Tododrogas CIA SAS</strong> · Experiencia de Servicio al Cliente · Nova TD v4</p>
-    <p style='font-size:10px;color:#d1d5db;margin:0'>Este es un correo automático — use su número de radicado <strong>{$ticket_id}</strong> para comunicarse con nosotros.</p>
+  <tr><td style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center'>
+    <p style='font-size:11px;color:#9ca3af;margin:0'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente<br>
+    Este es un mensaje automático, no responda directamente a este correo.</p>
   </td></tr>
+
 </table></td></tr></table></body></html>";
 
     $acuse_payload = [
@@ -490,38 +511,20 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         'attachments'  => [],
     ];
 
-    // Adjuntar su propio audio/canvas como evidencia (usa curl para URLs de Supabase Storage)
-    function fetchUrlBytes($url, $maxBytes = 4194304) {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>20,
-            CURLOPT_FOLLOWLOCATION=>true, CURLOPT_SSL_VERIFYPEER=>true]);
-        $data = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if ($code >= 200 && $code < 300 && $data && strlen($data) < $maxBytes) return $data;
-        return null;
-    }
-
+    // Adjuntar su propio audio/canvas como evidencia
     if ($audio_url) {
-        // Detectar extensión/mime desde URL
-        $audio_ext  = 'webm';
-        $audio_mime = 'audio/webm';
-        if (strpos($audio_url, '.mp4') !== false) { $audio_ext='mp4'; $audio_mime='audio/mp4'; }
-        elseif (strpos($audio_url, '.ogg') !== false) { $audio_ext='ogg'; $audio_mime='audio/ogg'; }
-        elseif (strpos($audio_url, '.mp3') !== false) { $audio_ext='mp3'; $audio_mime='audio/mpeg'; }
-
-        $audio_ev = fetchUrlBytes($audio_url);
-        if ($audio_ev) {
+        $audio_ev = fetchUrlBytes($audio_url, $SB_KEY);
+        if ($audio_ev && strlen($audio_ev) < 4*1024*1024) {
             $acuse_payload['attachments'][] = [
                 '@odata.type'  => '#microsoft.graph.fileAttachment',
-                'name'         => "su_audio_{$ticket_id}.{$audio_ext}",
-                'contentType'  => $audio_mime,
+                'name'         => "su_audio_{$ticket_id}.webm",
+                'contentType'  => 'audio/webm',
                 'contentBytes' => base64_encode($audio_ev),
             ];
         }
     }
     if ($canvas_url && strpos($canvas_url, 'data:image') === 0) {
-        preg_match('/data:image\/(\w+);base64,(.+)/s', $canvas_url, $mc);
+        preg_match('/data:image\/(\w+);base64,(.+)/', $canvas_url, $mc);
         if ($mc) {
             $acuse_payload['attachments'][] = [
                 '@odata.type'  => '#microsoft.graph.fileAttachment',
@@ -531,14 +534,12 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
             ];
         }
     } elseif ($canvas_url) {
-        $canvas_ev = fetchUrlBytes($canvas_url);
-        if ($canvas_ev) {
-            $ext_canvas = (strpos($canvas_url,'.jpg')!==false||strpos($canvas_url,'.jpeg')!==false) ? 'jpg' : 'png';
-            $mime_canvas = $ext_canvas === 'jpg' ? 'image/jpeg' : 'image/png';
+        $canvas_ev = fetchUrlBytes($canvas_url, $SB_KEY);
+        if ($canvas_ev && strlen($canvas_ev) < 4*1024*1024) {
             $acuse_payload['attachments'][] = [
                 '@odata.type'  => '#microsoft.graph.fileAttachment',
-                'name'         => "su_escrito_{$ticket_id}.{$ext_canvas}",
-                'contentType'  => $mime_canvas,
+                'name'         => "su_escrito_{$ticket_id}.png",
+                'contentType'  => 'image/png',
                 'contentBytes' => base64_encode($canvas_ev),
             ];
         }
