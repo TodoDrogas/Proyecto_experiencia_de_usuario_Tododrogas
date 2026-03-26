@@ -83,13 +83,9 @@ function getGraphToken($tenant, $client_id, $client_secret) {
 }
 
 // ── LOGO desde Supabase configuracion_sistema ───────────────────────
-// Estrategia única: descargar el logo UNA vez con credenciales Supabase,
-// embeber como base64 en AMBOS correos (PQRSFD y usuario).
-// Esto garantiza que se vea en Outlook, Gmail, Apple Mail, etc.
-// sin depender de URLs externas que pueden ser bloqueadas.
 $logo_url          = '';
-$logo_img_html     = '';   // base64 → correo usuario (Gmail, etc.)
-$logo_img_html_b64 = '';   // base64 → correo PQRSFD (Outlook)
+$logo_img_html     = '';
+$logo_img_html_b64 = '';
 try {
     $ch_cfg = curl_init("$SB_URL/rest/v1/configuracion_sistema?id=eq.main&select=data");
     curl_setopt_array($ch_cfg, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
@@ -99,19 +95,21 @@ try {
     $cfg_data = $cfg_rows[0]['data'] ?? [];
     if (!empty($cfg_data['logo'])) {
         $logo_url  = $cfg_data['logo'];
-        // Descargar con credenciales Supabase (funciona con buckets privados y públicos)
+        // Descargar logo con autenticación y embeber como base64
+        // Esto funciona en TODOS los clientes de correo (Gmail, Outlook, Apple Mail)
+        // porque no depende de URLs externas ni autenticación del receptor
         $logo_data = fetchUrlBytes($logo_url, $SB_KEY);
-        if ($logo_data && strlen($logo_data) > 100 && strlen($logo_data) < 300*1024) {
+        if ($logo_data && strlen($logo_data) < 300*1024) {
+            // Detectar tipo MIME real del archivo
             $finfo     = new finfo(FILEINFO_MIME_TYPE);
             $logo_mime = $finfo->buffer($logo_data) ?: 'image/png';
             $logo_b64  = base64_encode($logo_data);
             $logo_tag  = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
-            // Misma variable para ambos correos: base64 viaja dentro del email, ningún cliente la bloquea
-            $logo_img_html     = $logo_tag;
-            $logo_img_html_b64 = $logo_tag;
+            $logo_img_html     = $logo_tag; // para acuse usuario
+            $logo_img_html_b64 = $logo_tag; // para email PQRSFD
         }
     }
-} catch (Exception $e) { /* sin logo — continúa sin imagen */ }
+} catch (Exception $e) { /* sin logo */ }
 
 // ── LEER INPUT ───────────────────────────────────────────────────────
 $body = json_decode(file_get_contents('php://input'), true);
@@ -274,8 +272,8 @@ $payload_correo = [
     'body_content'      => $texto_pqr,
     'body_type'         => 'text',
     'transcripcion'     => $transcripcion ?: null,
-    'audio_url'         => (strpos($audio_url,'data:')===0  ? null : ($audio_url  ?: null)),
-    'canvas_url'        => (strpos($canvas_url,'data:')===0 ? null : ($canvas_url ?: null)),
+    'audio_url'         => (strpos($audio_url,'data:')===0 ? null : ($audio_url?:null)),
+    'canvas_url'        => $canvas_url    ?: null,
     'tipo_pqr'          => $tipo_pqr,
     'categoria_ia'      => $categoria_ia,
     'sentimiento'       => $sentimiento,
@@ -305,17 +303,8 @@ if ($sb_result['code'] < 400) {
     $correo_id = $inserted[0]['id'] ?? null;
 } else {
     // Error crítico — no se pudo guardar en BD
-    // Loguear detalle completo para diagnóstico
-    $sb_error_detail = $sb_result['body'];
-    $sb_error_parsed = json_decode($sb_error_detail, true);
-    $sb_error_msg    = $sb_error_parsed['message'] ?? $sb_error_parsed['hint'] ?? $sb_error_detail;
     http_response_code(502);
-    echo json_encode([
-        'error'   => 'supabase_error',
-        'code'    => $sb_result['code'],
-        'mensaje' => $sb_error_msg,
-        'detalle' => $sb_error_detail,
-    ]);
+    echo json_encode(['error' => 'supabase_error', 'code' => $sb_result['code'], 'detalle' => $sb_result['body']]);
     exit;
 }
 
@@ -517,15 +506,11 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     <p style='margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6'>Hemos recibido su solicitud. Queremos que sepa que para nosotros su bienestar es lo más importante y estamos comprometidos a darle una respuesta oportuna y de calidad.</p>
 
     <table width='100%' cellpadding='8' cellspacing='0' style='font-size:13px;border-collapse:collapse;margin-bottom:20px'>
-      <tr><td style='color:#6b7280;width:160px;border-bottom:1px solid #f3f4f6'>Nombre</td>
-          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$nombre}</td></tr>" .
-      ($documento ? "
-      <tr><td style='color:#6b7280;border-bottom:1px solid #f3f4f6'>Documento</td>
-          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$documento}</td></tr>" : "") . "
-      <tr><td style='color:#6b7280;border-bottom:1px solid #f3f4f6'>Fecha de radicado</td>
+      <tr><td style='color:#6b7280;width:160px;border-bottom:1px solid #f3f4f6'>Fecha de radicado</td>
           <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$fecha_fmt_u} (hora Colombia)</td></tr>
       <tr><td style='color:#6b7280;border-bottom:1px solid #f3f4f6'>Tipo de solicitud</td>
           <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$emoji_tipo_u} {$tipo_label_u} — {$categoria_ia}</td></tr>
+
       <tr><td style='color:#6b7280'>Canal de contacto</td>
           <td style='color:#111827;font-weight:600'>{$canal_contacto}</td></tr>
     </table>
