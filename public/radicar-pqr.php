@@ -144,21 +144,22 @@ $ley_aplicable = 'Ley 1755/2015';
 $horas_sla    = 15 * 24; // 15 días por defecto
 
 if ($OPENAI_KEY && $texto_pqr) {
-    $prompt = "Analiza esta PQR de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
+    $prompt = <<<PROMPT
+Analiza esta PQR de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
 
 TIPO DECLARADO POR EL USUARIO: $tipo_pqr_raw
 TEXTO EXACTO: $texto_pqr
 
 JSON requerido:
 {
-  \"sentimiento\": \"positivo|neutro|negativo|urgente\",
-  \"tono\": \"enojado|frustrado|triste|ansioso|neutro|satisfecho|agradecido\",
-  \"prioridad\": \"baja|media|alta|critica\",
-  \"categoria\": \"frase corta en espanol\",
-  \"nivel_riesgo\": \"bajo|medio|alto|critico\",
-  \"resumen\": \"maximo 100 caracteres\",
-  \"ley\": \"ley colombiana aplicable\",
-  \"horas_sla\": numero entero
+  "sentimiento": "positivo|neutro|negativo|urgente",
+  "tono": "enojado|frustrado|triste|ansioso|neutro|satisfecho|agradecido",
+  "prioridad": "baja|media|alta|critica",
+  "categoria": "frase corta en espanol",
+  "nivel_riesgo": "bajo|medio|alto|critico",
+  "resumen": "maximo 100 caracteres",
+  "ley": "ley colombiana aplicable",
+  "horas_sla": numero entero
 }
 
 REGLAS CRITICAS DE SENTIMIENTO Y TONO:
@@ -169,7 +170,8 @@ REGLAS CRITICAS DE SENTIMIENTO Y TONO:
 5. sentimiento=positivo + tono=agradecido: felicitaciones, gracias, elogios. Prioridad siempre baja. horas_sla=360.
 6. sentimiento=neutro: SOLO peticiones informativas sin carga emocional (pedir un documento, consultar horario).
 7. prioridad segun tipo: felicitacion/sugerencia=baja, peticion=media, queja/reclamo=alta, denuncia/urgente=critica.
-8. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4."
+8. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4.
+PROMPT;
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
     curl_setopt_array($ch, [
