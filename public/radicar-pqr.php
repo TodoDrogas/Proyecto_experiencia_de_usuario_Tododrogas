@@ -83,9 +83,8 @@ function getGraphToken($tenant, $client_id, $client_secret) {
 }
 
 // ── LOGO desde Supabase configuracion_sistema ───────────────────────
-$logo_url          = '';
-$logo_img_html     = '';
-$logo_img_html_b64 = '';
+$logo_url      = '';
+$logo_img_html = '';
 try {
     $ch_cfg = curl_init("$SB_URL/rest/v1/configuracion_sistema?id=eq.main&select=data");
     curl_setopt_array($ch_cfg, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
@@ -94,19 +93,18 @@ try {
     $cfg_rows = json_decode($cfg_resp, true);
     $cfg_data = $cfg_rows[0]['data'] ?? [];
     if (!empty($cfg_data['logo'])) {
-        $logo_url  = $cfg_data['logo'];
-        // Descargar logo con autenticación y embeber como base64
-        // Esto funciona en TODOS los clientes de correo (Gmail, Outlook, Apple Mail)
-        // porque no depende de URLs externas ni autenticación del receptor
+        $logo_url = $cfg_data['logo'];
+        // Intentar embeber como base64 para que funcione en clientes de correo sin autenticación
         $logo_data = fetchUrlBytes($logo_url, $SB_KEY);
-        if ($logo_data && strlen($logo_data) < 300*1024) {
-            // Detectar tipo MIME real del archivo
-            $finfo     = new finfo(FILEINFO_MIME_TYPE);
+        if ($logo_data && strlen($logo_data) < 200*1024) {
+            // Detectar tipo de imagen
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
             $logo_mime = $finfo->buffer($logo_data) ?: 'image/png';
             $logo_b64  = base64_encode($logo_data);
-            $logo_tag  = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
-            $logo_img_html     = $logo_tag; // para acuse usuario
-            $logo_img_html_b64 = $logo_tag; // para email PQRSFD
+            $logo_img_html = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+        } else {
+            // Fallback a URL directa
+            $logo_img_html = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
         }
     }
 } catch (Exception $e) { /* sin logo */ }
@@ -121,7 +119,6 @@ $rand        = str_pad(rand(1000, 9999), 4, '0', STR_PAD_LEFT);
 $ticket_id   = "TD-{$fecha}-{$rand}";
 
 $nombre       = trim($body['nombre']       ?? '');
-$documento    = trim($body['documento']    ?? '');
 $correo       = trim($body['correo']       ?? '');
 $telefono     = trim($body['telefono']     ?? '');
 $descripcion  = trim($body['descripcion']  ?? '');
@@ -262,7 +259,6 @@ $payload_correo = [
     'ticket_id'         => $ticket_id,
     'from_email'        => $correo ?: ($telefono . '@whatsapp'),
     'from_name'         => $nombre,
-    'documento'         => $documento ?: null,
     'nombre'            => $nombre,
     'correo'            => $correo ?: null,
     'telefono_contacto' => $telefono,
@@ -323,7 +319,7 @@ if ($token) {
     $cuerpo_html = "
 <div style='font-family:Poppins,Arial,sans-serif;max-width:680px;margin:0 auto;color:#1f2937'>
   <div style='background:#1e40af;padding:20px 28px;border-radius:8px 8px 0 0'>
-    {$logo_img_html_b64}
+    {$logo_img_html}
     <h2 style='color:#fff;margin:4px 0 0;font-size:20px;font-weight:700'>Nueva PQRSFD Recibida</h2>
     <p style='color:#bfdbfe;margin:4px 0 0;font-size:12px;letter-spacing:.5px'>Experiencia de Servicio al Cliente · Nova TD</p>
   </div>
@@ -353,7 +349,6 @@ if ($token) {
     <div style='background:#fff;border:1px solid #e2e8f0;border-left:4px solid #1e40af;border-radius:4px;padding:16px 20px;margin-bottom:20px'>
       <p style='margin:0 0 8px;font-weight:700;color:#1e40af'>👤 Datos del ciudadano</p>
       <p style='margin:2px 0;font-size:13px'><strong>Nombre:</strong> {$nombre}</p>" .
-      ($documento ? "<p style='margin:2px 0;font-size:13px'><strong>Documento:</strong> {$documento}</p>" : "") .
       ($correo ? "<p style='margin:2px 0;font-size:13px'><strong>Correo:</strong> {$correo}</p>" : "") .
       ($telefono ? "<p style='margin:2px 0;font-size:13px'><strong>Celular:</strong> {$telefono}</p>" : "") .
       "<p style='margin:2px 0;font-size:13px'><strong>Canal de contacto preferido:</strong> {$canal_contacto}</p>
