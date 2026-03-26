@@ -1965,8 +1965,14 @@ async function confirmarFirma() {
     showToast('Ticket cerrado con firma ✅','success');
     closeModal('modalFirma');
     await loadEmails();
-    // Force reload timeline since email moved to solucionado folder
-    await loadTicketTimeline(id, email?.message_id);
+    // Refrescar vista completa incluyendo timeline
+    const emailStillInState = state.emails.find(e=>e.id===id);
+    if(emailStillInState) {
+      await selectEmail(id);
+    } else {
+      // El email salió del folder actual — cargar timeline directamente
+      await loadTicketTimeline(id, email?.message_id);
+    }
   } catch(e) {
     errorEl.textContent = '⚠️ '+e.message.substring(0,100);
     errorEl.style.display = 'block';
@@ -1988,18 +1994,23 @@ async function reabrirTicket() {
 }
 
 async function addHistorialEvent(correoId, email, evento, metadata={}) {
+  // Limpiar agente_id del metadata para evitar conflicto con el campo top-level
+  const { agente_id: _aid, ...metaClean } = metadata;
+  const agId = _aid && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(_aid)) ? _aid : null;
   try {
-    await sb('historial_eventos','POST',{
-      correo_id: correoId,
-      agente_id: metadata.agente_id || null,
+    const res = await sb('historial_eventos','POST',{
+      correo_id:   correoId,
+      agente_id:   agId,
       evento,
-      from_email: email?.remitente || email?.from_email || null,
-      subject:    email?.asunto    || email?.subject    || null,
+      from_email:  email?.remitente || email?.from_email || null,
+      subject:     email?.asunto    || email?.subject    || null,
       descripcion: metadata.observaciones || metadata.agente_nombre || evento,
-      datos_extra: metadata,
+      datos_extra: metaClean,
     });
+    return res;
   } catch(e) {
-    console.warn('[historial_eventos] Error:', e?.message||e);
+    console.error('[historial_eventos] INSERT FAILED:', e?.message||e, {correo_id:correoId,evento,agId});
+    // Fallback: tabla historial legacy
     try {
       await sb('historial','POST',{
         correo_id: correoId,
@@ -2007,7 +2018,9 @@ async function addHistorialEvent(correoId, email, evento, metadata={}) {
         detalle:   metadata.observaciones||metadata.agente_nombre||evento,
         fecha:     new Date().toISOString(),
       });
-    } catch {}
+    } catch(e2) {
+      console.error('[historial] FALLBACK ALSO FAILED:', e2?.message);
+    }
   }
 }
 
