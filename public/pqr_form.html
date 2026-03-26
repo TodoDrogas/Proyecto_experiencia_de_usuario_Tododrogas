@@ -1322,8 +1322,8 @@ async function convertToText(){
     combined.width  = pages[0].cvs.width;
     combined.height = pages[0].cvs.height * pagesWithContent.length;
     const cctx = combined.getContext('2d');
-    // Fondo blanco
-    cctx.fillStyle = '#fff';
+    // FIX: fondo blanco explícito para que GPT-4o Vision vea el texto
+    cctx.fillStyle = '#ffffff';
     cctx.fillRect(0, 0, combined.width, combined.height);
     pagesWithContent.forEach((p,i)=>{ cctx.drawImage(p.cvs, 0, i * p.cvs.height); });
     const imgB64 = combined.toDataURL('image/png');
@@ -1393,6 +1393,9 @@ async function submitPQR(){
       combined.width  = pages[0].cvs.width;
       combined.height = pages[0].cvs.height * pagesWithContent.length;
       const cctx2 = combined.getContext('2d');
+      // FIX: fondo blanco para que el PNG no salga transparente/negro
+      cctx2.fillStyle = '#ffffff';
+      cctx2.fillRect(0, 0, combined.width, combined.height);
       pagesWithContent.forEach((p,i)=>{
         cctx2.drawImage(p.cvs, 0, i * p.cvs.height);
       });
@@ -1413,8 +1416,11 @@ async function submitPQR(){
       correo,
       telefono,
       descripcion: msgText||(S.medio==='audio'?'[Audio adjunto]':(S._canvasTranscripcion||'[Lápiz virtual adjunto]')),
+      transcripcion: S._canvasTranscripcion || '',
       tiene_audio:  S.medio==='audio'  && !!S.audioB64,
       tiene_canvas: S.medio==='lapiz'  && pages.some(p=>p.strokes.length>0),
+      // FIX: pasar canvas como data URL para que el correo tenga el adjunto inmediatamente
+      canvas_url: (S.medio==='lapiz' && canvasB64) ? ('data:image/png;base64,'+canvasB64) : '',
       contacto_preferido: S.canal,
       confirmacion_correo: correo || null,
       sin_correo: !correo,
