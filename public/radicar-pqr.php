@@ -1,16 +1,4 @@
 <?php
-/**
- * radicar-pqr.php v3 — Sistema PQR Tododrogas CIA SAS
- * ─────────────────────────────────────────────────────
- * 1. Recibe PQR del formulario (escrito / audio / canvas)
- * 2. Genera ticket TD-YYYYMMDD-XXXX
- * 3. Clasifica con GPT-4o-mini (sentimiento, prioridad, categoría, ley)
- * 4. Inserta en Supabase tabla correos
- * 5. Envía correo inteligente a pqrsfd@tododrogas.com.co vía Graph API
- *    con asunto formateado, cuerpo formal y adjunto según canal
- * 6. Registra en historial_eventos
- */
-
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
