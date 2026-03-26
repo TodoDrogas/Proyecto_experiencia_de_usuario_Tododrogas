@@ -396,9 +396,10 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
   display:flex;align-items:center;justify-content:center;
   opacity:0;pointer-events:none;transition:opacity .35s;}
 .success-overlay.show{opacity:1;pointer-events:auto;}
-.success-card{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
-  border-radius:24px;padding:40px 36px;max-width:420px;width:90%;
-  text-align:center;animation:scaleIn .4s cubic-bezier(.34,1.56,.64,1) both;}
+.success-card{background:rgba(15,20,40,.85);border:1px solid rgba(255,255,255,.12);
+  border-radius:24px;padding:36px 32px;max-width:440px;width:92%;
+  text-align:center;animation:scaleIn .4s cubic-bezier(.34,1.56,.64,1) both;
+  box-shadow:0 24px 80px rgba(0,0,0,.6),0 0 0 1px rgba(37,99,235,.15);}
 @keyframes scaleIn{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
 .success-glow{width:80px;height:80px;border-radius:50%;
   background:rgba(22,163,74,.15);border:2px solid rgba(22,163,74,.3);
@@ -511,7 +512,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
     <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
     Volver
   </button>
-  <div class="tb-brand"><div class="tb-dot"></div><span class="tb-name">Tododrogas</span></div>
+  <div class="tb-brand"><div class="tb-dot"></div><img id="topbarLogo" src="" alt="Tododrogas" style="height:22px;object-fit:contain;display:none;filter:brightness(0) invert(1);opacity:.9"><span class="tb-name" id="topbarName">Tododrogas</span></div>
   <span class="tb-time" id="clockDisplay">--:--</span>
 </div>
 
@@ -819,15 +820,27 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 <!-- SUCCESS -->
 <div class="success-overlay" id="successOverlay">
   <div class="success-card">
+    <div id="successLogoWrap" style="margin-bottom:16px;display:none">
+      <img id="successLogo" src="" alt="Tododrogas" style="height:36px;object-fit:contain;filter:brightness(0) invert(1);opacity:.85">
+    </div>
     <div class="success-glow">✅</div>
     <h2>¡Solicitud radicada!</h2>
-    <p>Tu PQR fue registrada exitosamente.<br>Guarda este número de radicado:</p>
-    <div class="ticket-badge" id="successTicket">PQR-00000000</div>
-    <p class="confirm-email" id="successConfirmLine" style="margin-bottom:8px;display:none;">📩 Confirmación enviada a <span id="successCorreo">—</span></p>
+    <p style="margin-bottom:10px">Tu PQR fue registrada exitosamente.<br>Guarda este número:</p>
+    <div class="ticket-badge" id="successTicket">TD-00000000-0000</div>
+
+    <p class="confirm-email" id="successConfirmLine" style="margin-bottom:8px;display:none">
+      📩 Confirmación enviada a <span id="successCorreo">—</span>
+    </p>
     <p id="successSinCorreo" style="display:none;font-size:12px;color:rgba(255,200,50,.75);margin-bottom:8px;padding:8px 12px;background:rgba(255,200,50,.08);border:1px solid rgba(255,200,50,.2);border-radius:8px;line-height:1.5;">
       📋 No registraste correo — <strong>el asesor te informará tu número de radicado cuando te contacte.</strong>
     </p>
-    <div id="successCanalMsg" style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:12px;padding:8px 14px;background:rgba(37,99,235,.1);border-radius:8px;border:1px solid rgba(37,99,235,.2);line-height:1.5;"></div>
+
+    <div id="successCanalMsg" style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:10px;padding:8px 14px;background:rgba(37,99,235,.1);border-radius:8px;border:1px solid rgba(37,99,235,.2);line-height:1.5;"></div>
+
+    <div id="successEvidenciaMsg" style="display:none;font-size:11px;color:rgba(255,165,50,.8);margin-bottom:12px;padding:7px 12px;background:rgba(255,140,0,.08);border:1px solid rgba(255,140,0,.2);border-radius:8px;line-height:1.5;">
+      🔒 Tu <span id="successEvidenciaTipo">mensaje</span> fue adjuntado al correo como evidencia de tu solicitud.
+    </div>
+
     <div class="countdown-text" id="countdown">Reiniciando en 10s…</div>
   </div>
 </div>
@@ -846,6 +859,33 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
     if(cfg.canales && cfg.canales.web)
       window._N8N_BASE = cfg.canales.web;
   }catch(e){}
+})();
+
+// LOGO — carga desde Supabase configuracion_sistema al iniciar
+(async function loadLogo(){
+  try {
+    const sbUrl = window.SUPABASE_URL || '';
+    const sbKey = window.SUPABASE_KEY || '';
+    if (!sbUrl || !sbKey) return;
+    const r = await fetch(`${sbUrl}/rest/v1/configuracion_sistema?id=eq.main&select=data`, {
+      headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + sbKey }
+    });
+    const rows = await r.json();
+    const logoUrl = rows?.[0]?.data?.logo || '';
+    if (!logoUrl) return;
+    // Topbar
+    const img = document.getElementById('topbarLogo');
+    const name = document.getElementById('topbarName');
+    if (img) { img.src = logoUrl; img.style.display = 'block'; }
+    if (name) name.style.display = 'none';
+    // Success card
+    const sImg = document.getElementById('successLogo');
+    const sWrap = document.getElementById('successLogoWrap');
+    if (sImg) { sImg.src = logoUrl; }
+    if (sWrap) sWrap.style.display = 'block';
+    // Guardar para uso posterior
+    window._LOGO_URL = logoUrl;
+  } catch(e) { /* sin logo, muestra texto */ }
 })();
 
 const N8N_BASE       = window._N8N_BASE || 'https://tododrogas.online/webhook';
@@ -1463,6 +1503,22 @@ async function submitPQR(){
     };
     const canalMsg = document.getElementById('successCanalMsg');
     if(canalMsg) canalMsg.textContent = canalMsgs[S.canal] || 'Un asesor te contactará pronto.';
+
+    // Mostrar mensaje de evidencia si usó audio o lápiz
+    const evMsg  = document.getElementById('successEvidenciaMsg');
+    const evTipo = document.getElementById('successEvidenciaTipo');
+    if (evMsg && evTipo) {
+      if (S.medio === 'audio') {
+        evTipo.textContent = 'audio de voz';
+        evMsg.style.display = 'block';
+      } else if (S.medio === 'lapiz') {
+        evTipo.textContent = 'escrito con lápiz inteligente';
+        evMsg.style.display = 'block';
+      } else {
+        evMsg.style.display = 'none';
+      }
+    }
+
     document.getElementById('successOverlay').classList.add('show');
     startCountdown(10);
 
