@@ -370,7 +370,7 @@ if ($token) {
     <div style='background:#fff;border:1px solid #e2e8f0;border-left:4px solid #1e40af;border-radius:4px;padding:16px 20px;margin-bottom:20px'>
       <p style='margin:0 0 8px;font-weight:700;color:#1e40af'>👤 Datos del ciudadano</p>
       <p style='margin:2px 0;font-size:13px'><strong>Nombre:</strong> {$nombre}</p>" .
-      ($documento ? "<p style='margin:2px 0;font-size:13px'><strong>Documento:</strong> {$documento}</p>" : "") ." .
+      ($documento ? "<p style='margin:2px 0;font-size:13px'><strong>Documento:</strong> {$documento}</p>" : "") .
       ($correo ? "<p style='margin:2px 0;font-size:13px'><strong>Correo:</strong> {$correo}</p>" : "") .
       ($telefono ? "<p style='margin:2px 0;font-size:13px'><strong>Celular:</strong> {$telefono}</p>" : "") .
       "<p style='margin:2px 0;font-size:13px'><strong>Canal de contacto preferido:</strong> {$canal_contacto}</p>
