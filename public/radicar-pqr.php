@@ -1,6 +1,6 @@
 <?php
 /**
- * radicar-pqr.php v3 — Sistema PQR Tododrogas CIA SAS
+ * radicar-pqr.php v3 — Experiencia de Servicio al Cliente Tododrogas CIA SAS
  * ─────────────────────────────────────────────────────
  * 1. Recibe PQR del formulario (escrito / audio / canvas)
  * 2. Genera ticket TD-YYYYMMDD-XXXX
@@ -93,8 +93,19 @@ try {
     $cfg_rows = json_decode($cfg_resp, true);
     $cfg_data = $cfg_rows[0]['data'] ?? [];
     if (!empty($cfg_data['logo'])) {
-        $logo_url      = $cfg_data['logo'];
-        $logo_img_html = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+        $logo_url = $cfg_data['logo'];
+        // Intentar embeber como base64 para que funcione en clientes de correo sin autenticación
+        $logo_data = fetchUrlBytes($logo_url, $SB_KEY);
+        if ($logo_data && strlen($logo_data) < 200*1024) {
+            // Detectar tipo de imagen
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $logo_mime = $finfo->buffer($logo_data) ?: 'image/png';
+            $logo_b64  = base64_encode($logo_data);
+            $logo_img_html = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+        } else {
+            // Fallback a URL directa
+            $logo_img_html = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+        }
     }
 } catch (Exception $e) { /* sin logo */ }
 
@@ -256,7 +267,7 @@ $payload_correo = [
     'body_content'      => $texto_pqr,
     'body_type'         => 'text',
     'transcripcion'     => $transcripcion ?: null,
-    'audio_url'         => $audio_url     ?: null,
+    'audio_url'         => (strpos($audio_url,'data:')===0 ? null : ($audio_url?:null)),
     'canvas_url'        => $canvas_url    ?: null,
     'tipo_pqr'          => $tipo_pqr,
     'categoria_ia'      => $categoria_ia,
@@ -305,14 +316,14 @@ if ($token) {
     $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} " . strtoupper($canal) . "</span>";
 
     $cuerpo_html = "
-<div style='font-family:Arial,sans-serif;max-width:680px;margin:0 auto;color:#1f2937'>
+<div style='font-family:Poppins,Arial,sans-serif;max-width:680px;margin:0 auto;color:#1f2937'>
   <div style='background:#1e40af;padding:20px 28px;border-radius:8px 8px 0 0'>
     {$logo_img_html}
-    <h2 style='color:#fff;margin:4px 0 0;font-size:20px;font-weight:700'>Nueva PQR Recibida</h2>
-    <p style='color:#bfdbfe;margin:4px 0 0;font-size:12px;letter-spacing:.5px'>Sistema PQR Inteligente · Plataforma Nova TD</p>
+    <h2 style='color:#fff;margin:4px 0 0;font-size:20px;font-weight:700'>Nueva PQRSFD Recibida</h2>
+    <p style='color:#bfdbfe;margin:4px 0 0;font-size:12px;letter-spacing:.5px'>Experiencia de Servicio al Cliente · Nova TD</p>
   </div>
   <div style='background:#f8fafc;padding:24px 28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px'>
-    <p style='margin:0 0 16px'>Estimado equipo PQRSFD,</p>
+    <p style='margin:0 0 16px'>Estimado equipo PQRSFDSFD,</p>
     <p style='margin:0 0 16px'>Mediante la <strong>Plataforma Inteligente Nova TD</strong> se ha recibido el siguiente caso radicado:</p>
 
     <table style='width:100%;border-collapse:collapse;margin-bottom:20px'>
@@ -359,7 +370,7 @@ if ($token) {
     </div>
 
     <p style='font-size:12px;color:#9ca3af;margin:0;border-top:1px solid #e5e7eb;padding-top:12px'>
-      Sistema PQR Inteligente · Tododrogas CIA SAS · Nova TD v4 · {$fecha_fmt}<br>
+      Experiencia de Servicio al Cliente · Tododrogas CIA SAS · Nova TD v4 · {$fecha_fmt}<br>
       Radicado: <strong>{$ticket_id}</strong> · ID interno: " . ($correo_id ?? 'N/A') . "
     </p>
   </div>
@@ -376,14 +387,29 @@ if ($token) {
 
     // Adjuntar audio si existe (máx 4MB inline)
     if ($audio_url) {
-        $audio_data = fetchUrlBytes($audio_url, $SB_KEY);
-        if ($audio_data && strlen($audio_data) < 4 * 1024 * 1024) {
-            $mail_payload['attachments'][] = [
-                '@odata.type'  => '#microsoft.graph.fileAttachment',
-                'name'         => "audio_{$ticket_id}.webm",
-                'contentType'  => 'audio/webm',
-                'contentBytes' => base64_encode($audio_data),
-            ];
+        // Soporte para data URL base64 (enviado directo desde el formulario)
+        if (strpos($audio_url, 'data:audio') === 0) {
+            preg_match('/data:audio\/([^;]+);base64,(.+)/s', $audio_url, $am);
+            if ($am) {
+                $mime_audio = 'audio/' . $am[1];
+                $ext_audio  = $am[1] === 'webm' ? 'webm' : $am[1];
+                $mail_payload['attachments'][] = [
+                    '@odata.type'  => '#microsoft.graph.fileAttachment',
+                    'name'         => "audio_{$ticket_id}.{$ext_audio}",
+                    'contentType'  => $mime_audio,
+                    'contentBytes' => $am[2],
+                ];
+            }
+        } else {
+            $audio_data = fetchUrlBytes($audio_url, $SB_KEY);
+            if ($audio_data && strlen($audio_data) < 4 * 1024 * 1024) {
+                $mail_payload['attachments'][] = [
+                    '@odata.type'  => '#microsoft.graph.fileAttachment',
+                    'name'         => "audio_{$ticket_id}.webm",
+                    'contentType'  => 'audio/webm',
+                    'contentBytes' => base64_encode($audio_data),
+                ];
+            }
         }
     }
 
@@ -450,14 +476,14 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     $emoji_tipo_u = ['PETICIÓN'=>'💡','QUEJA'=>'😤','RECLAMO'=>'⚠️','SUGERENCIA'=>'💬','FELICITACIÓN'=>'⭐','DENUNCIA'=>'🚨'][strtoupper($tipo_pqr_raw)] ?? '📋';
 
     $cuerpo_acuse = "
-<!DOCTYPE html><html><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
+<!DOCTYPE html><html><head><style>@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');body,table,td,p,span,div{font-family:'Poppins',Arial,sans-serif!important}</style></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Poppins,Arial,sans-serif'>
 <table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
 <tr><td align='center'>
 <table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%'>
 
   <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
     ".($logo_img_html ?: "")."
-    <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Sistema PQR</p>
+    <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente</p>
     <h2 style='color:#fff;margin:6px 0 0;font-size:20px;font-weight:700'>Su solicitud fue recibida</h2>
   </td></tr>
 
@@ -513,14 +539,26 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 
     // Adjuntar su propio audio/canvas como evidencia
     if ($audio_url) {
-        $audio_ev = fetchUrlBytes($audio_url, $SB_KEY);
-        if ($audio_ev && strlen($audio_ev) < 4*1024*1024) {
-            $acuse_payload['attachments'][] = [
-                '@odata.type'  => '#microsoft.graph.fileAttachment',
-                'name'         => "su_audio_{$ticket_id}.webm",
-                'contentType'  => 'audio/webm',
-                'contentBytes' => base64_encode($audio_ev),
-            ];
+        if (strpos($audio_url, 'data:audio') === 0) {
+            preg_match('/data:audio\/([^;]+);base64,(.+)/s', $audio_url, $aum);
+            if ($aum) {
+                $acuse_payload['attachments'][] = [
+                    '@odata.type'  => '#microsoft.graph.fileAttachment',
+                    'name'         => "su_audio_{$ticket_id}.{$aum[1]}",
+                    'contentType'  => 'audio/' . $aum[1],
+                    'contentBytes' => $aum[2],
+                ];
+            }
+        } else {
+            $audio_ev = fetchUrlBytes($audio_url, $SB_KEY);
+            if ($audio_ev && strlen($audio_ev) < 4*1024*1024) {
+                $acuse_payload['attachments'][] = [
+                    '@odata.type'  => '#microsoft.graph.fileAttachment',
+                    'name'         => "su_audio_{$ticket_id}.webm",
+                    'contentType'  => 'audio/webm',
+                    'contentBytes' => base64_encode($audio_ev),
+                ];
+            }
         }
     }
     if ($canvas_url && strpos($canvas_url, 'data:image') === 0) {
