@@ -32,6 +32,9 @@ if (!$pqr_id || !$imagen_b64) {
     exit;
 }
 
+// Modo preview: solo transcribir, sin guardar en BD ni Storage
+$is_preview = str_starts_with($pqr_id, 'preview_');
+
 // Limpiar data URL si viene con prefijo
 $img_data_url = $imagen_b64;
 $mime = 'image/png';
@@ -115,7 +118,14 @@ if ($OPENAI_KEY) {
     }
 }
 
-// ── 4. Actualizar correo ─────────────────────────────────────────────
+// ── 4. En modo preview solo devolver transcripción ──────────────────
+if ($is_preview) {
+    echo json_encode(['ok'=>true,'transcripcion'=>$transcripcion,
+        'texto'=>$transcripcion,'storage_ok'=>false,'vision_usado'=>!empty($transcripcion)]);
+    exit;
+}
+
+// ── 5. Actualizar correo ─────────────────────────────────────────────
 $update = ['has_attachments'=>true, 'updated_at'=>$now];
 if ($canvas_public_url) $update['canvas_url'] = $canvas_public_url;
 if ($transcripcion) {
