@@ -390,15 +390,17 @@ if ($token) {
     if ($audio_url) {
         // Soporte para data URL base64 (enviado directo desde el formulario)
         if (strpos($audio_url, 'data:audio') === 0) {
-            preg_match('/data:audio\/([^;]+);base64,(.+)/s', $audio_url, $am);
-            if ($am) {
-                $mime_audio = 'audio/' . $am[1];
-                $ext_audio  = $am[1] === 'webm' ? 'webm' : $am[1];
+            // Usar strpos/substr en lugar de preg_match para evitar backtracking en base64 grande
+            $b64sep = strpos($audio_url, ';base64,');
+            $mime_audio = $b64sep ? substr($audio_url, 5, $b64sep - 5) : 'audio/webm';
+            $ext_audio  = (substr($mime_audio, -4) === 'webm') ? 'webm' : substr($mime_audio, strrpos($mime_audio,'/')+1);
+            $audio_b64  = $b64sep ? substr($audio_url, $b64sep + 8) : '';
+            if ($audio_b64) {
                 $mail_payload['attachments'][] = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
                     'name'         => "audio_{$ticket_id}.{$ext_audio}",
                     'contentType'  => $mime_audio,
-                    'contentBytes' => $am[2],
+                    'contentBytes' => $audio_b64,
                 ];
             }
         } else {
@@ -542,13 +544,16 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     // Audio: adjuntar solo si es < 3MB (límite Graph API inline attachment)
     if ($audio_url) {
         if (strpos($audio_url, 'data:audio') === 0) {
-            preg_match('/data:audio\/([^;]+);base64,(.+)/s', $audio_url, $aum);
-            if ($aum && strlen($aum[2]) < 3*1024*1024) { // <3MB base64
+            $b64sep2 = strpos($audio_url, ';base64,');
+            $mime_au2 = $b64sep2 ? substr($audio_url, 5, $b64sep2 - 5) : 'audio/webm';
+            $ext_au2  = (substr($mime_au2, -4) === 'webm') ? 'webm' : substr($mime_au2, strrpos($mime_au2,'/')+1);
+            $audio_b642 = $b64sep2 ? substr($audio_url, $b64sep2 + 8) : '';
+            if ($audio_b642 && strlen($audio_b642) < 3*1024*1024) {
                 $acuse_payload['attachments'][] = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
-                    'name'         => "su_audio_{$ticket_id}.{$aum[1]}",
-                    'contentType'  => 'audio/' . $aum[1],
-                    'contentBytes' => $aum[2],
+                    'name'         => "su_audio_{$ticket_id}.{$ext_au2}",
+                    'contentType'  => $mime_au2,
+                    'contentBytes' => $audio_b642,
                 ];
             }
         } else {
@@ -638,7 +643,7 @@ echo json_encode([
     'prioridad'       => $prioridad,
     'categoria'       => $categoria_ia,
     'correo_enviado'  => $correo_enviado,
-    'acuse_enviado'   => isset(\$acuse_enviado) ? \$acuse_enviado : null,
-    'acuse_code'      => isset(\$acuse_code) ? \$acuse_code : null,
+    'acuse_enviado'   => isset($acuse_enviado) ? $acuse_enviado : null,
+    'acuse_code'      => isset($acuse_code) ? $acuse_code : null,
     'mensaje'         => "Tu solicitud fue recibida exitosamente. Radicado: {$ticket_id}",
 ]);
