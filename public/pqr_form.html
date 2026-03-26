@@ -1478,7 +1478,15 @@ async function submitPQR(){
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
     });
-    if(!res.ok) throw new Error('Error '+res.status);
+    if(!res.ok){
+      // Intentar leer el body del error para mostrar causa real
+      let errMsg = 'Error '+res.status;
+      try {
+        const errData = await res.json();
+        errMsg = errData.mensaje || errData.detalle || errData.error || errMsg;
+      } catch(ignored){}
+      throw new Error(errMsg);
+    }
     const data=await res.json();
     if(!data.ok) throw new Error(data.error||'Error desconocido');
 
