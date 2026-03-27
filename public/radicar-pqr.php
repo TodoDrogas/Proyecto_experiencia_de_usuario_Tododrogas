@@ -547,7 +547,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 </table></td></tr></table></body></html>";
 
     $acuse_payload = [
-        'subject'      => "Su solicitud fue recibida · Radicado {$ticket_id} · Tododrogas CIA SAS",
+        'subject'      => "✅Su solicitud fue recibida · Radicado {$ticket_id} · Tododrogas CIA SAS",
         'importance'   => 'normal',
         'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_acuse],
         'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
