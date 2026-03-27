@@ -200,7 +200,6 @@ JSON requerido:
   "sentimiento": "positivo|neutro|negativo|urgente",
   "tono": "enojado|frustrado|triste|ansioso|neutro|satisfecho|agradecido",
   "prioridad": "baja|media|alta|critica",
-  "categoria": "frase corta en espanol",
   "nivel_riesgo": "bajo|medio|alto|critico",
   "resumen": "maximo 100 caracteres",
   "ley": "ley colombiana aplicable",
