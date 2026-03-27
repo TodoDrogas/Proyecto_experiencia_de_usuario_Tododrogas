@@ -18,8 +18,10 @@ jobs:
       - name: Generar config.js
         run: |
           cat > public/config.js << 'CONFIGEOF'
+      # ── config.js — agregar SUPABASE_ANON si existe como secret separado
           window.SUPABASE_URL        = '${{ secrets.SUPABASE_URL }}';
           window.SUPABASE_KEY        = '${{ secrets.SUPABASE_KEY }}';
+          window.SUPABASE_ANON       = '${{ secrets.SUPABASE_ANON_KEY }}';
           window.AZURE_TENANT_ID     = '${{ secrets.AZURE_TENANT_ID }}';
           window.AZURE_CLIENT_ID     = '${{ secrets.AZURE_CLIENT_ID }}';
           window.AZURE_CLIENT_SECRET = '${{ secrets.AZURE_CLIENT_SECRET }}';
@@ -42,6 +44,13 @@ jobs:
             public/nova-td-respuesta.php
             public/chatbot.php
           )
+
+          # Verificar que geo-sede.js existe en public/
+          if [ ! -f "public/geo-sede.js" ]; then
+            echo "⚠️  public/geo-sede.js no existe — agrégalo al repo"
+          else
+            echo "✅ geo-sede.js presente"
+          fi
           for f in "${PHP_FILES[@]}"; do
             [ -f "$f" ] || { echo "⚠️  $f no existe — omitiendo"; continue; }
             sed -i "s|__SB_URL__|${{ secrets.SUPABASE_URL }}|g"                     "$f"
@@ -131,17 +140,23 @@ jobs:
           sed -i "s|AZURE_CLIENT_SECRET_VAL|${{ secrets.AZURE_CLIENT_SECRET }}|g" public/adj-proxy.php
           echo "✅ adj-proxy.php generado"
 
-      # ── 6. VALIDAR SECRETS ──────────────────────────────────────
       - name: Validar secrets
         run: |
           ERRORS=0
 
+          # config.js — SUPABASE_URL no puede estar vacío (crítico para tablet)
+          if grep -q "SUPABASE_URL = '';" public/config.js; then
+            echo "❌ SUPABASE_URL vacío en config.js — tablet no podrá leer config"
+            ERRORS=$((ERRORS+1))
+          else
+            echo "✅ SUPABASE_URL presente"
+          fi
+
           # config.js — ningún valor vacío
           EMPTY=$(grep -P "= '';" public/config.js || true)
           if [ -n "$EMPTY" ]; then
-            echo "❌ Secrets vacíos en config.js:"
+            echo "⚠️  Secrets vacíos en config.js (no críticos si son opcionales):"
             echo "$EMPTY"
-            ERRORS=$((ERRORS+1))
           fi
 
           # PHP — verificar placeholders residuales solo en archivos existentes
@@ -157,8 +172,14 @@ jobs:
             fi
           done
 
+          # Verificar que geo-sede.js está en public/
+          if [ ! -f "public/geo-sede.js" ]; then
+            echo "❌ public/geo-sede.js faltante — geolocalización de sedes no funcionará"
+            ERRORS=$((ERRORS+1))
+          fi
+
           if [ $ERRORS -gt 0 ]; then
-            echo "❌ $ERRORS error(es). Revisa GitHub → Settings → Secrets."
+            echo "❌ $ERRORS error(es) crítico(s). Revisa GitHub → Settings → Secrets."
             exit 1
           fi
           echo "✅ Todos los secrets validados"
