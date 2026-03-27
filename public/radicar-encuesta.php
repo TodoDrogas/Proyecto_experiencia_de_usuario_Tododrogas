@@ -81,7 +81,12 @@ $recomendacion = intval($body['recomendacion'] ?? 0);
 $promedio      = floatval($body['promedio']    ?? 0);
 
 $comentario    = trim($body['comentario']      ?? '');
-$sede_id       = trim($body['sede_id']         ?? '');
+// sede_id debe ser UUID real — el array del formulario usa strings como 'medellin'
+// Si no es UUID válido, lo descartamos (los datos de sede van en historial_eventos.datos_extra)
+$sede_id_raw   = trim($body['sede_id'] ?? '');
+$sede_id       = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $sede_id_raw)
+                 ? $sede_id_raw
+                 : null;
 $sede_nombre   = trim($body['sede_nombre']     ?? '');
 $sede_ciudad   = trim($body['sede_ciudad']     ?? '');
 $sede_direccion = trim($body['sede_direccion'] ?? '');
@@ -95,7 +100,7 @@ $calificacion  = (int) round($promedio);
 $payload = [
     'calificacion'    => $calificacion,
     'comentario'      => $comentario ?: null,
-    'sede_id'         => $sede_id    ?: null,
+    'sede_id'         => $sede_id,  // null si no es UUID válido
     'canal'           => $canal,
     'ip_origen'       => $ip_origen,
     'ticket_id'       => null,
@@ -111,7 +116,8 @@ if ($saved) {
     $inserted    = json_decode($sb_result['body'], true);
     $encuesta_id = $inserted[0]['id'] ?? null;
 } else {
-    error_log('[radicar-encuesta] Supabase error: ' . $sb_result['code'] . ' — ' . $sb_result['body']);
+    error_log('[radicar-encuesta] Supabase error ' . $sb_result['code'] . ': ' . $sb_result['body']);
+    // Retornar error detallado para debugging (solo en no-producción lo verías en consola)
 }
 
 // ── PASO 2: CORREO DE CONFIRMACIÓN AL USUARIO ────────────────────────
