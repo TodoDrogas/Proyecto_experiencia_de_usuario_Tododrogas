@@ -324,11 +324,31 @@ html,body{height:100%;font-family:'Space Grotesk',sans-serif;background:var(--bg
         </div>
         <div class="card">
           <div class="card-head"><h3>Logo de la institución</h3><span class="badge badge-orange">PNG recomendado</span></div>
+          <!-- Opción 1: URL pública (Supabase Storage, CDN, etc.) -->
+          <div style="margin-bottom:16px;">
+            <label style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--ink3);display:block;margin-bottom:6px;">
+              URL pública del logo <span style="color:var(--blue);">*</span>
+            </label>
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="logo-url-input" class="inp" style="margin-top:0;font-family:JetBrains Mono,monospace;font-size:12px;"
+                placeholder="https://supabase.co/storage/v1/object/public/logos-config/logo.png"
+                value="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png"
+                oninput="applyLogoUrl(this.value)">
+              <button class="btn btn-primary btn-sm" onclick="applyLogoUrl(document.getElementById('logo-url-input').value)" style="white-space:nowrap;">
+                ✓ Aplicar
+              </button>
+            </div>
+            <p style="font-size:11px;color:var(--ink3);margin-top:5px;">
+              Sube el logo al bucket <strong>logos-config</strong> de Supabase Storage (público) y pega la URL aquí.
+              Esta URL se guarda en <code>configuracion_sistema</code> y la usan automáticamente todos los formularios.
+            </p>
+          </div>
+          <!-- Opción 2: Subir archivo (se guarda como base64 — solo para pruebas locales) -->
           <div class="logo-zone" id="logo-zone" onclick="document.getElementById('logo-input').click()" ondrop="dropLogo(event)" ondragover="e=>e.preventDefault()">
-            <div class="logo-preview" id="logo-preview"><span class="logo-placeholder">🏥</span></div>
+            <div class="logo-preview" id="logo-preview"><img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Logo" onerror="this.parentElement.innerHTML='<span class=&quot;logo-placeholder&quot;>🏥</span>'"></div>
             <div class="logo-info">
-              <h4>Arrastra el logo aquí o haz clic</h4>
-              <p>PNG, JPG, SVG · Máximo 2 MB · Fondo transparente recomendado</p>
+              <h4>O arrastra el logo aquí (alternativa)</h4>
+              <p>PNG, JPG, SVG · Máximo 2 MB · Se convierte a base64 para pruebas locales</p>
               <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();document.getElementById('logo-input').click()">Seleccionar archivo</button>
             </div>
           </div>
@@ -734,8 +754,16 @@ function handleLogo(input){
   const file=input.files[0]; if(!file) return;
   if(file.size>2*1024*1024){showToast('Máximo 2 MB','err');return;}
   const r=new FileReader();
-  r.onload=e=>{STATE.logo=e.target.result;document.getElementById('logo-preview').innerHTML=`<img src="${STATE.logo}" alt="Logo">`;updateQRLogo();showToast('Logo cargado');};
+  r.onload=e=>{STATE.logo=e.target.result;document.getElementById('logo-preview').innerHTML=`<img src="${STATE.logo}" alt="Logo">`;updateQRLogo();showToast('Logo cargado (base64 — usa URL para producción)');};
   r.readAsDataURL(file);
+}
+
+function applyLogoUrl(url){
+  if(!url||!url.startsWith('http')){showToast('Ingresa una URL válida (https://...)','err');return;}
+  STATE.logo=url;
+  document.getElementById('logo-preview').innerHTML=`<img src="${url}" alt="Logo" onerror="this.parentElement.innerHTML='<span class=&quot;logo-placeholder&quot;>🏥</span>'">`;
+  updateQRLogo();
+  showToast('Logo URL aplicado — guarda para publicar');
 }
 function dropLogo(e){e.preventDefault();document.getElementById('logo-input').files=e.dataTransfer.files;handleLogo(document.getElementById('logo-input'));}
 
@@ -871,18 +899,55 @@ function showToast(msg,type='success'){
 
 // INIT
 renderFrases(); renderFaq(); startPreview();
-try{
-  const saved=localStorage.getItem('pqr_config');
-  if(saved){
-    const cfg=JSON.parse(saved);
-    if(cfg.frases){STATE.frases=cfg.frases;renderFrases();}
-    if(cfg.faq){STATE.faq=cfg.faq;renderFaq();}
-    if(cfg.logo){STATE.logo=cfg.logo;document.getElementById('logo-preview').innerHTML=`<img src="${cfg.logo}" alt="Logo">`;}
-    if(cfg.colors){STATE.colors=cfg.colors;Object.entries(cfg.colors).forEach(([k,v])=>{const c=document.getElementById('c-'+k);const h=document.getElementById('h-'+k);if(c)c.value=v;if(h)h.value=v;});}
-    if(cfg.canales){STATE.canales=cfg.canales;Object.entries(cfg.canales).forEach(([k,v])=>{const key=k.replace(/([A-Z])/g,'-$1').toLowerCase();const el=document.getElementById('ch-'+key);if(el)el.value=v;});}
-    if(cfg.qrUrl){STATE.qrUrl=cfg.qrUrl;const qi=document.getElementById('qr-url-input');if(qi)qi.value=cfg.qrUrl;const ql=document.getElementById('qr-url-label');if(ql)ql.textContent=cfg.qrUrl;}
+
+// ── Aplicar config local o remota ──────────────────────────
+function applyFullConfig(cfg){
+  if(!cfg) return;
+  if(cfg.frases){STATE.frases=cfg.frases;renderFrases();}
+  if(cfg.faq){STATE.faq=cfg.faq;renderFaq();}
+  if(cfg.logo){
+    STATE.logo=cfg.logo;
+    const prev=document.getElementById('logo-preview');
+    if(prev) prev.innerHTML=`<img src="${cfg.logo}" alt="Logo">`;
+    const urlInp=document.getElementById('logo-url-input');
+    if(urlInp&&cfg.logo.startsWith('http')) urlInp.value=cfg.logo;
+    updateQRLogo();
   }
-}catch(e){}
+  if(cfg.colors){STATE.colors=cfg.colors;Object.entries(cfg.colors).forEach(([k,v])=>{const c=document.getElementById('c-'+k);const h=document.getElementById('h-'+k);if(c)c.value=v;if(h)h.value=v;});}
+  if(cfg.canales){STATE.canales=cfg.canales;Object.entries(cfg.canales).forEach(([k,v])=>{const key=k.replace(/([A-Z])/g,'-$1').toLowerCase();const el=document.getElementById('ch-'+key);if(el)el.value=v;});}
+  if(cfg.qrUrl){STATE.qrUrl=cfg.qrUrl;const qi=document.getElementById('qr-url-input');if(qi)qi.value=cfg.qrUrl;const ql=document.getElementById('qr-url-label');if(ql)ql.textContent=cfg.qrUrl;}
+  if(cfg.instName){const inp=document.getElementById('inst-name');if(inp)inp.value=cfg.instName;}
+}
+
+// 1) localStorage primero (carga instantánea)
+try{const s=localStorage.getItem('pqr_config');if(s)applyFullConfig(JSON.parse(s));}catch(e){}
+
+// 2) Luego Supabase (configuracion_sistema — sobreescribe si hay datos más frescos)
+(async()=>{
+  try{
+    if(!STATE.sbUrl||!STATE.sbKey) return;
+    const r=await fetch(`${STATE.sbUrl}/rest/v1/configuracion_sistema?id=eq.main&select=data`,
+      {headers:{apikey:STATE.sbKey,Authorization:'Bearer '+STATE.sbKey}});
+    if(!r.ok) return;
+    const rows=await r.json();
+    if(rows?.[0]?.data){
+      applyFullConfig(rows[0].data);
+      localStorage.setItem('pqr_config',JSON.stringify(rows[0].data));
+      showToast('Config sincronizada desde Supabase ✓');
+    }
+  }catch(e){console.warn('Config remota:',e);}
+})();
+
+// Precargar logo URL por defecto si no hay config guardada
+(()=>{
+  const urlInp=document.getElementById('logo-url-input');
+  if(urlInp&&!STATE.logo){
+    STATE.logo='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+    urlInp.value='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+    const prev=document.getElementById('logo-preview');
+    if(prev) prev.innerHTML=`<img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Logo">`;
+  }
+})();
 
 // Tablas
 (function(){
