@@ -246,7 +246,10 @@ html,body{height:100%;font-family:'Space Grotesk',sans-serif;background:var(--bg
     </div>
     <nav class="nav">
       <div class="nav-item active" onclick="goTo('frases',this)">
-        <span class="icon">💬</span> Frases Carrusel
+        <span class="icon">💬</span> Carrusel Bienvenida
+      </div>
+      <div class="nav-item" onclick="goTo('frases-login',this)">
+        <span class="icon">🔐</span> Carrusel Login
       </div>
       <div class="nav-item" onclick="goTo('logo',this)">
         <span class="icon">🖼</span> Logo & Colores
@@ -288,7 +291,7 @@ html,body{height:100%;font-family:'Space Grotesk',sans-serif;background:var(--bg
       <!-- FRASES -->
       <div class="page active" id="page-frases">
         <div class="section-head">
-          <h2>Frases del Carrusel</h2>
+          <h2>Frases del Carrusel de Bienvenida</h2>
           <p>Se muestran en la pantalla de bienvenida rotando. Arrastra para reordenar.</p>
         </div>
         <div class="card">
@@ -505,6 +508,55 @@ html,body{height:100%;font-family:'Space Grotesk',sans-serif;background:var(--bg
         </div>
       </div>
 
+      <!-- FRASES LOGIN -->
+      <div class="page" id="page-frases-login">
+        <div class="section-head">
+          <h2>Carrusel del Login (SIGI)</h2>
+          <p>Estas slides aparecen en el panel izquierdo de <code style="background:var(--bg3);padding:1px 6px;border-radius:4px;font-size:11px;">login.html</code> mostrando las capacidades de SIGI. Arrastra para reordenar.</p>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <h3>Slides activos</h3>
+            <span id="frases-login-count">0 slides</span>
+          </div>
+          <div class="frase-list" id="frase-login-list"></div>
+          <div class="add-frase" style="gap:8px;flex-wrap:wrap;">
+            <select id="new-frase-login-icon" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-s);padding:8px 10px;color:var(--ink);font-size:16px;cursor:pointer;font-family:'Space Grotesk',sans-serif;">
+              <option value="🤖">🤖</option><option value="🎤">🎤</option><option value="⚡">⚡</option>
+              <option value="🎫">🎫</option><option value="⚖️">⚖️</option><option value="🗺️">🗺️</option>
+              <option value="📊">📊</option><option value="⭐">⭐</option><option value="🛡️">🛡️</option>
+              <option value="🔴">🔴</option><option value="📨">📨</option><option value="🕐">🕐</option>
+              <option value="🌐">🌐</option><option value="💡">💡</option><option value="🚀">🚀</option>
+            </select>
+            <input type="text" id="new-frase-login-input" placeholder="Texto del slide: empieza con el título — descripción breve…" maxlength="140" style="flex:1;min-width:200px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-s);padding:8px 14px;color:var(--ink);font-size:13px;font-family:'Space Grotesk',sans-serif;outline:none;">
+            <button class="btn btn-success" onclick="addFraseLogin()">+ Agregar</button>
+          </div>
+          <p style="font-size:11px;color:var(--ink3);margin-top:8px;">
+            💡 Tip: el formato recomendado es <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;">Título de la función — Descripción breve del beneficio.</code>
+          </p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Vista previa del slide</h3><span class="badge badge-blue">EN VIVO</span></div>
+          <div class="preview-iframe-wrap" style="height:180px;">
+            <div class="preview-slider" style="background:linear-gradient(135deg,#060b18 0%,#0c1428 55%,#080d1a 100%);">
+              <div class="preview-slide" style="max-width:480px;text-align:center;">
+                <div id="preview-login-icon" style="font-size:32px;margin-bottom:10px;animation:slideIn .5s ease;display:block;"></div>
+                <div id="preview-login-text" style="font-size:13px;color:rgba(200,215,255,.75);line-height:1.6;animation:slideIn .5s ease;"></div>
+              </div>
+              <div class="preview-dots" id="preview-login-dots"></div>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="border-color:rgba(79,142,247,.3);background:rgba(79,142,247,.04);">
+          <div class="card-head"><h3>🔗 Cómo se aplica en login.html</h3><span class="badge badge-blue">Auto</span></div>
+          <p style="font-size:13px;color:var(--ink2);line-height:1.8;">
+            Al guardar con <strong style="color:var(--ink)">💾 Guardar cambios</strong>, el campo <code style="background:var(--bg3);padding:1px 6px;border-radius:4px;font-size:11px;">frases_login</code> queda en <code style="background:var(--bg3);padding:1px 6px;border-radius:4px;font-size:11px;">configuracion_sistema → data</code>.<br>
+            El <code style="background:var(--bg3);padding:1px 6px;border-radius:4px;font-size:11px;">login.html</code> actualizado lee <code style="background:var(--bg3);padding:1px 6px;border-radius:4px;font-size:11px;">cfg.frases_login</code> al cargar y reemplaza los slides hardcodeados.<br>
+            Si <code style="background:var(--bg3);padding:1px 6px;border-radius:4px;font-size:11px;">frases_login</code> no existe en la config (instalación anterior), el login usa sus defaults SIGI sin errores.
+          </p>
+        </div>
+      </div>
+
       <!-- SEDES -->
       <div class="page" id="page-sedes">
         <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;">
@@ -654,6 +706,12 @@ html,body{height:100%;font-family:'Space Grotesk',sans-serif;background:var(--bg
 </div>
 
 <script>
+// ── CREDENCIALES — vienen de config.js (deploy.yml inyecta los secrets) ──
+// NUNCA se guardan en localStorage. Si config.js no está, el panel avisa.
+const SB_URL  = window.SUPABASE_URL  || '';
+const SB_KEY  = window.SUPABASE_KEY  || '';   // service key — solo en este panel admin
+const SB_ANON = window.SUPABASE_KEY  || '';   // misma key por ahora; separar si hay anon pública
+
 const STATE = {
   frases:[
     {id:1,text:'Tu voz importa — radica tu PQR en segundos'},
@@ -661,6 +719,16 @@ const STATE = {
     {id:3,text:'Confidencial · Tu información está protegida'},
     {id:4,text:'Respuesta garantizada en máximo 15 días hábiles'},
     {id:5,text:'Elige el canal que más te convenga: correo, chat, audio o escritura'},
+  ],
+  frases_login:[
+    {id:101,icon:'🤖',text:'NOVA TD clasifica cada caso al instante — Detecta sentimiento, urgencia y ley aplicable.'},
+    {id:102,icon:'🎤',text:'Radicación por voz, lápiz o texto — El ciudadano habla, dibuja o escribe desde cualquier sede.'},
+    {id:103,icon:'⚡',text:'Respuesta automática en segundos — Acuse de recibo inteligente enviado al instante de radicar.'},
+    {id:104,icon:'🎫',text:'Ticket único trazable TD-YYYYMMDD-XXXX — Con validez jurídica ante organismos de control colombianos.'},
+    {id:105,icon:'⚖️',text:'Ley colombiana aplicada automáticamente — SLA calculado y límite de respuesta asignado en tiempo real.'},
+    {id:106,icon:'🗺️',text:'Red de sedes unificada en un panel — Tablets en cada punto de atención conectadas al mismo sistema.'},
+    {id:107,icon:'📊',text:'Dashboard de métricas en vivo — Casos por estado, sede y agente. Gráficas en tiempo real.'},
+    {id:108,icon:'⭐',text:'Encuestas post-atención automáticas — Calificación por sede y reporte descargable al instante.'},
   ],
   logo:null,
   colors:{primary:'#2563eb',dark:'#0a0e1a',light:'#f2f4f8',accent:'#16a34a'},
@@ -679,7 +747,7 @@ const STATE = {
   },
   qrUrl: (window.location.origin || 'https://tododrogas.online') + '/pqr_bienvenida.html',
   instName:'Tododrogas',
-  sbUrl:'', sbKey:'', sbAnon:'', nextId:10,
+  nextId:10, nextIdLogin:200,
 };
 
 let qrInstance=null, previewInterval=null, previewIdx=0, dragSrc=null;
@@ -690,10 +758,11 @@ function goTo(page,el){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
   el.classList.add('active');
-  const T={frases:'Frases del Carrusel',logo:'Logo & Colores',faq:'Preguntas Frecuentes',canales:'Canales de Contacto',qr:'Código QR',sedes:'Gestión de Sedes',supabase:'Conexión BD'};
+  const T={frases:'Carrusel Bienvenida','frases-login':'Carrusel Login (SIGI)',logo:'Logo & Colores',faq:'Preguntas Frecuentes',canales:'Canales de Contacto',qr:'Código QR',sedes:'Gestión de Sedes',supabase:'Conexión BD'};
   document.getElementById('topbar-title').textContent=T[page]||page;
   if(page==='qr') setTimeout(generateQR,100);
   if(page==='frases') startPreview(); else stopPreview();
+  if(page==='frases-login') startPreviewLogin(); else stopPreviewLogin();
   if(page==='sedes') syncSedes();
 }
 
@@ -731,6 +800,76 @@ function addFrase(){
 function delFrase(id){
   if(STATE.frases.length<=1){showToast('Necesitas al menos 1 frase','err');return;}
   STATE.frases=STATE.frases.filter(f=>f.id!==id); renderFrases();
+}
+
+// ── FRASES LOGIN ─────────────────────────────────────────────────────
+let previewLoginInterval=null, previewLoginIdx=0, dragSrcLogin=null;
+
+const ICONS_LOGIN=['🤖','🎤','⚡','🎫','⚖️','🗺️','📊','⭐','🛡️','🔴','📨','🕐','🌐','💡','🚀'];
+
+function renderFrasesLogin(){
+  const list=document.getElementById('frase-login-list');
+  if(!list) return;
+  list.innerHTML='';
+  STATE.frases_login.forEach((f,i)=>{
+    const div=document.createElement('div');
+    div.className='frase-item'; div.draggable=true; div.dataset.id=f.id;
+    div.innerHTML=`
+      <span class="drag-handle" title="Arrastra">⠿</span>
+      <span class="frase-num">${String(i+1).padStart(2,'0')}</span>
+      <select class="frase-icon-sel" onchange="STATE.frases_login[${i}].icon=this.value;updatePreviewLogin()" style="background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--ink);font-size:16px;padding:2px 4px;width:42px;cursor:pointer;">
+        ${ICONS_LOGIN.map(ic=>`<option value="${ic}" ${ic===f.icon?'selected':''}>${ic}</option>`).join('')}
+      </select>
+      <input class="frase-text" value="${escHtml(f.text)}" maxlength="140" style="flex:1" oninput="STATE.frases_login[${i}].text=this.value;updatePreviewLogin()">
+      <button class="frase-del" onclick="delFraseLogin(${f.id})">✕</button>`;
+    div.addEventListener('dragstart',e=>{dragSrcLogin=div;e.dataTransfer.effectAllowed='move';div.style.opacity='.4';});
+    div.addEventListener('dragend',()=>{div.style.opacity='1';});
+    div.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';});
+    div.addEventListener('drop',e=>{
+      e.preventDefault();
+      if(dragSrcLogin!==div){
+        const si=STATE.frases_login.findIndex(x=>x.id===parseInt(dragSrcLogin.dataset.id));
+        const di=STATE.frases_login.findIndex(x=>x.id===parseInt(div.dataset.id));
+        const [m]=STATE.frases_login.splice(si,1); STATE.frases_login.splice(di,0,m);
+        renderFrasesLogin(); updatePreviewLogin();
+      }
+    });
+    list.appendChild(div);
+  });
+  document.getElementById('frases-login-count').textContent=STATE.frases_login.length+' slides';
+  updatePreviewLogin();
+}
+
+function addFraseLogin(){
+  const inp=document.getElementById('new-frase-login-input');
+  const text=inp.value.trim();
+  if(!text){showToast('Escribe el texto del slide primero','err');return;}
+  const iconSel=document.getElementById('new-frase-login-icon');
+  const icon=iconSel?iconSel.value:'💡';
+  STATE.frases_login.push({id:STATE.nextIdLogin++,icon,text});
+  inp.value=''; renderFrasesLogin(); showToast('Slide agregado al carrusel login');
+}
+
+function delFraseLogin(id){
+  if(STATE.frases_login.length<=1){showToast('Necesitas al menos 1 slide','err');return;}
+  STATE.frases_login=STATE.frases_login.filter(f=>f.id!==id); renderFrasesLogin();
+}
+
+function startPreviewLogin(){
+  stopPreviewLogin(); previewLoginIdx=0; updatePreviewLogin();
+  previewLoginInterval=setInterval(()=>{previewLoginIdx=(previewLoginIdx+1)%STATE.frases_login.length;updatePreviewLogin();},2800);
+}
+function stopPreviewLogin(){if(previewLoginInterval){clearInterval(previewLoginInterval);previewLoginInterval=null;}}
+function updatePreviewLogin(){
+  if(!STATE.frases_login.length) return;
+  const f=STATE.frases_login[previewLoginIdx%STATE.frases_login.length];
+  const ic=document.getElementById('preview-login-icon');
+  const tx=document.getElementById('preview-login-text');
+  if(ic){ic.style.animation='none';ic.offsetHeight;ic.style.animation='slideIn .5s ease';ic.textContent=f.icon||'💬';}
+  if(tx){tx.style.animation='none';tx.offsetHeight;tx.style.animation='slideIn .5s ease';tx.innerHTML=f.text.replace(/^([^—]+)—/,'<strong>$1</strong>—');}
+  const dots=document.getElementById('preview-login-dots');
+  if(dots) dots.innerHTML=STATE.frases_login.map((_,i)=>
+    `<span class="${i===(previewLoginIdx%STATE.frases_login.length)?'active':''}"></span>`).join('');
 }
 
 // PREVIEW
@@ -818,49 +957,58 @@ function downloadQR(){
 }
 function copyQRLink(){navigator.clipboard.writeText(STATE.qrUrl).then(()=>showToast('URL copiada'));}
 
-// SUPABASE
+// SUPABASE — sección de diagnóstico (las credenciales vienen de config.js, no del formulario)
 async function testSupabase(){
-  const url=document.getElementById('sb-url').value.trim();
-  const key=document.getElementById('sb-key').value.trim();
   const el=document.getElementById('sb-status');
-  if(!url||!key){showToast('Ingresa URL y Key','err');return;}
+  if(!SB_URL||!SB_KEY){
+    el.className='sb-status err';
+    el.innerHTML='<span>✕</span> config.js sin credenciales — verifica el deploy (GitHub Secrets)';
+    return;
+  }
   el.className='sb-status idle'; el.innerHTML='<span>↻</span> Probando…';
   try{
-    const r=await fetch(`${url}/rest/v1/sedes?limit=1`,{headers:{apikey:key,Authorization:'Bearer '+key}});
+    const r=await fetch(`${SB_URL}/rest/v1/sedes?limit=1`,{headers:sbH()});
     if(r.ok||r.status===200){
-      el.className='sb-status ok';el.innerHTML='<span>✓</span> Conexión exitosa';
-      STATE.sbUrl=url;STATE.sbKey=key;
-      STATE.sbAnon=document.getElementById('sb-anon').value.trim();
-      localStorage.setItem('td_sb_cfg',JSON.stringify({url,key,anon:STATE.sbAnon}));
-      showToast('Conectado ✓');
+      el.className='sb-status ok';el.innerHTML='<span>✓</span> Conexión exitosa · Credenciales desde config.js';
+      showToast('Supabase conectado ✓');
       syncSedes();
-    } else throw new Error('Status '+r.status);
+    } else throw new Error('HTTP '+r.status);
   }catch(e){el.className='sb-status err';el.innerHTML='<span>✕</span> Error: '+e.message;}
 }
 function saveSupabase(){
-  STATE.sbUrl=document.getElementById('sb-url').value.trim();
-  STATE.sbKey=document.getElementById('sb-key').value.trim();
-  STATE.sbAnon=document.getElementById('sb-anon').value.trim();
-  localStorage.setItem('td_sb_cfg',JSON.stringify({url:STATE.sbUrl,key:STATE.sbKey,anon:STATE.sbAnon}));
+  // Las credenciales son de solo lectura (vienen de config.js via deploy)
+  // Este botón solo actualiza el snippet de referencia
   updateBienvenidaSnippet();
-  showToast('Credenciales guardadas');
+  showToast('Credenciales provienen de config.js — no hay nada que guardar manualmente');
 }
 
-// GUARDAR
+// GUARDAR — SOLO SUPABASE, nunca localStorage
 async function saveAll(){
+  if(!checkSB()) return;
   saveCanales();
   const cfg=buildConfig();
-  if(STATE.sbUrl&&STATE.sbKey){
-    try{
-      const r=await fetch(`${STATE.sbUrl}/rest/v1/configuracion_sistema`,{method:'POST',headers:{apikey:STATE.sbKey,Authorization:'Bearer '+STATE.sbKey,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},body:JSON.stringify({id:'main',data:cfg,updated_at:new Date().toISOString()})});
-      if(r.ok||r.status===201){showToast('Guardado en Supabase ✓ — La tablet se actualizará');return;}
-    }catch(e){}
+  const btn=document.querySelector('.btn-primary[onclick="saveAll()"]');
+  if(btn){btn.disabled=true;btn.textContent='Guardando…';}
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/configuration_sistema`,{
+      method:'POST',
+      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
+      body:JSON.stringify({id:'main',data:cfg,updated_at:new Date().toISOString()})
+    });
+    if(r.ok||r.status===201||r.status===204){
+      showToast('✓ Guardado en Supabase — tablet y login se actualizarán en ≤30 s');
+    } else {
+      const txt=await r.text();
+      showToast('Error Supabase '+r.status+': '+txt.slice(0,120),'err');
+    }
+  }catch(e){
+    showToast('Error de red: '+e.message+' — verifica conexión','err');
+  } finally {
+    if(btn){btn.disabled=false;btn.textContent='💾 Guardar cambios';}
   }
-  try{localStorage.setItem('pqr_config',JSON.stringify(cfg));showToast('Guardado localmente');}
-  catch(e){showToast('Error: '+e.message,'err');}
 }
 function buildConfig(){
-  return{frases:STATE.frases,colors:STATE.colors,logo:STATE.logo,faq:STATE.faq,canales:STATE.canales,qrUrl:STATE.qrUrl,instName:document.getElementById('inst-name')?.value||STATE.instName,updatedAt:new Date().toISOString()};
+  return{frases:STATE.frases,frases_login:STATE.frases_login,colors:STATE.colors,logo:STATE.logo,faq:STATE.faq,canales:STATE.canales,qrUrl:STATE.qrUrl,instName:document.getElementById('inst-name')?.value||STATE.instName,updatedAt:new Date().toISOString()};
 }
 function exportConfig(){
   const blob=new Blob([JSON.stringify(buildConfig(),null,2)],{type:'application/json'});
@@ -871,22 +1019,18 @@ function exportConfig(){
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 let toastT;
 function updateBienvenidaSnippet(){
-  const url = STATE.sbUrl || document.getElementById('sb-url').value.trim();
-  const anon = STATE.sbAnon || document.getElementById('sb-anon').value.trim();
   const el = document.getElementById('bienvenida-snippet');
   if(!el) return;
-  if(!url || !anon){
-    el.textContent = 'Ingresa URL y Anon Key y haz clic en "Guardar" para ver el código.';
+  if(!SB_URL || SB_URL===''){
+    el.textContent = '⚠ config.js sin credenciales — ejecuta el deploy para que los secrets queden inyectados.';
     return;
   }
-  el.innerHTML = `<span style="color:var(--ink3);">// En pqr_bienvenida.html busca estas dos líneas y reemplaza:</span>\nconst SB_URL  = '<span style="color:var(--green);">${escHtml(url)}</span>';\nconst SB_ANON = '<span style="color:var(--green);">${escHtml(anon)}</span>';`;
+  el.innerHTML = `<span style="color:var(--ink3);">// Estas constantes ya están en config.js (inyectadas por deploy.yml)</span>\n<span style="color:var(--ink3);">// No necesitas cambiarlas manualmente en pqr_bienvenida.html ni login.html</span>\nwindow.SUPABASE_URL = '<span style="color:var(--green);">${escHtml(SB_URL)}</span>';\nwindow.SUPABASE_KEY = '<span style="color:var(--green);">[inyectado por deploy — no se muestra]</span>';`;
 }
 function copyBienvenidaSnippet(){
-  const url = STATE.sbUrl || document.getElementById('sb-url').value.trim();
-  const anon = STATE.sbAnon || document.getElementById('sb-anon').value.trim();
-  if(!url||!anon){showToast('Ingresa URL y Anon Key primero','err');return;}
-  const txt = `const SB_URL  = '${url}';\nconst SB_ANON = '${anon}';`;
-  navigator.clipboard.writeText(txt).then(()=>showToast('Copiado — pégalo en pqr_bienvenida.html'));
+  if(!SB_URL){showToast('config.js sin credenciales — ejecuta el deploy','err');return;}
+  const txt = `// Credenciales inyectadas automáticamente por config.js (deploy.yml)\n// SUPABASE_URL: ${SB_URL}`;
+  navigator.clipboard.writeText(txt).then(()=>showToast('Info copiada'));
 }
 function showToast(msg,type='success'){
   const el=document.getElementById('toast');
@@ -898,12 +1042,43 @@ function showToast(msg,type='success'){
 }
 
 // INIT
-renderFrases(); renderFaq(); startPreview();
+renderFrases(); renderFrasesLogin(); renderFaq(); startPreview();
 
-// ── Aplicar config local o remota ──────────────────────────
+// ── Carga config SOLO desde Supabase (fuente de verdad única) ──────
+(async()=>{
+  if(!SB_URL||!SB_KEY){
+    showToast('⚠ config.js sin credenciales Supabase — verifica el deploy','err');
+    updateBienvenidaSnippet();
+    return;
+  }
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/configuration_sistema?id=eq.main&select=data`,
+      {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const rows=await r.json();
+    if(rows?.[0]?.data){
+      applyFullConfig(rows[0].data);
+      showToast('Config cargada desde Supabase ✓');
+    } else {
+      showToast('Sin config en Supabase — usando defaults. Guarda para publicar.','err');
+    }
+  }catch(e){
+    showToast('No se pudo cargar config: '+e.message,'err');
+  }
+  updateBienvenidaSnippet();
+  // Poblar campos de la sección Supabase con la URL visible (sin la key)
+  const su=document.getElementById('sb-url'); if(su) su.value=SB_URL;
+  const sk=document.getElementById('sb-key'); if(sk) sk.value='[inyectado por deploy.yml]';
+  const sa=document.getElementById('sb-anon'); if(sa) sa.value='[inyectado por deploy.yml]';
+  // Sincronizar sedes
+  syncSedes();
+})();
+
+// ── Aplicar config desde Supabase ──────────────────────────
 function applyFullConfig(cfg){
   if(!cfg) return;
   if(cfg.frases){STATE.frases=cfg.frases;renderFrases();}
+  if(cfg.frases_login){STATE.frases_login=cfg.frases_login;renderFrasesLogin();}
   if(cfg.faq){STATE.faq=cfg.faq;renderFaq();}
   if(cfg.logo){
     STATE.logo=cfg.logo;
@@ -919,61 +1094,50 @@ function applyFullConfig(cfg){
   if(cfg.instName){const inp=document.getElementById('inst-name');if(inp)inp.value=cfg.instName;}
 }
 
-// 1) localStorage primero (carga instantánea)
-try{const s=localStorage.getItem('pqr_config');if(s)applyFullConfig(JSON.parse(s));}catch(e){}
-
-// 2) Luego Supabase (configuracion_sistema — sobreescribe si hay datos más frescos)
-(async()=>{
-  try{
-    if(!STATE.sbUrl||!STATE.sbKey) return;
-    const r=await fetch(`${STATE.sbUrl}/rest/v1/configuracion_sistema?id=eq.main&select=data`,
-      {headers:{apikey:STATE.sbKey,Authorization:'Bearer '+STATE.sbKey}});
-    if(!r.ok) return;
-    const rows=await r.json();
-    if(rows?.[0]?.data){
-      applyFullConfig(rows[0].data);
-      localStorage.setItem('pqr_config',JSON.stringify(rows[0].data));
-      showToast('Config sincronizada desde Supabase ✓');
-    }
-  }catch(e){console.warn('Config remota:',e);}
-})();
-
-// Precargar logo URL por defecto si no hay config guardada
-(()=>{
-  const urlInp=document.getElementById('logo-url-input');
-  if(urlInp&&!STATE.logo){
-    STATE.logo='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
-    urlInp.value='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
-    const prev=document.getElementById('logo-preview');
-    if(prev) prev.innerHTML=`<img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Logo">`;
-  }
-})();
-
-// Tablas
+// Tabla de estado de tablas Supabase (nombres correctos)
 (function(){
-  const tables=[['pqrs','Radicados','OK'],['correos','Correos entrantes','OK'],['historial','Historial','OK'],['historial_eventos','Línea de tiempo','OK'],['agentes','Agentes','OK'],['adjuntos','Adjuntos','OK'],['chat_mensajes','Chatbot','OK'],['respuestas','Respuestas','OK'],['config_sistema','Config panel','OK'],['sedes','Sedes por GPS','OK'],['encuestas_satisfaccion','Encuestas satisfacción','OK']];
+  const tables=[
+    ['correos','Radicados / Correos','OK'],
+    ['historial_eventos','Línea de tiempo','OK'],
+    ['agents','Agentes','OK'],
+    ['adjuntos','Adjuntos','OK'],
+    ['chat_mensajes','Chatbot','OK'],
+    ['respuestas','Respuestas','OK'],
+    ['configuration_sistema','Config panel','OK'],
+    ['sedes','Sedes por GPS','OK'],
+    ['encuestas_satisfaccion','Encuestas satisfacción','OK'],
+    ['knowledge_base','Base de conocimiento','OK'],
+  ];
   const el=document.getElementById('tables-list');
-  if(el)el.innerHTML=tables.map(([t,d,s])=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-s);"><span style="font-family:JetBrains Mono,monospace;font-size:12px;color:var(--blue);min-width:200px;">${t}</span><span style="font-size:12px;color:var(--ink2);flex:1;">${d}</span><span class="badge ${s==='OK'?'badge-green':'badge-orange'}">${s}</span></div>`).join('');
+  if(el)el.innerHTML=tables.map(([t,d,s])=>`<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-s);"><span style="font-family:JetBrains Mono,monospace;font-size:12px;color:var(--blue);min-width:220px;">${t}</span><span style="font-size:12px;color:var(--ink2);flex:1;">${d}</span><span class="badge ${s==='OK'?'badge-green':'badge-orange'}">${s}</span></div>`).join('');
 })();
 
-// ── SEDES ──────────────────────────────────────────
-function sbH(extra={}){return{apikey:STATE.sbKey,Authorization:'Bearer '+STATE.sbKey,'Content-Type':'application/json',...extra};}
+// ── SUPABASE HELPERS ────────────────────────────────────────────────
+function sbH(extra={}){return{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',...extra};}
+function sbHAnon(extra={}){return{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Content-Type':'application/json',...extra};}
 
+function checkSB(){
+  if(!SB_URL||!SB_KEY){
+    showToast('⚠ config.js sin credenciales Supabase — verifica deploy','err');
+    return false;
+  }
+  return true;
+}
+
+// ── SEDES ──────────────────────────────────────────────────────────
 async function syncSedes(){
-  if(!STATE.sbUrl||!STATE.sbKey){
-    try{SEDES=JSON.parse(localStorage.getItem('td_sedes')||'[]');renderSedes();}catch(_){}
+  if(!SB_URL||!SB_KEY){
+    showToast('Sin credenciales Supabase — verifica el deploy','err');
     return;
   }
   try{
-    const r=await fetch(`${STATE.sbUrl}/rest/v1/sedes?select=*&order=created_at.asc`,{headers:sbH()});
+    const r=await fetch(`${SB_URL}/rest/v1/sedes?select=*&order=nombre.asc`,{headers:sbH()});
     if(!r.ok) throw new Error('HTTP '+r.status);
     SEDES=await r.json();
-    localStorage.setItem('td_sedes',JSON.stringify(SEDES));
     renderSedes();
     showToast('Sedes sincronizadas ('+SEDES.length+')');
   }catch(e){
     showToast('Error cargando sedes: '+e.message,'err');
-    try{SEDES=JSON.parse(localStorage.getItem('td_sedes')||'[]');renderSedes();}catch(_){}
   }
 }
 
@@ -1058,6 +1222,7 @@ function openModalMaps(){
   window.open((!isNaN(lat)&&!isNaN(lng))?`https://www.google.com/maps?q=${lat},${lng}&z=17`:'https://www.google.com/maps','_blank');
 }
 async function saveSede(){
+  if(!checkSB()) return;
   const id=document.getElementById('m-id').value.trim();
   const nombre=document.getElementById('m-nombre').value.trim();
   const direccion=document.getElementById('m-direccion').value.trim();
@@ -1065,42 +1230,37 @@ async function saveSede(){
   const lng=parseFloat(document.getElementById('m-lng').value);
   if(!id||!nombre||!direccion||isNaN(lat)||isNaN(lng)){showToast('Completa los campos obligatorios (*)','err');return;}
   const sede={id,nombre,direccion,ciudad:document.getElementById('m-ciudad').value.trim()||'Ibagué',telefono:document.getElementById('m-telefono').value.trim()||null,encargado:document.getElementById('m-encargado').value.trim()||null,lat,lng,radio_m:parseInt(document.getElementById('m-radio').value)||300,activa:document.getElementById('m-tog').classList.contains('on')};
-  if(STATE.sbUrl&&STATE.sbKey){
-    try{
-      const r=await fetch(`${STATE.sbUrl}/rest/v1/sedes`,{method:'POST',headers:{...sbH(),Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(sede)});
-      if(!r.ok){const t=await r.text();throw new Error(t);}
-      showToast(sedeEditId?'Sede actualizada ✓':'Sede creada ✓');
-    }catch(e){showToast('Error Supabase: '+e.message,'err');}
-  } else {showToast('Sin Supabase — guardado local','err');}
-  const idx=SEDES.findIndex(s=>s.id===id);
-  if(idx>=0) SEDES[idx]={...SEDES[idx],...sede}; else SEDES.push(sede);
-  localStorage.setItem('td_sedes',JSON.stringify(SEDES));
-  renderSedes(); closeSedeModal();
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/sedes`,{method:'POST',headers:{...sbH(),Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(sede)});
+    if(!r.ok){const t=await r.text();throw new Error(t);}
+    showToast(sedeEditId?'Sede actualizada ✓':'Sede creada ✓');
+    await syncSedes();
+    closeSedeModal();
+  }catch(e){showToast('Error Supabase: '+e.message,'err');}
 }
 async function deleteSede(id){
+  if(!checkSB()) return;
   const s=SEDES.find(x=>x.id===id); if(!s) return;
   if(!confirm(`¿Eliminar "${s.nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
-  if(STATE.sbUrl&&STATE.sbKey){
-    try{
-      const r=await fetch(`${STATE.sbUrl}/rest/v1/sedes?id=eq.${id}`,{method:'DELETE',headers:sbH()});
-      if(!r.ok) throw new Error('HTTP '+r.status);
-    }catch(e){showToast('Error al eliminar: '+e.message,'err');return;}
-  }
-  SEDES=SEDES.filter(x=>x.id!==id);
-  localStorage.setItem('td_sedes',JSON.stringify(SEDES));
-  renderSedes(); showToast('Sede eliminada');
+  try{
+    const r=await fetch(`${SB_URL}/rest/v1/sedes?id=eq.${id}`,{method:'DELETE',headers:sbH()});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    SEDES=SEDES.filter(x=>x.id!==id);
+    renderSedes(); showToast('Sede eliminada');
+  }catch(e){showToast('Error al eliminar: '+e.message,'err');}
 }
 
-// Restaurar credenciales Supabase
-try{
-  const sc=JSON.parse(localStorage.getItem('td_sb_cfg')||'{}');
-  if(sc.url){document.getElementById('sb-url').value=sc.url;STATE.sbUrl=sc.url;}
-  if(sc.anon){document.getElementById('sb-anon').value=sc.anon;STATE.sbAnon=sc.anon;}
-  if(sc.key){document.getElementById('sb-key').value=sc.key;STATE.sbKey=sc.key;}
-  updateBienvenidaSnippet();
-}catch(_){}
-
 document.getElementById('new-frase-input').addEventListener('keydown',e=>{if(e.key==='Enter')addFrase();});
+// Precargar logo URL por defecto si no hay config guardada
+(()=>{
+  const urlInp=document.getElementById('logo-url-input');
+  if(urlInp&&!STATE.logo){
+    STATE.logo='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+    urlInp.value=STATE.logo;
+    const prev=document.getElementById('logo-preview');
+    if(prev) prev.innerHTML=`<img src="${STATE.logo}" alt="Logo">`;
+  }
+})();
 </script>
 </body>
 </html>
