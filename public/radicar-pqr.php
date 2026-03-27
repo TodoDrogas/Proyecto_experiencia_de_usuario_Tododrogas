@@ -161,6 +161,19 @@ $transcripcion = trim($body['transcripcion'] ?? '');
 $audio_url    = trim($body['audio_url']    ?? '');
 $canvas_url   = trim($body['canvas_url']   ?? '');
 
+// ── SEDE (detectada por GPS o elegida manualmente en el formulario) ───
+// El frontend envía sede_id (UUID), sede_nombre, sede_ciudad, sede_direccion
+// Si no hay UUID válido, se guarda solo en historial_eventos (datos_extra)
+$sede_id_raw    = trim($body['sede_id']        ?? '');
+$sede_nombre    = trim($body['sede_nombre']    ?? '');
+$sede_ciudad    = trim($body['sede_ciudad']    ?? '');
+$sede_direccion = trim($body['sede_direccion'] ?? '');
+$sede_manual    = !empty($body['sede_manual']); // true = el usuario la cambió a mano
+
+// Validar UUID v4 (tabla correos.sede_id si existe, sino null)
+$sede_id = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $sede_id_raw)
+           ? $sede_id_raw : null;
+
 // FIX: leer medio declarado por el formulario
 $medio_form   = strtolower(trim($body['medio'] ?? ''));
 $tiene_audio  = !empty($body['tiene_audio']);
@@ -303,6 +316,9 @@ $payload_correo = [
     'received_at'       => $now,
     'created_at'        => $now,
     'updated_at'        => $now,
+    // Sede detectada por GPS o elegida manualmente
+    // sede_id solo si es UUID válido (evita error FK en Supabase)
+    'sede_id'           => $sede_id,
 ];
 
 $sb_result = sbPost($SB_URL, $SB_KEY, 'correos', $payload_correo);
@@ -347,6 +363,10 @@ if ($token) {
           <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$fecha_fmt}</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Canal</td>
           <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$badge_canal}</td></tr>
+      <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Sede</td>
+          <td style='padding:8px 12px;border:1px solid #e2e8f0'>" .
+          ($sede_nombre ? "<strong>{$sede_nombre}</strong>" . ($sede_ciudad ? " · {$sede_ciudad}" : '') . ($sede_manual ? " <span style='background:#fef3c7;color:#92400e;font-size:11px;padding:1px 7px;border-radius:10px;font-weight:600'>Cambio manual</span>" : " <span style='background:#dcfce7;color:#166534;font-size:11px;padding:1px 7px;border-radius:10px;font-weight:600'>GPS detectada</span>") : "<span style='color:#9ca3af;font-size:12px'>No especificada</span>") .
+          "</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Tipo</td>
           <td style='padding:8px 12px;border:1px solid #e2e8f0'><strong>" . strtoupper($tipo_pqr) . "</strong> — {$categoria_ia}</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Sentimiento</td>
@@ -640,6 +660,10 @@ if ($correo_id) {
             'categoria_ia'   => $categoria_ia,
             'correo_enviado' => $correo_enviado,
             'horas_sla'      => $horas_sla,
+            'sede_id'        => $sede_id,
+            'sede_nombre'    => $sede_nombre,
+            'sede_ciudad'    => $sede_ciudad,
+            'sede_manual'    => $sede_manual,
         ]),
         'created_at' => $now,
     ], 'return=minimal');
@@ -658,5 +682,7 @@ echo json_encode([
     'correo_enviado'  => $correo_enviado,
     'acuse_enviado'   => isset($acuse_enviado) ? $acuse_enviado : null,
     'acuse_code'      => isset($acuse_code) ? $acuse_code : null,
+    'sede_nombre'     => $sede_nombre ?: null,
+    'sede_id'         => $sede_id,
     'mensaje'         => "Tu solicitud fue recibida exitosamente. Radicado: {$ticket_id}",
 ]);
