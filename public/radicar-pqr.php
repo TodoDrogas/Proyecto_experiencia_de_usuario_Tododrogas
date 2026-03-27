@@ -94,18 +94,20 @@ try {
     $cfg_data = $cfg_rows[0]['data'] ?? [];
     if (!empty($cfg_data['logo'])) {
         $logo_url = $cfg_data['logo'];
-        // Intentar embeber como base64 para que funcione en clientes de correo sin autenticación
+
+        // Correo interno (Outlook/pqrsfd) → base64 embebido
         $logo_data = fetchUrlBytes($logo_url, $SB_KEY);
         if ($logo_data && strlen($logo_data) < 200*1024) {
-            // Detectar tipo de imagen
             $finfo = new finfo(FILEINFO_MIME_TYPE);
             $logo_mime = $finfo->buffer($logo_data) ?: 'image/png';
             $logo_b64  = base64_encode($logo_data);
             $logo_img_html = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
         } else {
-            // Fallback a URL directa
             $logo_img_html = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
         }
+
+        // Acuse al usuario (Gmail) → siempre URL directa (Gmail bloquea base64 inline)
+        $logo_img_html_usuario = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
     }
 } catch (Exception $e) { /* sin logo */ }
 
