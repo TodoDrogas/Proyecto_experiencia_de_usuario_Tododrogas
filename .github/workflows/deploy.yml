@@ -15,7 +15,6 @@ jobs:
         uses: actions/checkout@v4
 
       # ── 2. CONFIG.JS ────────────────────────────────────────────
-      # NOTA: el cierre del heredoc (CONFIGEOF) debe estar en columna 0
       - name: Generar config.js
         run: |
           cat > public/config.js << 'CONFIGEOF'
@@ -33,12 +32,11 @@ jobs:
           echo "✅ config.js generado"
 
       # ── 3. INYECTAR SECRETS EN PHP ──────────────────────────────
-      # FIX 1: [ -f ] antes de sed — evita error si el archivo no existe en el repo
-      # FIX 2: ahora también inyecta __AZURE_* y __GRAPH_USER_ID__ en radicar-pqr.php
       - name: Inyectar secrets en PHP
         run: |
           PHP_FILES=(
             public/radicar-pqr.php
+            public/radicar-encuesta.php
             public/transcribir-audio.php
             public/procesar-canvas.php
             public/nova-td-respuesta.php
@@ -134,7 +132,6 @@ jobs:
           echo "✅ adj-proxy.php generado"
 
       # ── 6. VALIDAR SECRETS ──────────────────────────────────────
-      # FIX 3: no falla por archivos ausentes; verifica TODOS los placeholders
       - name: Validar secrets
         run: |
           ERRORS=0
@@ -149,7 +146,7 @@ jobs:
 
           # PHP — verificar placeholders residuales solo en archivos existentes
           PLACEHOLDERS='__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_TENANT_ID__\|__AZURE_CLIENT_ID__\|__AZURE_CLIENT_SECRET__\|__GRAPH_USER_ID__'
-          for f in public/radicar-pqr.php public/transcribir-audio.php public/procesar-canvas.php; do
+          for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php; do
             [ -f "$f" ] || continue
             if grep -q "$PLACEHOLDERS" "$f"; then
               echo "❌ Placeholders sin reemplazar en $f"
@@ -197,7 +194,6 @@ jobs:
           strip_components: 1
 
       # ── 9. VERIFICAR DEPLOY ─────────────────────────────────────
-      # FIX 4: sin POST real a prod (evita tickets falsos); solo sintaxis PHP + nginx
       - name: Verificar deploy
         uses: appleboy/ssh-action@v1
         with:
@@ -213,6 +209,7 @@ jobs:
             echo "--- Sintaxis PHP ---"
             ERRORS=0
             for f in /var/www/pqr/radicar-pqr.php \
+                     /var/www/pqr/radicar-encuesta.php \
                      /var/www/pqr/transcribir-audio.php \
                      /var/www/pqr/procesar-canvas.php \
                      /var/www/pqr/api-token.php \
