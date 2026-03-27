@@ -487,7 +487,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 <table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%'>
 
   <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
-    ".($logo_img_html ?: "")."
+    ".($logo_img_html_usuario ?: "")."
     <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente</p>
     <h2 style='color:#fff;margin:6px 0 0;font-size:20px;font-weight:700'>Su solicitud fue recibida</h2>
   </td></tr>
