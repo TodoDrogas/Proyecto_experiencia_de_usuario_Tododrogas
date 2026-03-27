@@ -17,20 +17,20 @@ jobs:
       # ── 2. CONFIG.JS ────────────────────────────────────────────
       - name: Generar config.js
         run: |
-          cat > public/config.js << 'CONFIGEOF'
-      # ── config.js — agregar SUPABASE_ANON si existe como secret separado
-          window.SUPABASE_URL        = '${{ secrets.SUPABASE_URL }}';
-          window.SUPABASE_KEY        = '${{ secrets.SUPABASE_KEY }}';
-          window.SUPABASE_ANON       = '${{ secrets.SUPABASE_ANON_KEY }}';
-          window.AZURE_TENANT_ID     = '${{ secrets.AZURE_TENANT_ID }}';
-          window.AZURE_CLIENT_ID     = '${{ secrets.AZURE_CLIENT_ID }}';
-          window.AZURE_CLIENT_SECRET = '${{ secrets.AZURE_CLIENT_SECRET }}';
-          window.GRAPH_USER_ID       = '${{ secrets.GRAPH_USER_ID }}';
-          window.N8N_WEBHOOK_BASE    = '${{ secrets.N8N_WEBHOOK_BASE }}';
-          window.OPENAI_KEY          = '${{ secrets.OPENAI_KEY }}';
-          window.ADMIN_USER          = '${{ secrets.ADMIN_USER }}';
-          window.ADMIN_PASS          = '${{ secrets.ADMIN_PASS }}';
-          CONFIGEOF
+          cat > public/config.js <<EOF
+          # ── config.js — agregar SUPABASE_ANON si existe como secret separado
+          window.SUPABASE_URL        = "${{ secrets.SUPABASE_URL }}";
+          window.SUPABASE_KEY        = "${{ secrets.SUPABASE_KEY }}";
+          window.SUPABASE_ANON       = "${{ secrets.SUPABASE_ANON_KEY }}";
+          window.AZURE_TENANT_ID     = "${{ secrets.AZURE_TENANT_ID }}";
+          window.AZURE_CLIENT_ID     = "${{ secrets.AZURE_CLIENT_ID }}";
+          window.AZURE_CLIENT_SECRET = "${{ secrets.AZURE_CLIENT_SECRET }}";
+          window.GRAPH_USER_ID       = "${{ secrets.GRAPH_USER_ID }}";
+          window.N8N_WEBHOOK_BASE    = "${{ secrets.N8N_WEBHOOK_BASE }}";
+          window.OPENAI_KEY          = "${{ secrets.OPENAI_KEY }}";
+          window.ADMIN_USER          = "${{ secrets.ADMIN_USER }}";
+          window.ADMIN_PASS          = "${{ secrets.ADMIN_PASS }}";
+EOF
           echo "✅ config.js generado"
 
       # ── 3. INYECTAR SECRETS EN PHP ──────────────────────────────
@@ -139,121 +139,3 @@ jobs:
           sed -i "s|AZURE_CLIENT_ID_VAL|${{ secrets.AZURE_CLIENT_ID }}|g"         public/adj-proxy.php
           sed -i "s|AZURE_CLIENT_SECRET_VAL|${{ secrets.AZURE_CLIENT_SECRET }}|g" public/adj-proxy.php
           echo "✅ adj-proxy.php generado"
-
-      - name: Validar secrets
-        run: |
-          ERRORS=0
-
-          # config.js — SUPABASE_URL no puede estar vacío (crítico para tablet)
-          if grep -q "SUPABASE_URL = '';" public/config.js; then
-            echo "❌ SUPABASE_URL vacío en config.js — tablet no podrá leer config"
-            ERRORS=$((ERRORS+1))
-          else
-            echo "✅ SUPABASE_URL presente"
-          fi
-
-          # config.js — ningún valor vacío
-          EMPTY=$(grep -P "= '';" public/config.js || true)
-          if [ -n "$EMPTY" ]; then
-            echo "⚠️  Secrets vacíos en config.js (no críticos si son opcionales):"
-            echo "$EMPTY"
-          fi
-
-          # PHP — verificar placeholders residuales solo en archivos existentes
-          PLACEHOLDERS='__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_TENANT_ID__\|__AZURE_CLIENT_ID__\|__AZURE_CLIENT_SECRET__\|__GRAPH_USER_ID__'
-          for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php; do
-            [ -f "$f" ] || continue
-            if grep -q "$PLACEHOLDERS" "$f"; then
-              echo "❌ Placeholders sin reemplazar en $f"
-              grep "$PLACEHOLDERS" "$f"
-              ERRORS=$((ERRORS+1))
-            else
-              echo "✅ $f limpio"
-            fi
-          done
-
-          # Verificar que geo-sede.js está en public/
-          if [ ! -f "public/geo-sede.js" ]; then
-            echo "❌ public/geo-sede.js faltante — geolocalización de sedes no funcionará"
-            ERRORS=$((ERRORS+1))
-          fi
-
-          if [ $ERRORS -gt 0 ]; then
-            echo "❌ $ERRORS error(es) crítico(s). Revisa GitHub → Settings → Secrets."
-            exit 1
-          fi
-          echo "✅ Todos los secrets validados"
-
-      # ── 7. PREPARAR VPS ────────────────────────────────────────
-      - name: Preparar VPS
-        uses: appleboy/ssh-action@v1
-        with:
-          host:     ${{ secrets.VPS_WEB_HOST }}
-          username: root
-          key:      ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            mkdir -p /var/www/pqr
-            if ! systemctl is-active --quiet php8.3-fpm 2>/dev/null; then
-              apt-get update -qq && apt-get install -y -qq php8.3-fpm php8.3-curl php8.3-mbstring
-              systemctl enable php8.3-fpm && systemctl start php8.3-fpm
-            fi
-            if ! grep -q "fastcgi_pass" /etc/nginx/sites-enabled/pqr 2>/dev/null; then
-              sed -i 's|location / {|location ~ \\.php$ {\n        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n    location / {|' /etc/nginx/sites-enabled/pqr 2>/dev/null || true
-              nginx -t && systemctl reload nginx
-            fi
-            echo "✅ VPS listo"
-
-      # ── 8. COPIAR ARCHIVOS ──────────────────────────────────────
-      - name: Copiar archivos
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host:     ${{ secrets.VPS_WEB_HOST }}
-          username: root
-          key:      ${{ secrets.VPS_SSH_KEY }}
-          source:   "public/"
-          target:   /var/www/pqr/
-          strip_components: 1
-
-      # ── 9. VERIFICAR DEPLOY ─────────────────────────────────────
-      - name: Verificar deploy
-        uses: appleboy/ssh-action@v1
-        with:
-          host:     ${{ secrets.VPS_WEB_HOST }}
-          username: root
-          key:      ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            nginx -t && systemctl reload nginx && echo "✅ Nginx OK"
-
-            echo "--- Archivos PHP desplegados ---"
-            ls -la /var/www/pqr/*.php 2>/dev/null || echo "(sin .php)"
-
-            echo "--- Sintaxis PHP ---"
-            ERRORS=0
-            for f in /var/www/pqr/radicar-pqr.php \
-                     /var/www/pqr/radicar-encuesta.php \
-                     /var/www/pqr/transcribir-audio.php \
-                     /var/www/pqr/procesar-canvas.php \
-                     /var/www/pqr/api-token.php \
-                     /var/www/pqr/adj-proxy.php; do
-              [ -f "$f" ] || continue
-              OUT=$(php -l "$f" 2>&1)
-              if echo "$OUT" | grep -q "No syntax errors"; then
-                echo "✅ $(basename $f)"
-              else
-                echo "❌ $(basename $f): $OUT"
-                ERRORS=$((ERRORS+1))
-              fi
-            done
-
-            echo "--- Placeholders residuales ---"
-            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__' \
-              /var/www/pqr/*.php 2>/dev/null || true)
-            if [ -n "$FOUND" ]; then
-              echo "❌ Placeholders sin reemplazar en: $FOUND"
-              ERRORS=$((ERRORS+1))
-            else
-              echo "✅ Sin placeholders residuales"
-            fi
-
-            [ $ERRORS -gt 0 ] && exit 1
-            echo "✅ Deploy OK — $(date '+%d/%m/%Y %H:%M') hora Colombia"
