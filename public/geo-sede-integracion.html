@@ -1,0 +1,209 @@
+<!--
+  ══════════════════════════════════════════════════════════════════════
+  geo-sede-integracion.html
+  Fragmentos listos para copiar y pegar en:
+    • pqr_encuesta.html
+    • El formulario de radicación (pqr_form.html o similar)
+  ══════════════════════════════════════════════════════════════════════
+
+  PASO 1 — Incluir el script (justo antes del </body> o en el <head>)
+  PASO 2 — Agregar el contenedor del badge donde quieras mostrarlo
+  PASO 3 — Inicializar GeoSede en tu script de inicio
+  PASO 4 — Leer GeoSede.getSede() al enviar el formulario
+  ══════════════════════════════════════════════════════════════════════
+-->
+
+<!-- ─────────────────────────────────────────────────────────────────
+  FRAGMENTO A: Incluir el módulo (pegar en <head> o antes de </body>)
+───────────────────────────────────────────────────────────────────── -->
+<script src="geo-sede.js"></script>
+
+
+<!-- ─────────────────────────────────────────────────────────────────
+  FRAGMENTO B: Contenedor del badge (pegar donde quieras el badge
+  de sede, por ejemplo justo arriba del formulario de encuesta o PQR)
+───────────────────────────────────────────────────────────────────── -->
+<div id="geo-sede-badge" data-geo-badge
+  style="margin-bottom:16px;display:flex;align-items:center;justify-content:center;">
+  <!-- GeoSede.renderBadge('geo-sede-badge') inyecta el badge aquí -->
+</div>
+
+
+<!-- ─────────────────────────────────────────────────────────────────
+  FRAGMENTO C: Campos ocultos para enviar la sede con el formulario
+  (pegar dentro del <form> o donde construyes el payload JSON)
+───────────────────────────────────────────────────────────────────── -->
+<input type="hidden" id="campo-sede-id"        name="sede_id"        value="">
+<input type="hidden" id="campo-sede-nombre"    name="sede_nombre"    value="">
+<input type="hidden" id="campo-sede-ciudad"    name="sede_ciudad"    value="">
+<input type="hidden" id="campo-sede-direccion" name="sede_direccion" value="">
+<input type="hidden" id="campo-sede-manual"    name="sede_manual"    value="false">
+
+
+<!-- ─────────────────────────────────────────────────────────────────
+  FRAGMENTO D: Inicialización y sincronización de campos
+  (pegar en tu bloque <script> de inicio, después del DOM listo)
+───────────────────────────────────────────────────────────────────── -->
+<script>
+// ── Credenciales Supabase — ajusta estas dos líneas ──────────────────
+// Usa las mismas constantes que ya tienes en tu archivo:
+//   const SB_URL  = '...' y const SB_ANON = '...'
+// Si ya están definidas en el mismo script, simplemente referencia:
+//   GeoSede.init(SB_URL, SB_ANON, onSedeDetectada);
+
+document.addEventListener('DOMContentLoaded', function () {
+
+  // 1) Mostrar badge de carga inmediatamente
+  GeoSede.renderBadge('geo-sede-badge');
+
+  // 2) Inicializar GeoSede: detecta GPS + carga sedes + resuelve la más cercana
+  //    Reemplaza SB_URL y SB_ANON con tus constantes reales
+  GeoSede.init(
+    window.SB_URL  || 'https://TU_PROYECTO.supabase.co',
+    window.SB_ANON || 'TU_ANON_KEY',
+    function onSedeDetectada(sede) {
+      // Llamado cuando la sede queda resuelta (GPS, manual o primera activa)
+      if (sede) {
+        sincronizarCamposSede(sede);
+      }
+      // Actualizar badge (ya tiene la sede o sigue en loading)
+      GeoSede.renderBadge('geo-sede-badge');
+    }
+  );
+
+});
+
+/**
+ * Sincroniza los campos ocultos con la sede activa.
+ * Llama esta función también después de que el usuario cambie la sede.
+ */
+function sincronizarCamposSede(sede) {
+  if (!sede) return;
+  var setVal = function(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.value = val || '';
+  };
+  setVal('campo-sede-id',        sede.id        || '');
+  setVal('campo-sede-nombre',    sede.nombre    || '');
+  setVal('campo-sede-ciudad',    sede.ciudad    || '');
+  setVal('campo-sede-direccion', sede.direccion || '');
+  // sede_manual: true si la clave 'geo_sede_manual' existe en sessionStorage
+  var esManual = !!sessionStorage.getItem('geo_sede_manual');
+  setVal('campo-sede-manual', esManual ? 'true' : 'false');
+}
+
+/**
+ * Llama esto cuando el usuario confirma un cambio manual de sede
+ * (GeoSede ya lo hace internamente, pero si necesitas re-sincronizar
+ * los campos después del modal, agrega este listener aquí).
+ */
+var _geoSedePollTimer = setInterval(function () {
+  var sede = GeoSede.getSede();
+  if (sede) {
+    sincronizarCamposSede(sede);
+    // Badge ya actualizado por GeoSede internamente, pero refrescamos por si acaso
+    GeoSede.renderBadge('geo-sede-badge');
+  }
+}, 2000); // Revisa cada 2 s por si el usuario cambió la sede
+
+
+// ─────────────────────────────────────────────────────────────────────
+// FRAGMENTO E: Leer la sede al enviar el formulario (en tu función de envío)
+// ─────────────────────────────────────────────────────────────────────
+// Agrega estas líneas donde construyes el payload a enviar al servidor:
+//
+//   var sede = GeoSede.getSede() || {};
+//   var payload = {
+//     nombre:        ...,
+//     correo:        ...,
+//     descripcion:   ...,
+//     // SEDE — campos de geolocalización
+//     sede_id:        sede.id        || null,
+//     sede_nombre:    sede.nombre    || '',
+//     sede_ciudad:    sede.ciudad    || '',
+//     sede_direccion: sede.direccion || '',
+//     sede_manual:    !!sessionStorage.getItem('geo_sede_manual'),
+//     // ... resto de campos
+//   };
+//
+// Para radicar-pqr.php estos campos ya están implementados en el backend.
+// Para radicar-encuesta.php (encuestas), los campos llegan como:
+//   sede_id, sede_nombre, sede_ciudad, sede_manual
+// y el PHP los lee con: $body['sede_id'] ?? ''
+// ─────────────────────────────────────────────────────────────────────
+
+</script>
+
+
+<!-- ─────────────────────────────────────────────────────────────────
+  EJEMPLO COMPLETO — formulario mínimo con badge de sede integrado
+  (Solo para referencia, no es necesario copiar esto)
+───────────────────────────────────────────────────────────────────── -->
+<!--
+<div style="max-width:520px;margin:40px auto;font-family:sans-serif;">
+
+  <h2>Formulario PQR / Encuesta</h2>
+
+  ❶ Badge de sede — el usuario ve su sede y puede cambiarla
+  <div id="geo-sede-badge" data-geo-badge style="margin-bottom:20px;"></div>
+
+  <input type="text"  id="nombre"      placeholder="Tu nombre" style="width:100%;padding:10px;margin-bottom:12px;">
+  <input type="email" id="correo"      placeholder="Tu correo" style="width:100%;padding:10px;margin-bottom:12px;">
+  <textarea           id="descripcion" placeholder="Describe tu solicitud" style="width:100%;padding:10px;height:100px;margin-bottom:12px;"></textarea>
+
+  Campos ocultos — sede
+  <input type="hidden" id="campo-sede-id"        value="">
+  <input type="hidden" id="campo-sede-nombre"    value="">
+  <input type="hidden" id="campo-sede-ciudad"    value="">
+  <input type="hidden" id="campo-sede-direccion" value="">
+  <input type="hidden" id="campo-sede-manual"    value="false">
+
+  <button onclick="enviarPQR()">Radicar solicitud</button>
+</div>
+
+<script src="geo-sede.js"></script>
+<script>
+  const SB_URL  = 'https://TU_PROYECTO.supabase.co';
+  const SB_ANON = 'TU_ANON_KEY';
+
+  document.addEventListener('DOMContentLoaded', function () {
+    GeoSede.renderBadge('geo-sede-badge');
+    GeoSede.init(SB_URL, SB_ANON, function(sede) {
+      sincronizarCamposSede(sede);
+      GeoSede.renderBadge('geo-sede-badge');
+    });
+  });
+
+  function sincronizarCamposSede(sede) {
+    if (!sede) return;
+    document.getElementById('campo-sede-id').value        = sede.id        || '';
+    document.getElementById('campo-sede-nombre').value    = sede.nombre    || '';
+    document.getElementById('campo-sede-ciudad').value    = sede.ciudad    || '';
+    document.getElementById('campo-sede-direccion').value = sede.direccion || '';
+    document.getElementById('campo-sede-manual').value    = sessionStorage.getItem('geo_sede_manual') ? 'true' : 'false';
+  }
+
+  async function enviarPQR() {
+    var sede = GeoSede.getSede() || {};
+    var payload = {
+      nombre:         document.getElementById('nombre').value,
+      correo:         document.getElementById('correo').value,
+      descripcion:    document.getElementById('descripcion').value,
+      tipo_pqr:       'peticion',
+      // Sede GPS / manual
+      sede_id:        sede.id        || null,
+      sede_nombre:    sede.nombre    || '',
+      sede_ciudad:    sede.ciudad    || '',
+      sede_direccion: sede.direccion || '',
+      sede_manual:    !!sessionStorage.getItem('geo_sede_manual'),
+    };
+    const r = await fetch('radicar-pqr.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    alert(data.mensaje || 'Error al radicar');
+  }
+</script>
+-->
