@@ -82,9 +82,31 @@ function getGraphToken($tenant, $client_id, $client_secret) {
     return $data['access_token'] ?? null;
 }
 
+// ── Descarga autenticada de Supabase Storage ─────────────────────────────
+function fetchUrlBytes(string $url, string $sbKey = ''): string {
+    $ch = curl_init($url);
+    $headers = ['Accept: */*'];
+    if ($sbKey) {
+        $headers[] = "apikey: $sbKey";
+        $headers[] = "Authorization: Bearer $sbKey";
+    }
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_HTTPHEADER     => $headers,
+    ]);
+    $data = curl_exec($ch);
+    curl_close($ch);
+    return ($data && strlen($data) > 0) ? $data : '';
+}
+
 // ── LOGO desde Supabase configuracion_sistema ───────────────────────
-$logo_url      = '';
-$logo_img_html = '';
+// $logo_img_html      → correo interno a pqrsfd (Outlook — acepta base64)
+// $logo_img_html_usuario → acuse al usuario (Gmail — NO acepta base64 inline)
+$logo_url             = '';
+$logo_img_html        = '';
+$logo_img_html_usuario = '';
 try {
     $ch_cfg = curl_init("$SB_URL/rest/v1/configuracion_sistema?id=eq.main&select=data");
     curl_setopt_array($ch_cfg, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
@@ -95,19 +117,28 @@ try {
     if (!empty($cfg_data['logo'])) {
         $logo_url = $cfg_data['logo'];
 
-        // Correo interno (Outlook/pqrsfd) → base64 embebido
-        $logo_data = fetchUrlBytes($logo_url, $SB_KEY);
-        if ($logo_data && strlen($logo_data) < 200*1024) {
-            $finfo = new finfo(FILEINFO_MIME_TYPE);
-            $logo_mime = $finfo->buffer($logo_data) ?: 'image/png';
-            $logo_b64  = base64_encode($logo_data);
-            $logo_img_html = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
-        } else {
+        if (strpos($logo_url, 'data:image') === 0) {
+            // El logo ya está almacenado como base64 en la BD (no es una URL externa)
+            // Outlook acepta base64 inline → usarlo para el correo interno
             $logo_img_html = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+            // Gmail bloquea base64 inline y no hay URL pública → adjuntar logo como CID (Content-ID)
+            // Por ahora se omite en el acuse al usuario para evitar imagen rota
+            $logo_img_html_usuario = "";
+        } else {
+            // El logo es una URL externa pública
+            // Correo interno (Outlook): embeber en base64 para evitar bloqueos de imágenes externas
+            $logo_data = fetchUrlBytes($logo_url, $SB_KEY);
+            if ($logo_data && strlen($logo_data) < 200*1024) {
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $logo_mime = $finfo->buffer($logo_data) ?: 'image/png';
+                $logo_b64  = base64_encode($logo_data);
+                $logo_img_html = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+            } else {
+                $logo_img_html = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+            }
+            // Acuse al usuario (Gmail): usar URL directa — Gmail carga URLs públicas sin problema
+            $logo_img_html_usuario = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
         }
-
-        // Acuse al usuario (Gmail) → siempre URL directa (Gmail bloquea base64 inline)
-        $logo_img_html_usuario = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
     }
 } catch (Exception $e) { /* sin logo */ }
 
@@ -147,25 +178,6 @@ $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_w
 // Texto final para clasificar (transcripción si hay, sino descripción)
 $texto_pqr = $transcripcion ?: $descripcion;
 
-
-// ── Descarga autenticada de Supabase Storage ─────────────────────────────
-function fetchUrlBytes(string $url, string $sbKey = ''): string {
-    $ch = curl_init($url);
-    $headers = ['Accept: */*'];
-    if ($sbKey) {
-        $headers[] = "apikey: $sbKey";
-        $headers[] = "Authorization: Bearer $sbKey";
-    }
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 20,
-        CURLOPT_FOLLOWLOCATION => true,
-        CURLOPT_HTTPHEADER     => $headers,
-    ]);
-    $data = curl_exec($ch);
-    curl_close($ch);
-    return ($data && strlen($data) > 0) ? $data : '';
-}
 
 // ── PASO 1: CLASIFICACIÓN IA ─────────────────────────────────────────
 $sentimiento  = 'neutro';
