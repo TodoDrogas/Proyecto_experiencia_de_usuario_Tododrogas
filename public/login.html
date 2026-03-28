@@ -379,10 +379,10 @@ body{background:var(--ink);display:flex;min-height:100vh;overflow:hidden;positio
 <script src="config.js" onerror="void 0"></script>
 <script>
 
-/* ─── CONFIG — credenciales SOLO desde config.js (deploy.yml) ─── */
-const SB_URL     = window.SUPABASE_URL  || '';
+/* ─── CONFIG ─── */
+const SB_URL     = window.SUPABASE_URL  || 'https://lyosqaqhiwhgvjigvqtc.supabase.co';
 const SB_KEY     = window.SUPABASE_KEY  || '';
-const SB_ANON    = window.SUPABASE_KEY  || '';
+const SB_ANON    = window.SUPABASE_ANON || SB_KEY;
 const ADMIN_USER = window.ADMIN_USER    || 'admin';
 const ADMIN_PASS = window.ADMIN_PASS    || 'admin123';
 const LOGO_URL   = window.LOGO_URL      ||
@@ -396,7 +396,7 @@ if (window.LOGO_URL) {
   });
 }
 
-/* ─── FRASES (se reemplazan desde Supabase · configuration_sistema · frases_login) ─── */
+/* ─── FRASES (se reemplazan desde config_sistema o localStorage) ─── */
 let FRASES = [
   { icon:'🤖', html:'<strong>NOVA TD - clasifica cada caso al instante</strong> — Detecta sentimiento, tono, urgencia y ley aplicable antes de que el agente abra el correo. El futuro ya opera aquí.' },
   { icon:'🎤', html:'<strong>Radicación por voz, lápiz o texto</strong> — El ciudadano habla, dibuja o escribe desde cualquier sede. SIGI transcribe, entiende y radica sin intervención humana.' },
@@ -416,41 +416,39 @@ let FRASES = [
 let currentSlide = 0;
 let carouselTimer = null;
 
-/* ─── APLICAR CONFIG ─── */
+/* ─── APLICAR CONFIG (igual que PQRSFD_bienvenida) ─── */
 function applyConfig(cfg) {
   if (!cfg) return;
-  // frases_login tiene prioridad — slides específicos del login (SIGI)
-  // Si no existe, usa los defaults FRASES[] hardcodeados
-  if (cfg.frases_login && cfg.frases_login.length) {
-    FRASES = cfg.frases_login.map(f => ({
-      icon: f.icon || '💬',
-      html: esc(f.text || String(f)).replace(/^(.+?) — /, '<strong>$1</strong> — ')
-    }));
+  if (cfg.frases && cfg.frases.length) {
+    FRASES = cfg.frases.map(f => ({ icon:'💬', html: esc(f.text || String(f)) }));
   }
-  // Solo logo
   if (cfg.logo) {
-    const el = document.getElementById('formLogo');
-    if (el) { el.src = cfg.logo; el.style.display = ''; }
+    ['formLogo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.src = cfg.logo; el.style.display = ''; }
+    });
   }
   rebuildCarousel();
 }
 
-// Config: SIEMPRE desde Supabase — loadRemoteConfig() llamado en DOMContentLoaded
+// 1) localStorage (panel_config)
+try { const s = localStorage.getItem('PQRSFD_config'); if(s) applyConfig(JSON.parse(s)); } catch(e){}
 
-// Cargar config desde Supabase al abrir (ÚNICA fuente de verdad)
+// 2) Supabase (igual que PQRSFD_bienvenida — tabla config_sistema)
 async function loadRemoteConfig() {
-  if (!SB_URL || !SB_ANON) return;
   try {
-    // TABLA CORRECTA: configuration_sistema (con "tion")
-    const r = await fetch(`${SB_URL}/rest/v1/configuration_sistema?id=eq.main&select=data`,{
-      headers:{apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON}
+    let url = SB_URL, anon = SB_ANON;
+    try { const r=localStorage.getItem('td_sb_cfg'); if(r){const o=JSON.parse(r);if(o.url)url=o.url;if(o.anon)anon=o.anon;} } catch(e){}
+    if (!url || !anon || anon==='ANON_KEY_NO_DEFINIDA') return;
+    const r = await fetch(`${url}/rest/v1/config_sistema?id=eq.main&select=data`,{
+      headers:{apikey:anon,Authorization:'Bearer '+anon}
     });
     if (!r.ok) return;
     const rows = await r.json();
     if (!rows?.length || !rows[0].data) return;
     applyConfig(rows[0].data);
-    // NO se guarda en localStorage — próxima apertura también lee de Supabase
-  } catch(e){ console.warn('[login] loadRemoteConfig:', e); }
+    localStorage.setItem('PQRSFD_config', JSON.stringify(rows[0].data));
+  } catch(e){}
 }
 
 /* ─── CAROUSEL ─── */
