@@ -1,586 +1,369 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Encuesta de Satisfacción · Tododrogas</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-:root {
-  --ink:#0a0e1a; --ink2:#3a4258; --ink3:#8892a4;
-  --bg:#f2f4f8;  --bg2:#e8ebf2;  --surface:#fff;
-  --border:#dde1eb;
-  --blue:#2563eb; --blue-d:#1d4ed8;
-  --blue-l:#eff4ff; --blue-m:#bfdbfe;
-  --green:#16a34a; --green-l:#dcfce7;
-  --shadow:0 4px 24px rgba(10,14,26,.12),0 1px 4px rgba(10,14,26,.06);
-  --shadow-l:0 8px 40px rgba(10,14,26,.18),0 2px 8px rgba(10,14,26,.09);
+<?php
+/**
+ * radicar-encuesta.php — Encuesta de Satisfacción · Tododrogas CIA SAS
+ * ─────────────────────────────────────────────────────────────────────
+ * 1. Recibe datos de la encuesta desde pqr_encuesta.html
+ * 2. Inserta en Supabase tabla encuestas_satisfaccion
+ * 3. Envía correo de confirmación al usuario vía Graph API
+ * 4. Registra en historial_eventos
+ */
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type');
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
+
+// ── CREDENCIALES (inyectadas por deploy.yml) ─────────────────────────
+$SB_URL        = '__SB_URL__';
+$SB_KEY        = '__SB_KEY__';
+$TENANT_ID     = '__AZURE_TENANT_ID__';
+$CLIENT_ID     = '__AZURE_CLIENT_ID__';
+$CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
+$GRAPH_USER_ID = '__GRAPH_USER_ID__';
+$BUZÓN_PQRS    = 'pqrsfd@tododrogas.com.co';
+$LOGO_URL      = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+
+// ── HELPERS ──────────────────────────────────────────────────────────
+function sbPost($url, $key, $endpoint, $data, $prefer = 'return=representation') {
+    $ch = curl_init("$url/rest/v1/$endpoint");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($data),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => [
+            "apikey: $key", "Authorization: Bearer $key",
+            'Content-Type: application/json', "Prefer: $prefer"
+        ],
+        CURLOPT_TIMEOUT => 15,
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['code' => $code, 'body' => $resp];
 }
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;background:var(--ink)}
-.topbar{position:fixed;top:0;left:0;right:0;z-index:200;height:48px;background:rgba(10,14,26,.94);backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:space-between;padding:0 20px;}
-.tb-back{display:flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;color:rgba(255,255,255,.5);font-size:12px;font-weight:600;font-family:'Poppins',sans-serif;padding:6px 0;transition:color .15s;}
-.tb-back:hover{color:#fff;}
-.tb-brand{display:flex;align-items:center;gap:8px;}
-.tb-dot{width:7px;height:7px;border-radius:50%;background:var(--blue);box-shadow:0 0 10px var(--blue);animation:blink 2s infinite;}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.tb-name{font-size:14px;font-weight:800;color:#fff;letter-spacing:-.2px;}
-.tb-time{font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,.4);}
-.progress-bar{position:fixed;top:48px;left:0;right:0;z-index:199;height:3px;background:rgba(255,255,255,.07);}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue-d),var(--blue));border-radius:0 99px 99px 0;transition:width .5s cubic-bezier(.4,0,.2,1);box-shadow:0 0 12px rgba(37,99,235,.5);width:5%;}
-.step-dots{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:199;}
-.sdot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.18);transition:all .3s;}
-.sdot.active{background:var(--blue);width:18px;border-radius:3px;box-shadow:0 0 6px var(--blue);}
-.slides-wrap{position:fixed;top:51px;left:0;right:0;bottom:0;display:flex;transition:transform .55s cubic-bezier(.4,0,.2,1);}
-.slide{min-width:100vw;width:100vw;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 20px 50px;position:relative;overflow:hidden;}
-.slide-dark{background:var(--ink);}
-.slide-dark::before{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse 70% 50% at 15% 25%,rgba(37,99,235,.18) 0%,transparent 65%),radial-gradient(ellipse 50% 60% at 85% 80%,rgba(37,99,235,.10) 0%,transparent 60%);}
-.sgrid{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);background-size:52px 52px;}
-.eyebrow{font-size:10px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:var(--blue);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
-.eyebrow::before,.eyebrow::after{content:'';flex:0 0 24px;height:1px;background:rgba(37,99,235,.4);}
-.slide-title{font-size:clamp(24px,3.5vw,36px);font-weight:800;color:#fff;text-align:center;line-height:1.1;letter-spacing:-.5px;margin-bottom:8px;}
-.slide-sub{font-size:13px;color:rgba(255,255,255,.4);text-align:center;margin-bottom:28px;line-height:1.5;max-width:480px;}
-.pqr-input{background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.1);border-radius:10px;padding:11px 14px;font-size:13px;font-family:'Poppins',sans-serif;color:#fff;outline:none;transition:all .18s;width:100%;}
-.pqr-input:focus{border-color:var(--blue);background:rgba(37,99,235,.08);box-shadow:0 0 0 3px rgba(37,99,235,.1);}
-.pqr-input::placeholder{color:rgba(255,255,255,.25);}
-.pqr-input.error{border-color:#ef4444;}
-.field-wrap{display:flex;flex-direction:column;gap:5px;width:100%;}
-.field-label{font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:rgba(255,255,255,.4);}
-.req{color:var(--blue);margin-left:2px;}
-.err-msg{font-size:11px;color:#f87171;display:none;margin-top:2px;}
-.err-msg.show{display:block;}
-.sede-wrap{position:relative;width:100%;max-width:520px;}
-.sede-dd{position:absolute;top:calc(100% + 4px);left:0;right:0;background:rgba(18,24,48,.98);border:1.5px solid rgba(37,99,235,.3);border-radius:12px;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 16px 48px rgba(0,0,0,.6);}
-.sede-dd::-webkit-scrollbar{width:4px}.sede-dd::-webkit-scrollbar-thumb{background:rgba(255,255,255,.15);border-radius:99px}
-.sede-opt{padding:11px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);transition:background .12s;}
-.sede-opt:hover{background:rgba(37,99,235,.14);}
-.sede-opt-name{font-size:13px;font-weight:600;color:#fff;}
-.sede-opt-sub{font-size:11px;color:rgba(255,255,255,.38);margin-top:1px;}
-.sede-badge{display:none;align-items:center;gap:12px;background:rgba(37,99,235,.1);border:1.5px solid rgba(37,99,235,.3);border-radius:12px;padding:12px 16px;width:100%;max-width:520px;}
-.sede-badge-icon{font-size:22px;}
-.sede-badge-info{flex:1;}
-.sede-badge-name{font-size:13px;font-weight:700;color:#fff;}
-.sede-badge-sub{font-size:11px;color:rgba(255,255,255,.4);}
-.sede-badge-change{background:none;border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.5);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:'Poppins',sans-serif;transition:all .15s;}
-.sede-badge-change:hover{border-color:var(--blue-m);color:var(--blue-m);}
-.data-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:20px;width:100%;max-width:520px;}
-.data-card-title{font-size:12px;font-weight:700;color:rgba(255,255,255,.6);margin-bottom:14px;display:flex;align-items:center;gap:7px;letter-spacing:.2px;}
-.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-.btn-next{width:100%;max-width:520px;background:var(--blue);color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-family:'Poppins',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 4px 20px rgba(37,99,235,.35);}
-.btn-next:hover{background:var(--blue-d);transform:translateY(-1px);}
-.btn-next:disabled{opacity:.35;cursor:not-allowed;transform:none;background:rgba(255,255,255,.08);box-shadow:none;}
-.rating-card{width:100%;max-width:560px;}
-.q-header{margin-bottom:20px;text-align:center;}
-.q-icon{font-size:46px;margin-bottom:10px;line-height:1;}
-.q-title{font-size:clamp(20px,2.8vw,28px);font-weight:800;color:#fff;margin-bottom:6px;}
-.q-sub{font-size:13px;color:rgba(255,255,255,.4);line-height:1.5;}
-.star-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px;}
-.star-btn{background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.1);border-radius:16px;padding:18px 8px 12px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;align-items:center;gap:6px;}
-.star-btn:hover{border-color:rgba(37,99,235,.5);background:rgba(37,99,235,.1);transform:translateY(-3px);box-shadow:0 6px 20px rgba(37,99,235,.2);}
-.star-btn.selected{border-color:var(--blue);background:rgba(37,99,235,.18);box-shadow:0 0 0 1px var(--blue),0 8px 28px rgba(37,99,235,.3);transform:translateY(-3px);}
-.sb-emoji{font-size:28px;line-height:1;}
-.sb-num{font-size:12px;font-weight:700;font-family:'DM Mono',monospace;color:rgba(255,255,255,.3);}
-.star-btn.selected .sb-num{color:var(--blue-m);}
-.q-feedback{font-size:13px;text-align:center;min-height:22px;transition:opacity .25s;opacity:0;color:rgba(255,255,255,.5);}
-.q-feedback.show{opacity:1;}
-.q-feedback.good{color:#4ade80;}
-.q-feedback.mid{color:#fbbf24;}
-.q-feedback.bad{color:#f87171;}
-.q-progress{display:flex;align-items:center;gap:10px;margin-bottom:20px;width:100%;max-width:560px;}
-.qp-dots{display:flex;gap:5px;}
-.qp-dot{width:26px;height:4px;border-radius:99px;background:rgba(255,255,255,.12);transition:all .3s;}
-.qp-dot.done{background:var(--blue);box-shadow:0 0 6px rgba(37,99,235,.4);}
-.qp-dot.current{background:var(--blue-m);animation:qpulse 1s ease-in-out infinite alternate;}
-@keyframes qpulse{from{opacity:.6}to{opacity:1}}
-.qp-label{font-size:11px;font-family:'DM Mono',monospace;color:rgba(255,255,255,.35);margin-left:auto;}
-.comment-textarea{background:rgba(255,255,255,.05);border:1.5px solid rgba(255,255,255,.1);border-radius:12px;padding:14px 16px;font-size:13px;font-family:'Poppins',sans-serif;color:#fff;outline:none;resize:none;width:100%;max-width:560px;line-height:1.7;transition:all .18s;min-height:110px;}
-.comment-textarea:focus{border-color:var(--blue);background:rgba(37,99,235,.06);box-shadow:0 0 0 3px rgba(37,99,235,.08);}
-.comment-textarea::placeholder{color:rgba(255,255,255,.22);}
-.btn-submit{width:100%;max-width:560px;background:var(--blue);color:#fff;border:none;border-radius:14px;padding:15px;font-size:15px;font-family:'Poppins',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 4px 20px rgba(37,99,235,.35);}
-.btn-submit:hover{background:var(--blue-d);transform:translateY(-1px);}
-.btn-submit:disabled{opacity:.45;cursor:not-allowed;transform:none;}
-.btn-submit.loading{opacity:.7;cursor:wait;transform:none;}
-.success-overlay{position:fixed;inset:0;z-index:300;background:rgba(10,14,26,.92);backdrop-filter:blur(16px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .35s;}
-.success-overlay.show{opacity:1;pointer-events:auto;}
-.success-card{background:rgba(15,20,40,.88);border:1px solid rgba(255,255,255,.12);border-radius:24px;padding:36px 32px;max-width:440px;width:92%;text-align:center;animation:scaleIn .4s cubic-bezier(.34,1.56,.64,1) both;box-shadow:0 24px 80px rgba(0,0,0,.6),0 0 0 1px rgba(37,99,235,.15);}
-@keyframes scaleIn{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
-.success-glow{width:80px;height:80px;border-radius:50%;background:rgba(22,163,74,.15);border:2px solid rgba(22,163,74,.3);display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 20px;box-shadow:0 0 40px rgba(22,163,74,.2);}
-.success-card h2{font-size:22px;font-weight:800;color:#fff;margin-bottom:8px;}
-.success-card p{font-size:13px;color:rgba(255,255,255,.45);margin-bottom:16px;line-height:1.6;}
-.score-badge{display:inline-flex;align-items:center;gap:10px;background:rgba(37,99,235,.15);border:1px solid rgba(37,99,235,.3);border-radius:12px;padding:12px 22px;margin-bottom:14px;}
-.score-num{font-family:'DM Mono',monospace;font-size:34px;font-weight:700;color:var(--blue-m);line-height:1;}
-.score-lbl{font-size:11px;color:rgba(255,255,255,.4);text-align:left;line-height:1.4;}
-.success-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:14px;}
-.s-chip{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:99px;padding:5px 12px;font-size:11px;color:rgba(255,255,255,.6);}
-.confirm-email{font-size:12px;color:rgba(255,255,255,.4);margin-bottom:14px;}
-.confirm-email span{color:var(--blue-m);font-weight:600;}
-.countdown-text{font-size:11px;color:rgba(255,255,255,.25);font-family:'DM Mono',monospace;margin-top:6px;}
-.btn-home{margin-top:12px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);color:rgba(255,255,255,.7);padding:9px 22px;border-radius:9px;font-size:12px;font-family:'Poppins',sans-serif;cursor:pointer;font-weight:600;letter-spacing:.3px;transition:all .15s;}
-.btn-home:hover{background:rgba(255,255,255,.16);color:#fff;}
-#toasts{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);z-index:999;display:flex;flex-direction:column;gap:6px;align-items:center;}
-.toast{padding:9px 18px;border-radius:99px;font-size:12px;font-weight:600;font-family:'Poppins',sans-serif;white-space:nowrap;animation:fadeUp .3s ease;backdrop-filter:blur(8px);}
-@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-.toast.error{background:rgba(220,38,38,.88);color:#fff;}
-.toast.info{background:rgba(37,99,235,.88);color:#fff;}
-.toast.ok{background:rgba(22,163,74,.88);color:#fff;}
-@media(max-width:900px){
-  html,body{overflow:auto;}
-  .slides-wrap{position:relative;top:0;display:block;height:auto;transform:none!important;}
-  .slide,.slide-dark{min-width:100%;width:100%;min-height:100vh;height:auto;padding:68px 16px 80px;justify-content:flex-start;}
-  .star-grid{gap:7px;}
-  .star-btn{padding:14px 6px 10px;border-radius:14px;}
-  .sb-emoji{font-size:22px;}
-  .btn-next,.btn-submit{max-width:100%;}
-  .field-row{grid-template-columns:1fr;}
+
+function getGraphToken($tenant, $client_id, $client_secret) {
+    $ch = curl_init("https://login.microsoftonline.com/$tenant/oauth2/v2.0/token");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => http_build_query([
+            'grant_type'    => 'client_credentials',
+            'client_id'     => $client_id,
+            'client_secret' => $client_secret,
+            'scope'         => 'https://graph.microsoft.com/.default',
+        ]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
+        CURLOPT_TIMEOUT        => 15,
+    ]);
+    $resp = curl_exec($ch);
+    curl_close($ch);
+    $data = json_decode($resp, true);
+    return $data['access_token'] ?? null;
 }
-@media(max-width:600px){
-  .topbar{padding:0 14px;}
-  .slide-title{font-size:clamp(20px,6vw,26px);}
-  .slide-sub{font-size:12px;margin-bottom:18px;}
-  .eyebrow{font-size:9px;}
-  .star-grid{gap:5px;}
-  .star-btn{padding:12px 4px 8px;border-radius:12px;}
-  .sb-emoji{font-size:20px;}
-  .sb-num{font-size:10px;}
-  .q-icon{font-size:36px;}
-  .data-card{padding:14px;}
-  .btn-next,.btn-submit{padding:14px;font-size:14px;}
+
+// ── LEER INPUT ───────────────────────────────────────────────────────
+$body = json_decode(file_get_contents('php://input'), true);
+if (!$body) { http_response_code(400); echo json_encode(['error' => 'Invalid JSON']); exit; }
+
+$now    = date('c');
+$nombre = trim($body['nombre']       ?? '');
+$correo = trim($body['correo']       ?? '');
+$telefono = trim($body['telefono']   ?? '');
+$documento = trim($body['documento'] ?? '');
+
+// Ratings individuales
+$instalaciones = intval($body['instalaciones'] ?? 0);
+$atencion      = intval($body['atencion']      ?? 0);
+$tiempos       = intval($body['tiempos']       ?? 0);
+$medicamentos  = intval($body['medicamentos']  ?? 0);
+$recomendacion = intval($body['recomendacion'] ?? 0);
+$promedio      = floatval($body['promedio']    ?? 0);
+
+$comentario    = trim($body['comentario']      ?? '');
+$sede_id       = trim($body['sede_id']         ?? '');
+$sede_nombre   = trim($body['sede_nombre']     ?? '');
+$sede_ciudad   = trim($body['sede_ciudad']     ?? '');
+$sede_direccion = trim($body['sede_direccion'] ?? '');
+$canal         = trim($body['canal']           ?? 'web');
+$ip_origen     = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? ($body['ip_origen'] ?? 'web');
+
+// Calificacion final = promedio redondeado a entero para la tabla
+$calificacion  = (int) round($promedio);
+
+// ── PASO 1: INSERTAR EN SUPABASE ─────────────────────────────────────
+$payload = [
+    'calificacion'    => $calificacion,
+    'comentario'      => $comentario ?: null,
+    'sede_id'         => $sede_id    ?: null,
+    'canal'           => $canal,
+    'ip_origen'       => $ip_origen,
+    'ticket_id'       => null,
+    'correo_id'       => null,
+    'created_at'      => $now,
+];
+
+$sb_result  = sbPost($SB_URL, $SB_KEY, 'encuestas_satisfaccion', $payload);
+$encuesta_id = null;
+$saved       = ($sb_result['code'] >= 200 && $sb_result['code'] < 300);
+
+if ($saved) {
+    $inserted    = json_decode($sb_result['body'], true);
+    $encuesta_id = $inserted[0]['id'] ?? null;
+} else {
+    error_log('[radicar-encuesta] Supabase error: ' . $sb_result['code'] . ' — ' . $sb_result['body']);
 }
-@media(max-width:360px){
-  .star-grid{gap:3px;}
-  .star-btn{padding:10px 2px 6px;}
-  .sb-emoji{font-size:17px;}
-}
-</style>
-</head>
-<body>
 
-<div class="topbar">
-  <button class="tb-back" onclick="goBack()">
-    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-    Volver
-  </button>
-  <div class="tb-brand">
-    <div class="tb-dot"></div>
-    <img id="topbarLogo" src="" alt="Tododrogas" style="height:22px;object-fit:contain;display:none;filter:brightness(0) invert(1);opacity:.9">
-    <span class="tb-name" id="topbarName">Tododrogas</span>
-  </div>
-  <span id="clockDisplay" class="tb-time">--:--</span>
-</div>
+// ── PASO 2: CORREO DE CONFIRMACIÓN AL USUARIO ────────────────────────
+$correo_enviado = false;
+if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+    $token = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
 
-<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-<div class="step-dots" id="stepDots"></div>
+    if ($token) {
+        // Determinar emoji de calificación
+        $emojis_rating = [1=>'😞', 2=>'😐', 3=>'🙂', 4=>'😊', 5=>'🤩'];
+        $emoji_final   = $emojis_rating[$calificacion] ?? '⭐';
+        $estrellas     = str_repeat('⭐', $calificacion) . str_repeat('☆', 5 - $calificacion);
+        $color_cal     = $calificacion >= 4 ? '#10b981' : ($calificacion >= 3 ? '#f59e0b' : '#ef4444');
+        $nombre_first  = explode(' ', $nombre)[0];
 
-<div class="slides-wrap" id="slidesWrap">
+        $labels = ['Instalaciones', 'Atención', 'Tiempos', 'Medicamentos', 'Recomienda'];
+        $valores = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
+        $emojis_cats = [
+            ['😞','😐','🙂','😊','🤩'],
+            ['😞','😐','🙂','😊','🤩'],
+            ['⏳','😐','🙂','⚡','🚀'],
+            ['❌','⚠️','✅','💊','🌟'],
+            ['👎','🤔','👍','😊','🙌'],
+        ];
 
-  <!-- SLIDE 0: SEDE + DATOS -->
-  <div class="slide slide-dark">
-    <div class="sgrid"></div>
-    <div class="eyebrow">Paso 1 de 7</div>
-    <h1 class="slide-title">¿En qué sede fue<br>atendido?</h1>
-    <p class="slide-sub">Indique la sede que visitó y sus datos de contacto para enviarle la confirmación de su encuesta.</p>
+        $filas_calificaciones = '';
+        foreach ($labels as $i => $label) {
+            $v   = $valores[$i];
+            $emo = $v > 0 ? ($emojis_cats[$i][$v - 1] ?? '⭐') : '—';
+            $barras = '';
+            for ($b = 1; $b <= 5; $b++) {
+                $col = $b <= $v ? '#2563eb' : '#e2e8f0';
+                $barras .= "<span style='display:inline-block;width:18px;height:6px;background:{$col};border-radius:3px;margin-right:2px'></span>";
+            }
+            $filas_calificaciones .= "
+            <tr>
+              <td style='padding:8px 12px;color:#6b7280;font-size:13px;border-bottom:1px solid #f3f4f6'>{$label}</td>
+              <td style='padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:13px'>{$emo} {$barras}</td>
+              <td style='padding:8px 12px;border-bottom:1px solid #f3f4f6;font-weight:700;font-size:13px;color:{$color_cal}'>{$v}/5</td>
+            </tr>";
+        }
 
-    <div style="width:100%;max-width:520px;margin-bottom:18px;">
-      <div class="field-label" style="margin-bottom:8px;">📍 Sede visitada <span class="req">*</span></div>
-      <div class="sede-wrap">
-        <input class="pqr-input" type="text" id="inputSede"
-          placeholder="Escriba el municipio o nombre del servicio…"
-          oninput="buscarSede(this.value)" autocomplete="off">
-        <div class="sede-dd" id="sedeDd" style="display:none;"></div>
-      </div>
-      <div class="sede-badge" id="sedeBadge">
-        <div class="sede-badge-icon">📍</div>
-        <div class="sede-badge-info">
-          <div class="sede-badge-name" id="sbName">—</div>
-          <div class="sede-badge-sub"  id="sbSub">—</div>
-        </div>
-        <button class="sede-badge-change" onclick="cambiarSede()">Cambiar</button>
-      </div>
-      <div class="err-msg" id="errSede">Seleccione la sede donde fue atendido</div>
-    </div>
+        $bloque_comentario = '';
+        if ($comentario) {
+            $bloque_comentario = "
+            <div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #7c3aed;border-radius:4px;padding:14px 16px;margin-bottom:20px'>
+              <p style='margin:0 0 6px;font-size:12px;font-weight:700;color:#7c3aed'>💬 Tu comentario</p>
+              <p style='margin:0;font-size:13px;color:#374151;line-height:1.6'>" . htmlspecialchars($comentario) . "</p>
+            </div>";
+        }
 
-    <div class="data-card">
-      <div class="data-card-title">👤 Datos de contacto</div>
-      <div style="display:flex;flex-direction:column;gap:12px;">
-        <div class="field-row">
-          <div class="field-wrap">
-            <div class="field-label">Nombre completo <span class="req">*</span></div>
-            <input class="pqr-input" type="text" id="inNombre" placeholder="Nombre y apellido">
-            <div class="err-msg" id="errNombre">Ingrese su nombre</div>
-          </div>
-          <div class="field-wrap">
-            <div class="field-label">Documento <span class="req">*</span></div>
-            <input class="pqr-input" type="text" id="inDoc" placeholder="Cédula / NIT">
-            <div class="err-msg" id="errDoc">Ingrese su documento</div>
-          </div>
-        </div>
-        <div class="field-row">
-          <div class="field-wrap">
-            <div class="field-label">Celular <span class="req">*</span></div>
-            <input class="pqr-input" type="tel" id="inTel" placeholder="300 123 4567">
-            <div class="err-msg" id="errTel">Ingrese su número de celular</div>
-          </div>
-          <div class="field-wrap">
-            <div class="field-label">Correo electrónico
-              <span style="font-size:10px;color:rgba(255,255,255,.28);font-weight:400;">(opcional)</span>
-            </div>
-            <input class="pqr-input" type="email" id="inCorreo" placeholder="ejemplo@correo.com">
-          </div>
-        </div>
-      </div>
-    </div>
+        $cuerpo = "
+<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
+<body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
+<tr><td align='center'>
+<table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%'>
 
-    <div style="height:18px;"></div>
-    <button class="btn-next" id="btn0" disabled>
-      Iniciar encuesta
-      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-    </button>
-  </div>
+  <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
+    <div style='background:#fff;border-radius:10px;padding:10px 20px;display:inline-block;margin:0 auto 14px'><img src='{$LOGO_URL}' alt='Tododrogas' style='height:44px;max-width:200px;object-fit:contain;display:block'></div>
+    <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente</p>
+    <h2 style='color:#fff;margin:8px 0 0;font-size:22px;font-weight:700'>¡Gracias por tu opinión!</h2>
+  </td></tr>
 
-  <!-- SLIDES 1-5 generados por JS -->
+  <tr><td style='background:#1e3a8a;padding:20px 32px;text-align:center'>
+    <p style='color:#93c5fd;margin:0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase'>Tu calificación global</p>
+    <p style='color:#fff;margin:8px 0 4px;font-size:42px;font-weight:700;line-height:1'>{$emoji_final} {$promedio}</p>
+    <p style='color:#93c5fd;margin:0;font-size:18px;letter-spacing:3px'>{$estrellas}</p>
+  </td></tr>
 
-  <!-- SLIDE 6: COMENTARIO -->
-  <div class="slide slide-dark" id="slideComment">
-    <div class="sgrid"></div>
-    <div class="eyebrow">Paso 7 de 7</div>
-    <h1 class="slide-title">¿Desea agregar<br>algún comentario?</h1>
-    <p class="slide-sub">Su observación nos permite implementar mejoras concretas. Este campo es opcional.</p>
-    <div class="q-progress" id="qpComment"></div>
-    <textarea class="comment-textarea" id="commentInp" rows="4"
-      placeholder="Escriba cualquier observación, sugerencia o reconocimiento que desee compartir…"></textarea>
-    <div style="height:16px;"></div>
-    <button class="btn-submit" id="submitBtn" onclick="submitSurvey()">
-      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      Enviar calificación
-    </button>
-    <p style="font-size:11px;color:rgba(255,255,255,.22);margin-top:10px;text-align:center;">
-      El comentario es opcional. Puede enviar sin completarlo.
+  <tr><td style='background:#fff;padding:24px 32px;border:1px solid #e2e8f0;border-top:none'>
+    <p style='margin:0 0 16px;color:#374151;font-size:14px'>Hola <strong>{$nombre_first}</strong>,</p>
+    <p style='margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6'>
+      Recibimos tu encuesta de satisfacción en <strong>{$sede_nombre}</strong>
+      " . ($sede_ciudad ? "({$sede_ciudad})" : '') . ".
+      Tu opinión es muy valiosa para seguir mejorando nuestro servicio.
     </p>
-  </div>
 
-</div>
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;margin-bottom:20px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden'>
+      <tr style='background:#f8fafc'>
+        <th style='padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e2e8f0'>Categoría</th>
+        <th style='padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e2e8f0'>Valoración</th>
+        <th style='padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e2e8f0'>Puntaje</th>
+      </tr>
+      {$filas_calificaciones}
+    </table>
 
-<!-- SUCCESS -->
-<div class="success-overlay" id="successOverlay">
-  <div class="success-card">
-    <div id="sLogoWrap" style="margin-bottom:14px;display:none;">
-      <img id="sLogo" src="" alt="Tododrogas" style="height:34px;object-fit:contain;filter:brightness(0) invert(1);opacity:.85">
+    {$bloque_comentario}
+
+    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:20px'>
+      <p style='margin:0 0 6px;font-size:13px;font-weight:700;color:#166534'>¿Qué pasa con tu opinión?</p>
+      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Tu calificación será revisada por el equipo de calidad.</p>
+      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Usamos tus respuestas para mejorar nuestros servicios.</p>
+      <p style='margin:2px 0;font-size:12px;color:#166534'>→ ¡Gracias por tomarte el tiempo de ayudarnos a crecer!</p>
     </div>
-    <div class="success-glow">✅</div>
-    <h2>¡Encuesta registrada!</h2>
-    <p>Su calificación ha sido recibida exitosamente.<br>Gracias por contribuir a la mejora de nuestro servicio.</p>
-    <div class="score-badge">
-      <div class="score-num" id="sAvg">—</div>
-      <div class="score-lbl">Promedio<br>/ 5.0</div>
-    </div>
-    <div style="font-size:12px;color:rgba(255,255,255,.35);margin-bottom:10px;" id="sSede"></div>
-    <div class="success-chips" id="sChips"></div>
-    <div class="confirm-email" id="sEmailLine" style="display:none;">
-      📩 Confirmación enviada a <span id="sEmail">—</span>
-    </div>
-    <div class="countdown-text" id="sCountdown">Volviendo al inicio en 10s…</div>
-    <button class="btn-home" onclick="irInicio()">🏠 Ir al inicio</button>
-  </div>
-</div>
 
-<div id="toasts"></div>
+  </td></tr>
 
-<script>
-const LOGO_URL='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
-(function(){
-  const tb=document.getElementById('topbarLogo'),tn=document.getElementById('topbarName');
-  const sl=document.getElementById('sLogo'),sw=document.getElementById('sLogoWrap');
-  if(tb){tb.src=LOGO_URL;tb.style.display='block';}
-  if(tn)tn.style.display='none';
-  if(sl)sl.src=LOGO_URL;
-  if(sw)sw.style.display='block';
-})();
-(function clock(){
-  const el=document.getElementById('clockDisplay');
-  const t=()=>el.textContent=new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
-  t();setInterval(t,10000);
-})();
+  <tr><td style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center'>
+    <p style='font-size:11px;color:#9ca3af;margin:0'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente<br>
+    Este es un mensaje automático. Si tienes una solicitud o queja, usa nuestro formulario PQRSFD.</p>
+  </td></tr>
 
-const SEDES=[
-  {id:'abejorral',municipio:'ABEJORRAL',nombre:'SERVICIO FARMACÉUTICO TODODROGAS ABEJORRAL',direccion:'CARRERA SANTANDER # 48 - 11'},
-  {id:'amaga',municipio:'AMAGA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS AMAGA',direccion:'CALLE 51 N 51 BLOQUE 1 PRIMER PISO'},
-  {id:'andes',municipio:'ANDES',nombre:'SERVICIO FARMACÉUTICO TODODROGAS ANDES',direccion:'CARRERA 50 # 49-68 LOCAL 102'},
-  {id:'apartado',municipio:'APARTADÓ',nombre:'SERVICIO FARMACÉUTICO TODODROGAS APARTADO',direccion:'CARRERA 102 # 92 - 16/18'},
-  {id:'carepa',municipio:'CAREPA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CAREPA',direccion:'CALLE 81 CON CARRERA 74-12/14'},
-  {id:'caucasia',municipio:'CAUCASIA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CAUCASIA',direccion:'CARRERA 20 # 3-76 CC CAUCA CENTRO'},
-  {id:'chigorodo',municipio:'CHIGORODÓ',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CHIGORODO',direccion:'CALLE 95 # 97 04 LOCAL 2'},
-  {id:'ciudad-bolivar',municipio:'CIUDAD BOLÍVAR',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CIUDAD BOLIVAR',direccion:'CALLE 49 # 50-57 LOCAL 104'},
-  {id:'el-bagre',municipio:'EL BAGRE',nombre:'SERVICIO FARMACÉUTICO TODODROGAS EL BAGRE',direccion:'CALLE 50 #47A-31'},
-  {id:'medellin',municipio:'MEDELLÍN',nombre:'SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN',direccion:'CARRERA 49 # 48-57'},
-  {id:'medellin2',municipio:'MEDELLÍN',nombre:'SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN 2',direccion:'CALLE 48 # 48-03'},
-  {id:'puerto-berrio',municipio:'PUERTO BERRÍO',nombre:'SERVICIO FARMACÉUTICO TODODROGAS PUERTO BERRIO',direccion:'CALLE 48 # 4-56 BARRIO EL HOYO'},
-  {id:'santa-barbara',municipio:'SANTA BÁRBARA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS SANTA BARBARA',direccion:'CARRERA 50 # 48-17'},
-  {id:'santa-fe-antioquia',municipio:'SANTA FE DE ANTIOQUIA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS SANTA FE',direccion:'CALLE 10 # 7-49'},
-  {id:'segovia',municipio:'SEGOVIA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS SEGOVIA',direccion:'CALLE 52 N 48-69'},
-  {id:'tamesis',municipio:'TÁMESIS',nombre:'SERVICIO FARMACÉUTICO TODODROGAS TAMESIS',direccion:'CARRERA 10 # 9-47'},
-  {id:'turbo',municipio:'TURBO',nombre:'SERVICIO FARMACÉUTICO TODODROGAS TURBO',direccion:'CALLE 101 # 15-14'},
-  {id:'yarumal',municipio:'YARUMAL',nombre:'SERVICIO FARMACÉUTICO TODODROGAS YARUMAL',direccion:'CARRERA 21 # 17-17 MALL CUBOX'},
-  {id:'yolombo',municipio:'YOLOMBÓ',nombre:'SERVICIO FARMACÉUTICO TODODROGAS YOLOMBO',direccion:'CARRERA 24 CALLE 18-04'},
-  {id:'zaragoza',municipio:'ZARAGOZA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS ZARAGOZA',direccion:'CALLE PRINCIPAL SAN GREGORIO 36-20'},
-  {id:'nechi',municipio:'NECHÍ',nombre:'SERVICIO FARMACÉUTICO TODODROGAS NECHI',direccion:'CL 25 N.º 31A – 16'},
-  {id:'rionegro',municipio:'RIONEGRO',nombre:'SERVICIO FARMACÉUTICO TODODROGAS RIONEGRO',direccion:'CL 52 #45-70 Local 2006'},
-  {id:'la-ceja',municipio:'LA CEJA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CEJA',direccion:'CARRERA 24 19 40'},
-  {id:'sopetran',municipio:'SOPETRÁN',nombre:'SERVICIO FARMACEUTICO TODO DROGAS SOPETRAN',direccion:'CARRERA 10 # 11-65'},
-  {id:'amalfi',municipio:'AMALFI',nombre:'DROGUERIA FARMAVIDA',direccion:'CALLE 23 # 29-54'},
-  {id:'angostura',municipio:'ANGOSTURA',nombre:'DROGUERIA COOPRIACHON ANGOSTURA',direccion:'CARRERA 10 # 9-20'},
-  {id:'anori',municipio:'ANORÍ',nombre:'DROGUERIA SAN RAFAEL ANORI',direccion:'AVENIDA 31 n 30-16'},
-  {id:'frontino',municipio:'FRONTINO',nombre:'DROGUERIA FRONTIFARMA',direccion:'CARRERA 30 #38-47'},
-  {id:'mutata',municipio:'MUTATÁ',nombre:'DROGUERIA FAMILIAR EDDY',direccion:'CARRERA 10 # 10-41-43'},
-  {id:'necocli',municipio:'NECOCLÍ',nombre:'DROGUERIA LA PILDORA',direccion:'CALLE 51 # 48-38'},
-  {id:'remedios',municipio:'REMEDIOS',nombre:'FARMAX LA DROGUERIA S.A.S',direccion:'CALLE 11 # 8-12'},
-  {id:'giraldo',municipio:'GIRALDO',nombre:'HOSPITAL SAN ISIDRO ESE',direccion:'CARRERA 10 # 11-05'},
-  {id:'dabeiba',municipio:'DABEIBA',nombre:'DROGUERIA DONDE NATALIA',direccion:'CARRERA 10 # 6-47'},
-  {id:'hispania',municipio:'HISPANIA',nombre:'DROGUERIA BIOMEDIC',direccion:'CALLE 50 TOLEDO # 50-12'},
-  {id:'jardin',municipio:'JARDÍN',nombre:'DROGUERIA MACRODESCUENTOS # 9',direccion:'CALLE 9 # 2-59'},
-  {id:'liborina',municipio:'LIBORINA',nombre:'DROGUERIA SAN GABRIEL',direccion:'CARRERA 9 #8-4'},
-  {id:'sabanalarga',municipio:'SABANALARGA',nombre:'DROGUERIA LA AMISTAD',direccion:'CALLE 17 # 18-06'},
-  {id:'caceres',municipio:'CÁCERES',nombre:'DROGUERIA BIENESTAR CACERES',direccion:'CALLE 49 #51-36'},
-  {id:'jerico',municipio:'JERICÓ',nombre:'DROGUERIA SAN ANTONIO JERICO',direccion:'CARRERA 5 #6-09'},
-  {id:'taraza',municipio:'TARAZÁ',nombre:'DROGUERIA KIRIUS LA BOMBA',direccion:'CARRERA 28 #27-26'},
-  {id:'barbosa',municipio:'BARBOSA',nombre:'DROGUERIA LA SOLIDARIA',direccion:'CALLE 15 No. 17-22'},
-  {id:'girardota',municipio:'GIRARDOTA',nombre:'DROGUERIA FAMILIAR E&M',direccion:'CARRERA 15 No. 5-42'},
-  {id:'rionegro2',municipio:'RIONEGRO',nombre:'DROGUERIAS ORIENTE',direccion:'CARRERA 48 # 51-15'},
-  {id:'concordia',municipio:'CONCORDIA',nombre:'DROGUERIA LA NUESTRA',direccion:'CALLE 19 No. 19-30'},
-  {id:'copacabana',municipio:'COPACABANA',nombre:'DROGUERIA ALMA SALUD 1',direccion:'CALLE 40 No. 84-18'},
-  {id:'sabaneta',municipio:'SABANETA',nombre:'DROGUERIA INNOVA FARMA',direccion:'CALLE 73 sur # 46-09'},
-];
+</table></td></tr></table>
+</body></html>";
 
-const QUESTIONS=[
-  {id:'instalaciones',icon:'🏥',label:'Instalaciones y limpieza',sub:'Evalúe el estado y aseo de las instalaciones del servicio.',emoji:['😞','😐','🙂','😊','🤩']},
-  {id:'atencion',icon:'👩‍⚕️',label:'Atención del personal',sub:'Valore el trato, amabilidad y profesionalismo del equipo.',emoji:['😞','😐','🙂','😊','🤩']},
-  {id:'tiempos',icon:'⏱️',label:'Tiempos de espera',sub:'Califique la agilidad y puntualidad en la atención recibida.',emoji:['⏳','😐','🙂','⚡','🚀']},
-  {id:'medicamentos',icon:'💊',label:'Disponibilidad de medicamentos',sub:'Evalúe si encontró los medicamentos que necesitaba.',emoji:['❌','⚠️','✅','💊','🌟']},
-  {id:'recomendacion',icon:'🌟',label:'¿Recomendaría nuestro servicio?',sub:'¿Recomendaría este servicio a un familiar o conocido?',emoji:['👎','🤔','👍','😊','🙌']},
-];
-const FEEDBACK={
-  1:['Lamentamos su experiencia. Su comentario nos ayuda a mejorar.','bad'],
-  2:['Gracias. Trabajaremos para que su próxima visita sea mejor.','mid'],
-  3:['Bien. Continuamos mejorando para superar sus expectativas.','good'],
-  4:['Muy bien. Su satisfacción nos motiva a seguir adelante.','good'],
-  5:['Excelente. Es un honor contar con su confianza.','good'],
-};
+        $mail_payload = [
+            'subject'      => "Gracias por su opinión {$nombre} - Tododrogas CIA SAS",
+            'importance'   => 'normal',
+            'body'         => ['contentType' => 'HTML', 'content' => $cuerpo],
+            'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
+        ];
 
-let currentSlide=0, ratings=new Array(5).fill(null), sedeSeleccionada=null, userData={};
-const TOTAL_SLIDES=7;
+        $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode(['message' => $mail_payload, 'saveToSentItems' => false]),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
+            CURLOPT_TIMEOUT        => 30,
+        ]);
+        $mail_resp = curl_exec($ch);
+        $mail_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $correo_enviado = ($mail_code === 202);
 
-function buildSlides(){
-  const wrap=document.getElementById('slidesWrap');
-  const cs=document.getElementById('slideComment');
-  QUESTIONS.forEach((q,qi)=>{
-    const s=document.createElement('div');
-    s.className='slide slide-dark'; s.id='slideQ'+qi;
-    s.innerHTML=`<div class="sgrid"></div>
-      <div class="eyebrow">Pregunta ${qi+1} de 5</div>
-      <div class="q-progress" id="qp${qi}"></div>
-      <div class="rating-card">
-        <div class="q-header">
-          <div class="q-icon">${q.icon}</div>
-          <div class="q-title">${q.label}</div>
-          <div class="q-sub">${q.sub}</div>
-        </div>
-        <div class="star-grid" id="stars${qi}"></div>
-        <div class="q-feedback" id="fb${qi}"></div>
-      </div>
-      <div style="height:18px;"></div>
-      <button class="btn-next" id="btnQ${qi}" disabled>
-        ${qi<4?'Siguiente pregunta':'Continuar'}
-        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-      </button>`;
-    wrap.insertBefore(s,cs);
-    for(let v=1;v<=5;v++){
-      const b=document.createElement('button');
-      b.className='star-btn'; b.dataset.q=qi; b.dataset.v=v;
-      b.innerHTML=`<span class="sb-emoji">${q.emoji[v-1]}</span><span class="sb-num">${v}</span>`;
-      b.onclick=()=>rate(qi,v);
-      document.getElementById('stars'+qi).appendChild(b);
+        // ── NOTIFICACIÓN INTERNA A PQRSFD ──────────────────────────────────
+        if ($token) {
+            $estrellas_admin = str_repeat('★', $calificacion) . str_repeat('☆', 5 - $calificacion);
+            $color_cal_admin = $calificacion >= 4 ? '#16a34a' : ($calificacion >= 3 ? '#d97706' : '#dc2626');
+            $badge_cal       = $calificacion >= 4 ? '✅ Satisfecho' : ($calificacion >= 3 ? '⚠️ Neutro' : '🔴 Insatisfecho');
+
+            $filas_admin = '';
+            $labels_a = ['Instalaciones', 'Atención al cliente', 'Tiempos de espera', 'Disponibilidad medicamentos', 'Recomendaría'];
+            $vals_a   = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
+            foreach ($labels_a as $i => $lbl) {
+                $v = $vals_a[$i];
+                $bar = '';
+                for ($b = 1; $b <= 5; $b++) {
+                    $col = $b <= $v ? '#2563eb' : '#e2e8f0';
+                    $bar .= "<span style='display:inline-block;width:16px;height:5px;background:{$col};border-radius:3px;margin-right:2px'></span>";
+                }
+                $filas_admin .= "<tr><td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$lbl}</td>"
+                              . "<td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$bar} <span style='color:#6b7280;font-size:11px'>{$v}/5</span></td></tr>";
+            }
+
+            $bloque_comentario_admin = $comentario
+                ? "<tr><td colspan='2' style='padding:8px 10px;font-size:12px;background:#fefce8;border-top:2px solid #facc15'><strong>💬 Comentario:</strong> " . htmlspecialchars($comentario, ENT_QUOTES) . "</td></tr>"
+                : '';
+
+            $cuerpo_admin = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:24px 0'>
+<tr><td align='center'>
+<table width='580' cellpadding='0' cellspacing='0' style='background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)'>
+
+  <tr><td style='background:#1e3a5f;padding:20px 28px'>
+    <table width='100%'><tr>
+      <td><div style='background:#fff;border-radius:8px;padding:6px 12px;display:inline-block'><img src='{$LOGO_URL}' alt='Tododrogas' style='height:28px;object-fit:contain'></div></td>
+      <td align='right'><span style='color:#93c5fd;font-size:11px;font-weight:700'>NUEVA ENCUESTA RECIBIDA</span></td>
+    </tr></table>
+  </td></tr>
+
+  <tr><td style='padding:20px 28px 12px'>
+    <table width='100%'><tr>
+      <td><p style='margin:0 0 4px;font-size:16px;font-weight:700;color:#111827'>Calificación: <span style='color:{$color_cal_admin}'>{$estrellas_admin} ({$calificacion}/5)</span></p>
+          <p style='margin:0;font-size:12px;color:#6b7280'>{$badge_cal}</p></td>
+      <td align='right'><p style='margin:0;font-size:11px;color:#6b7280'>Sede: <strong style='color:#111827'>{$sede_nombre}</strong><br>{$sede_ciudad}</p></td>
+    </tr></table>
+  </td></tr>
+
+  <tr><td style='padding:4px 28px 16px'>
+    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
+      <tr style='background:#f9fafb'><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DATOS DEL ENCUESTADO</th><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DETALLES</th></tr>
+      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Nombre</td><td style='padding:7px 10px;font-size:12px;color:#111827;font-weight:600'>" . htmlspecialchars($nombre, ENT_QUOTES) . "</td></tr>
+      " . ($correo ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Correo</td><td style='padding:7px 10px;font-size:12px;color:#2563eb'>" . htmlspecialchars($correo, ENT_QUOTES) . "</td></tr>" : "") . "
+      " . ($telefono ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Teléfono</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . htmlspecialchars($telefono, ENT_QUOTES) . "</td></tr>" : "") . "
+      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Canal</td><td style='padding:7px 10px;font-size:12px;color:#111827;text-transform:capitalize'>{$canal}</td></tr>
+      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Fecha</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . date('d/m/Y H:i', strtotime($now)) . "</td></tr>
+    </table>
+  </td></tr>
+
+  <tr><td style='padding:0 28px 16px'>
+    <p style='margin:0 0 8px;font-size:12px;font-weight:700;color:#374151'>Calificaciones por categoría:</p>
+    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
+      {$filas_admin}
+      {$bloque_comentario_admin}
+    </table>
+  </td></tr>
+
+  <tr><td style='background:#f8fafc;border-top:1px solid #e5e7eb;padding:14px 28px;text-align:center'>
+    <p style='font-size:11px;color:#9ca3af;margin:0'>Notificación automática · Sistema PQRSFD · Tododrogas CIA SAS</p>
+  </td></tr>
+
+</table></td></tr></table>
+</body></html>";
+
+            $admin_payload = [
+                'subject'      => "⭐ Nueva encuesta [{$calificacion}/5] · {$sede_nombre} · " . htmlspecialchars($nombre, ENT_QUOTES),
+                'importance'   => $calificacion <= 2 ? 'high' : 'normal',
+                'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_admin],
+                'toRecipients' => [['emailAddress' => ['address' => $BUZÓN_PQRS, 'name' => 'PQRSFD Tododrogas']]],
+            ];
+            $ch2 = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
+            curl_setopt_array($ch2, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode(['message' => $admin_payload, 'saveToSentItems' => true]),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
+                CURLOPT_TIMEOUT        => 30,
+            ]);
+            curl_exec($ch2);
+            curl_close($ch2);
+        }
+        // ── FIN NOTIFICACIÓN INTERNA ─────────────────────────────────────
     }
-  });
-  const dw=document.getElementById('stepDots');
-  for(let i=0;i<TOTAL_SLIDES;i++){
-    const d=document.createElement('div');
-    d.className='sdot'+(i===0?' active':''); d.id='sd'+i;
-    dw.appendChild(d);
-  }
-  renderQP(document.getElementById('qpComment'),5);
 }
 
-function renderQP(el,done){
-  if(!el)return;
-  el.innerHTML='<div class="qp-dots">'+QUESTIONS.map((_,i)=>
-    `<div class="qp-dot ${i<done?'done':i===done?'current':''}"></div>`
-  ).join('')+'</div><span class="qp-label">'+done+'/5 respondidas</span>';
+// ── PASO 3: HISTORIAL_EVENTOS ─────────────────────────────────────────
+if ($saved) {
+    sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
+        'evento'      => 'encuesta_recibida',
+        'descripcion' => "Encuesta de satisfacción recibida. Sede: {$sede_nombre}. Promedio: {$promedio}. Confirmación: " . ($correo_enviado ? 'OK' : ($correo ? 'error' : 'sin correo')),
+        'from_email'  => $correo ?: $telefono,
+        'subject'     => "Encuesta · {$sede_nombre} · {$nombre}",
+        'datos_extra' => json_encode([
+            'encuesta_id'  => $encuesta_id,
+            'nombre'       => $nombre,
+            'correo'       => $correo,
+            'sede_nombre'  => $sede_nombre,
+            'sede_ciudad'  => $sede_ciudad,
+            'calificacion' => $calificacion,
+            'promedio'     => $promedio,
+            'instalaciones'=> $instalaciones,
+            'atencion'     => $atencion,
+            'tiempos'      => $tiempos,
+            'medicamentos' => $medicamentos,
+            'recomendacion'=> $recomendacion,
+            'canal'        => $canal,
+        ]),
+        'created_at' => $now,
+    ], 'return=minimal');
 }
 
-function goTo(idx){
-  currentSlide=idx;
-  const mob=window.matchMedia('(max-width:900px)').matches;
-  if(!mob){
-    document.getElementById('slidesWrap').style.transform=`translateX(-${idx*100}vw)`;
-  }
-  document.querySelectorAll('.sdot').forEach((d,i)=>d.classList.toggle('active',i===idx));
-  const pct=Math.round((idx/(TOTAL_SLIDES-1))*92)+5;
-  document.getElementById('progressFill').style.width=pct+'%';
-  if(mob){
-    const slides=document.querySelectorAll('#slidesWrap > *');
-    if(slides[idx]) setTimeout(()=>slides[idx].scrollIntoView({behavior:'smooth',block:'start'}),50);
-  } else {
-    window.scrollTo(0,0);
-  }
-}
+// ── RESPUESTA ─────────────────────────────────────────────────────────
+http_response_code(200);
+echo json_encode([
+    'ok'              => $saved,
+    'encuesta_id'     => $encuesta_id,
+    'correo_enviado'  => $correo_enviado,
+    'mensaje'         => $saved
+        ? "Encuesta registrada correctamente. ¡Gracias, {$nombre}!"
+        : "No se pudo guardar en BD — se guardó localmente.",
+]);
 
-function goBack(){
-  if(currentSlide>0){goTo(currentSlide-1);return;}
-  document.body.style.opacity='0';document.body.style.transition='opacity .3s';
-  setTimeout(()=>window.location.href='pqr_bienvenida.html',300);
-}
-
-let sedeTimer;
-function buscarSede(val){
-  const dd=document.getElementById('sedeDd');
-  clearTimeout(sedeTimer);sedeSeleccionada=null;checkBtn0();
-  if(val.trim().length<2){dd.style.display='none';return;}
-  sedeTimer=setTimeout(()=>{
-    const q=val.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const res=SEDES.filter(s=>(s.nombre+' '+s.municipio+' '+(s.direccion||''))
-      .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes(q)).slice(0,10);
-    if(!res.length){dd.style.display='none';return;}
-    dd.innerHTML=res.map(s=>`<div class="sede-opt" onclick='_ss(${JSON.stringify(s)})'>
-      <div class="sede-opt-name">${s.nombre}</div>
-      <div class="sede-opt-sub">📍 ${s.municipio} · ${s.direccion||''}</div></div>`).join('');
-    dd.style.display='block';
-  },200);
-}
-
-function _ss(s){
-  sedeSeleccionada=s;
-  document.getElementById('sedeDd').style.display='none';
-  document.getElementById('inputSede').style.display='none';
-  document.getElementById('sbName').textContent=s.nombre;
-  document.getElementById('sbSub').textContent='📍 '+s.municipio+(s.direccion?' · '+s.direccion:'');
-  document.getElementById('sedeBadge').style.display='flex';
-  markErr('inputSede','errSede',false);checkBtn0();
-}
-
-function cambiarSede(){
-  sedeSeleccionada=null;
-  document.getElementById('sedeBadge').style.display='none';
-  const i=document.getElementById('inputSede');
-  i.style.display='block';i.value='';i.focus();checkBtn0();
-}
-
-function checkBtn0(){
-  const ok=sedeSeleccionada
-    &&document.getElementById('inNombre').value.trim().length>=2
-    &&document.getElementById('inDoc').value.trim().length>=4
-    &&document.getElementById('inTel').value.trim().replace(/\D/g,'').length>=7;
-  document.getElementById('btn0').disabled=!ok;
-}
-['inNombre','inDoc','inTel','inCorreo'].forEach(id=>document.getElementById(id).addEventListener('input',checkBtn0));
-
-document.getElementById('btn0').addEventListener('click',()=>{
-  let ok=true;
-  if(!sedeSeleccionada){markErr('inputSede','errSede',true);ok=false;}
-  if(document.getElementById('inNombre').value.trim().length<2){markErr('inNombre','errNombre',true);ok=false;}
-  if(document.getElementById('inDoc').value.trim().length<4){markErr('inDoc','errDoc',true);ok=false;}
-  if(document.getElementById('inTel').value.trim().replace(/\D/g,'').length<7){markErr('inTel','errTel',true);ok=false;}
-  if(!ok)return;
-  userData={
-    nombre:document.getElementById('inNombre').value.trim(),
-    documento:document.getElementById('inDoc').value.trim(),
-    telefono:document.getElementById('inTel').value.trim(),
-    correo:document.getElementById('inCorreo').value.trim(),
-    sede_id:sedeSeleccionada.id,
-    sede_nombre:sedeSeleccionada.nombre,
-    sede_ciudad:sedeSeleccionada.municipio,
-    sede_direccion:sedeSeleccionada.direccion||'',
-  };
-  goTo(1);
-});
-
-function rate(qi,v){
-  ratings[qi]=v;
-  document.querySelectorAll(`[data-q="${qi}"]`).forEach(b=>b.classList.toggle('selected',parseInt(b.dataset.v)===v));
-  const[msg,cls]=FEEDBACK[v];
-  const fb=document.getElementById('fb'+qi);
-  fb.textContent=msg;fb.className='q-feedback show '+cls;
-  const btn=document.getElementById('btnQ'+qi);if(btn)btn.disabled=false;
-  const done=ratings.filter(r=>r!==null).length;
-  for(let i=0;i<QUESTIONS.length;i++){const qp=document.getElementById('qp'+i);if(qp)renderQP(qp,done);}
-  renderQP(document.getElementById('qpComment'),done);
-  if(v>=3)setTimeout(()=>{const b=document.getElementById('btnQ'+qi);if(b&&!b.disabled)b.click();},500);
-}
-
-document.addEventListener('click',e=>{
-  const b=e.target.closest('[id^="btnQ"]');if(!b)return;
-  const qi=parseInt(b.id.replace('btnQ',''));
-  goTo(qi<QUESTIONS.length-1?qi+2:6);
-});
-
-async function submitSurvey(){
-  if(ratings.some(r=>r===null)){showToast('Por favor responda las 5 preguntas','error');return;}
-  const btn=document.getElementById('submitBtn');
-  btn.classList.add('loading');btn.disabled=true;
-  btn.innerHTML='⏳ Registrando encuesta…';
-  const avg=ratings.reduce((a,b)=>a+b,0)/5;
-  const payload={...userData,
-    instalaciones:ratings[0],atencion:ratings[1],tiempos:ratings[2],
-    medicamentos:ratings[3],recomendacion:ratings[4],
-    promedio:parseFloat(avg.toFixed(2)),
-    comentario:document.getElementById('commentInp').value.trim()||null,
-    canal:'web',ip_origen:window.location.hostname||'web',
-  };
-  let saved=false;
-  try{
-    const r=await fetch('radicar-encuesta.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(r.ok){const d=await r.json();saved=d.ok===true;}
-  }catch(e){console.warn('Sin conexión:',e.message);}
-  if(!saved){
-    try{const p=JSON.parse(localStorage.getItem('td_encuestas_offline')||'[]');p.push({...payload,_pendiente:true,_ts:new Date().toISOString()});localStorage.setItem('td_encuestas_offline',JSON.stringify(p));}catch(_){}
-  }
-  showSuccess(avg,payload);
-}
-
-function showSuccess(avg,payload){
-  document.getElementById('sAvg').textContent=avg.toFixed(1);
-  document.getElementById('sSede').textContent='📍 '+(payload.sede_nombre||'');
-  const labels=['Instalaciones','Atención','Tiempos','Medicamentos','Recomienda'];
-  document.getElementById('sChips').innerHTML=ratings.map((r,i)=>`<div class="s-chip">${QUESTIONS[i].emoji[r-1]} ${labels[i]}: ${r}/5</div>`).join('');
-  if(payload.correo&&payload.correo.includes('@')){document.getElementById('sEmail').textContent=payload.correo;document.getElementById('sEmailLine').style.display='block';}
-  spawnConfetti();
-  document.getElementById('successOverlay').classList.add('show');
-  let t=10;const iv=setInterval(()=>{t--;document.getElementById('sCountdown').textContent=`Volviendo al inicio en ${t}s…`;if(t<=0){clearInterval(iv);irInicio();}},1000);
-}
-
-function irInicio(){document.body.style.opacity='0';document.body.style.transition='opacity .3s';setTimeout(()=>window.location.href='pqr_bienvenida.html',300);}
-
-function markErr(a,b,s){
-  const e=document.getElementById(a);if(e)e.classList.toggle('error',s);
-  const r=document.getElementById(b);if(r)r.classList.toggle('show',s);
-}
-
-function showToast(msg,type='info'){
-  const w=document.getElementById('toasts'),t=document.createElement('div');
-  t.className='toast '+type;t.textContent=msg;w.appendChild(t);
-  setTimeout(()=>t.remove(),3400);
-}
-
-function spawnConfetti(){
-  const c=['#2563eb','#1d4ed8','#16a34a','#bfdbfe','#ffffff'];
-  for(let i=0;i<60;i++){
-    const d=document.createElement('div'),col=c[Math.floor(Math.random()*c.length)];
-    Object.assign(d.style,{position:'fixed',top:'0',left:Math.random()*100+'vw',width:'7px',height:'7px',background:col,borderRadius:Math.random()>.5?'50%':'2px',zIndex:9998,pointerEvents:'none',animation:`fall ${1+Math.random()}s ease-in ${Math.random()*.7}s forwards`});
-    document.body.appendChild(d);setTimeout(()=>d.remove(),2500);
-  }
-  if(!document.getElementById('csty')){const s=document.createElement('style');s.id='csty';s.textContent='@keyframes fall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}';document.head.appendChild(s);}
-}
-
-document.addEventListener('click',e=>{if(!e.target.closest('.sede-wrap'))document.getElementById('sedeDd').style.display='none';});
-buildSlides();
-</script>
-</body>
-</html>
