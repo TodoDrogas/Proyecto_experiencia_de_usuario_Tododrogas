@@ -172,7 +172,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 <table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%'>
 
   <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
-    <img src='{$LOGO_URL}' alt='Tododrogas' style='height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 12px'>
+    <div style='background:#fff;border-radius:10px;padding:10px 20px;display:inline-block;margin:0 auto 14px'><img src='{$LOGO_URL}' alt='Tododrogas' style='height:44px;max-width:200px;object-fit:contain;display:block'></div>
     <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente</p>
     <h2 style='color:#fff;margin:8px 0 0;font-size:22px;font-weight:700'>¡Gracias por tu opinión!</h2>
   </td></tr>
@@ -220,7 +220,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 </body></html>";
 
         $mail_payload = [
-            'subject'      => "✅ Gracias por tu opinión · Tododrogas {$sede_nombre}",
+            'subject'      => "Gracias por su opinión {$nombre} - Tododrogas CIA SAS",
             'importance'   => 'normal',
             'body'         => ['contentType' => 'HTML', 'content' => $cuerpo],
             'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
@@ -270,7 +270,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 
   <tr><td style='background:#1e3a5f;padding:20px 28px'>
     <table width='100%'><tr>
-      <td><img src='{$LOGO_URL}' alt='Tododrogas' style='height:28px;object-fit:contain'></td>
+      <td><div style='background:#fff;border-radius:8px;padding:6px 12px;display:inline-block'><img src='{$LOGO_URL}' alt='Tododrogas' style='height:28px;object-fit:contain'></div></td>
       <td align='right'><span style='color:#93c5fd;font-size:11px;font-weight:700'>NUEVA ENCUESTA RECIBIDA</span></td>
     </tr></table>
   </td></tr>
