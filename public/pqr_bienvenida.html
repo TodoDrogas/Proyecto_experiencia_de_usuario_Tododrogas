@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>PQR · Tododrogas</title>
+<script src="config.js" onerror="console.error('[PQR] config.js no cargó — credenciales Supabase no disponibles')"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -511,7 +512,7 @@ body{background:var(--ink);display:flex;min-height:100vh;}
   .horario-badge{font-size:9px;padding:4px 10px;}
 }
 </style>
-<script src="assets/js/config.js" onerror="console.warn('config.js not found')"></script>
+
 </head>
 <body>
 
@@ -774,29 +775,31 @@ let FRASES = [
   { text:'Elige el canal que más te convenga: correo, chat, audio o escritura', hl:false },
 ];
 
-// ── CONFIG — SOLO desde Supabase via config.js (deploy.yml inyecta los secrets)
-// CERO localStorage en toda esta página.
-const SB_URL  = window.SUPABASE_URL || '';
-const SB_ANON = window.SUPABASE_KEY || '';
-
 let CFG = {};
-let FORM_URL = window.location.origin + '/pqr_form.html'; // default relativo al dominio
+// FORM_URL: URL absoluta del formulario de radicación
+// El QR radicar siempre apunta a esta URL — se actualiza desde Supabase (configuration_sistema.data.qrUrl)
+let FORM_URL = window.location.origin + '/pqr_form.html';
 let _lastQrUrl = null;
 
 function applyConfig(cfg){
   if(!cfg) return;
   CFG = cfg;
-  // Frases del carrusel de bienvenida
+  // Frases carrusel bienvenida
   if(cfg.frases && cfg.frases.length)
     FRASES = cfg.frases.map((f,i) => ({text: f.text, hl: i===0}));
-  // URL del formulario de radicación → QR radicar
   if(cfg.qrUrl) FORM_URL = cfg.qrUrl;
 }
 
-// Polling a Supabase cada 30 s — tabla CORRECTA: configuration_sistema
+// Credenciales SOLO desde config.js — inyectadas por deploy.yml
+// NUNCA hardcodeadas, NUNCA desde localStorage
+const SB_URL  = window.SUPABASE_URL  || '';
+const SB_ANON = window.SUPABASE_KEY  || '';
+
+// Polling a Supabase: revisa la config cada 30 s y actualiza todo
 async function pollSupabaseConfig(){
   if(!SB_URL || !SB_ANON) return;
   try {
+    // TABLA CORRECTA: configuration_sistema (con "tion")
     const r = await fetch(`${SB_URL}/rest/v1/configuration_sistema?id=eq.main&select=data`, {
       headers:{ apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON }
     });
@@ -807,19 +810,19 @@ async function pollSupabaseConfig(){
     const newQrUrl  = remoteCfg.qrUrl || '';
     const newEncUrl = remoteCfg.canales?.encuesta || '';
     const oldEncUrl = CFG.canales?.encuesta || '';
-    const qrChanged  = newQrUrl && newQrUrl !== _lastQrUrl;
+    const qrChanged  = newQrUrl  && newQrUrl  !== _lastQrUrl;
     const encChanged = newEncUrl !== oldEncUrl;
     const firstLoad  = !CFG.updatedAt;
     if(firstLoad || qrChanged || encChanged){
-      // Aplicar frases si la config trae nuevas
-      if(remoteCfg.frases && remoteCfg.frases.length)
+      // Aplicar frases si cambiaron
+      if(remoteCfg.frases && remoteCfg.frases.length){
         FRASES = remoteCfg.frases.map((f,i) => ({text: f.text, hl: i===0}));
+      }
       CFG = remoteCfg;
       if(newQrUrl){ _lastQrUrl = newQrUrl; FORM_URL = newQrUrl; }
       applyQRs();
     }
-    // NO se guarda en localStorage — el próximo poll vuelve a leer de Supabase
-  } catch(e){ console.warn('[bienvenida] pollSupabaseConfig:', e.message); }
+  } catch(e){}
 }
 
 // Genera QR midiendo el contenedor real para adaptarse a cualquier pantalla
