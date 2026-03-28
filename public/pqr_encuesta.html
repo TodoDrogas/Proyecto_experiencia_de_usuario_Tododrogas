@@ -287,11 +287,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 
 <script>
 const LOGO_URL = (function(){
-  // Primero intentar desde config guardada, luego URL fija de Supabase Storage
-  try {
-    const cfg = JSON.parse(localStorage.getItem('pqr_config')||'{}');
-    if (cfg.logo && cfg.logo.startsWith('http')) return cfg.logo;
-  } catch(_) {}
+  // Logo desde Supabase Storage (URL pública fija) — sin localStorage
   return 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
 })();
 (function(){
@@ -308,7 +304,11 @@ const LOGO_URL = (function(){
   t();setInterval(t,10000);
 })();
 
-// ── SEDES — cargadas desde Supabase configuracion_sistema o localStorage ──
+// ── CREDENCIALES — SOLO desde config.js (deploy.yml), CERO localStorage ──
+const SB_URL  = window.SUPABASE_URL || '';
+const SB_KEY  = window.SUPABASE_KEY || '';
+
+// ── SEDES — cargadas SOLO desde Supabase, CERO localStorage ──────────
 const SEDES_FALLBACK=[
   {id:'abejorral',municipio:'ABEJORRAL',nombre:'SERVICIO FARMACÉUTICO TODODROGAS ABEJORRAL',direccion:'CARRERA SANTANDER # 48 - 11'},
   {id:'amaga',municipio:'AMAGA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS AMAGA',direccion:'CALLE 51 N 51 BLOQUE 1 PRIMER PISO'},
@@ -360,52 +360,71 @@ const SEDES_FALLBACK=[
 
 let SEDES = [];
 
-async function cargarSedes() {
-  // 1) Intentar desde localStorage (instantáneo)
-  try {
-    const cached = localStorage.getItem('td_sedes');
-    if (cached) {
-      const arr = JSON.parse(cached);
-      if (arr && arr.length) {
-        SEDES = arr.map(normalizeSede);
-      }
-    }
-  } catch(_) {}
+// ── HAVERSINE — distancia GPS en metros ──────────────────────────────
+function haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000, r = d => d * Math.PI / 180;
+  const dLat = r(lat2-lat1), dLng = r(lng2-lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(r(lat1))*Math.cos(r(lat2))*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
 
-  // 2) Intentar desde Supabase (tabla sedes — con lat/lng reales)
+// ── GEOLOCALIZACIÓN — detecta sede más cercana automáticamente ───────
+let _gpsLat = null, _gpsLng = null;
+
+async function detectarSedePorGPS() {
+  if (!navigator.geolocation) return;
   try {
-    const sbUrl  = window.SUPABASE_URL  ||  + SB_URL + ;
-    const sbKey  = window.SUPABASE_KEY  || '';
-    if (sbUrl && sbKey) {
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, {timeout:8000, maximumAge:60000})
+    );
+    _gpsLat = pos.coords.latitude;
+    _gpsLng = pos.coords.longitude;
+    // Buscar la sede más cercana que esté dentro de su radio
+    let mejorSede = null, mejorDist = Infinity;
+    for (const s of SEDES) {
+      if (!s.lat || !s.lng) continue;
+      const dist = haversineM(_gpsLat, _gpsLng, s.lat, s.lng);
+      if (dist < mejorDist) { mejorDist = dist; mejorSede = {...s, _dist: Math.round(dist)}; }
+    }
+    // Asignar la más cercana (siempre, para que el usuario pueda confirmar o cambiar)
+    if (mejorSede) {
+      seleccionarSede(mejorSede, true); // true = detectada por GPS
+    }
+  } catch(e) {
+    console.info('[Encuesta] GPS no disponible:', e.message);
+  }
+}
+
+async function cargarSedes() {
+  // SOLO desde Supabase — CERO localStorage
+  if (SB_URL && SB_KEY) {
+    try {
       const r = await fetch(
-        `${sbUrl}/rest/v1/sedes?activa=eq.true&select=id,nombre,ciudad,direccion,lat,lng,radio_m&order=nombre.asc`,
-        { headers: { apikey: sbKey, Authorization: 'Bearer ' + sbKey } }
+        `${SB_URL}/rest/v1/sedes?activa=eq.true&select=id,nombre,ciudad,direccion,lat,lng,radio_m&order=nombre.asc`,
+        { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY } }
       );
       if (r.ok) {
         const rows = await r.json();
         if (rows && rows.length) {
           SEDES = rows.map(normalizeSede);
-          localStorage.setItem('td_sedes', JSON.stringify(rows));
+          return; // éxito — no usar fallback
         }
       }
-    }
-  } catch(e) { console.warn('[Encuesta] sedes Supabase:', e.message); }
-
-  // 3) Fallback al array hardcodeado si no hay nada
-  if (!SEDES.length) {
-    SEDES = SEDES_FALLBACK.map(normalizeSede);
+    } catch(e) { console.warn('[Encuesta] sedes Supabase:', e.message); }
   }
+  // Fallback al array hardcodeado SOLO si Supabase falla
+  SEDES = SEDES_FALLBACK.map(normalizeSede);
 }
 
 function normalizeSede(s) {
   return {
-    id:        s.id       || s.municipio?.toLowerCase().replace(/[^a-z0-9]/g,'-') || '',
-    nombre:    s.nombre   || '',
-    municipio: s.ciudad   || s.municipio || '',
-    direccion: s.direccion|| '',
+    id:        s.id        || s.municipio?.toLowerCase().replace(/[^a-z0-9]/g,'-') || '',
+    nombre:    s.nombre    || '',
+    municipio: s.ciudad    || s.municipio || '',
+    direccion: s.direccion || '',
     lat:       parseFloat(s.lat) || null,
     lng:       parseFloat(s.lng) || null,
-    radio_m:   s.radio_m  || 300,
+    radio_m:   s.radio_m   || 300,
   };
 }
 
@@ -515,15 +534,24 @@ function buscarSede(val){
   },200);
 }
 
-function _ss(s){
+// seleccionarSede: llamada desde dropdown manual (_ss) o desde GPS (detectarSedePorGPS)
+// porGPS=true → muestra badge con indicador "Detectada por GPS · Cambiar"
+function seleccionarSede(s, porGPS=false){
   sedeSeleccionada=s;
   document.getElementById('sedeDd').style.display='none';
   document.getElementById('inputSede').style.display='none';
   document.getElementById('sbName').textContent=s.nombre;
-  document.getElementById('sbSub').textContent='📍 '+s.municipio+(s.direccion?' · '+s.direccion:'');
+  const distLabel = (porGPS && s._dist != null)
+    ? ` · ${s._dist < 1000 ? s._dist+'m' : (s._dist/1000).toFixed(1)+'km'}`
+    : '';
+  const gpsLabel = porGPS ? '📡 Detectada por GPS' : ('📍 '+s.municipio);
+  document.getElementById('sbSub').textContent = gpsLabel + distLabel + (s.direccion?' · '+s.direccion:'');
   document.getElementById('sedeBadge').style.display='flex';
   markErr('inputSede','errSede',false);checkBtn0();
 }
+
+// Alias para el dropdown manual
+function _ss(s){ seleccionarSede(s, false); }
 
 function cambiarSede(){
   sedeSeleccionada=null;
@@ -599,7 +627,11 @@ async function submitSurvey(){
     if(r.ok){const d=await r.json();saved=d.ok===true;}
   }catch(e){console.warn('Sin conexión:',e.message);}
   if(!saved){
-    try{const p=JSON.parse(localStorage.getItem('td_encuestas_offline')||'[]');p.push({...payload,_pendiente:true,_ts:new Date().toISOString()});localStorage.setItem('td_encuestas_offline',JSON.stringify(p));}catch(_){}
+    // Sin conexión: mostrar mensaje y continuar — el usuario puede reintentarlo
+    showToast('Sin conexión al servidor. Por favor verifica tu red e intenta de nuevo.','error');
+    btn.classList.remove('loading');btn.disabled=false;
+    btn.innerHTML='⭐ Enviar evaluación';
+    return;
   }
   showSuccess(avg,payload);
 }
@@ -639,10 +671,13 @@ function spawnConfetti(){
 }
 
 document.addEventListener('click',e=>{if(!e.target.closest('.sede-wrap'))document.getElementById('sedeDd').style.display='none';});
-// Cargar sedes antes de construir los slides
+
+// Cargar sedes desde Supabase, luego intentar GPS para autodetección
 (async () => {
   await cargarSedes();
   buildSlides();
+  // Intentar detectar sede más cercana por GPS (no bloquea el inicio)
+  detectarSedePorGPS().catch(()=>{});
 })();
 </script>
 </body>
