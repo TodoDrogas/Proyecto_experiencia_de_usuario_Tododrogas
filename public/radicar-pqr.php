@@ -120,7 +120,7 @@ try {
         if (strpos($logo_url, 'data:image') === 0) {
             // El logo ya está almacenado como base64 en la BD (no es una URL externa)
             // Outlook acepta base64 inline → usarlo para el correo interno
-            $logo_img_html = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+            $logo_img_html = "<div style='background:#fff;border-radius:10px;padding:8px 16px;display:inline-block;margin-bottom:10px'><img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:36px;max-width:180px;object-fit:contain;display:block\"></div>";
             // Gmail bloquea base64 inline y no hay URL pública → adjuntar logo como CID (Content-ID)
             // Por ahora se omite en el acuse al usuario para evitar imagen rota
             $logo_img_html_usuario = "";
@@ -132,12 +132,12 @@ try {
                 $finfo = new finfo(FILEINFO_MIME_TYPE);
                 $logo_mime = $finfo->buffer($logo_data) ?: 'image/png';
                 $logo_b64  = base64_encode($logo_data);
-                $logo_img_html = "<img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+                $logo_img_html = "<div style='background:#fff;border-radius:10px;padding:8px 16px;display:inline-block;margin-bottom:10px'><img src=\"data:{$logo_mime};base64,{$logo_b64}\" alt=\"Tododrogas\" style=\"height:36px;max-width:180px;object-fit:contain;display:block\"></div>";
             } else {
-                $logo_img_html = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+                $logo_img_html = "<div style='background:#fff;border-radius:10px;padding:8px 16px;display:inline-block;margin-bottom:10px'><img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:36px;max-width:180px;object-fit:contain;display:block\"></div>";
             }
             // Acuse al usuario (Gmail): usar URL directa — Gmail carga URLs públicas sin problema
-            $logo_img_html_usuario = "<img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 10px\">";
+            $logo_img_html_usuario = "<div style='background:#fff;border-radius:10px;padding:8px 16px;display:inline-block;margin:0 auto 12px'><img src=\"{$logo_url}\" alt=\"Tododrogas\" style=\"height:36px;max-width:180px;object-fit:contain;display:block\"></div>";
         }
     }
 } catch (Exception $e) { /* sin logo */ }
@@ -331,66 +331,94 @@ if ($token) {
     $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} " . strtoupper($canal) . "</span>";
 
     $cuerpo_html = "
-<div style='font-family:Poppins,Arial,sans-serif;max-width:680px;margin:0 auto;color:#1f2937'>
-  <div style='background:#1e40af;padding:20px 28px;border-radius:8px 8px 0 0'>
-    {$logo_img_html}
-    <h2 style='color:#fff;margin:4px 0 0;font-size:20px;font-weight:700'>Nueva PQRSFD Recibida</h2>
-    <p style='color:#bfdbfe;margin:4px 0 0;font-size:12px;letter-spacing:.5px'>Experiencia de Servicio al Cliente · Nova TD</p>
-  </div>
-  <div style='background:#f8fafc;padding:24px 28px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px'>
-    <p style='margin:0 0 16px'>Estimado equipo PQRSFDSFD,</p>
-    <p style='margin:0 0 16px'>Mediante la <strong>Plataforma Inteligente Nova TD</strong> se ha recibido el siguiente caso radicado:</p>
+<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap');body,table,td,p,span,div,a{font-family:'Poppins',Arial,sans-serif!important}</style>
+</head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Poppins,Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
+<tr><td align='center'>
+<table width='680' cellpadding='0' cellspacing='0' style='max-width:680px;width:100%'>
 
-    <table style='width:100%;border-collapse:collapse;margin-bottom:20px'>
-      <tr><td style='padding:8px 12px;background:#eff6ff;font-weight:700;width:160px;border:1px solid #dbeafe'>Radicado</td>
-          <td style='padding:8px 12px;border:1px solid #dbeafe;font-weight:700;color:#1e40af;font-size:16px'>{$ticket_id}</td></tr>
-      <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Fecha</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$fecha_fmt}</td></tr>
-      <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Canal</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$badge_canal}</td></tr>
-      <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Tipo</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'><strong>" . strtoupper($tipo_pqr) . "</strong>" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " — {$categoria_ia}" : '') . "</td></tr>
-      <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Sentimiento</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$badge_sent}</td></tr>
-      <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Prioridad</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$badge_prio}</td></tr>
-      <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>SLA</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$horas_sla}h · Límite: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "</td></tr>
-      <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Ley aplicable</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$ley_aplicable}</td></tr>
+  <!-- HEADER -->
+  <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:24px 32px'>
+    <table width='100%'><tr>
+      <td><div style='background:#fff;border-radius:10px;padding:8px 16px;display:inline-block'>
+        <img src='{$logo_url}' alt='Tododrogas' style='height:34px;max-width:180px;object-fit:contain;display:block'>
+      </div></td>
+      <td align='right'><span style='color:#93c5fd;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase'>NUEVA PQRSFD RECIBIDA</span></td>
+    </tr></table>
+  </td></tr>
+
+  <!-- RADICADO BAND -->
+  <tr><td style='background:#1e3a8a;padding:18px 32px;text-align:center'>
+    <p style='color:#93c5fd;margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase'>Número de radicado</p>
+    <p style='color:#fff;margin:6px 0 2px;font-size:28px;font-weight:800;letter-spacing:3px;font-family:monospace'>{$ticket_id}</p>
+    <p style='color:#bfdbfe;margin:0;font-size:11px'>{$fecha_fmt} &nbsp;·&nbsp; {$badge_canal}</p>
+  </td></tr>
+
+  <!-- BODY -->
+  <tr><td style='background:#fff;padding:24px 32px;border:1px solid #e2e8f0;border-top:none'>
+    <p style='margin:0 0 16px;color:#374151;font-size:14px'>Estimado equipo PQRSFD,</p>
+    <p style='margin:0 0 20px;color:#374151;font-size:14px;line-height:1.6'>Mediante la <strong>Plataforma Inteligente Nova TD</strong> se ha recibido el siguiente caso radicado:</p>
+
+    <!-- Tabla de datos del ticket -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:20px;font-size:13px'>
+      <tr style='background:#eff6ff'><td style='padding:9px 14px;font-weight:700;color:#1e40af;width:160px;border-bottom:1px solid #e5e7eb'>Radicado</td>
+          <td style='padding:9px 14px;font-weight:700;color:#1e40af;font-size:15px;border-bottom:1px solid #e5e7eb'>{$ticket_id}</td></tr>
+      <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Fecha</td>
+          <td style='padding:9px 14px;color:#111827;border-bottom:1px solid #f3f4f6'>{$fecha_fmt}</td></tr>
+      <tr style='background:#fafafa'><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Canal</td>
+          <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$badge_canal}</td></tr>
+      <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Tipo</td>
+          <td style='padding:9px 14px;color:#111827;font-weight:700;border-bottom:1px solid #f3f4f6'>" . strtoupper($tipo_pqr) . "" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " — {$categoria_ia}" : '') . "</td></tr>
+      <tr style='background:#fafafa'><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Sentimiento</td>
+          <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$badge_sent}</td></tr>
+      <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Prioridad</td>
+          <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$badge_prio}</td></tr>
+      <tr style='background:#fafafa'><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>SLA</td>
+          <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$horas_sla}h · Límite: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "</td></tr>
+      <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280'>Ley aplicable</td>
+          <td style='padding:9px 14px;color:#111827'>{$ley_aplicable}</td></tr>
     </table>
 
-    <div style='background:#fff;border:1px solid #e2e8f0;border-left:4px solid #1e40af;border-radius:4px;padding:16px 20px;margin-bottom:20px'>
-      <p style='margin:0 0 8px;font-weight:700;color:#1e40af'>👤 Datos del ciudadano</p>
-      <p style='margin:2px 0;font-size:13px'><strong>Nombre:</strong> {$nombre}</p>" .
-      ($documento ? "<p style='margin:2px 0;font-size:13px'><strong>Documento:</strong> {$documento}</p>" : "") .
-      ($correo ? "<p style='margin:2px 0;font-size:13px'><strong>Correo:</strong> {$correo}</p>" : "") .
-      ($telefono ? "<p style='margin:2px 0;font-size:13px'><strong>Celular:</strong> {$telefono}</p>" : "") .
-      "<p style='margin:2px 0;font-size:13px'><strong>Canal de contacto preferido:</strong> {$canal_contacto}</p>
+    <!-- Datos del ciudadano -->
+    <div style='background:#f0f7ff;border:1px solid #bfdbfe;border-left:4px solid #1e40af;border-radius:6px;padding:16px 20px;margin-bottom:16px'>
+      <p style='margin:0 0 10px;font-weight:700;color:#1e40af;font-size:13px'>👤 Datos del ciudadano</p>
+      <p style='margin:3px 0;font-size:13px;color:#374151'><strong>Nombre:</strong> {$nombre}</p>" .
+      ($documento ? "<p style='margin:3px 0;font-size:13px;color:#374151'><strong>Documento:</strong> {$documento}</p>" : "") .
+      ($correo ? "<p style='margin:3px 0;font-size:13px;color:#374151'><strong>Correo:</strong> <a href='mailto:{$correo}' style='color:#2563eb'>{$correo}</a></p>" : "") .
+      ($telefono ? "<p style='margin:3px 0;font-size:13px;color:#374151'><strong>Celular:</strong> {$telefono}</p>" : "") .
+      "<p style='margin:3px 0;font-size:13px;color:#374151'><strong>Canal preferido:</strong> {$canal_contacto}</p>
     </div>
 
-    <div style='background:#fff;border:1px solid #e2e8f0;border-left:4px solid #7c3aed;border-radius:4px;padding:16px 20px;margin-bottom:20px'>
-      <p style='margin:0 0 8px;font-weight:700;color:#7c3aed'>{$emoji_canal} Mensaje recibido via {$canal_txt}</p>
-      <p style='margin:0;font-size:14px;line-height:1.6;color:#374151'>" . nl2br(htmlspecialchars($texto_pqr)) . "</p>" .
+    <!-- Mensaje recibido -->
+    <div style='background:#faf5ff;border:1px solid #e9d5ff;border-left:4px solid #7c3aed;border-radius:6px;padding:16px 20px;margin-bottom:16px'>
+      <p style='margin:0 0 8px;font-weight:700;color:#7c3aed;font-size:13px'>{$emoji_canal} Mensaje recibido via {$canal_txt}</p>
+      <p style='margin:0;font-size:13px;line-height:1.6;color:#374151'>" . nl2br(htmlspecialchars($texto_pqr)) . "</p>" .
       ($resumen_corto ? "<p style='margin:10px 0 0;font-size:12px;color:#6b7280;font-style:italic'>📌 Resumen IA: {$resumen_corto}</p>" : "") .
       "
-    </div>
+    </div>" .
 
-    " . ($audio_url || $canvas_url ? "<div style='background:#fefce8;border:1px solid #fde68a;border-radius:4px;padding:12px 16px;margin-bottom:20px;font-size:13px'>
+    ($audio_url || $canvas_url ? "
+    <div style='background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#92400e'>
       <strong>📎 Adjunto incluido:</strong> " . ($audio_url ? "Archivo de audio (🎤 .webm)" : "Imagen del lápiz inteligente (✏️)") . " — ver adjunto en este correo.
     </div>" : "") . "
 
-    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:12px 16px;margin-bottom:20px;font-size:12px;color:#166534'>
-      ✅ Este caso ha sido <strong>guardado automáticamente en el sistema</strong>. 
-      Si hay problemas de conectividad, el registro persiste en la base de datos y estará disponible cuando se recupere la conexión.
+    <!-- Estado sistema -->
+    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:12px 16px;margin-bottom:0;font-size:12px;color:#166534'>
+      ✅ Este caso ha sido <strong>guardado automáticamente en el sistema</strong>. Si hay problemas de conectividad, el registro persiste en la base de datos y estará disponible cuando se recupere la conexión.
     </div>
+  </td></tr>
 
-    <p style='font-size:12px;color:#9ca3af;margin:0;border-top:1px solid #e5e7eb;padding-top:12px'>
-      Experiencia de Servicio al Cliente · Tododrogas CIA SAS · Nova TD v4 · {$fecha_fmt}<br>
-      Radicado: <strong>{$ticket_id}</strong> · ID interno: " . ($correo_id ?? 'N/A') . "
-    </p>
-  </div>
-</div>";
+  <!-- FOOTER -->
+  <tr><td style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center'>
+    <p style='font-size:11px;color:#9ca3af;margin:0'>Experiencia de Servicio al Cliente · Tododrogas CIA SAS · Nova TD v4 · {$fecha_fmt}<br>
+    Radicado: <strong>{$ticket_id}</strong> · ID interno: " . ($correo_id ?? 'N/A') . "</p>
+  </td></tr>
+
+</table>
+</td></tr></table>
+</body></html>";
+
 
     // Construir mensaje Graph API
     $mail_payload = [
