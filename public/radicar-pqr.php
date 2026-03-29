@@ -538,6 +538,38 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     </div>" : "")."
 
   </td></tr>
+
+  <!-- CANALES PQRSFD -->
+  <tr><td style='padding:0'>
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse'>
+      <tr><td style='background:linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%);padding:22px 32px'>
+        <p style='margin:0 0 14px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#93c5fd'>📍 Nuestros canales de atención · Tododrogas CIA SAS</p>
+        <table width='100%' cellpadding='0' cellspacing='0'>
+          <tr>
+            <td width='50%' style='vertical-align:top;padding-right:8px'>
+              <p style='margin:0 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>💬 WhatsApp</p>
+              <a href='https://wa.me/573043412431' style='color:#fff;font-size:14px;font-weight:700;text-decoration:none'>304 341 2431</a>
+              <p style='margin:10px 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>📞 PBX Atención</p>
+              <a href='tel:6043222432' style='color:#fff;font-size:14px;font-weight:700;text-decoration:none'>604 322 2432 Op. 2</a>
+            </td>
+            <td width='50%' style='vertical-align:top;padding-left:8px'>
+              <p style='margin:0 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>📧 Correo PQRSFD</p>
+              <a href='mailto:pqrsfd@tododrogas.com.co' style='color:#fff;font-size:13px;font-weight:700;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
+              <p style='margin:10px 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>🌐 Formulario PQR</p>
+              <a href='https://tododrogas.online/pqr_form.html' style='color:#fff;font-size:13px;font-weight:700;text-decoration:none'>tododrogas.online/pqr</a>
+            </td>
+          </tr>
+        </table>
+        <p style='margin:12px 0 0;font-size:10px;color:rgba(255,255,255,.55);border-top:1px solid rgba(255,255,255,.1);padding-top:10px'>
+          <strong style='color:#bfdbfe'>PBX Ventas:</strong> 604 448 1534 &nbsp;·&nbsp;
+          <strong style='color:#bfdbfe'>WhatsApp Ventas:</strong> 312 815 2913 &nbsp;·&nbsp;
+          <strong style='color:#bfdbfe'>Tel. Corp:</strong> 304 341 2431
+        </p>
+      </td></tr>
+    </table>
+  </td></tr>
+  <!-- FIN CANALES PQRSFD -->
+
   <tr><td style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center'>
     <p style='font-size:11px;color:#9ca3af;margin:0'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente<br>
     Este es un mensaje automático, no responda directamente a este correo.</p>
