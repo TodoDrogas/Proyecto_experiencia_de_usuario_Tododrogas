@@ -115,6 +115,82 @@ if ($saved) {
     error_log('[radicar-encuesta] Supabase error: ' . $sb_result['code'] . ' — ' . $sb_result['body']);
 }
 
+// ── PASO 1B: INSERTAR EN TABLA CORREOS (igual que radicación) ─────────
+// Así las encuestas aparecen en el buzón del admin automáticamente
+$fecha_enc   = date('Ymd');
+$rand_enc    = str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
+$ticket_enc  = "ENC-{$fecha_enc}-{$rand_enc}";
+
+$emoji_cal   = [1=>'😞',2=>'😐',3=>'🙂',4=>'😊',5=>'🤩'][$calificacion] ?? '⭐';
+$emoji_prio  = $calificacion >= 4 ? '🟢' : ($calificacion >= 3 ? '🟡' : '🔴');
+$sent_enc    = $calificacion >= 4 ? 'positivo' : ($calificacion >= 3 ? 'neutro' : 'negativo');
+$prio_enc    = $calificacion >= 4 ? 'baja'     : ($calificacion >= 3 ? 'media'  : 'alta');
+
+$subject_enc = "[{$ticket_enc}] ⭐ ENCUESTA | {$emoji_cal} {$calificacion}/5 | {$emoji_prio} " . mb_strtoupper($prio_enc,'UTF-8') . " | 📍 {$sede_nombre}";
+
+$resumen_enc = "Encuesta de satisfacción. Promedio: {$promedio}/5. " .
+               "Instalaciones:{$instalaciones} Atención:{$atencion} " .
+               "Tiempos:{$tiempos} Medicamentos:{$medicamentos} Recomienda:{$recomendacion}." .
+               ($comentario ? " Comentario: {$comentario}" : '');
+
+$horas_enc        = 360; // SLA encuestas = 15 días
+$fecha_limite_enc = date('c', strtotime("+{$horas_enc} hours"));
+
+$payload_correo_enc = [
+    'ticket_id'         => $ticket_enc,
+    'from_email'        => $correo ?: ($telefono ? $telefono.'@encuesta' : 'anonimo@encuesta'),
+    'from_name'         => $nombre ?: 'Anónimo',
+    'nombre'            => $nombre ?: 'Anónimo',
+    'correo'            => $correo ?: null,
+    'telefono_contacto' => $telefono ?: null,
+    'subject'           => $subject_enc,
+    'descripcion'       => $resumen_enc,
+    'body_preview'      => mb_substr($resumen_enc, 0, 200),
+    'body_content'      => $resumen_enc . ($comentario ? "
+
+Comentario: {$comentario}" : ''),
+    'body_type'         => 'text',
+    'tipo_pqr'          => 'encuesta',
+    'categoria_ia'      => "Encuesta · {$sede_nombre}",
+    'sentimiento'       => $sent_enc,
+    'nivel_riesgo'      => $calificacion <= 2 ? 'medio' : 'bajo',
+    'resumen_corto'     => "Encuesta {$calificacion}/5 — {$sede_nombre}" . ($sede_ciudad ? ", {$sede_ciudad}" : ''),
+    'ley_aplicable'     => 'N/A',
+    'canal_contacto'    => $canal,
+    'origen'            => 'formulario_encuesta',
+    'estado'            => 'solucionado', // encuestas no requieren gestión
+    'prioridad'         => $prio_enc,
+    'es_urgente'        => false,
+    'horas_sla'         => $horas_enc,
+    'fecha_limite_sla'  => $fecha_limite_enc,
+    'has_attachments'   => false,
+    'is_read'           => false,
+    'datos_legales'     => json_encode([
+        'encuesta_id'   => $encuesta_id,
+        'instalaciones' => $instalaciones,
+        'atencion'      => $atencion,
+        'tiempos'       => $tiempos,
+        'medicamentos'  => $medicamentos,
+        'recomendacion' => $recomendacion,
+        'promedio'      => $promedio,
+        'sede_nombre'   => $sede_nombre,
+        'sede_ciudad'   => $sede_ciudad,
+        'sede_direccion'=> $sede_direccion,
+    ]),
+    'received_at'       => $now,
+    'created_at'        => $now,
+    'updated_at'        => $now,
+];
+
+$enc_correo_result = sbPost($SB_URL, $SB_KEY, 'correos', $payload_correo_enc);
+$enc_correo_id = null;
+if ($enc_correo_result['code'] < 400) {
+    $enc_ins = json_decode($enc_correo_result['body'], true);
+    $enc_correo_id = $enc_ins[0]['id'] ?? null;
+} else {
+    error_log('[radicar-encuesta] correos insert error: ' . $enc_correo_result['code']);
+}
+
 // ── PASO 2: CORREO DE CONFIRMACIÓN AL USUARIO ────────────────────────
 $correo_enviado = false;
 if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
