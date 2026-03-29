@@ -364,7 +364,8 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 }
 
 // ── PASO 3: HISTORIAL_EVENTOS ─────────────────────────────────────────
-if ($saved) {
+// Siempre guardar en historial (admin lee encuestas desde aquí)
+if (true) {
     sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
         'evento'      => 'encuesta_recibida',
         'descripcion' => "Encuesta de satisfacción recibida. Sede: {$sede_nombre}. Promedio: {$promedio}. Confirmación: " . ($correo_enviado ? 'OK' : ($correo ? 'error' : 'sin correo')),
