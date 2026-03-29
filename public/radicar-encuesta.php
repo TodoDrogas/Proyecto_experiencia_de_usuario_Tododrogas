@@ -102,6 +102,22 @@ $payload = [
     'ticket_id'       => null,
     'correo_id'       => null,
     'created_at'      => $now,
+    'datos_extra'     => json_encode([
+        'nombre'        => $nombre,
+        'correo'        => $correo,
+        'telefono'      => $telefono,
+        'documento'     => $documento,
+        'sede_nombre'   => $sede_nombre,
+        'sede_ciudad'   => $sede_ciudad,
+        'sede_direccion'=> $sede_direccion,
+        'promedio'      => $promedio,
+        'instalaciones' => $instalaciones,
+        'atencion'      => $atencion,
+        'tiempos'       => $tiempos,
+        'medicamentos'  => $medicamentos,
+        'recomendacion' => $recomendacion,
+        'canal'         => $canal,
+    ]),
 ];
 
 $sb_result  = sbPost($SB_URL, $SB_KEY, 'encuestas_satisfaccion', $payload);
@@ -169,7 +185,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 <body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
 <table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
 <tr><td align='center'>
-<table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%'>
+<table width='640' cellpadding='0' cellspacing='0' style='max-width:640px;width:100%'>
 
   <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
     <div style='background:#fff;border-radius:10px;padding:10px 20px;display:inline-block;margin:0 auto 14px'><img src='{$LOGO_URL}' alt='Tododrogas' style='height:44px;max-width:200px;object-fit:contain;display:block'></div>
@@ -298,7 +314,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
             $cuerpo_admin = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
 <table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:24px 0'>
 <tr><td align='center'>
-<table width='580' cellpadding='0' cellspacing='0' style='background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)'>
+<table width='680' cellpadding='0' cellspacing='0' style='background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1);max-width:680px;width:100%'>
 
   <tr><td style='background:#1e3a5f;padding:20px 28px'>
     <table width='100%'><tr>
@@ -311,7 +327,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     <table width='100%'><tr>
       <td><p style='margin:0 0 4px;font-size:16px;font-weight:700;color:#111827'>Calificación: <span style='color:{$color_cal_admin}'>{$estrellas_admin} ({$calificacion}/5)</span></p>
           <p style='margin:0;font-size:12px;color:#6b7280'>{$badge_cal}</p></td>
-      <td align='right'><p style='margin:0;font-size:11px;color:#6b7280'>Sede: <strong style='color:#111827'>{$sede_nombre}</strong><br>{$sede_ciudad}</p></td>
+      <td align='right'><p style='margin:0;font-size:11px;color:#6b7280'>Sede: <strong style='color:#111827'>{$sede_nombre}</strong>" . (($sede_ciudad && stripos($sede_nombre, $sede_ciudad) === false) ? "<br>{$sede_ciudad}" : "") . "</p></td>
     </tr></table>
   </td></tr>
 
@@ -319,6 +335,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
       <tr style='background:#f9fafb'><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DATOS DEL ENCUESTADO</th><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DETALLES</th></tr>
       <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Nombre</td><td style='padding:7px 10px;font-size:12px;color:#111827;font-weight:600'>" . htmlspecialchars($nombre, ENT_QUOTES) . "</td></tr>
+      " . ($documento ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Documento</td><td style='padding:7px 10px;font-size:12px;color:#111827;font-weight:600'>" . htmlspecialchars($documento, ENT_QUOTES) . "</td></tr>" : "") . "
       " . ($correo ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Correo</td><td style='padding:7px 10px;font-size:12px;color:#2563eb'>" . htmlspecialchars($correo, ENT_QUOTES) . "</td></tr>" : "") . "
       " . ($telefono ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Teléfono</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . htmlspecialchars($telefono, ENT_QUOTES) . "</td></tr>" : "") . "
       <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Canal</td><td style='padding:7px 10px;font-size:12px;color:#111827;text-transform:capitalize'>{$canal}</td></tr>
