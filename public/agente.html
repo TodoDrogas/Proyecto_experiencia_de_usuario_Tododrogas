@@ -525,12 +525,13 @@ async function sb(path, method='GET', body=null) {
 }
 
 // ──────────────────────────────────────────────
-// SESSION
+// SESSION — Edge-safe (sessionStorage may be blocked by privacy settings)
 // ──────────────────────────────────────────────
-const _rawAgId   = sessionStorage.getItem('pqr_agent_id') || '';
+function _ss(key, def='') { try { return sessionStorage.getItem(key) || def; } catch(e) { return def; } }
+const _rawAgId   = _ss('pqr_agent_id');
 const _uuidRe    = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AGENT_ID   = _uuidRe.test(_rawAgId) ? _rawAgId : null;
-const AGENT_NAME = sessionStorage.getItem('pqr_name') || 'Agente';
+const AGENT_NAME = _ss('pqr_name', 'Agente');
 
 // Default actions (loaded from config or fallback)
 let DEFAULT_ACTIONS = ['Observación añadida','Solicitud de información','Cliente contactado','Seguimiento','Escalado','En gestión','Solucionado','Correo respondido'];
