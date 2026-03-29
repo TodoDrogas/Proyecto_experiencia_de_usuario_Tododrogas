@@ -154,6 +154,7 @@ $ticket_id   = "TD-{$fecha}-{$rand}";
 $nombre       = trim($body['nombre']       ?? '');
 $correo       = trim($body['correo']       ?? '');
 $telefono     = trim($body['telefono']     ?? '');
+$documento    = trim($body['documento']    ?? '');
 $descripcion  = trim($body['descripcion']  ?? '');
 $tipo_pqr_raw = trim($body['tipo_pqr'] ?? $body['tipo'] ?? 'peticion');
 $tipo_pqr     = strtolower($tipo_pqr_raw);
@@ -348,7 +349,7 @@ if ($token) {
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Canal</td>
           <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$badge_canal}</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Tipo</td>
-          <td style='padding:8px 12px;border:1px solid #e2e8f0'><strong>" . strtoupper($tipo_pqr) . "</strong> — {$categoria_ia}</td></tr>
+          <td style='padding:8px 12px;border:1px solid #e2e8f0'><strong>" . strtoupper($tipo_pqr) . "</strong>" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " — {$categoria_ia}" : '') . "</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Sentimiento</td>
           <td style='padding:8px 12px;border:1px solid #e2e8f0'>{$badge_sent}</td></tr>
       <tr><td style='padding:8px 12px;background:#f8fafc;font-weight:700;border:1px solid #e2e8f0'>Prioridad</td>
@@ -362,6 +363,7 @@ if ($token) {
     <div style='background:#fff;border:1px solid #e2e8f0;border-left:4px solid #1e40af;border-radius:4px;padding:16px 20px;margin-bottom:20px'>
       <p style='margin:0 0 8px;font-weight:700;color:#1e40af'>👤 Datos del ciudadano</p>
       <p style='margin:2px 0;font-size:13px'><strong>Nombre:</strong> {$nombre}</p>" .
+      ($documento ? "<p style='margin:2px 0;font-size:13px'><strong>Documento:</strong> {$documento}</p>" : "") .
       ($correo ? "<p style='margin:2px 0;font-size:13px'><strong>Correo:</strong> {$correo}</p>" : "") .
       ($telefono ? "<p style='margin:2px 0;font-size:13px'><strong>Celular:</strong> {$telefono}</p>" : "") .
       "<p style='margin:2px 0;font-size:13px'><strong>Canal de contacto preferido:</strong> {$canal_contacto}</p>
@@ -495,7 +497,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 <!DOCTYPE html><html><head><style>@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');body,table,td,p,span,div{font-family:'Poppins',Arial,sans-serif!important}</style></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Poppins,Arial,sans-serif'>
 <table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
 <tr><td align='center'>
-<table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%'>
+<table width='640' cellpadding='0' cellspacing='0' style='max-width:640px;width:100%'>
 
   <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
     ".($logo_img_html_usuario ?: "")."
@@ -517,7 +519,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
       <tr><td style='color:#6b7280;width:160px;border-bottom:1px solid #f3f4f6'>Fecha de radicado</td>
           <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$fecha_fmt_u} (hora Colombia)</td></tr>
       <tr><td style='color:#6b7280;border-bottom:1px solid #f3f4f6'>Tipo de solicitud</td>
-          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$emoji_tipo_u} {$tipo_label_u} — {$categoria_ia}</td></tr>
+          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$emoji_tipo_u} {$tipo_label_u}" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " — {$categoria_ia}" : '') . "</td></tr>
 
       <tr><td style='color:#6b7280'>Canal de contacto</td>
           <td style='color:#111827;font-weight:600'>{$canal_contacto}</td></tr>
