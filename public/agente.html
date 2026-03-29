@@ -137,7 +137,15 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 
 /* ── RIGHT PANEL (MGMT + TIMELINE) ── */
 .mgmt-right{width:270px;min-width:250px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0}
-.mgmt-section{padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.mgmt-section{border-bottom:1px solid var(--border);flex-shrink:0;overflow:hidden}
+.mgmt-section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none;transition:background .15s}
+.mgmt-section-header:hover{background:var(--bg)}
+.mgmt-section-header .mgmt-label{margin-bottom:0}
+.mgmt-section-header .mgmt-chevron{transition:transform .2s;color:var(--ink3);flex-shrink:0}
+.mgmt-section-body{padding:0 14px 12px;animation:mgmtFadeIn .15s ease}
+.mgmt-section.collapsed .mgmt-section-body{display:none}
+.mgmt-section.collapsed .mgmt-chevron{transform:rotate(-90deg)}
+@keyframes mgmtFadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .mgmt-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;flex-shrink:0}
 .mgmt-select{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r2);padding:7px 10px;font-size:12px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;cursor:pointer}
 .mgmt-select:focus{border-color:var(--blue)}
@@ -276,8 +284,10 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
     </div>
     <div class="email-view" id="emailView" style="display:none"></div>
     <div class="mgmt-right" id="mgmtRight" style="display:none">
+
+      <!-- ESTADO — siempre visible -->
       <div class="mgmt-section">
-        <div class="mgmt-label">Estado del ticket</div>
+        <div class="mgmt-label" style="padding-top:12px">Estado del ticket</div>
         <span id="mgmtEstadoBadge" class="badge pendiente" style="font-size:11px;padding:3px 10px;margin-bottom:10px;display:inline-flex"></span>
         <button class="btn btn-primary mgmt-btn-full" onclick="openGestionModal()">
           <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -292,15 +302,24 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
           Confirmar firma
         </button>
       </div>
-      <div class="mgmt-section">
-        <div class="mgmt-label">Prioridad</div>
-        <div class="priority-row">
-          <button class="priority-btn" data-p="alta" onclick="setPriority('alta',this)">🔴 Alta</button>
-          <button class="priority-btn" data-p="media" onclick="setPriority('media',this)">🟡 Media</button>
-          <button class="priority-btn" data-p="baja" onclick="setPriority('baja',this)">🟢 Baja</button>
+
+      <!-- PRIORIDAD — collapsible, empieza colapsada -->
+      <div class="mgmt-section collapsed" id="secPrioridadAgente">
+        <div class="mgmt-section-header" onclick="toggleAgentSection('secPrioridadAgente')">
+          <div class="mgmt-label">Prioridad</div>
+          <svg class="mgmt-chevron" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="mgmt-section-body">
+          <div class="priority-row">
+            <button class="priority-btn" data-p="alta" onclick="setPriority('alta',this)">🔴 Alta</button>
+            <button class="priority-btn" data-p="media" onclick="setPriority('media',this)">🟡 Media</button>
+            <button class="priority-btn" data-p="baja" onclick="setPriority('baja',this)">🟢 Baja</button>
+          </div>
         </div>
       </div>
-      <div class="mgmt-label" style="padding:12px 14px 4px;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);flex-shrink:0">Historial del ticket</div>
+
+      <!-- HISTORIAL -->
+      <div class="mgmt-label" style="padding:10px 14px 4px;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);flex-shrink:0;border-top:1px solid var(--border)">Historial del ticket</div>
       <div class="timeline-wrap" id="ticketTimeline">
         <div class="empty-state"><p>Sin eventos</p></div>
       </div>
@@ -531,7 +550,9 @@ let _gestionForSolucionado = false;
 // INIT
 // ──────────────────────────────────────────────
 (async()=>{
-  if(sessionStorage.getItem('pqr_role')!=='agente') {
+  let _role = '';
+  try { _role = sessionStorage.getItem('pqr_role') || ''; } catch(e) { _role = ''; }
+  if(_role !== 'agente') {
     window.location.href='login.html'; return;
   }
   // Set agent UI
@@ -632,7 +653,8 @@ function renderEmailList() {
   const prioColor={alta:'#dc2626',media:'#ca8a04',baja:'#16a34a'};
   el.innerHTML = list.map(e=>`
     <div class="email-item${e.id===state.selectedId?' selected':''}${!e.is_read?' unread':''}"
-      onclick="selectEmail('${e.id}')"
+      data-email-id="${e.id}"
+      style="cursor:pointer"
       ondblclick="abrirPreviewCorreo('${e.id}')">
       ${!e.is_read?'<div class="unread-pip"></div>':''}
       ${(e.es_urgente||e.tipo_pqr||e.fecha_limite_sla)?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin:3px 0">${e.es_urgente?'<span style="background:#fee2e2;color:#dc2626;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px">⚠ URGENTE</span>':''  }${e.tipo_pqr?'<span style="background:var(--bg2);color:var(--ink2);font-size:9px;font-weight:600;padding:1px 6px;border-radius:99px;text-transform:capitalize;border:1px solid var(--border)">'+e.tipo_pqr+'</span>':''  }${e.fecha_limite_sla?(()=>{const fin=new Date(e.fecha_limite_sla).getTime();const ahora=Date.now();const hRest=Math.max(0,Math.round((fin-ahora)/3600000));const vencido=fin<ahora;const color=vencido?'#dc2626':hRest<24?'#ca8a04':'#16a34a';const bg=vencido?'#fee2e2':hRest<24?'#fef9c3':'#dcfce7';return '<span style="background:'+bg+';color:'+color+';font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px">'+( vencido?'⚠ Vencido':'⏱ '+hRest+'h')+'</span>';})():''  }</div>`:''}
@@ -1504,6 +1526,7 @@ async function syncAll() {
 // ──────────────────────────────────────────────
 function estadoLabel(s){return {pendiente:'Pendiente',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
+function toggleAgentSection(id){const s=document.getElementById(id);if(s)s.classList.toggle('collapsed');}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function getFileIcon(n=''){
   const e=(n.split('.').pop()||'').toLowerCase();
@@ -2516,6 +2539,30 @@ async function renderMediaFormulario(email) {
   html += '</div>';
   el.innerHTML = html;
 }
+
+// ── EDGE FIX: Event delegation for email list ─────────────────────────
+(function(){
+  function setupEmailDelegate() {
+    const el = document.getElementById('emailList');
+    if (!el) return;
+    el.addEventListener('click', function(evt) {
+      let node = evt.target;
+      while (node && node !== el) {
+        if (node.classList && node.classList.contains('email-item')) {
+          const id = node.getAttribute('data-email-id');
+          if (id) selectEmail(id);
+          return;
+        }
+        node = node.parentElement;
+      }
+    }, true);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupEmailDelegate);
+  } else {
+    setupEmailDelegate();
+  }
+})();
 
 </script>
 </body>
