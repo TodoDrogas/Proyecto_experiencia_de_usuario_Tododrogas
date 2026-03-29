@@ -262,8 +262,8 @@ $fecha_limite_sla = date('c', strtotime("+{$horas_sla} hours"));
 $emoji_sent = ['positivo'=>'😊','neutro'=>'😐','negativo'=>'😤','urgente'=>'🚨'][$sentimiento] ?? '📋';
 $emoji_prio = ['baja'=>'🟢','media'=>'🟡','alta'=>'🟠','critica'=>'🔴'][$prioridad] ?? '🟡';
 $emoji_canal = ['audio'=>'🎤','canvas'=>'✏️','escrito'=>'📝'][$canal] ?? '📝';
-$tipo_label  = strtoupper($tipo_pqr);
-$canal_label = strtoupper($canal);
+$tipo_label  = mb_strtoupper($tipo_pqr, 'UTF-8');
+$canal_label = mb_strtoupper($canal, 'UTF-8');
 
 // Asunto formateado completo
 $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} ".strtoupper($sentimiento)." | {$emoji_prio} ".strtoupper($prioridad);
@@ -319,6 +319,7 @@ if ($sb_result['code'] < 400) {
 }
 
 // ── PASO 3: ENVIAR CORREO A pqrsfd via Graph API ─────────────────────
+date_default_timezone_set('America/Bogota'); // Hora Colombia UTC-5
 $token = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
 
 if ($token) {
@@ -326,9 +327,9 @@ if ($token) {
     $fecha_fmt  = date('d/m/Y H:i', strtotime($now));
     $canal_txt  = ['audio' => 'mensaje de voz', 'canvas' => 'escritura con lápiz inteligente', 'escrito' => 'texto escrito'][$canal] ?? 'formulario web';
 
-    $badge_sent  = "<span style='background:" . (['positivo'=>'#dcfce7','neutro'=>'#f3f4f6','negativo'=>'#fee2e2','urgente'=>'#fef3c7'][$sentimiento]??'#f3f4f6') . ";color:" . (['positivo'=>'#166534','neutro'=>'#374151','negativo'=>'#991b1b','urgente'=>'#92400e'][$sentimiento]??'#374151') . ";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_sent} " . strtoupper($sentimiento) . "</span>";
-    $badge_prio  = "<span style='background:" . (['baja'=>'#dcfce7','media'=>'#fef9c3','alta'=>'#fed7aa','critica'=>'#fee2e2'][$prioridad]??'#fef9c3') . ";color:" . (['baja'=>'#166534','media'=>'#854d0e','alta'=>'#9a3412','critica'=>'#991b1b'][$prioridad]??'#854d0e') . ";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_prio} " . strtoupper($prioridad) . "</span>";
-    $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} " . strtoupper($canal) . "</span>";
+    $badge_sent  = "<span style='background:" . (['positivo'=>'#dcfce7','neutro'=>'#f3f4f6','negativo'=>'#fee2e2','urgente'=>'#fef3c7'][$sentimiento]??'#f3f4f6') . ";color:" . (['positivo'=>'#166534','neutro'=>'#374151','negativo'=>'#991b1b','urgente'=>'#92400e'][$sentimiento]??'#374151') . ";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_sent} " . mb_strtoupper($sentimiento, "UTF-8") . "</span>";
+    $badge_prio  = "<span style='background:" . (['baja'=>'#dcfce7','media'=>'#fef9c3','alta'=>'#fed7aa','critica'=>'#fee2e2'][$prioridad]??'#fef9c3') . ";color:" . (['baja'=>'#166534','media'=>'#854d0e','alta'=>'#9a3412','critica'=>'#991b1b'][$prioridad]??'#854d0e') . ";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_prio} " . mb_strtoupper($prioridad, "UTF-8") . "</span>";
+    $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} " . mb_strtoupper($canal, "UTF-8") . "</span>";
 
     $cuerpo_html = "
 <!DOCTYPE html><html><head><meta charset='UTF-8'>
@@ -369,7 +370,7 @@ if ($token) {
       <tr style='background:#fafafa'><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Canal</td>
           <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$badge_canal}</td></tr>
       <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Tipo</td>
-          <td style='padding:9px 14px;color:#111827;font-weight:700;border-bottom:1px solid #f3f4f6'>" . strtoupper($tipo_pqr) . "" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " — {$categoria_ia}" : '') . "</td></tr>
+          <td style='padding:9px 14px;color:#111827;font-weight:700;border-bottom:1px solid #f3f4f6'>" . mb_strtoupper($tipo_pqr, "UTF-8") . "" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " — {$categoria_ia}" : '') . "</td></tr>
       <tr style='background:#fafafa'><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Sentimiento</td>
           <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$badge_sent}</td></tr>
       <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Prioridad</td>
@@ -518,8 +519,8 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     $dias_resp   = round($horas_sla / 24);
     $fecha_lim_u = date('d/m/Y H:i', strtotime($fecha_limite_sla));
 
-    $tipo_label_u = strtoupper($tipo_pqr_raw);
-    $emoji_tipo_u = ['PETICIÓN'=>'💡','QUEJA'=>'😤','RECLAMO'=>'⚠️','SUGERENCIA'=>'💬','FELICITACIÓN'=>'⭐','DENUNCIA'=>'🚨'][strtoupper($tipo_pqr_raw)] ?? '📋';
+    $tipo_label_u = mb_strtoupper($tipo_pqr_raw, "UTF-8");
+    $emoji_tipo_u = ['PETICIÓN'=>'💡','QUEJA'=>'😤','RECLAMO'=>'⚠️','SUGERENCIA'=>'💬','FELICITACIÓN'=>'⭐','DENUNCIA'=>'🚨'][mb_strtoupper($tipo_pqr_raw, "UTF-8")] ?? '📋';
 
     $cuerpo_acuse = "
 <!DOCTYPE html><html><head><style>@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');body,table,td,p,span,div{font-family:'Poppins',Arial,sans-serif!important}</style></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Poppins,Arial,sans-serif'>
