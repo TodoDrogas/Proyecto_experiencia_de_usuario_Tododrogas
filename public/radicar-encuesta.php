@@ -359,8 +359,99 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
             curl_exec($ch2);
             curl_close($ch2);
         }
-        // ── FIN NOTIFICACIÓN INTERNA ─────────────────────────────────────
+        // ── FIN NOTIFICACIÓN INTERNA (dentro de bloque correo usuario) ─────
     }
+}
+
+// ── PASO 2B: NOTIFICACIÓN INTERNA A PQRSFD (SIEMPRE, sin importar si el usuario tiene correo) ──
+// Esto garantiza que las encuestas lleguen al admin aunque el usuario no haya dado su correo
+$token_admin = $token ?? getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
+if ($token_admin && !isset($token)) {
+    // token_admin recién obtenido (usuario no tenía correo, no se generó antes)
+    $token = $token_admin;
+}
+if ($token_admin && !$correo_enviado) {
+    // Solo enviar si NO se envió ya dentro del bloque de correo usuario
+    // (cuando hay correo, ya se envió adentro)
+    $estrellas_admin2 = str_repeat('★', $calificacion) . str_repeat('☆', 5 - $calificacion);
+    $color_cal_admin2 = $calificacion >= 4 ? '#16a34a' : ($calificacion >= 3 ? '#d97706' : '#dc2626');
+    $badge_cal2       = $calificacion >= 4 ? '✅ Satisfecho' : ($calificacion >= 3 ? '⚠️ Neutro' : '🔴 Insatisfecho');
+    $LOGO_URL_A       = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+
+    $labels_a2 = ['Instalaciones', 'Atención al cliente', 'Tiempos de espera', 'Disponibilidad medicamentos', 'Recomendaría'];
+    $vals_a2   = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
+    $filas_a2  = '';
+    foreach ($labels_a2 as $i => $lbl) {
+        $v = $vals_a2[$i];
+        $bar = '';
+        for ($b = 1; $b <= 5; $b++) {
+            $col = $b <= $v ? '#2563eb' : '#e2e8f0';
+            $bar .= "<span style='display:inline-block;width:16px;height:5px;background:{$col};border-radius:3px;margin-right:2px'></span>";
+        }
+        $filas_a2 .= "<tr><td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$lbl}</td>"
+                   . "<td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$bar} <span style='color:#6b7280;font-size:11px'>{$v}/5</span></td></tr>";
+    }
+    $bloque_com_a2 = $comentario
+        ? "<tr><td colspan='2' style='padding:8px 10px;font-size:12px;background:#fefce8;border-top:2px solid #facc15'><strong>💬 Comentario:</strong> " . htmlspecialchars($comentario, ENT_QUOTES) . "</td></tr>"
+        : '';
+
+    $cuerpo_a2 = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:24px 0'>
+<tr><td align='center'>
+<table width='680' cellpadding='0' cellspacing='0' style='background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1);max-width:680px;width:100%'>
+  <tr><td style='background:#1e3a5f;padding:20px 28px'>
+    <table width='100%'><tr>
+      <td><div style='background:#fff;border-radius:8px;padding:6px 12px;display:inline-block'><img src='{$LOGO_URL_A}' alt='Tododrogas' style='height:28px;object-fit:contain'></div></td>
+      <td align='right'><span style='color:#93c5fd;font-size:11px;font-weight:700'>NUEVA ENCUESTA RECIBIDA</span></td>
+    </tr></table>
+  </td></tr>
+  <tr><td style='padding:20px 28px 12px'>
+    <table width='100%'><tr>
+      <td><p style='margin:0 0 4px;font-size:16px;font-weight:700;color:#111827'>Calificación: <span style='color:{$color_cal_admin2}'>{$estrellas_admin2} ({$calificacion}/5)</span></p>
+          <p style='margin:0;font-size:12px;color:#6b7280'>{$badge_cal2}</p></td>
+      <td align='right'><p style='margin:0;font-size:11px;color:#6b7280'>Sede: <strong style='color:#111827'>{$sede_nombre}</strong>" . ($sede_ciudad ? "<br>{$sede_ciudad}" : "") . "</p></td>
+    </tr></table>
+  </td></tr>
+  <tr><td style='padding:4px 28px 16px'>
+    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
+      <tr style='background:#f9fafb'><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DATOS DEL ENCUESTADO</th><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DETALLES</th></tr>
+      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Nombre</td><td style='padding:7px 10px;font-size:12px;color:#111827;font-weight:600'>" . htmlspecialchars($nombre, ENT_QUOTES) . "</td></tr>
+      " . ($documento ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Documento</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . htmlspecialchars($documento, ENT_QUOTES) . "</td></tr>" : "") . "
+      " . ($correo ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Correo</td><td style='padding:7px 10px;font-size:12px;color:#2563eb'>" . htmlspecialchars($correo, ENT_QUOTES) . "</td></tr>" : "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Correo</td><td style='padding:7px 10px;font-size:12px;color:#9ca3af'>No proporcionado</td></tr>") . "
+      " . ($telefono ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Teléfono</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . htmlspecialchars($telefono, ENT_QUOTES) . "</td></tr>" : "") . "
+      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Canal</td><td style='padding:7px 10px;font-size:12px;color:#111827;text-transform:capitalize'>{$canal}</td></tr>
+      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Fecha</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . date('d/m/Y H:i', strtotime($now)) . "</td></tr>
+    </table>
+  </td></tr>
+  <tr><td style='padding:0 28px 16px'>
+    <p style='margin:0 0 8px;font-size:12px;font-weight:700;color:#374151'>Calificaciones por categoría:</p>
+    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
+      {$filas_a2}
+      {$bloque_com_a2}
+    </table>
+  </td></tr>
+  <tr><td style='background:#f8fafc;border-top:1px solid #e5e7eb;padding:14px 28px;text-align:center'>
+    <p style='font-size:11px;color:#9ca3af;margin:0'>Notificación automática · Sistema PQRSFD · Tododrogas CIA SAS</p>
+  </td></tr>
+</table></td></tr></table>
+</body></html>";
+
+    $admin_pay2 = [
+        'subject'      => "⭐ Nueva encuesta [{$calificacion}/5] · {$sede_nombre} · " . htmlspecialchars($nombre, ENT_QUOTES),
+        'importance'   => $calificacion <= 2 ? 'high' : 'normal',
+        'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_a2],
+        'toRecipients' => [['emailAddress' => ['address' => $BUZÓN_PQRS, 'name' => 'PQRSFD Tododrogas']]],
+    ];
+    $ch_a2 = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
+    curl_setopt_array($ch_a2, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode(['message' => $admin_pay2, 'saveToSentItems' => true]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token_admin", 'Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    curl_exec($ch_a2);
+    curl_close($ch_a2);
 }
 
 // ── PASO 3: HISTORIAL_EVENTOS ─────────────────────────────────────────
