@@ -21,6 +21,7 @@ $TENANT_ID     = '__AZURE_TENANT_ID__';
 $CLIENT_ID     = '__AZURE_CLIENT_ID__';
 $CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
 $GRAPH_USER_ID = '__GRAPH_USER_ID__';
+$BUZÓN_PQRS    = 'pqrsfd@tododrogas.com.co';
 $LOGO_URL      = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
 
 // ── HELPERS ──────────────────────────────────────────────────────────
@@ -81,12 +82,7 @@ $recomendacion = intval($body['recomendacion'] ?? 0);
 $promedio      = floatval($body['promedio']    ?? 0);
 
 $comentario    = trim($body['comentario']      ?? '');
-// sede_id debe ser UUID real — el array del formulario usa strings como 'medellin'
-// Si no es UUID válido, lo descartamos (los datos de sede van en historial_eventos.datos_extra)
-$sede_id_raw   = trim($body['sede_id'] ?? '');
-$sede_id       = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $sede_id_raw)
-                 ? $sede_id_raw
-                 : null;
+$sede_id       = trim($body['sede_id']         ?? '');
 $sede_nombre   = trim($body['sede_nombre']     ?? '');
 $sede_ciudad   = trim($body['sede_ciudad']     ?? '');
 $sede_direccion = trim($body['sede_direccion'] ?? '');
@@ -100,7 +96,7 @@ $calificacion  = (int) round($promedio);
 $payload = [
     'calificacion'    => $calificacion,
     'comentario'      => $comentario ?: null,
-    'sede_id'         => $sede_id,  // null si no es UUID válido
+    'sede_id'         => $sede_id    ?: null,
     'canal'           => $canal,
     'ip_origen'       => $ip_origen,
     'ticket_id'       => null,
@@ -116,8 +112,7 @@ if ($saved) {
     $inserted    = json_decode($sb_result['body'], true);
     $encuesta_id = $inserted[0]['id'] ?? null;
 } else {
-    error_log('[radicar-encuesta] Supabase error ' . $sb_result['code'] . ': ' . $sb_result['body']);
-    // Retornar error detallado para debugging (solo en no-producción lo verías en consola)
+    error_log('[radicar-encuesta] Supabase error: ' . $sb_result['code'] . ' — ' . $sb_result['body']);
 }
 
 // ── PASO 2: CORREO DE CONFIRMACIÓN AL USUARIO ────────────────────────
@@ -177,7 +172,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 <table width='560' cellpadding='0' cellspacing='0' style='max-width:560px;width:100%'>
 
   <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
-    <img src='{$LOGO_URL}' alt='Tododrogas' style='height:52px;max-width:220px;object-fit:contain;display:block;margin:0 auto 12px'>
+    <div style='background:#fff;border-radius:10px;padding:10px 20px;display:inline-block;margin:0 auto 14px'><img src='{$LOGO_URL}' alt='Tododrogas' style='height:44px;max-width:200px;object-fit:contain;display:block'></div>
     <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente</p>
     <h2 style='color:#fff;margin:8px 0 0;font-size:22px;font-weight:700'>¡Gracias por tu opinión!</h2>
   </td></tr>
@@ -225,7 +220,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 </body></html>";
 
         $mail_payload = [
-            'subject'      => "✅ Gracias por tu opinión · Tododrogas {$sede_nombre}",
+            'subject'      => "Gracias por su opinión {$nombre} - Tododrogas CIA SAS",
             'importance'   => 'normal',
             'body'         => ['contentType' => 'HTML', 'content' => $cuerpo],
             'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
@@ -243,6 +238,95 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         $mail_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         $correo_enviado = ($mail_code === 202);
+
+        // ── NOTIFICACIÓN INTERNA A PQRSFD ──────────────────────────────────
+        if ($token) {
+            $estrellas_admin = str_repeat('★', $calificacion) . str_repeat('☆', 5 - $calificacion);
+            $color_cal_admin = $calificacion >= 4 ? '#16a34a' : ($calificacion >= 3 ? '#d97706' : '#dc2626');
+            $badge_cal       = $calificacion >= 4 ? '✅ Satisfecho' : ($calificacion >= 3 ? '⚠️ Neutro' : '🔴 Insatisfecho');
+
+            $filas_admin = '';
+            $labels_a = ['Instalaciones', 'Atención al cliente', 'Tiempos de espera', 'Disponibilidad medicamentos', 'Recomendaría'];
+            $vals_a   = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
+            foreach ($labels_a as $i => $lbl) {
+                $v = $vals_a[$i];
+                $bar = '';
+                for ($b = 1; $b <= 5; $b++) {
+                    $col = $b <= $v ? '#2563eb' : '#e2e8f0';
+                    $bar .= "<span style='display:inline-block;width:16px;height:5px;background:{$col};border-radius:3px;margin-right:2px'></span>";
+                }
+                $filas_admin .= "<tr><td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$lbl}</td>"
+                              . "<td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$bar} <span style='color:#6b7280;font-size:11px'>{$v}/5</span></td></tr>";
+            }
+
+            $bloque_comentario_admin = $comentario
+                ? "<tr><td colspan='2' style='padding:8px 10px;font-size:12px;background:#fefce8;border-top:2px solid #facc15'><strong>💬 Comentario:</strong> " . htmlspecialchars($comentario, ENT_QUOTES) . "</td></tr>"
+                : '';
+
+            $cuerpo_admin = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:24px 0'>
+<tr><td align='center'>
+<table width='580' cellpadding='0' cellspacing='0' style='background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08)'>
+
+  <tr><td style='background:#1e3a5f;padding:20px 28px'>
+    <table width='100%'><tr>
+      <td><div style='background:#fff;border-radius:8px;padding:6px 12px;display:inline-block'><img src='{$LOGO_URL}' alt='Tododrogas' style='height:28px;object-fit:contain'></div></td>
+      <td align='right'><span style='color:#93c5fd;font-size:11px;font-weight:700'>NUEVA ENCUESTA RECIBIDA</span></td>
+    </tr></table>
+  </td></tr>
+
+  <tr><td style='padding:20px 28px 12px'>
+    <table width='100%'><tr>
+      <td><p style='margin:0 0 4px;font-size:16px;font-weight:700;color:#111827'>Calificación: <span style='color:{$color_cal_admin}'>{$estrellas_admin} ({$calificacion}/5)</span></p>
+          <p style='margin:0;font-size:12px;color:#6b7280'>{$badge_cal}</p></td>
+      <td align='right'><p style='margin:0;font-size:11px;color:#6b7280'>Sede: <strong style='color:#111827'>{$sede_nombre}</strong><br>{$sede_ciudad}</p></td>
+    </tr></table>
+  </td></tr>
+
+  <tr><td style='padding:4px 28px 16px'>
+    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
+      <tr style='background:#f9fafb'><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DATOS DEL ENCUESTADO</th><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DETALLES</th></tr>
+      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Nombre</td><td style='padding:7px 10px;font-size:12px;color:#111827;font-weight:600'>" . htmlspecialchars($nombre, ENT_QUOTES) . "</td></tr>
+      " . ($correo ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Correo</td><td style='padding:7px 10px;font-size:12px;color:#2563eb'>" . htmlspecialchars($correo, ENT_QUOTES) . "</td></tr>" : "") . "
+      " . ($telefono ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Teléfono</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . htmlspecialchars($telefono, ENT_QUOTES) . "</td></tr>" : "") . "
+      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Canal</td><td style='padding:7px 10px;font-size:12px;color:#111827;text-transform:capitalize'>{$canal}</td></tr>
+      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Fecha</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . date('d/m/Y H:i', strtotime($now)) . "</td></tr>
+    </table>
+  </td></tr>
+
+  <tr><td style='padding:0 28px 16px'>
+    <p style='margin:0 0 8px;font-size:12px;font-weight:700;color:#374151'>Calificaciones por categoría:</p>
+    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
+      {$filas_admin}
+      {$bloque_comentario_admin}
+    </table>
+  </td></tr>
+
+  <tr><td style='background:#f8fafc;border-top:1px solid #e5e7eb;padding:14px 28px;text-align:center'>
+    <p style='font-size:11px;color:#9ca3af;margin:0'>Notificación automática · Sistema PQRSFD · Tododrogas CIA SAS</p>
+  </td></tr>
+
+</table></td></tr></table>
+</body></html>";
+
+            $admin_payload = [
+                'subject'      => "⭐ Nueva encuesta [{$calificacion}/5] · {$sede_nombre} · " . htmlspecialchars($nombre, ENT_QUOTES),
+                'importance'   => $calificacion <= 2 ? 'high' : 'normal',
+                'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_admin],
+                'toRecipients' => [['emailAddress' => ['address' => $BUZÓN_PQRS, 'name' => 'PQRSFD Tododrogas']]],
+            ];
+            $ch2 = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
+            curl_setopt_array($ch2, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode(['message' => $admin_payload, 'saveToSentItems' => true]),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
+                CURLOPT_TIMEOUT        => 30,
+            ]);
+            curl_exec($ch2);
+            curl_close($ch2);
+        }
+        // ── FIN NOTIFICACIÓN INTERNA ─────────────────────────────────────
     }
 }
 
