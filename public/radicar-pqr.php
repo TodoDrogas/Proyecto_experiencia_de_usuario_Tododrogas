@@ -176,7 +176,64 @@ elseif  ($transcripcion)                            $canal = 'audio';
 
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 
-// Texto final para clasificar (transcripción si hay, sino descripción)
+// ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
+// Si el canal es audio y viene el base64 del audio, transcribimos PRIMERO
+// para que GPT clasifique el texto real, no '[Audio adjunto]'
+$whisper_transcripcion = '';
+$whisper_error_pre     = '';
+if ($canal === 'audio' && $OPENAI_KEY) {
+    // audio_url puede venir como data URL base64 directamente del formulario
+    $audio_b64_pre  = '';
+    $mime_type_pre  = 'audio/webm';
+    if (!empty($audio_url) && strpos($audio_url, 'data:audio') === 0) {
+        $b64sep_pre    = strpos($audio_url, ';base64,');
+        $mime_type_pre = $b64sep_pre ? substr($audio_url, 5, $b64sep_pre - 5) : 'audio/webm';
+        $audio_b64_pre = $b64sep_pre ? substr($audio_url, $b64sep_pre + 8) : '';
+    } elseif (!empty($body['audio_base64'])) {
+        $audio_b64_pre = $body['audio_base64'];
+    }
+
+    if ($audio_b64_pre) {
+        $audio_data_pre = base64_decode($audio_b64_pre);
+        if ($audio_data_pre && strlen($audio_data_pre) > 100) {
+            $ext_pre  = (strpos($mime_type_pre, 'webm') !== false) ? 'webm'
+                      : ((strpos($mime_type_pre, 'mp4') !== false)  ? 'mp4'
+                      : ((strpos($mime_type_pre, 'ogg') !== false)  ? 'ogg' : 'webm'));
+            $tmp_pre  = tempnam(sys_get_temp_dir(), 'aud_') . '.' . $ext_pre;
+            file_put_contents($tmp_pre, $audio_data_pre);
+
+            $ch_w = curl_init('https://api.openai.com/v1/audio/transcriptions');
+            curl_setopt_array($ch_w, [
+                CURLOPT_POST           => true,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 60,
+                CURLOPT_HTTPHEADER     => ["Authorization: Bearer $OPENAI_KEY"],
+                CURLOPT_POSTFIELDS     => [
+                    'file'     => new CURLFile($tmp_pre, $mime_type_pre, "audio.$ext_pre"),
+                    'model'    => 'whisper-1',
+                    'language' => 'es',
+                ],
+            ]);
+            $w_resp = curl_exec($ch_w);
+            $w_code = curl_getinfo($ch_w, CURLINFO_HTTP_CODE);
+            curl_close($ch_w);
+            @unlink($tmp_pre);
+
+            $w_data = json_decode($w_resp, true);
+            if ($w_code === 200 && !empty($w_data['text'])) {
+                $whisper_transcripcion = trim($w_data['text']);
+            } else {
+                $whisper_error_pre = $w_data['error']['message'] ?? "HTTP $w_code";
+            }
+        }
+    }
+}
+// Si Whisper transcribió, usar eso; si ya venía transcripción del form, también usarla
+if ($whisper_transcripcion) {
+    $transcripcion = $whisper_transcripcion; // actualizar para guardar en BD
+}
+
+// Texto final para clasificar (transcripción Whisper > transcripción form > descripción)
 $texto_pqr = $transcripcion ?: $descripcion;
 
 
