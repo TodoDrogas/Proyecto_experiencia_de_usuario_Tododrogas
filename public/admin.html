@@ -3622,8 +3622,10 @@ async function getGraphToken(){
 // INIT
 // ──────────────────────────────────────────────
 (async()=>{
-  // Auth check
-  if(sessionStorage.getItem('pqr_role')!=='admin') {
+  // Auth check — Edge-safe sessionStorage access
+  let _role = '';
+  try { _role = sessionStorage.getItem('pqr_role') || ''; } catch(e) { _role = ''; }
+  if(_role !== 'admin') {
     window.location.href='login.html'; return;
   }
   await Promise.all([loadEmails(), loadAgents(), loadHistorial()]);
