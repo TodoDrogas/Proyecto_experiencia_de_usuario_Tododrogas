@@ -137,15 +137,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 
 /* ── RIGHT PANEL (MGMT + TIMELINE) ── */
 .mgmt-right{width:270px;min-width:250px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0}
-.mgmt-section{border-bottom:1px solid var(--border);flex-shrink:0;overflow:hidden}
-.mgmt-section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none;transition:background .15s}
-.mgmt-section-header:hover{background:var(--bg)}
-.mgmt-section-header .mgmt-label{margin-bottom:0}
-.mgmt-section-header .mgmt-chevron{transition:transform .2s;color:var(--ink3)}
-.mgmt-section-body{padding:0 14px 12px;animation:aFadeIn .15s ease}
-.mgmt-section.collapsed .mgmt-section-body{display:none}
-.mgmt-section.collapsed .mgmt-chevron{transform:rotate(-90deg)}
-@keyframes aFadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.mgmt-section{padding:12px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
 .mgmt-label{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;flex-shrink:0}
 .mgmt-select{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r2);padding:7px 10px;font-size:12px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;cursor:pointer}
 .mgmt-select:focus{border-color:var(--blue)}
@@ -315,17 +307,12 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
           Confirmar firma
         </button>
       </div>
-      <div class="mgmt-section collapsed" id="secPrioridadAgente">
-        <div class="mgmt-section-header" onclick="toggleAgentSection('secPrioridadAgente')">
-          <div class="mgmt-label">Prioridad</div>
-          <svg class="mgmt-chevron" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
-        <div class="mgmt-section-body">
-          <div class="priority-row">
-            <button class="priority-btn" data-p="alta" onclick="setPriority('alta',this)">🔴 Alta</button>
-            <button class="priority-btn" data-p="media" onclick="setPriority('media',this)">🟡 Media</button>
-            <button class="priority-btn" data-p="baja" onclick="setPriority('baja',this)">🟢 Baja</button>
-          </div>
+      <div class="mgmt-section">
+        <div class="mgmt-label">Prioridad</div>
+        <div class="priority-row">
+          <button class="priority-btn" data-p="alta" onclick="setPriority('alta',this)">🔴 Alta</button>
+          <button class="priority-btn" data-p="media" onclick="setPriority('media',this)">🟡 Media</button>
+          <button class="priority-btn" data-p="baja" onclick="setPriority('baja',this)">🟢 Baja</button>
         </div>
       </div>
       <div class="mgmt-label" style="padding:12px 14px 4px;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);flex-shrink:0">Historial del ticket</div>
@@ -534,17 +521,12 @@ async function sb(path, method='GET', body=null) {
 }
 
 // ──────────────────────────────────────────────
-// SESSION — Edge-safe with localStorage fallback
+// SESSION
 // ──────────────────────────────────────────────
-function _ss(key, def='') {
-  try { const v=sessionStorage.getItem(key); if(v) return v; } catch(e) {}
-  try { const v=localStorage.getItem('td_auth_'+key); if(v) return v; } catch(e) {}
-  return def;
-}
-const _rawAgId   = _ss('pqr_agent_id');
+const _rawAgId   = sessionStorage.getItem('pqr_agent_id') || '';
 const _uuidRe    = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AGENT_ID   = _uuidRe.test(_rawAgId) ? _rawAgId : null;
-const AGENT_NAME = _ss('pqr_name', 'Agente');
+const AGENT_NAME = sessionStorage.getItem('pqr_name') || 'Agente';
 
 // Default actions (loaded from config or fallback)
 let DEFAULT_ACTIONS = ['Observación añadida','Solicitud de información','Cliente contactado','Seguimiento','Escalado','En gestión','Solucionado','Correo respondido'];
@@ -564,10 +546,9 @@ let _gestionForSolucionado = false;
 // INIT
 // ──────────────────────────────────────────────
 (async()=>{
-  let _role='';
-  try{_role=sessionStorage.getItem('pqr_role')||'';}catch(e){}
-  if(!_role){try{_role=localStorage.getItem('td_auth_pqr_role')||'';}catch(e){}}
-  if(_role!=='agente'){window.location.href='login.html';return;}
+  if(sessionStorage.getItem('pqr_role')!=='agente') {
+    window.location.href='login.html'; return;
+  }
   // Set agent UI
   document.getElementById('agentNameLabel').textContent = AGENT_NAME;
   document.getElementById('agentAv').textContent = (AGENT_NAME||'A').charAt(0).toUpperCase();
@@ -1538,7 +1519,6 @@ async function syncAll() {
 // ──────────────────────────────────────────────
 function estadoLabel(s){return {pendiente:'Pendiente',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
-function toggleAgentSection(id){const s=document.getElementById(id);if(s)s.classList.toggle('collapsed');}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function getFileIcon(n=''){
   const e=(n.split('.').pop()||'').toLowerCase();
@@ -2429,7 +2409,7 @@ async function verHiloCompleto(conversationId, correoId) {
   }
 }
 
-function logout(){try{sessionStorage.clear();}catch(e){}try{['pqr_role','pqr_agent_id','pqr_name'].forEach(k=>localStorage.removeItem('td_auth_'+k));}catch(e){}window.location.href='login.html';}
+function logout(){sessionStorage.clear();window.location.href='login.html';}
 async function getGraphToken(){
   try{
     const r=await fetch('/api-token.php',{
