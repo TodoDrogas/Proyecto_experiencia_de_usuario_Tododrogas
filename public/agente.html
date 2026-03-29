@@ -527,7 +527,7 @@ async function sb(path, method='GET', body=null) {
 // ──────────────────────────────────────────────
 // SESSION — Edge-safe (sessionStorage may be blocked by privacy settings)
 // ──────────────────────────────────────────────
-function _ss(key, def='') { try { return sessionStorage.getItem(key) || def; } catch(e) { return def; } }
+function _ss(key, def='') { try { const v=sessionStorage.getItem(key); if(v) return v; } catch(e) {} try { const v=localStorage.getItem('td_auth_'+key); if(v) return v; } catch(e) {} return def; }
 const _rawAgId   = _ss('pqr_agent_id');
 const _uuidRe    = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AGENT_ID   = _uuidRe.test(_rawAgId) ? _rawAgId : null;
@@ -552,7 +552,8 @@ let _gestionForSolucionado = false;
 // ──────────────────────────────────────────────
 (async()=>{
   let _role = '';
-  try { _role = sessionStorage.getItem('pqr_role') || ''; } catch(e) { _role = ''; }
+  try { _role = sessionStorage.getItem('pqr_role') || ''; } catch(e) {}
+  if(!_role) { try { _role = localStorage.getItem('td_auth_pqr_role') || ''; } catch(e) {} }
   if(_role !== 'agente') {
     window.location.href='login.html'; return;
   }
@@ -2418,7 +2419,7 @@ async function verHiloCompleto(conversationId, correoId) {
   }
 }
 
-function logout(){sessionStorage.clear();window.location.href='login.html';}
+function logout(){try{sessionStorage.clear();}catch(e){} try{['pqr_role','pqr_agent_id','pqr_name'].forEach(k=>localStorage.removeItem('td_auth_'+k));}catch(e){} window.location.href='login.html';}
 async function getGraphToken(){
   try{
     const r=await fetch('/api-token.php',{
