@@ -466,7 +466,7 @@ table.agents-tbl tr:hover td{background:rgba(99,179,237,.04)}
       <div class="list-header">
         <div class="list-search">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="searchInput" placeholder="Buscar remitente, asunto..." oninput="renderEmailList()">
+          <input type="text" id="searchInput" placeholder="Buscar remitente, asunto..." oninput="state._searchTyped=true;renderEmailList()" onfocus="if(!state._searchTyped){this.value='';}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" name="pqrsfd-search-x">
         </div>
         <div class="list-filters" id="sortFilters">
           <button class="filter-chip active" onclick="setSort('fecha',this)">Por fecha</button>
@@ -1074,6 +1074,7 @@ async function sb(path, method='GET', body=null) {
 // STATE
 // ──────────────────────────────────────────────
 const state = {
+  _searchTyped: false,
   encuestas: [],
   emails: [],
   agents: [],
@@ -1631,7 +1632,14 @@ function setAgentFolder(agentId, el) {
 // ──────────────────────────────────────────────
 function renderEmailList() {
   let list = [...state.emails];
-  const search = document.getElementById('searchInput')?.value?.toLowerCase()||'';
+  // Only use search value if the user actually typed it (not browser autofill)
+  const _rawSearch = document.getElementById('searchInput')?.value||'';
+  const search = state._searchTyped ? _rawSearch.toLowerCase() : '';
+  if (!state._searchTyped && _rawSearch) {
+    // Browser autofilled - clear it silently
+    const si = document.getElementById('searchInput');
+    if (si) si.value = '';
+  }
 
   // Folder filter
   if(state.folder.startsWith('agent_')) {
@@ -1671,6 +1679,7 @@ function renderEmailList() {
     const prioColor = {alta:'#dc2626',media:'#ca8a04',baja:'#16a34a'}[e.prioridad||'']||'transparent';
     return `<div class="email-item${e.id===state.selectedId?' selected':''}${!e.is_read?' unread':''}"
       data-email-id="${e.id}"
+      onclick="selectEmail('${e.id}')"
       ondblclick="abrirPreviewCorreo('${e.id}')"
       draggable="true"
       ondragstart="onDragStart(event,'${e.id}')"
@@ -2078,7 +2087,7 @@ async function confirmarFirma() {
   errorEl.style.display = 'none';
   try {
     const email = state.emails.find(e=>e.id===id);
-    const _rawAgentId = sessionStorage.getItem('pqr_agent_id')||'';
+    const _rawAgentId = (()=>{try{const v=sessionStorage.getItem('pqr_agent_id');if(v)return v;}catch(e){}try{return localStorage.getItem('td_auth_pqr_agent_id')||'';}catch(e){}return '';})();
     const _uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const agentId = _uuidRe.test(_rawAgentId) ? _rawAgentId : null;
     const ts = Date.now();
@@ -2285,7 +2294,7 @@ async function saveGestion() {
   const obs = document.getElementById('gestionObs').value.trim();
   if(!obs) { showToast('Las observaciones son obligatorias','error'); return; }
   const email = state.emails.find(e=>e.id===id);
-  const _rawAgId2 = sessionStorage.getItem('pqr_agent_id')||'';
+  const _rawAgId2 = (()=>{try{const v=sessionStorage.getItem('pqr_agent_id');if(v)return v;}catch(e){}try{return localStorage.getItem('td_auth_pqr_agent_id')||'';}catch(e){}return '';})();
   const _uuidRe2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const agentId = _uuidRe2.test(_rawAgId2) ? _rawAgId2 : null;
   const agentName = 'Admin';
@@ -2598,7 +2607,7 @@ async function sendReply() {
       showToast('Respuesta enviada ✓'+adjInfo,'success');
       const todosLosArchivos=[...inlineFiles,...largeFiles];
       if(todosLosArchivos.length>0){
-        const _rawAgId3=sessionStorage.getItem('pqr_agent_id')||'';
+        const _rawAgId3=(()=>{try{const v=sessionStorage.getItem('pqr_agent_id');if(v)return v;}catch(e){}try{return localStorage.getItem('td_auth_pqr_agent_id')||'';}catch(e){}return '';})();
         const agentId=(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).test(_rawAgId3)?_rawAgId3:null;
         _guardarAdjuntosEnStorage(id,todosLosArchivos,agentId)
           .then(res=>{const f=res.filter(r=>!r.ok);if(f.length)console.warn('[adjuntos-storage] Sin guardar:',f.map(x=>x.nombre).join(', '));})
@@ -2752,7 +2761,11 @@ async function syncAll() {
   const btn=document.getElementById('syncBtn'),icon=document.getElementById('syncIcon');
   btn.classList.add('loading');
   try {
-    await Promise.all([loadEmails(), loadAgents(), loadHistorial()]);
+    // Limpiar search para evitar autofill del navegador
+  const si = document.getElementById('searchInput');
+  if(si) si.value = '';
+  state._searchTyped = false;
+  await Promise.all([loadEmails(), loadAgents(), loadHistorial(), loadEncuestas()]);
     // sync time hidden
     showToast('Datos actualizados ✓','success');
   } catch { showToast('Error al actualizar','error'); }
@@ -3596,7 +3609,7 @@ async function confirmarAutoAsignar() {
   }
 }
 
-function logout(){sessionStorage.clear();window.location.href='login.html';}
+function logout(){try{sessionStorage.clear();}catch(e){} try{['pqr_role','pqr_agent_id','pqr_name'].forEach(k=>localStorage.removeItem('td_auth_'+k));}catch(e){} window.location.href='login.html';}
 
 // ── COLLAPSIBLE MGMT SECTIONS ─────────────────────────────────────────
 function toggleMgmtSection(id) {
@@ -3624,11 +3637,16 @@ async function getGraphToken(){
 (async()=>{
   // Auth check — Edge-safe sessionStorage access
   let _role = '';
-  try { _role = sessionStorage.getItem('pqr_role') || ''; } catch(e) { _role = ''; }
+  try { _role = sessionStorage.getItem('pqr_role') || ''; } catch(e) {}
+  if(!_role) { try { _role = localStorage.getItem('td_auth_pqr_role') || ''; } catch(e) {} }
   if(_role !== 'admin') {
     window.location.href='login.html'; return;
   }
-  await Promise.all([loadEmails(), loadAgents(), loadHistorial()]);
+  // Limpiar search para evitar autofill del navegador
+  const si = document.getElementById('searchInput');
+  if(si) si.value = '';
+  state._searchTyped = false;
+  await Promise.all([loadEmails(), loadAgents(), loadHistorial(), loadEncuestas()]);
   // sync time hidden
   // Auto-refresh
   setInterval(()=>{ loadEmails(); loadHistorial(); }, 90000);
@@ -3747,21 +3765,46 @@ async function renderMediaFormulario(email) {
 // ══════════════════════════════════════════════════════
 async function loadEncuestas() {
   try {
-    // Carga historial_eventos filtrando encuesta_recibida (lleva datos_extra completos)
+    // Fuente 1: historial_eventos con evento encuesta_recibida (contiene datos_extra completos)
     const data = await sb('historial_eventos?evento=eq.encuesta_recibida&order=created_at.desc&limit=2000');
-    state.encuestas = (data || []).map(ev => {
+    let enc = (data || []).map(ev => {
       let ex = {};
       try { ex = typeof ev.datos_extra === 'string' ? JSON.parse(ev.datos_extra) : (ev.datos_extra || {}); } catch(_) {}
       return {
         id:           ev.id,
         created_at:   ev.created_at,
-        calificacion: ex.calificacion || null,
-        comentario:   ex.comentario   || null,
+        calificacion: ex.calificacion ?? null,
+        comentario:   ex.comentario   ?? null,
         canal:        ex.canal        || 'web',
         datos_extra:  ex,
+        _fuente:      'historial',
       };
     });
-    console.log('[loadEncuestas]', state.encuestas.length, 'encuestas cargadas');
+
+    // Fuente 2: encuestas_satisfaccion directa (fallback si historial está vacío)
+    if (enc.length === 0) {
+      const enc2 = await sb('encuestas_satisfaccion?order=created_at.desc&limit=500');
+      if (enc2 && enc2.length > 0) {
+        enc = enc2.map(e => {
+          let ex = {};
+          try { ex = typeof e.datos_extra === 'string' ? JSON.parse(e.datos_extra) : (e.datos_extra || {}); } catch(_) {}
+          return {
+            id:           e.id,
+            created_at:   e.created_at,
+            calificacion: e.calificacion ?? ex.calificacion ?? null,
+            comentario:   e.comentario   ?? ex.comentario   ?? null,
+            canal:        e.canal        || ex.canal || 'web',
+            datos_extra:  { ...ex, calificacion: e.calificacion, comentario: e.comentario,
+                            sede_nombre: ex.sede_nombre || '', sede_ciudad: ex.sede_ciudad || '',
+                            nombre: ex.nombre || '', correo: ex.correo || '', canal: e.canal || ex.canal || 'web' },
+            _fuente:      'tabla',
+          };
+        });
+      }
+    }
+
+    state.encuestas = enc;
+    console.log('[loadEncuestas]', enc.length, 'encuestas — fuente:', enc[0]?._fuente || 'ninguna');
   } catch(err) {
     console.error('[loadEncuestas]', err.message);
     state.encuestas = [];
