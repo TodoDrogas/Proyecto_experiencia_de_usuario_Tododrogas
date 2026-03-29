@@ -500,7 +500,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
     <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
     Volver
   </button>
-  <div class="tb-brand"><div class="tb-dot"></div><img id="topbarLogo" src="" alt="Tododrogas" style="height:22px;object-fit:contain;display:none;filter:brightness(0) invert(1);opacity:.9"><span class="tb-name" id="topbarName">Tododrogas</span></div>
+  <div class="tb-brand"><div class="tb-dot"></div><img id="topbarLogo" src="" alt="Tododrogas" style="height:22px;object-fit:contain;display:none;object-fit:contain"><span class="tb-name" id="topbarName">Tododrogas</span></div>
   <span class="tb-time" id="clockDisplay">--:--</span>
 </div>
 
@@ -855,30 +855,35 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
   }catch(e){}
 })();
 
-// LOGO — carga desde Supabase configuracion_sistema al iniciar
-(async function loadLogo(){
+// LOGO — URL directa Supabase (mismo que pqr_encuesta, siempre disponible)
+const _LOGO_FORM_URL = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+(function loadLogo(){
   try {
-    const sbUrl = window.SUPABASE_URL || '';
-    const sbKey = window.SUPABASE_KEY || '';
-    if (!sbUrl || !sbKey) return;
-    const r = await fetch(`${sbUrl}/rest/v1/configuracion_sistema?id=eq.main&select=data`, {
-      headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + sbKey }
-    });
-    const rows = await r.json();
-    const logoUrl = rows?.[0]?.data?.logo || '';
-    if (!logoUrl) return;
     // Topbar
     const img = document.getElementById('topbarLogo');
     const name = document.getElementById('topbarName');
-    if (img) { img.src = logoUrl; img.style.display = 'block'; }
-    if (name) name.style.display = 'none';
+    if (img) { img.onload=()=>{img.style.display='block';if(name)name.style.display='none';}; img.src=_LOGO_FORM_URL; }
     // Success card
     const sImg = document.getElementById('successLogo');
     const sWrap = document.getElementById('successLogoWrap');
-    if (sImg) { sImg.onload=()=>{if(sWrap)sWrap.style.display='block';}; sImg.src = logoUrl; }
-    // Guardar para uso posterior
-    window._LOGO_URL = logoUrl;
-  } catch(e) { /* sin logo, muestra texto */ }
+    if (sImg) { sImg.onload=()=>{if(sWrap)sWrap.style.display='block';}; sImg.src=_LOGO_FORM_URL; }
+    window._LOGO_URL = _LOGO_FORM_URL;
+    // Intentar también desde Supabase config (sin bloquear si falla)
+    const sbUrl = window.SUPABASE_URL || '';
+    const sbKey = window.SUPABASE_KEY || '';
+    if (sbUrl && sbKey) {
+      fetch(`${sbUrl}/rest/v1/configuracion_sistema?id=eq.main&select=data`, {
+        headers: { 'apikey': sbKey, 'Authorization': 'Bearer ' + sbKey }
+      }).then(r=>r.json()).then(rows=>{
+        const u = rows?.[0]?.data?.logo;
+        if (u && u !== _LOGO_FORM_URL) {
+          if (img) img.src = u;
+          if (sImg) sImg.src = u;
+          window._LOGO_URL = u;
+        }
+      }).catch(()=>{});
+    }
+  } catch(e) {}
 })();
 
 const N8N_BASE       = window._N8N_BASE || 'https://tododrogas.online/webhook';
