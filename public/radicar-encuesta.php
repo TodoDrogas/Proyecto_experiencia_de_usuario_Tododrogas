@@ -102,22 +102,6 @@ $payload = [
     'ticket_id'       => null,
     'correo_id'       => null,
     'created_at'      => $now,
-    'datos_extra'     => json_encode([
-        'nombre'        => $nombre,
-        'correo'        => $correo,
-        'telefono'      => $telefono,
-        'documento'     => $documento,
-        'sede_nombre'   => $sede_nombre,
-        'sede_ciudad'   => $sede_ciudad,
-        'sede_direccion'=> $sede_direccion,
-        'promedio'      => $promedio,
-        'instalaciones' => $instalaciones,
-        'atencion'      => $atencion,
-        'tiempos'       => $tiempos,
-        'medicamentos'  => $medicamentos,
-        'recomendacion' => $recomendacion,
-        'canal'         => $canal,
-    ]),
 ];
 
 $sb_result  = sbPost($SB_URL, $SB_KEY, 'encuestas_satisfaccion', $payload);
@@ -327,7 +311,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     <table width='100%'><tr>
       <td><p style='margin:0 0 4px;font-size:16px;font-weight:700;color:#111827'>Calificación: <span style='color:{$color_cal_admin}'>{$estrellas_admin} ({$calificacion}/5)</span></p>
           <p style='margin:0;font-size:12px;color:#6b7280'>{$badge_cal}</p></td>
-      <td align='right'><p style='margin:0;font-size:11px;color:#6b7280'>Sede: <strong style='color:#111827'>{$sede_nombre}</strong>" . (($sede_ciudad && stripos($sede_nombre, $sede_ciudad) === false) ? "<br>{$sede_ciudad}" : "") . "</p></td>
+      <td align='right'><p style='margin:0;font-size:11px;color:#6b7280'>Sede: <strong style='color:#111827'>{$sede_nombre}</strong>" . (($sede_ciudad && stripos(iconv('UTF-8','ASCII//TRANSLIT',$sede_nombre), iconv('UTF-8','ASCII//TRANSLIT',$sede_ciudad)) === false) ? "<br>{$sede_ciudad}" : "") . "</p></td>
     </tr></table>
   </td></tr>
 
