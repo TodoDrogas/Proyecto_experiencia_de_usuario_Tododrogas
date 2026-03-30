@@ -177,12 +177,14 @@ elseif  ($transcripcion)                            $canal = 'audio';
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 
 // ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
-// Si el canal es audio y viene el base64 del audio, transcribimos PRIMERO
-// para que GPT clasifique el texto real, no '[Audio adjunto]'
+// Usamos verbose_json para obtener además del texto, metadatos de tono/confianza
 $whisper_transcripcion = '';
 $whisper_error_pre     = '';
+$whisper_avg_logprob   = null; // promedio de confianza (indica claridad del habla)
+$whisper_duracion      = null; // duración total en segundos
+$audio_tono_contexto   = '';   // contexto de tono para el prompt de clasificación
+
 if ($canal === 'audio' && $OPENAI_KEY) {
-    // audio_url puede venir como data URL base64 directamente del formulario
     $audio_b64_pre  = '';
     $mime_type_pre  = 'audio/webm';
     if (!empty($audio_url) && strpos($audio_url, 'data:audio') === 0) {
@@ -209,9 +211,14 @@ if ($canal === 'audio' && $OPENAI_KEY) {
                 CURLOPT_TIMEOUT        => 60,
                 CURLOPT_HTTPHEADER     => ["Authorization: Bearer $OPENAI_KEY"],
                 CURLOPT_POSTFIELDS     => [
-                    'file'     => new CURLFile($tmp_pre, $mime_type_pre, "audio.$ext_pre"),
-                    'model'    => 'whisper-1',
-                    'language' => 'es',
+                    'file'            => new CURLFile($tmp_pre, $mime_type_pre, "audio.$ext_pre"),
+                    'model'           => 'whisper-1',
+                    'language'        => 'es',
+                    // verbose_json devuelve segmentos con avg_logprob (confianza),
+                    // temperatura del habla y duración — útil para inferir tono
+                    'response_format' => 'verbose_json',
+                    // prompt de contexto ayuda a Whisper con jerga colombiana y nombres
+                    'prompt'          => 'Droguería colombiana, PQR, servicio al cliente, medicamentos, EPS, Tododrogas',
                 ],
             ]);
             $w_resp = curl_exec($ch_w);
@@ -222,6 +229,40 @@ if ($canal === 'audio' && $OPENAI_KEY) {
             $w_data = json_decode($w_resp, true);
             if ($w_code === 200 && !empty($w_data['text'])) {
                 $whisper_transcripcion = trim($w_data['text']);
+                $whisper_duracion      = $w_data['duration'] ?? null;
+
+                // Calcular avg_logprob promedio de todos los segmentos
+                // logprob cercano a 0 = alta confianza; < -1 = baja confianza/murmullo
+                $segmentos = $w_data['segments'] ?? [];
+                if ($segmentos) {
+                    $sum_logprob = array_sum(array_column($segmentos, 'avg_logprob'));
+                    $whisper_avg_logprob = $sum_logprob / count($segmentos);
+                }
+
+                // Construir contexto de tono para el prompt de clasificación
+                // basado en señales objetivas del audio
+                $duracion_str = $whisper_duracion ? round($whisper_duracion) . ' segundos' : 'desconocida';
+                $confianza_str = $whisper_avg_logprob !== null
+                    ? ($whisper_avg_logprob > -0.3 ? 'alta (voz clara y segura)'
+                      : ($whisper_avg_logprob > -0.6 ? 'media (voz normal)'
+                      : 'baja (voz temblorosa, susurrante o emocionada)'))
+                    : 'desconocida';
+
+                // Señales textuales de tono en la transcripción
+                $texto_lower = mb_strtolower($whisper_transcripcion);
+                $señales_positivas = preg_match('/\b(gracias|muchas gracias|excelente|felicit|maravillo|encanta|agradec|buen servicio|muy bien|genial|perfecto|satisfech|contento|alegr|feliz)\b/u', $texto_lower);
+                $señales_urgentes  = preg_match('/\b(urgente|emergencia|reacci[oó]n|dolor|grave|peligro|muerto|hospital|911|auxilio)\b/u', $texto_lower);
+                $señales_negativas = preg_match('/\b(p[eé]simo|horrible|nunca|incumpl|abusivo|ladr[oó]n|indigna|escandalo|increíble|el colmo|harto|cansado)\b/u', $texto_lower);
+
+                $audio_tono_contexto = "
+CONTEXTO DEL AUDIO (señales objetivas detectadas por Whisper):
+- Duración del mensaje: {$duracion_str}
+- Claridad/confianza de voz: {$confianza_str}
+- Señales positivas en texto: " . ($señales_positivas ? 'SÍ (palabras de agradecimiento/elogio detectadas)' : 'No') . "
+- Señales urgentes en texto: " . ($señales_urgentes ? 'SÍ (palabras de emergencia detectadas)' : 'No') . "
+- Señales negativas en texto: " . ($señales_negativas ? 'SÍ (palabras de queja/ira detectadas)' : 'No') . "
+INSTRUCCIÓN: Usa este contexto junto con el texto para clasificar con mayor precisión el tono real del hablante.";
+
             } else {
                 $whisper_error_pre = $w_data['error']['message'] ?? "HTTP $w_code";
             }
@@ -247,11 +288,19 @@ $ley_aplicable = 'Ley 1755/2015';
 $horas_sla    = 15 * 24; // 15 días por defecto
 
 if ($OPENAI_KEY && $texto_pqr) {
+
+    // Contexto adicional si es audio (vacío si es escrito/canvas)
+    $contexto_canal = ($canal === 'audio' && $audio_tono_contexto)
+        ? $audio_tono_contexto
+        : '';
+
     $prompt = <<<PROMPT
 Analiza esta solicitud de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
 
+CANAL: {$canal} (audio=voz grabada, escrito=texto, canvas=escrito a mano)
 TIPO DECLARADO POR EL USUARIO: $tipo_pqr_raw
-TEXTO EXACTO: $texto_pqr
+TEXTO EXACTO (transcripción literal): $texto_pqr
+{$contexto_canal}
 
 JSON requerido:
 {
@@ -265,15 +314,16 @@ JSON requerido:
 }
 
 REGLAS CRITICAS — LEER TODAS ANTES DE CLASIFICAR:
-1. EL CONTENIDO DEL TEXTO MANDA sobre el tipo declarado. Si el usuario seleccionó "queja" pero el texto es claramente una felicitación, clasificar por el contenido real del texto.
-2. sentimiento=positivo + tono=agradecido: cuando el texto contiene felicitaciones, agradecimientos, elogios, "muchas gracias", "buen servicio", "los felicito", "excelente atención". Prioridad siempre=baja. horas_sla=360. SIN IMPORTAR el tipo declarado.
-3. sentimiento=negativo + tono=enojado: exclamaciones, palabras como horrible/pesimo/increible/incumplieron/nunca/es el colmo/abusivos/ladrones o frases de ira/indignación explícita.
-4. sentimiento=negativo + tono=frustrado: quejas sin ira explícita, insatisfacción repetida, "no me atienden", "llevo días esperando", "siempre pasa lo mismo".
-5. sentimiento=urgente: riesgo de salud, error en medicamento, reacción adversa, urgencia médica. Prioridad siempre=critica.
-6. sentimiento=neutro: peticiones informativas sin carga emocional (pedir documento, consultar horario, solicitar información).
-7. prioridad según contenido real: si el texto es positivo → baja; peticion/sugerencia → media; queja/reclamo con inconformidad → alta; urgente/denuncia → critica.
-8. horas_sla: texto_positivo/felicitacion=360, sugerencia=360, peticion=120, queja_real=72, reclamo=72, denuncia=24, urgente=4.
-9. nivel_riesgo: si sentimiento=positivo → bajo. Si urgente → critico. Si negativo+alta → medio. Si reclamo económico → medio.
+1. EL CONTENIDO DEL TEXTO MANDA sobre el tipo declarado. Si el usuario seleccionó "queja" pero el texto es claramente una felicitación, clasificar por el contenido real.
+2. FELICITACIÓN/AGRADECIMIENTO → sentimiento=positivo, tono=agradecido, prioridad=baja, horas_sla=360.
+   Detectar por: "gracias", "muchas gracias", "excelente", "felicito", "maravilloso", "me encantó", "buen servicio", "muy bien atendido", "los felicito", "quedé satisfecho", "contento", "perfecto", "genial", expresiones de alegría o elogio.
+   EN AUDIO: si las señales positivas están marcadas en el contexto, dar peso extra a sentimiento=positivo.
+3. URGENTE → riesgo de salud, error en medicamento, reacción adversa. Prioridad=critica, horas_sla=4.
+4. ENOJO EXPLÍCITO → "horrible", "pésimo", "incumplieron", "ladrones", "el colmo", "abusivos", "estoy indignado". tono=enojado.
+5. FRUSTRACIÓN → queja sin ira explícita, "llevo días esperando", "no me atienden", "siempre pasa". tono=frustrado.
+6. NEUTRO → petición informativa sin carga emocional.
+7. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4.
+8. nivel_riesgo: positivo→bajo, urgente→critico, negativo+alta→medio, reclamo económico→medio.
 PROMPT;
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
@@ -284,7 +334,7 @@ PROMPT;
             'max_tokens'  => 300,
             'temperature' => 0.1,
             'messages'    => [
-                ['role' => 'system', 'content' => 'Eres clasificador de solicitudes colombianas de drogueria. Responde SOLO JSON valido con los campos exactos solicitados. CRITICO: el contenido del texto SIEMPRE prevalece sobre el tipo que el usuario declaró en el formulario. Si el texto es positivo/agradecido (felicitaciones, gracias, buen servicio) clasificar como sentimiento=positivo+tono=agradecido+prioridad=baja+horas_sla=360 SIN IMPORTAR el tipo declarado. Si el texto muestra ira/frustración real, clasificar como negativo aunque el tipo diga petición.'],
+                ['role' => 'system', 'content' => 'Eres clasificador experto de solicitudes de droguería colombiana. Responde SOLO JSON válido. CRÍTICO: si el texto contiene agradecimientos, elogios o felicitaciones (incluyendo audios donde el contexto marca señales positivas), clasificar SIEMPRE como sentimiento=positivo+tono=agradecido+prioridad=baja+horas_sla=360, sin importar el tipo declarado por el usuario. El contenido real del mensaje siempre prevalece.'],
                 ['role' => 'user',   'content' => $prompt],
             ],
         ]),
