@@ -398,8 +398,8 @@ $payload_correo = [
     'telefono_contacto' => $telefono,
     'subject'           => $subject,
     'descripcion'       => $descripcion,
-    'body_preview'      => mb_substr($texto_pqr, 0, 200),
-    'body_content'      => $texto_pqr,
+    'body_preview'      => mb_substr($texto_pqr ?: ($descripcion ?: ''), 0, 200),
+    'body_content'      => $texto_pqr ?: ($descripcion ?: ''),
     'body_type'         => 'text',
     'transcripcion'     => $transcripcion ?: null,
     'audio_url'         => (strpos($audio_url,'data:')===0 ? null : ($audio_url?:null)),
@@ -625,15 +625,70 @@ if ($token) {
 
     $correo_enviado = ($mail_code === 202);
 
-    // Actualizar BD con datos de clasificación y correo_enviado
+    // Actualizar BD: guardar HTML completo como body_content para que admin lo muestre igual que el correo a pqrsfd
     if ($correo_id) {
-        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
-            'updated_at' => date('c'),
-        ]);
+        // Reemplazar footer con ID real (el insert inicial tenía correo_id null en el footer)
+        $cuerpo_html_final = str_replace(
+            'ID interno: N/A',
+            'ID interno: ' . $correo_id,
+            $cuerpo_html
+        );
+        $patch_data = [
+            'body_content' => $cuerpo_html_final, // HTML completo con logo, datos ciudadano, clasificación IA
+            'body_type'    => 'html',
+            'updated_at'   => date('c'),
+        ];
+        // Actualizar transcripción y preview si Whisper la obtuvo
+        if ($transcripcion) {
+            $patch_data['transcripcion'] = $transcripcion;
+            $patch_data['body_preview']  = mb_substr($transcripcion, 0, 200);
+        }
+        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", $patch_data);
     }
 } else {
     $correo_enviado = false;
     $mail_code = 0;
+
+    // Sin token Graph: construir HTML básico para que admin no vea "[Audio adjunto]"
+    if ($correo_id && $texto_pqr) {
+        $emoji_sent_f = ['positivo'=>'😊','neutro'=>'😐','negativo'=>'😤','urgente'=>'🚨'][$sentimiento] ?? '📋';
+        $emoji_prio_f = ['baja'=>'🟢','media'=>'🟡','alta'=>'🟠','critica'=>'🔴'][$prioridad] ?? '🟡';
+        $fecha_fmt_f  = date('d/m/Y H:i', strtotime($now));
+        $body_fallback = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
+<div style='max-width:680px;margin:24px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1)'>
+  <div style='background:#1e3a8a;padding:20px 28px;text-align:center'>
+    <p style='color:#93c5fd;margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase'>Número de radicado</p>
+    <p style='color:#fff;margin:6px 0;font-size:26px;font-weight:800;letter-spacing:3px;font-family:monospace'>{$ticket_id}</p>
+    <p style='color:#bfdbfe;margin:0;font-size:11px'>{$fecha_fmt_f}</p>
+  </div>
+  <div style='padding:20px 28px'>
+    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:16px;font-size:13px'>
+      <tr style='background:#eff6ff'><td style='padding:8px 14px;font-weight:700;color:#1e40af;width:140px'>Radicado</td><td style='padding:8px 14px;font-weight:700;color:#1e40af'>{$ticket_id}</td></tr>
+      <tr><td style='padding:8px 14px;color:#6b7280'>Tipo</td><td style='padding:8px 14px;font-weight:700'>" . mb_strtoupper($tipo_pqr,'UTF-8') . "</td></tr>
+      <tr style='background:#fafafa'><td style='padding:8px 14px;color:#6b7280'>Sentimiento</td><td style='padding:8px 14px'>{$emoji_sent_f} " . mb_strtoupper($sentimiento,'UTF-8') . "</td></tr>
+      <tr><td style='padding:8px 14px;color:#6b7280'>Prioridad</td><td style='padding:8px 14px'>{$emoji_prio_f} " . mb_strtoupper($prioridad,'UTF-8') . "</td></tr>
+      <tr style='background:#fafafa'><td style='padding:8px 14px;color:#6b7280'>Canal</td><td style='padding:8px 14px'>" . mb_strtoupper($canal,'UTF-8') . "</td></tr>
+    </table>
+    <div style='background:#f0f7ff;border-left:4px solid #1e40af;border-radius:6px;padding:14px 18px;margin-bottom:14px'>
+      <p style='margin:0 0 8px;font-weight:700;color:#1e40af;font-size:13px'>👤 Datos del ciudadano</p>
+      <p style='margin:3px 0;font-size:13px'><strong>Nombre:</strong> {$nombre}</p>" .
+      ($documento ? "<p style='margin:3px 0;font-size:13px'><strong>Documento:</strong> {$documento}</p>" : "") .
+      ($correo ? "<p style='margin:3px 0;font-size:13px'><strong>Correo:</strong> {$correo}</p>" : "") .
+      ($telefono ? "<p style='margin:3px 0;font-size:13px'><strong>Celular:</strong> {$telefono}</p>" : "") . "
+    </div>
+    <div style='background:#faf5ff;border-left:4px solid #7c3aed;border-radius:6px;padding:14px 18px'>
+      <p style='margin:0 0 8px;font-weight:700;color:#7c3aed;font-size:13px'>📝 Mensaje</p>
+      <p style='margin:0;font-size:13px;line-height:1.7'>" . nl2br(htmlspecialchars($texto_pqr)) . "</p>
+    </div>
+  </div>
+</div>
+</body></html>";
+        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
+            'body_content' => $body_fallback,
+            'body_type'    => 'html',
+            'updated_at'   => date('c'),
+        ]);
+    }
 }
 
 // ── PASO 3B: ACUSE AL USUARIO ───────────────────────────────────────
