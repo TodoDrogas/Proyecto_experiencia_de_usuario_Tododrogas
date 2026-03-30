@@ -160,7 +160,7 @@ log_msg("Token OK");
 $desde     = (new DateTime("-{$HORAS_VENTANA} hours", new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
 $select    = 'id,subject,from,toRecipients,ccRecipients,bccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,isRead,isDraft,conversationId,importance,internetMessageId,categories,flag';
 $filter    = urlencode("isDraft eq false and receivedDateTime ge {$desde}");
-$url_base  = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages";
+$url_base  = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/Inbox/messages"; // Solo Inbox = igual que Outlook
 $url       = "{$url_base}?\$filter={$filter}&\$orderby=receivedDateTime+desc&\$top=999&\$select={$select}";
 
 log_msg("Trayendo correos desde $desde...");
