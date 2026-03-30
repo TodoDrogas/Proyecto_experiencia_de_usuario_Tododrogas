@@ -20,7 +20,7 @@
 
 // ── Modo de ejecución ─────────────────────────────────────────────────
 $es_web    = php_sapi_name() !== 'cli';
-$es_manual = $es_web && isset($_GET['token']);99978{{{
+$es_manual = $es_web && isset($_GET['token']);
 
 if ($es_web) {
     header('Content-Type: application/json; charset=utf-8');
