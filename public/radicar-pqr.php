@@ -177,50 +177,49 @@ elseif  ($transcripcion)                            $canal = 'audio';
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 
 // ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
-// Usamos verbose_json para obtener además del texto, metadatos de tono/confianza
 $whisper_transcripcion = '';
 $whisper_error_pre     = '';
-$whisper_avg_logprob   = null; // promedio de confianza (indica claridad del habla)
-$whisper_duracion      = null; // duración total en segundos
-$audio_tono_contexto   = '';   // contexto de tono para el prompt de clasificación
+$whisper_avg_logprob   = null;
+$whisper_duracion      = null;
+$audio_tono_contexto   = '';
 
 if ($canal === 'audio' && $OPENAI_KEY) {
     $audio_b64_pre  = '';
     $mime_type_pre  = 'audio/webm';
 
     if (!empty($audio_url) && strpos($audio_url, 'data:audio') === 0) {
-        // Caso 1: base64 inline directo del formulario
+        // Caso 1: base64 inline
         $b64sep_pre    = strpos($audio_url, ';base64,');
         $mime_type_pre = $b64sep_pre ? substr($audio_url, 5, $b64sep_pre - 5) : 'audio/webm';
         $audio_b64_pre = $b64sep_pre ? substr($audio_url, $b64sep_pre + 8) : '';
 
     } elseif (!empty($audio_url) && strpos($audio_url, 'http') === 0) {
-        // Caso 2: URL pública de Supabase Storage → descargar y convertir a base64
+        // Caso 2: URL pública de Supabase Storage → descargar primero
         $audio_bytes = fetchUrlBytes($audio_url, $SB_KEY);
         if ($audio_bytes && strlen($audio_bytes) > 100) {
-            // Detectar mime type real del archivo descargado
-            $finfo_audio = new finfo(FILEINFO_MIME_TYPE);
-            $mime_type_pre = $finfo_audio->buffer($audio_bytes) ?: 'audio/webm';
-            // Inferir extensión desde la URL si finfo devuelve genérico
-            $ext_from_url = strtolower(pathinfo(parse_url($audio_url, PHP_URL_PATH), PATHINFO_EXTENSION));
-            if ($ext_from_url && in_array($ext_from_url, ['webm','mp4','ogg','wav','mp3','m4a'])) {
-                $mime_type_pre = "audio/{$ext_from_url}";
-            }
+            $ext_from_url  = strtolower(pathinfo(parse_url($audio_url, PHP_URL_PATH), PATHINFO_EXTENSION));
+            $mime_type_pre = in_array($ext_from_url, ['webm','mp4','ogg','wav','mp3','m4a'])
+                           ? "audio/{$ext_from_url}" : 'audio/webm';
             $audio_b64_pre = base64_encode($audio_bytes);
         }
 
     } elseif (!empty($body['audio_base64'])) {
-        // Caso 3: base64 enviado directamente en el body
+        // Caso 3: base64 en el body JSON
         $audio_b64_pre = $body['audio_base64'];
     }
 
     if ($audio_b64_pre) {
         $audio_data_pre = base64_decode($audio_b64_pre);
         if ($audio_data_pre && strlen($audio_data_pre) > 100) {
-            $ext_pre  = (strpos($mime_type_pre, 'webm') !== false) ? 'webm'
-                      : ((strpos($mime_type_pre, 'mp4') !== false)  ? 'mp4'
-                      : ((strpos($mime_type_pre, 'ogg') !== false)  ? 'ogg' : 'webm'));
-            $tmp_pre  = tempnam(sys_get_temp_dir(), 'aud_') . '.' . $ext_pre;
+            $ext_pre = match(true) {
+                str_contains($mime_type_pre, 'webm') => 'webm',
+                str_contains($mime_type_pre, 'mp4')  => 'mp4',
+                str_contains($mime_type_pre, 'ogg')  => 'ogg',
+                str_contains($mime_type_pre, 'wav')  => 'wav',
+                str_contains($mime_type_pre, 'mp3')  => 'mp3',
+                default => 'webm',
+            };
+            $tmp_pre = tempnam(sys_get_temp_dir(), 'aud_') . '.' . $ext_pre;
             file_put_contents($tmp_pre, $audio_data_pre);
 
             $ch_w = curl_init('https://api.openai.com/v1/audio/transcriptions');
@@ -233,10 +232,7 @@ if ($canal === 'audio' && $OPENAI_KEY) {
                     'file'            => new CURLFile($tmp_pre, $mime_type_pre, "audio.$ext_pre"),
                     'model'           => 'whisper-1',
                     'language'        => 'es',
-                    // verbose_json devuelve segmentos con avg_logprob (confianza),
-                    // temperatura del habla y duración — útil para inferir tono
                     'response_format' => 'verbose_json',
-                    // prompt de contexto ayuda a Whisper con jerga colombiana y nombres
                     'prompt'          => 'Droguería colombiana, PQR, servicio al cliente, medicamentos, EPS, Tododrogas',
                 ],
             ]);
@@ -249,53 +245,34 @@ if ($canal === 'audio' && $OPENAI_KEY) {
             if ($w_code === 200 && !empty($w_data['text'])) {
                 $whisper_transcripcion = trim($w_data['text']);
                 $whisper_duracion      = $w_data['duration'] ?? null;
-
-                // Calcular avg_logprob promedio de todos los segmentos
-                // logprob cercano a 0 = alta confianza; < -1 = baja confianza/murmullo
                 $segmentos = $w_data['segments'] ?? [];
                 if ($segmentos) {
-                    $sum_logprob = array_sum(array_column($segmentos, 'avg_logprob'));
-                    $whisper_avg_logprob = $sum_logprob / count($segmentos);
+                    $sum_lp = array_sum(array_column($segmentos, 'avg_logprob'));
+                    $whisper_avg_logprob = $sum_lp / count($segmentos);
                 }
-
-                // Construir contexto de tono para el prompt de clasificación
-                // basado en señales objetivas del audio
-                $duracion_str = $whisper_duracion ? round($whisper_duracion) . ' segundos' : 'desconocida';
+                // Construir contexto de tono para el prompt de GPT
+                $duracion_str  = $whisper_duracion ? round($whisper_duracion) . 's' : '?';
                 $confianza_str = $whisper_avg_logprob !== null
                     ? ($whisper_avg_logprob > -0.3 ? 'alta (voz clara y segura)'
-                      : ($whisper_avg_logprob > -0.6 ? 'media (voz normal)'
-                      : 'baja (voz temblorosa, susurrante o emocionada)'))
+                      : ($whisper_avg_logprob > -0.6 ? 'media' : 'baja (voz emocionada o temblorosa)'))
                     : 'desconocida';
-
-                // Señales textuales de tono en la transcripción
-                $texto_lower = mb_strtolower($whisper_transcripcion);
-                $señales_positivas = preg_match('/\b(gracias|muchas gracias|excelente|felicit|maravillo|encanta|agradec|buen servicio|muy bien|genial|perfecto|satisfech|contento|alegr|feliz)\b/u', $texto_lower);
-                $señales_urgentes  = preg_match('/\b(urgente|emergencia|reacci[oó]n|dolor|grave|peligro|muerto|hospital|911|auxilio)\b/u', $texto_lower);
-                $señales_negativas = preg_match('/\b(p[eé]simo|horrible|nunca|incumpl|abusivo|ladr[oó]n|indigna|escandalo|increíble|el colmo|harto|cansado)\b/u', $texto_lower);
-
-                $audio_tono_contexto = "
-CONTEXTO DEL AUDIO (señales objetivas detectadas por Whisper):
-- Duración del mensaje: {$duracion_str}
-- Claridad/confianza de voz: {$confianza_str}
-- Señales positivas en texto: " . ($señales_positivas ? 'SÍ (palabras de agradecimiento/elogio detectadas)' : 'No') . "
-- Señales urgentes en texto: " . ($señales_urgentes ? 'SÍ (palabras de emergencia detectadas)' : 'No') . "
-- Señales negativas en texto: " . ($señales_negativas ? 'SÍ (palabras de queja/ira detectadas)' : 'No') . "
-INSTRUCCIÓN: Usa este contexto junto con el texto para clasificar con mayor precisión el tono real del hablante.";
-
+                $tl = mb_strtolower($whisper_transcripcion);
+                $sig_pos = (int)(bool)preg_match('/\b(gracias|muchas gracias|excelente|felicit|maravillo|encanta|agradec|buen servicio|muy bien|genial|perfecto|satisfech|contento|alegr|feliz|los amo|me ayudaron)\b/u', $tl);
+                $sig_urg = (int)(bool)preg_match('/\b(urgente|emergencia|reacci[oó]n|dolor|grave|peligro|hospital|auxilio)\b/u', $tl);
+                $sig_neg = (int)(bool)preg_match('/\b(p[eé]simo|horrible|nunca|incumpl|abusivo|ladr[oó]n|indigna|el colmo|harto)\b/u', $tl);
+                $audio_tono_contexto = "\nCONTEXTO AUDIO — duración:{$duracion_str}, voz:{$confianza_str}, señales_positivas:" . ($sig_pos?'SÍ':'No') . ", señales_urgentes:" . ($sig_urg?'SÍ':'No') . ", señales_negativas:" . ($sig_neg?'SÍ':'No') . "\nSi señales_positivas=SÍ → clasificar sentimiento=positivo+tono=agradecido+prioridad=baja.";
             } else {
                 $whisper_error_pre = $w_data['error']['message'] ?? "HTTP $w_code";
             }
         }
     }
 }
-// Si Whisper transcribió, usar eso; si ya venía transcripción del form, también usarla
 if ($whisper_transcripcion) {
-    $transcripcion = $whisper_transcripcion; // actualizar para guardar en BD
+    $transcripcion = $whisper_transcripcion;
 }
 
-// Texto final para clasificar (transcripción Whisper > transcripción form > descripción)
+// Texto final para clasificar
 $texto_pqr = $transcripcion ?: $descripcion;
-
 
 // ── PASO 1: CLASIFICACIÓN IA ─────────────────────────────────────────
 $sentimiento  = 'neutro';
@@ -304,22 +281,41 @@ $categoria_ia = ucfirst($tipo_pqr);
 $nivel_riesgo = 'bajo';
 $resumen_corto = mb_substr($texto_pqr, 0, 120);
 $ley_aplicable = 'Ley 1755/2015';
-$horas_sla    = 15 * 24; // 15 días por defecto
+$horas_sla    = 15 * 24;
+$tono_ia      = 'neutro';
+
+// ── Inferencia por tipo cuando no hay texto (audio sin transcripción) ──
+// Si Whisper no pudo transcribir pero el usuario declaró un tipo,
+// usar el tipo para inferir sentimiento/prioridad por defecto
+if (!$texto_pqr && $canal === 'audio') {
+    $map_tipo = [
+        'felicitacion' => ['sentimiento'=>'positivo','tono'=>'agradecido','prioridad'=>'baja','horas_sla'=>360,'nivel_riesgo'=>'bajo'],
+        'sugerencia'   => ['sentimiento'=>'neutro',  'tono'=>'neutro',    'prioridad'=>'baja','horas_sla'=>360,'nivel_riesgo'=>'bajo'],
+        'peticion'     => ['sentimiento'=>'neutro',  'tono'=>'neutro',    'prioridad'=>'media','horas_sla'=>120,'nivel_riesgo'=>'bajo'],
+        'queja'        => ['sentimiento'=>'negativo','tono'=>'frustrado', 'prioridad'=>'alta','horas_sla'=>72, 'nivel_riesgo'=>'medio'],
+        'reclamo'      => ['sentimiento'=>'negativo','tono'=>'enojado',   'prioridad'=>'alta','horas_sla'=>72, 'nivel_riesgo'=>'medio'],
+        'denuncia'     => ['sentimiento'=>'negativo','tono'=>'enojado',   'prioridad'=>'alta','horas_sla'=>24, 'nivel_riesgo'=>'alto'],
+        'urgente'      => ['sentimiento'=>'urgente', 'tono'=>'ansioso',   'prioridad'=>'critica','horas_sla'=>4,'nivel_riesgo'=>'critico'],
+    ];
+    if (isset($map_tipo[$tipo_pqr])) {
+        $d = $map_tipo[$tipo_pqr];
+        $sentimiento   = $d['sentimiento'];
+        $tono_ia       = $d['tono'];
+        $prioridad     = $d['prioridad'];
+        $horas_sla     = $d['horas_sla'];
+        $nivel_riesgo  = $d['nivel_riesgo'];
+        $resumen_corto = "[Audio sin transcripción] Tipo declarado: {$tipo_pqr}";
+    }
+}
 
 if ($OPENAI_KEY && $texto_pqr) {
-
-    // Contexto adicional si es audio (vacío si es escrito/canvas)
-    $contexto_canal = ($canal === 'audio' && $audio_tono_contexto)
-        ? $audio_tono_contexto
-        : '';
-
     $prompt = <<<PROMPT
 Analiza esta solicitud de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
 
-CANAL: {$canal} (audio=voz grabada, escrito=texto, canvas=escrito a mano)
-TIPO DECLARADO POR EL USUARIO: $tipo_pqr_raw
-TEXTO EXACTO (transcripción literal): $texto_pqr
-{$contexto_canal}
+CANAL: {$canal}
+TIPO DECLARADO: $tipo_pqr_raw
+TEXTO: $texto_pqr
+{$audio_tono_contexto}
 
 JSON requerido:
 {
@@ -332,17 +328,15 @@ JSON requerido:
   "horas_sla": numero entero
 }
 
-REGLAS CRITICAS — LEER TODAS ANTES DE CLASIFICAR:
-1. EL CONTENIDO DEL TEXTO MANDA sobre el tipo declarado. Si el usuario seleccionó "queja" pero el texto es claramente una felicitación, clasificar por el contenido real.
-2. FELICITACIÓN/AGRADECIMIENTO → sentimiento=positivo, tono=agradecido, prioridad=baja, horas_sla=360.
-   Detectar por: "gracias", "muchas gracias", "excelente", "felicito", "maravilloso", "me encantó", "buen servicio", "muy bien atendido", "los felicito", "quedé satisfecho", "contento", "perfecto", "genial", expresiones de alegría o elogio.
-   EN AUDIO: si las señales positivas están marcadas en el contexto, dar peso extra a sentimiento=positivo.
-3. URGENTE → riesgo de salud, error en medicamento, reacción adversa. Prioridad=critica, horas_sla=4.
-4. ENOJO EXPLÍCITO → "horrible", "pésimo", "incumplieron", "ladrones", "el colmo", "abusivos", "estoy indignado". tono=enojado.
-5. FRUSTRACIÓN → queja sin ira explícita, "llevo días esperando", "no me atienden", "siempre pasa". tono=frustrado.
-6. NEUTRO → petición informativa sin carga emocional.
-7. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4.
-8. nivel_riesgo: positivo→bajo, urgente→critico, negativo+alta→medio, reclamo económico→medio.
+REGLAS:
+1. El contenido del texto MANDA sobre el tipo declarado.
+2. FELICITACIÓN/AGRADECIMIENTO → sentimiento=positivo, tono=agradecido, prioridad=baja, horas_sla=360. Palabras clave: "gracias", "muchas gracias", "excelente", "felicito", "maravilloso", "buen servicio", "muy bien atendido", "contento", "satisfecho", "perfecto", "genial", "los amo", "me ayudaron mucho".
+3. Si CONTEXTO AUDIO indica señales_positivas=SÍ → sentimiento=positivo+tono=agradecido OBLIGATORIO.
+4. URGENTE → riesgo de salud, error medicamento. prioridad=critica, horas_sla=4.
+5. ENOJO → "horrible", "pésimo", "ladrones", "abusivos", "el colmo". tono=enojado.
+6. FRUSTRACIÓN → queja sin ira, "llevo días", "no me atienden". tono=frustrado.
+7. NEUTRO → petición informativa sin emoción.
+8. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4.
 PROMPT;
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
@@ -353,7 +347,7 @@ PROMPT;
             'max_tokens'  => 300,
             'temperature' => 0.1,
             'messages'    => [
-                ['role' => 'system', 'content' => 'Eres clasificador experto de solicitudes de droguería colombiana. Responde SOLO JSON válido. CRÍTICO: si el texto contiene agradecimientos, elogios o felicitaciones (incluyendo audios donde el contexto marca señales positivas), clasificar SIEMPRE como sentimiento=positivo+tono=agradecido+prioridad=baja+horas_sla=360, sin importar el tipo declarado por el usuario. El contenido real del mensaje siempre prevalece.'],
+                ['role' => 'system', 'content' => 'Eres clasificador de solicitudes colombianas de drogueria. Responde SOLO JSON valido con los campos exactos solicitados. CRITICO: el contenido del texto SIEMPRE prevalece sobre el tipo que el usuario declaró en el formulario. Si el texto es positivo/agradecido (felicitaciones, gracias, buen servicio) clasificar como sentimiento=positivo+tono=agradecido+prioridad=baja+horas_sla=360 SIN IMPORTAR el tipo declarado. Si el texto muestra ira/frustración real, clasificar como negativo aunque el tipo diga petición.'],
                 ['role' => 'user',   'content' => $prompt],
             ],
         ]),
@@ -521,10 +515,10 @@ if ($token) {
     <div style='background:#faf5ff;border:1px solid #e9d5ff;border-left:4px solid #7c3aed;border-radius:6px;padding:16px 20px;margin-bottom:16px'>
       <p style='margin:0 0 8px;font-weight:700;color:#7c3aed;font-size:13px'>{$emoji_canal} Mensaje recibido via {$canal_txt}</p>" .
       ($canal === 'audio' && $transcripcion
-        ? "<p style='margin:0 0 8px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px'>🎙️ Transcripción automática (Whisper AI):</p>
+        ? "<p style='margin:0 0 6px;font-size:10px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.5px'>🎙️ Transcripción Whisper AI:</p>
            <p style='margin:0;font-size:13px;line-height:1.6;color:#374151;background:#fff;border:1px solid #e9d5ff;border-radius:4px;padding:10px 14px'>" . nl2br(htmlspecialchars($transcripcion)) . "</p>"
-        : "<p style='margin:0;font-size:13px;line-height:1.6;color:#374151'>" . nl2br(htmlspecialchars($texto_pqr ?: '[Audio adjunto — ver archivo]')) . "</p>") .
-      ($resumen_corto && $resumen_corto !== '[Audio adjunto]' ? "<p style='margin:10px 0 0;font-size:12px;color:#6b7280;font-style:italic'>📌 Resumen IA: {$resumen_corto}</p>" : "") .
+        : "<p style='margin:0;font-size:13px;line-height:1.6;color:#374151'>" . nl2br(htmlspecialchars($texto_pqr ?: '[Audio adjunto — escuchar archivo adjunto]')) . "</p>") .
+      ($resumen_corto && !str_starts_with($resumen_corto, '[Audio') ? "<p style='margin:10px 0 0;font-size:12px;color:#6b7280;font-style:italic'>📌 Resumen IA: " . htmlspecialchars($resumen_corto) . "</p>" : "") .
       "
     </div>" .
 
@@ -631,13 +625,10 @@ if ($token) {
 
     $correo_enviado = ($mail_code === 202);
 
-    // Actualizar BD: guardar el HTML del correo para que admin lo muestre igual que Outlook
+    // Actualizar BD con datos de clasificación y correo_enviado
     if ($correo_id) {
         sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
-            'body_content' => $cuerpo_html,
-            'body_type'    => 'html',
-            'body_preview' => mb_substr(strip_tags($cuerpo_html), 0, 300),
-            'updated_at'   => date('c'),
+            'updated_at' => date('c'),
         ]);
     }
 } else {
