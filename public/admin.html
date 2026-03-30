@@ -1523,8 +1523,8 @@ async function loadEmails(horasVentana = 0) {
       body_type: e.body_type || 'text',
       has_attachments: e.has_attachments || false,
       is_read: e.is_read || false,
-      to_recipients: e.to_recipients || [],
-      cc_recipients: e.cc_recipients || [],
+      to_recipients: parseJsonField(e.to_recipients),
+      cc_recipients: parseJsonField(e.cc_recipients),
       sent_at: e.sent_at || e.received_at || e.created_at,
       origen: e.origen || '',
       hilo_count: 0, // cuántos mensajes tiene el hilo
@@ -2501,6 +2501,14 @@ async function _guardarAdjuntosEnStorage(correoId,archivos,enviadoPor){
   return resultados;
 }
 
+
+// Ensure recipients are always arrays (Supabase may return JSON strings)
+function _parseRecip(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') { try { const p=JSON.parse(val); return Array.isArray(p)?p:[]; } catch(e){return[];} }
+  return [];
+}
 function toggleReply(modo) {
   modo = modo || 'reply';
   const area = document.getElementById('replyBoxArea');
@@ -2525,8 +2533,8 @@ function toggleReply(modo) {
     // CC = todos los to_recipients + cc_recipients excepto el buzón propio
     const propioEmail = (window.GRAPH_USER_ID||'').toLowerCase();
     const allCC = [
-      ...(email.to_recipients||[]).map(r=>r?.emailAddress?.address||r),
-      ...(email.cc_recipients||[]).map(r=>r?.emailAddress?.address||r),
+      ..._parseRecip(email.to_recipients).map(r=>r?.emailAddress?.address||r),
+      ..._parseRecip(email.cc_recipients).map(r=>r?.emailAddress?.address||r),
     ].filter(Boolean).filter(a=>a.toLowerCase()!==propioEmail && a.toLowerCase()!==toVal.toLowerCase());
     ccVal = [...new Set(allCC)].join('; ');
     subjectVal = 'RE: '+(email.asunto||'').replace(/^(RE:|RV:|FWD?:)\s*/i,'');
@@ -2539,7 +2547,7 @@ function toggleReply(modo) {
     titleColor = 'var(--orange,#f97316)'; modoLabel = '↪ Reenviar';
   }
 
-  const ccPrev = (email.cc_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ');
+  const ccPrev = _parseRecip(email.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ');
 
   area.innerHTML = `
     <div class="reply-box" style="border:1px solid var(--border);border-radius:var(--r);background:#fff;overflow:hidden;box-shadow:var(--shadow)">
@@ -2567,8 +2575,8 @@ function toggleReply(modo) {
         <div style="font-size:11px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;line-height:1.5">
           <b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br>
           <b>Enviado:</b> ${email?.sent_at ? new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : ''}<br>
-          <b>Para:</b> ${esc((email?.to_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br>
-          <b>CC:</b> ${esc((email?.cc_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br>
+          <b>Para:</b> ${esc(_parseRecip(email?.to_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br>
+          <b>CC:</b> ${esc(_parseRecip(email?.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br>
           <b>Asunto:</b> ${esc(email?.asunto||'')}
         </div>
         <div style="margin-top:8px;font-size:12px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;max-height:180px;overflow-y:auto;border-left:3px solid var(--border);padding-left:10px">${email?.body_content||email?.raw?.body_preview||''}</div>
@@ -2619,7 +2627,7 @@ async function sendReply() {
   if(!body || body==='<br>') { showToast('Escribe un mensaje','info'); return; }
   if(!toInput) { showToast('Escribe un destinatario','info'); return; }
 
-  const hiloHTML=`<br><br><div style="border-left:3px solid #ccc;padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px"><b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br><b>Enviado:</b> ${email?.sent_at?new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}):''}<br><b>Para:</b> ${esc((email?.to_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br><b>CC:</b> ${esc((email?.cc_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br><b>Asunto:</b> ${esc(email?.asunto||'')}<br><br>${email?.body_content||''}</div>`;
+  const hiloHTML=`<br><br><div style="border-left:3px solid #ccc;padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px"><b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br><b>Enviado:</b> ${email?.sent_at?new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}):''}<br><b>Para:</b> ${esc(_parseRecip(email?.to_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br><b>CC:</b> ${esc(_parseRecip(email?.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br><b>Asunto:</b> ${esc(email?.asunto||'')}<br><br>${email?.body_content||''}</div>`;
 
   const inlineFiles=[], largeFiles=[];
   _attachedFiles.forEach(({file,id:fid})=>{
