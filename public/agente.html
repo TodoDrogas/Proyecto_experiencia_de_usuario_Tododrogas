@@ -718,7 +718,7 @@ async function selectEmail(id) {
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         ✦ Nova TD
       </button>
-      <button class="btn btn-ghost" onclick="abrirPanelRR()" title="Plantillas de respuesta rápida" style="border-color:#f59e0b;color:#b45309">⚡ Rápidas</button>
+      <button class="btn btn-ghost" onclick="abrirPanelRR()" title="Plantillas" style="border-color:#f59e0b;color:#b45309">⚡ Rápidas</button>
       `}
       ${email.message_id ? `
       <button class="btn btn-ghost" onclick="descargarEML('${esc(email.message_id)}','${esc(email.asunto)}')" title="Descargar este correo como .eml (igual que Outlook)">
@@ -939,7 +939,8 @@ function previewAdjunto(url, nombre, tipo, el) {
     const w = window.open('', '_blank', 'width=860,height=700,resizable=yes,scrollbars=yes');
     if(!w) { window.open(url, '_blank'); return; }
     if(isPDF) {
-      w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659}iframe{width:100%;height:100vh;border:none}</style></head><body><iframe src="${url}#toolbar=1&navpanes=0"></iframe></body></html>`);
+      w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659}iframe{width:100%;height:100vh;border:none}</style></head><body><iframe src="${url}#toolbar=1&navpanes=0"></iframe><div id="panelRR" style="display:none;position:fixed;top:0;right:0;width:380px;height:100vh;background:#fff;border-left:1px solid var(--border);box-shadow:-4px 0 24px rgba(0,0,0,.13);z-index:9999;flex-direction:column"><div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0"><span style="font-size:15px">⚡</span><span style="font-weight:700;font-size:14px;color:var(--ink)">Respuestas Rápidas</span><button onclick="cerrarPanelRR()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:2px 6px">✕</button></div><div style="padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0"><input type="text" id="rrSearch" placeholder="🔍 Buscar plantilla..." oninput="renderRR()" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;font-family:inherit;outline:none"><div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px"></div></div><div id="rrLista" style="flex:1;overflow-y:auto;padding:8px"></div></div>
+</body></html>`);
     } else {
       w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${url}" alt="${nombre}"></body></html>`);
     }
@@ -1146,7 +1147,7 @@ async function generarConNovaTD(correoId) {
     toggleReply('reply');
     setTimeout(()=>{ const ed=document.querySelector('#replyBoxArea [contenteditable]'); if(ed) ed.innerHTML=html; },300);
   } catch(err) {
-    area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error Nova TD PHP.</div>`;
+    area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error Nova TD PHP — revisa el log del servidor.</div>`;
     console.error('Nova TD error:', err);
   }
 }
@@ -1523,6 +1524,7 @@ function estadoLabel(s){return {pendiente:'Pendiente',gestion:'En gestión',gest
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 
 function _arr(v){if(!v)return[];if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch(e){return[];}}
+
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function getFileIcon(n=''){
   const e=(n.split('.').pop()||'').toLowerCase();
@@ -2538,64 +2540,13 @@ async function renderMediaFormulario(email) {
 
 
 let _rrData=[],_rrCat='todas',_rrLoaded=false;
-function abrirPanelRR(){
-  const p=document.getElementById('panelRR');
-  if(!p)return;
-  p.style.visibility='visible';
-  p.style.opacity='1';
-  p.style.pointerEvents='auto';
-  if(!_rrLoaded){
-    document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:#64748b;font-size:12px">⏳ Cargando plantillas...</div>';
-    sb('knowledge_base?activo=eq.true&order=categoria.asc,veces_usado.desc&limit=200')
-      .then(data=>{_rrData=data||[];_rrLoaded=true;_rrRC();renderRR();})
-      .catch(()=>{document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px">❌ Error — ¿Cargaste las plantillas con cargar-plantillas.php?</div>';});
-    return;
-  }
-  renderRR();
-}
-function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p){p.style.visibility='hidden';p.style.opacity='0';p.style.pointerEvents='none';}}
-function _rrRC(){const cats=['todas',...new Set(_rrData.map(p=>p.categoria).filter(Boolean))];const el=document.getElementById('rrCategorias');if(!el)return;el.innerHTML=cats.map(c=>`<button class="rr-cat-btn${c===_rrCat?' active':''}" onclick="_rrSC('${c.replace(/'/g,"\\'")}')">${c==='todas'?'Todas':c}</button>`).join('');}
+async function abrirPanelRR(){const p=document.getElementById('panelRR');if(!p)return;p.style.display='flex';if(!_rrLoaded){document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">⏳ Cargando...</div>';try{_rrData=await sb('knowledge_base?activo=eq.true&order=categoria.asc,veces_usado.desc&limit=200')||[];_rrLoaded=true;_rrRC();}catch(e){document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px">❌ Error al cargar plantillas</div>';return;}}renderRR();}
+function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p)p.style.display='none';}
+function _rrRC(){const cats=['todas',...new Set(_rrData.map(p=>p.categoria).filter(Boolean))];const el=document.getElementById('rrCategorias');if(!el)return;el.innerHTML=cats.map(c=>`<button class="rr-cat-btn${c===_rrCat?' active':''}" onclick="_rrSC('${c.replace(/'/g,"\\'")}')"> ${c==='todas'?'Todas':c}</button>`).join('');}
 function _rrSC(c){_rrCat=c;_rrRC();renderRR();}
-function renderRR(){
-  const q=(document.getElementById('rrSearch')?.value||'').toLowerCase();
-  let l=_rrData;
-  if(_rrCat!=='todas')l=l.filter(p=>p.categoria===_rrCat);
-  if(q)l=l.filter(p=>(p.situacion||'').toLowerCase().includes(q)||(p.categoria||'').toLowerCase().includes(q));
-  const el=document.getElementById('rrLista');if(!el)return;
-  if(!l.length){el.innerHTML='<div style="padding:24px;text-align:center;color:#64748b;font-size:12px">Sin resultados</div>';return;}
-  el.innerHTML=l.map(p=>`<div class="rr-item" onclick="insertarRR(${p.id})"><div class="rr-cat">${esc(p.categoria||'')}${p.veces_usado?` &nbsp;·&nbsp; <span style='color:#2563eb'>${p.veces_usado}x</span>`:''}</div><div class="rr-sit">${esc(p.situacion||'')}</div><div class="rr-prev">${esc((p.respuesta_modelo||'').substring(0,100))}…</div></div>`).join('');
-}
-async function insertarRR(id){
-  const p=_rrData.find(x=>x.id===id);if(!p)return;
-  if(typeof toggleReply==='function')toggleReply('reply');
-  await new Promise(r=>setTimeout(r,300));
-  const ed=document.querySelector('#replyBoxArea [contenteditable]');
-  if(!ed){cerrarPanelRR();return;}
-  const html=(p.respuesta_modelo||'')
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/
-/g,'<br>')
-    .replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');
-  ed.innerHTML=html;ed.focus();
-  const v=ed.querySelector('span[style*="fef08a"]');
-  if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}
-  try{await sb(`knowledge_base?id=eq.${id}`,'PATCH',{veces_usado:(p.veces_usado||0)+1});p.veces_usado=(p.veces_usado||0)+1;renderRR();}catch(e){}
-  cerrarPanelRR();
-}
+function renderRR(){const q=(document.getElementById('rrSearch')?.value||'').toLowerCase();let l=_rrData;if(_rrCat!=='todas')l=l.filter(p=>p.categoria===_rrCat);if(q)l=l.filter(p=>(p.situacion||'').toLowerCase().includes(q)||(p.categoria||'').toLowerCase().includes(q));const el=document.getElementById('rrLista');if(!el)return;if(!l.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">Sin resultados</div>';return;}el.innerHTML=l.map(p=>`<div class="rr-item" onclick="insertarRR(${p.id})"><div class="rr-cat">${esc(p.categoria||'')}${p.veces_usado?` · <span style='color:#2563eb'>${p.veces_usado}x</span>`:''}</div><div class="rr-sit">${esc(p.situacion||'')}</div><div class="rr-prev">${esc((p.respuesta_modelo||'').substring(0,100))}…</div></div>`).join('');}
+async function insertarRR(id){const p=_rrData.find(x=>x.id===id);if(!p)return;if(typeof toggleReply==='function')toggleReply('reply');await new Promise(r=>setTimeout(r,300));const ed=document.querySelector('#replyBoxArea [contenteditable]');if(!ed){cerrarPanelRR();return;}const html=(p.respuesta_modelo||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>').replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');ed.innerHTML=html;ed.focus();const v=ed.querySelector('span[style*="fef08a"]');if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}try{await sb(`knowledge_base?id=eq.${id}`,'PATCH',{veces_usado:(p.veces_usado||0)+1});p.veces_usado=(p.veces_usado||0)+1;renderRR();}catch(e){}cerrarPanelRR();}
 
 </script>
-
-<div id="panelRR" style="visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;right:0;width:380px;height:100vh;background:#fff;border-left:1px solid #e2e8f0;box-shadow:-4px 0 24px rgba(0,0,0,.13);z-index:9999;display:flex;flex-direction:column;transition:opacity .2s">
-  <div style="padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;flex-shrink:0">
-    <span style="font-size:15px">⚡</span>
-    <span style="font-weight:700;font-size:14px">Respuestas Rápidas</span>
-    <button onclick="cerrarPanelRR()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:18px;color:#64748b;padding:2px 6px">✕</button>
-  </div>
-  <div style="padding:10px 12px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
-    <input type="text" id="rrSearch" placeholder="🔍 Buscar plantilla..." oninput="renderRR()" style="width:100%;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:8px;padding:7px 12px;font-size:12px;font-family:inherit;outline:none">
-    <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px"></div>
-  </div>
-  <div id="rrLista" style="flex:1;overflow-y:auto;padding:8px"></div>
-</div>
 </body>
 </html>
