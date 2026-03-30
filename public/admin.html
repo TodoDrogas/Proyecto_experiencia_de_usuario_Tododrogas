@@ -386,6 +386,14 @@ table.agents-tbl tr:hover td{background:var(--bg)}
   </nav>
   <div class="topbar-right">
     <span class="last-sync" id="lastSync">—</span>
+    <select id="ventanaSync" title="Ventana de correos a mostrar"
+      style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:5px 8px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;outline:none"
+      onchange="syncAll()">
+      <option value="12">Últimas 12h</option>
+      <option value="24">Últimas 24h</option>
+      <option value="48">Últimas 48h</option>
+      <option value="72">Últimos 3 días</option>
+    </select>
     <button class="topbar-sync" id="syncBtn" onclick="syncAll()">
       <svg id="syncIcon" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg>
       Actualizar
@@ -1463,15 +1471,19 @@ function showPage(page, btn) {
 // ──────────────────────────────────────────────
 // DATA LOADING
 // ──────────────────────────────────────────────
-async function loadEmails() {
+async function loadEmails(horasVentana = 12) {
   try {
-    // Traer todos los correos del inbox (graph_sync + formulario_web)
-    // Solo Inbox: origen=graph_sync trae mailFolders/Inbox, formulario_web siempre va
-    const data = await sb('correos?order=received_at.desc&limit=500');
+    // ── Ventana de tiempo configurable (igual que sincronizar-correos.php) ──
+    // El PHP hace upsert → nunca duplica. El admin muestra exactamente
+    // lo que el cron sincronizó dentro de la ventana seleccionada.
+    const desde = new Date(Date.now() - horasVentana * 60 * 60 * 1000).toISOString();
+
+    // Traer solo correos dentro de la ventana, orden igual que Outlook (más reciente primero)
+    const data = await sb(`correos?received_at=gte.${desde}&order=received_at.desc&limit=500`);
     const allEmails = (data||[]).map(e=>({
       id: e.id,
       message_id: e.message_id,
-      conversation_id: e.conversation_id || e.id, // fallback a id si no hay conversation
+      conversation_id: e.conversation_id || null, // null = sin hilo, se muestra individual
       asunto: e.subject || '(Sin asunto)',
       remitente: e.from_email || '',
       remitente_nombre: e.from_name || '',
@@ -1502,16 +1514,16 @@ async function loadEmails() {
     }));
 
     // ── AGRUPAR POR HILO (igual que Outlook) ──────────────────────────
-    // Para correos graph_sync: agrupar por conversation_id
-    // Para correos formulario_web: sin conversation_id, mostrar individualmente
+    // Para correos graph_sync: agrupar por conversation_id real de Graph
+    // Para correos sin conversation_id (formulario web u otros): mostrar individualmente
     const hilos = new Map(); // conversation_id → email más reciente del hilo
 
     for (const email of allEmails) {
-      const convId = email.raw?.conversation_id;
+      const convId = email.raw?.conversation_id; // null si no tiene hilo real
 
-      // Correos sin conversation_id (formulario web) → siempre individuales
+      // Sin conversation_id real → siempre individual (igual que Outlook con correos únicos)
       if (!convId) {
-        hilos.set(email.id, { ...email, hilo_count: 1 });
+        hilos.set('solo_' + email.id, { ...email, hilo_count: 1 });
         continue;
       }
 
@@ -1772,8 +1784,15 @@ async function selectEmail(id) {
     <div class="adj-section" style="margin-bottom:14px;display:none" id="mediaFormulario" style="display:none"></div>
       <div id="adjSection"><div class="adj-title">📎 Adjuntos</div><div class="adj-grid" id="adjGrid"></div></div>
     <div class="ev-body" id="evBody">
-      ${email.body_type==='html'?`<iframe srcdoc="${esc(email.body_content||'')}" sandbox="allow-same-origin" style="width:100%;height:100%;min-height:280px;border:none"></iframe>`:
-        `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`}
+      ${email.body_type==='html'
+        ? `<iframe
+            srcdoc="${esc(email.body_content||'')}"
+            sandbox="allow-same-origin allow-popups"
+            referrerpolicy="no-referrer"
+            style="width:100%;height:100%;min-height:400px;border:none;display:block"
+            onload="this.style.height=(this.contentDocument?.body?.scrollHeight||400)+'px'"
+          ></iframe>`
+        : `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`}
     </div>
   `;
 
@@ -1940,24 +1959,32 @@ async function loadAttachments(correoId, messageId) {
   const el = document.getElementById('adjGrid');
   const section = document.getElementById('adjSection');
   if(!el) return;
-  // ── Filtro adjuntos: solo reales, excluir firmas/logos inline del HTML ──
+  // ── Filtro adjuntos: IGUAL QUE OUTLOOK ──────────────────────────────
+  // Regla exacta igual al PHP sincronizar-correos.php:
+  //   isInline=false → adjunto real → mostrar en sección adjuntos ✅
+  //   isInline=true  → forma parte del cuerpo HTML → NO mostrar en adjuntos ❌
+  //   Excepciones para imágenes inline GRANDES (>150KB y no son logos Outlook) → mostrar
   const filtrar = (lista) => lista.filter(a => {
-    const dir = a.direccion || '';
-    if(dir && dir !== 'entrante') return false;
     const esInline = a.es_inline === true || a.isInline === true;
-    const ct = (a.tipo_contenido || a.contentType || '').toLowerCase();
-    const esImagen = ct.startsWith('image/');
+    // No inline = siempre adjunto real → mostrar
+    if (!esInline) return true;
+    // Inline: aplicar mismas reglas que el PHP
+    const ct     = (a.tipo_contenido || a.contentType || '').toLowerCase();
     const nombre = a.nombre || a.name || '';
-    const tam = a.tamano_bytes || a.size || 0;
-    // Excluir imágenes inline pequeñas (firmas, logos embebidos en HTML)
-    if(esInline && esImagen && tam < 200000) return false;
-    // Excluir imágenes Outlook auto-generadas (firmas HTML)
-    if(/^Outlook-[a-z0-9]+\./i.test(nombre)) return false;
-    // Excluir imágenes GIF animadas de firmas corporativas (Coosalud etc.)
-    if(esInline && ct === 'image/gif') return false;
-    // Excluir imágenes sin nombre real
-    if(esInline && esImagen && (!nombre || /^\.[a-z]+$/i.test(nombre))) return false;
-    // Imágenes inline GRANDES (>200KB) pueden ser adjuntos reales → mostrar
+    const tam    = a.tamano_bytes || a.size || 0;
+    const esImg  = ct.startsWith('image/');
+    // Imágenes inline pequeñas = logos/firmas del cuerpo → NO mostrar
+    if (esImg && tam < 150000) return false;
+    // Logos Outlook auto-generados → NO mostrar
+    if (esImg && /^Outlook-[a-z0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i.test(nombre)) return false;
+    // GIFs inline = firmas corporativas → NO mostrar
+    if (ct === 'image/gif') return false;
+    // Imágenes sin nombre real → NO mostrar
+    if (esImg && (!nombre || /^\.[a-z]+$/i.test(nombre))) return false;
+    // Solo excluir adjuntos de firma de cierre
+    const dir = a.direccion || '';
+    if (dir && dir !== 'entrante') return false;
+    // Imágenes inline GRANDES (>150KB) = pueden ser adjuntos reales embebidos → mostrar
     return true;
   });
   // ── Renderizar lista de adjuntos con visor tipo Outlook (reutiliza mpPreviewAdjunto)
@@ -2759,13 +2786,14 @@ async function onDropToAgent(e, agentId, agentName) {
 // SYNC
 // ──────────────────────────────────────────────
 async function syncAll() {
-  const btn=document.getElementById('syncBtn'),icon=document.getElementById('syncIcon');
+  const btn  = document.getElementById('syncBtn');
+  const horas = parseInt(document.getElementById('ventanaSync')?.value || '12');
   btn.classList.add('loading');
   try {
-    await Promise.all([loadEmails(), loadAgents(), loadHistorial()]);
-    document.getElementById('lastSync').textContent=`sync ${new Date().toLocaleTimeString('es-CO')}`;
-    showToast('Datos actualizados ✓','success');
-  } catch { showToast('Error al actualizar','error'); }
+    await Promise.all([loadEmails(horas), loadAgents(), loadHistorial()]);
+    document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')} · ${horas}h`;
+    showToast(`Datos actualizados (últimas ${horas}h) ✓`, 'success');
+  } catch { showToast('Error al actualizar', 'error'); }
   finally { btn.classList.remove('loading'); }
 }
 
