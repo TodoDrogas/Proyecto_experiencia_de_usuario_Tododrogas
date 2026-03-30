@@ -530,6 +530,46 @@ if ($token_admin && !$correo_enviado) {
     curl_close($ch_a2);
 }
 
+// ── PASO 2C: INSERTAR ENCUESTA EN TABLA CORREOS ───────────────────────
+// Así aparece en admin con el mismo estilo HTML que llega a pqrsfd
+$fecha_enc  = date('Ymd');
+$rand_enc   = str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
+$ticket_enc = "ENC-{$fecha_enc}-{$rand_enc}";
+
+$emoji_cal  = [1=>'😞',2=>'😐',3=>'🙂',4=>'😊',5=>'🤩'][$calificacion] ?? '⭐';
+$prio_enc   = $calificacion >= 4 ? 'baja' : ($calificacion >= 3 ? 'media' : 'alta');
+$sent_enc   = $calificacion >= 4 ? 'positivo' : ($calificacion >= 3 ? 'neutro' : 'negativo');
+$subject_enc = "[{$ticket_enc}] ⭐ ENCUESTA | {$emoji_cal} {$calificacion}/5 | 📍 {$sede_nombre}";
+
+// Usar el cuerpo_admin ya construido (HTML bonito) como body del correo en admin
+$body_enc = isset($cuerpo_admin) ? $cuerpo_admin : (isset($cuerpo_a2) ? $cuerpo_a2 : '');
+
+$payload_enc_correo = [
+    'ticket_id'     => $ticket_enc,
+    'from_email'    => $correo ?: ($telefono ? $telefono.'@encuesta' : 'anonimo@encuesta'),
+    'from_name'     => $nombre ?: 'Anónimo',
+    'nombre'        => $nombre ?: 'Anónimo',
+    'correo'        => $correo ?: null,
+    'subject'       => $subject_enc,
+    'body_content'  => $body_enc,
+    'body_preview'  => "Encuesta {$calificacion}/5 — {$sede_nombre}" . ($comentario ? ". Comentario: ".mb_substr($comentario,0,100) : ''),
+    'body_type'     => $body_enc ? 'html' : 'text',
+    'tipo_pqr'      => 'encuesta',
+    'sentimiento'   => $sent_enc,
+    'prioridad'     => $prio_enc,
+    'categoria_ia'  => "Encuesta · {$sede_nombre}",
+    'resumen_corto' => "Encuesta {$calificacion}/5 — {$sede_nombre}",
+    'canal_contacto'=> $canal,
+    'origen'        => 'formulario_encuesta',
+    'estado'        => 'solucionado',
+    'is_read'       => false,
+    'has_attachments'=> false,
+    'received_at'   => $now,
+    'created_at'    => $now,
+    'updated_at'    => $now,
+];
+sbPost($SB_URL, $SB_KEY, 'correos', $payload_enc_correo);
+
 // ── PASO 3: HISTORIAL_EVENTOS ─────────────────────────────────────────
 // Siempre guardar en historial (admin lee encuestas desde aquí)
 if (true) {
