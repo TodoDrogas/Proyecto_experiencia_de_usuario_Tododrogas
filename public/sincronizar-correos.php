@@ -84,7 +84,7 @@ $TENANT_ID     = '__AZURE_TENANT_ID__';
 $CLIENT_ID     = '__AZURE_CLIENT_ID__';
 $CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
 $GRAPH_MAILBOX = 'pqrsfd@tododrogas.com.co';
-$HORAS_VENTANA = (int)($_GET['horas'] ?? 2);
+$HORAS_VENTANA = (int)($_GET['horas'] ?? 12); // 12h = ventana por defecto (cron cada 5min cubre bien sin duplicar)
 
 // Tamaño de lote para batch upsert — no subir de 25 en Nano
 const BATCH_SIZE = 20;
