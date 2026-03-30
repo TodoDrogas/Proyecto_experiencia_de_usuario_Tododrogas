@@ -265,11 +265,12 @@ foreach ($todos_correos as $c) {
             }
             if ($correo_id) {
                 $correos_para_clasificar[] = [
-                    'correo_id' => $correo_id,
-                    'msg_id'    => $msg_id,
-                    'subject'   => $c['subject'] ?? '',
-                    'body'      => mb_substr($c['body']['content'] ?? $c['bodyPreview'] ?? '', 0, 2000),
-                    'tiene_adj' => $tiene_adjuntos,
+                    'correo_id'  => $correo_id,
+                    'msg_id'     => $msg_id,
+                    'subject'    => $c['subject'] ?? '',
+                    'body'       => mb_substr($c['body']['content'] ?? $c['bodyPreview'] ?? '', 0, 2000),
+                    'tiene_adj'  => $tiene_adjuntos,
+                    'from_email' => $c['from']['emailAddress']['address'] ?? '',
                 ];
             }
         } else {
@@ -295,11 +296,29 @@ if ($OPENAI_KEY && !empty($correos_para_clasificar)) {
     log_msg("Clasificando " . count($correos_para_clasificar) . " correos con GPT...");
 
     foreach ($correos_para_clasificar as $item) {
+        $from_email = strtolower($item['from_email'] ?? '');
         $texto = strip_tags($item['body']);
         $texto = preg_replace('/\s+/', ' ', $texto);
         $texto = mb_substr(trim($texto), 0, 1500);
 
         if (strlen($texto) < 10) continue; // sin contenido clasificable
+
+        // No clasificar correos de nuestro propio dominio (notificaciones internas)
+        if (str_contains($from_email, 'tododrogas.com.co') || str_contains($from_email, 'pqrsfd@')) continue;
+
+        // No clasificar correos internos del sistema
+        $asunto_lower = strtolower($item['subject']);
+        $es_interno = (
+            str_contains($asunto_lower, 'encuesta')           || // notificación encuesta
+            str_contains($item['subject'], '⭐')              || // encuesta emoji
+            str_contains($item['subject'], '✅')              || // acuse al usuario
+            str_contains($asunto_lower, 'su solicitud fue')   || // acuse
+            str_contains($asunto_lower, 'gracias por su opinión') || // confirmación encuesta
+            preg_match('/^\[td-\d{8}-\d{4}\]/i', $item['subject']) || // radicado formulario
+            str_starts_with(trim($item['subject']), 'RV:')    || // reenvío interno
+            str_starts_with(trim($item['subject']), 'RE:')       // respuesta interna
+        );
+        if ($es_interno) continue;
 
         $prompt = <<<PROMPT
 Analiza este correo recibido en una droguería colombiana. Responde SOLO JSON válido sin markdown.
