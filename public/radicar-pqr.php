@@ -544,67 +544,29 @@ if ($token) {
         }
     }
 
-    // ── Enviar correo en 2 pasos para capturar message_id ───────────────
-    // PASO A: Crear borrador (devuelve el mensaje con su ID de Graph)
-    $graph_msg_id   = null;
-    $graph_inet_id  = null;
-    $correo_enviado = false;
-
-    $ch_create = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/messages");
-    curl_setopt_array($ch_create, [
+    // Enviar correo
+    $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
+    curl_setopt_array($ch, [
         CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode($mail_payload),
+        CURLOPT_POSTFIELDS     => json_encode(['message' => $mail_payload, 'saveToSentItems' => true]),
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
         CURLOPT_TIMEOUT        => 30,
     ]);
-    $create_resp = curl_exec($ch_create);
-    $create_code = curl_getinfo($ch_create, CURLINFO_HTTP_CODE);
-    curl_close($ch_create);
+    $mail_resp = curl_exec($ch);
+    $mail_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
 
-    if ($create_code === 201) {
-        $msg_data      = json_decode($create_resp, true);
-        $graph_msg_id  = $msg_data['id']                  ?? null; // ID interno Graph
-        $graph_inet_id = $msg_data['internetMessageId']   ?? null; // message_id estándar SMTP
+    $correo_enviado = ($mail_code === 202);
 
-        // PASO B: Enviar el borrador
-        if ($graph_msg_id) {
-            $ch_send = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/messages/{$graph_msg_id}/send");
-            curl_setopt_array($ch_send, [
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => '',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
-                CURLOPT_TIMEOUT        => 30,
-            ]);
-            $send_resp = curl_exec($ch_send);
-            $send_code = curl_getinfo($ch_send, CURLINFO_HTTP_CODE);
-            curl_close($ch_send);
-            $correo_enviado = ($send_code === 202);
-        }
-    } else {
-        // Fallback: sendMail clásico si falla la creación
-        $ch_fb = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
-        curl_setopt_array($ch_fb, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => json_encode(['message' => $mail_payload, 'saveToSentItems' => true]),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
-            CURLOPT_TIMEOUT        => 30,
-        ]);
-        curl_exec($ch_fb);
-        $correo_enviado = (curl_getinfo($ch_fb, CURLINFO_HTTP_CODE) === 202);
-        curl_close($ch_fb);
-    }
-
-    // Actualizar BD con message_id capturado para que N8N pueda buscar adjuntos
+    // Actualizar BD: guardar el HTML del correo para que admin lo muestre igual que Outlook
     if ($correo_id) {
-        $patch_data = ['updated_at' => date('c')];
-        if ($graph_inet_id) $patch_data['message_id']          = $graph_inet_id;
-        if ($graph_msg_id)  $patch_data['internet_message_id'] = $graph_msg_id;
-        // Marcar has_attachments=true si el correo lleva adjunto, para que N8N lo procese
-        if (!empty($mail_payload['attachments'])) $patch_data['has_attachments'] = true;
-        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", $patch_data);
+        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
+            'body_content' => $cuerpo_html,
+            'body_type'    => 'html',
+            'body_preview' => mb_substr(strip_tags($cuerpo_html), 0, 300),
+            'updated_at'   => date('c'),
+        ]);
     }
 } else {
     $correo_enviado = false;
