@@ -389,7 +389,7 @@ table.agents-tbl tr:hover td{background:var(--bg)}
     <select id="ventanaSync" title="Ventana de correos a mostrar"
       style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:5px 8px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;outline:none"
       onchange="syncAll()">
-      <option value="12">Últimas 12h</option>
+      <option value="0">Hoy (desde 00:00)</option>
       <option value="24">Últimas 24h</option>
       <option value="48">Últimas 48h</option>
       <option value="72">Últimos 3 días</option>
@@ -1471,14 +1471,23 @@ function showPage(page, btn) {
 // ──────────────────────────────────────────────
 // DATA LOADING
 // ──────────────────────────────────────────────
-async function loadEmails(horasVentana = 12) {
+async function loadEmails(horasVentana = 0) {
   try {
-    // ── Ventana de tiempo configurable (igual que sincronizar-correos.php) ──
-    // El PHP hace upsert → nunca duplica. El admin muestra exactamente
-    // lo que el cron sincronizó dentro de la ventana seleccionada.
-    const desde = new Date(Date.now() - horasVentana * 60 * 60 * 1000).toISOString();
+    // ── Ventana: desde el inicio del día de HOY en hora Colombia ──
+    // horasVentana=0 → desde las 00:00 de hoy (default, igual que el PHP)
+    // horasVentana>0 → carga histórica manual (ej: últimas 48h)
+    let desde;
+    if (horasVentana > 0) {
+      desde = new Date(Date.now() - horasVentana * 60 * 60 * 1000).toISOString();
+    } else {
+      // Inicio del día en hora Colombia (UTC-5)
+      const ahora = new Date();
+      const inicioDia = new Date(ahora.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }));
+      // Compensar offset Colombia = UTC-5
+      desde = new Date(inicioDia.getTime() + 5 * 60 * 60 * 1000).toISOString();
+    }
 
-    // Traer solo correos dentro de la ventana, orden igual que Outlook (más reciente primero)
+    // Traer correos desde el inicio del día, orden igual que Outlook (más reciente primero)
     const data = await sb(`correos?received_at=gte.${desde}&order=received_at.desc&limit=500`);
     const allEmails = (data||[]).map(e=>({
       id: e.id,
@@ -2791,8 +2800,9 @@ async function syncAll() {
   btn.classList.add('loading');
   try {
     await Promise.all([loadEmails(horas), loadAgents(), loadHistorial()]);
-    document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')} · ${horas}h`;
-    showToast(`Datos actualizados (últimas ${horas}h) ✓`, 'success');
+    const label = horas === 0 ? 'Hoy' : `últimas ${horas}h`;
+    document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')} · ${label}`;
+    showToast(`Datos actualizados (${label}) ✓`, 'success');
   } catch { showToast('Error al actualizar', 'error'); }
   finally { btn.classList.remove('loading'); }
 }
