@@ -366,7 +366,7 @@ table.agents-tbl tr:hover td{background:var(--bg)}
 <!-- TOPBAR -->
 <div class="topbar">
   <div class="topbar-logo">
-    <img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Tododrogas" style="height:30px;object-fit:contain;filter:brightness(10) saturate(0);mix-blend-mode:screen">
+    <img id="topbarLogo" src="" alt="Tododrogas" style="height:30px;object-fit:contain;display:none">
     <div style="width:1px;height:18px;background:rgba(255,255,255,.2);margin:0 10px"></div>
     <div class="topbar-logo-text" style="font-size:12px;color:rgba(255,255,255,.5);font-weight:500">PQRSFD Admin</div>
   </div>
@@ -1940,13 +1940,24 @@ async function loadAttachments(correoId, messageId) {
   const el = document.getElementById('adjGrid');
   const section = document.getElementById('adjSection');
   if(!el) return;
-  // ── Filtro: solo entrantes, excluir imágenes inline pequeñas (firmas HTML)
+  // ── Filtro adjuntos: solo reales, excluir firmas/logos inline del HTML ──
   const filtrar = (lista) => lista.filter(a => {
     const dir = a.direccion || '';
     if(dir && dir !== 'entrante') return false;
     const esInline = a.es_inline === true || a.isInline === true;
-    const esImagen = (a.tipo_contenido || a.contentType || '').toLowerCase().startsWith('image/');
-    if(esInline && esImagen && (a.tamano_bytes || a.size || 0) < 10000) return false;
+    const ct = (a.tipo_contenido || a.contentType || '').toLowerCase();
+    const esImagen = ct.startsWith('image/');
+    const nombre = a.nombre || a.name || '';
+    const tam = a.tamano_bytes || a.size || 0;
+    // Excluir imágenes inline pequeñas (firmas, logos embebidos en HTML)
+    if(esInline && esImagen && tam < 200000) return false;
+    // Excluir imágenes Outlook auto-generadas (firmas HTML)
+    if(/^Outlook-[a-z0-9]+\./i.test(nombre)) return false;
+    // Excluir imágenes GIF animadas de firmas corporativas (Coosalud etc.)
+    if(esInline && ct === 'image/gif') return false;
+    // Excluir imágenes sin nombre real
+    if(esInline && esImagen && (!nombre || /^\.[a-z]+$/i.test(nombre))) return false;
+    // Imágenes inline GRANDES (>200KB) pueden ser adjuntos reales → mostrar
     return true;
   });
   // ── Renderizar lista de adjuntos con visor tipo Outlook (reutiliza mpPreviewAdjunto)
@@ -2849,7 +2860,10 @@ async function abrirPreviewCorreo(id) {
     if(dir && dir !== 'entrante') return false;
     const esInline = a.es_inline===true||a.isInline===true;
     const esImagen = (a.tipo_contenido||a.contentType||'').toLowerCase().startsWith('image/');
-    if(esInline && esImagen && (a.tamano_bytes||a.size||0) < 10000) return false;
+    // Excluir TODAS las imágenes inline — firmas embebidas en el cuerpo
+    if(esInline && esImagen) return false;
+    const nombre2 = a.nombre||a.name||'';
+    if(/^Outlook-[a-z0-9]+\./i.test(nombre2)) return false;
     return true;
   });
   const _mpRenderAdjBar = (visibles) => {
@@ -3595,6 +3609,24 @@ async function confirmarAutoAsignar() {
   }
 }
 
+
+async function loadTopbarLogo() {
+  const FALLBACK = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+  const img = document.getElementById('topbarLogo');
+  if (!img) return;
+  img.src = FALLBACK;
+  img.style.display = 'block';
+  img.onerror = () => { img.style.display = 'none'; };
+  try {
+    const cfg = await sb('configuracion_sistema?id=eq.main&select=data');
+    const logoUrl = cfg?.[0]?.data?.logo || '';
+    if (logoUrl && logoUrl !== FALLBACK) {
+      const t = new Image();
+      t.onload = () => { img.src = logoUrl; };
+      t.src = logoUrl;
+    }
+  } catch(e) {}
+}
 function logout(){sessionStorage.clear();window.location.href='login.html';}
 async function getGraphToken(){
   try{
@@ -3620,6 +3652,7 @@ async function getGraphToken(){
     window.location.href='login.html'; return;
   }
   await Promise.all([loadEmails(), loadAgents(), loadHistorial()]);
+  loadTopbarLogo();
   document.getElementById('lastSync').textContent=`sync ${new Date().toLocaleTimeString('es-CO')}`;
   // Auto-refresh
   setInterval(()=>{ loadEmails(); loadHistorial(); }, 90000);
