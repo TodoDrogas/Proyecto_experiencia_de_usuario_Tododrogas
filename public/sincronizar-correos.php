@@ -211,11 +211,24 @@ if (!$access_token) {
 log_msg("Token OK");
 
 // ── 2. TRAER CORREOS ──────────────────────────────────────────────────
-$desde    = (new DateTime("-{$HORAS_VENTANA} hours", new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
+// Ventana: desde el inicio del día de HOY en hora Bogotá (no últimas N horas fijas)
+// Esto garantiza que SIEMPRE se traigan todos los correos del día actual sin importar la hora
+$hoy_bogota = new DateTime('today', new DateTimeZone('America/Bogota'));
+$hoy_utc    = clone $hoy_bogota;
+$hoy_utc->setTimezone(new DateTimeZone('UTC'));
+$desde = $hoy_utc->format('Y-m-d\TH:i:s\Z');
+
+// Si se pasa ?horas=N manualmente (ej: para carga histórica), usar eso en vez de "hoy"
+if (isset($_GET['horas'])) {
+    $horas_manual = (int)$_GET['horas'];
+    $desde = (new DateTime("-{$horas_manual} hours", new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
+}
 $select   = 'id,subject,from,toRecipients,ccRecipients,bccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,isRead,isDraft,conversationId,importance,internetMessageId,categories,flag';
 $filter   = urlencode("isDraft eq false and receivedDateTime ge {$desde}");
 $url_base = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/Inbox/messages";
-$url      = "{$url_base}?\$filter={$filter}&\$orderby=receivedDateTime+desc&\$top=999&\$select={$select}";
+// Sin $orderby — cuando no se usa ConsistencyLevel:eventual, orderby puede
+// limitar resultados. El orden se hace en el upsert de Supabase.
+$url      = "{$url_base}?\$filter={$filter}&\$top=999&\$select={$select}";
 
 log_msg("Trayendo correos desde $desde...");
 
@@ -226,7 +239,8 @@ while ($url) {
     $r = curlJson($url, [
         CURLOPT_HTTPHEADER => [
             "Authorization: Bearer $access_token",
-            'ConsistencyLevel: eventual',
+            // Sin ConsistencyLevel:eventual — ese header puede causar que Graph
+            // omita mensajes recientes en índices no actualizados
         ],
         CURLOPT_TIMEOUT => 60,
     ]);
