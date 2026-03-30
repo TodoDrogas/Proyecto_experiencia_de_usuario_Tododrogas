@@ -224,11 +224,14 @@ if (isset($_GET['horas'])) {
     $desde = (new DateTime("-{$horas_manual} hours", new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
 }
 $select   = 'id,subject,from,toRecipients,ccRecipients,bccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,isRead,isDraft,conversationId,importance,internetMessageId,categories,flag';
+// ID directo de Bandeja de entrada (más confiable que el alias 'Inbox' con 19k correos)
+$INBOX_FOLDER_ID = 'AAMkAGQ2YzJjNGI2LTMzMGEtNDU0NC04ZThmLTQyZmE3OWE3Y2Q2MQAuAAAAAACxND13kBixQbsfNf09-SJMAQDfGH-v2n7eT5N6GkJDeq_8AAAAAAEMAAA=';
+
 $filter   = urlencode("isDraft eq false and receivedDateTime ge {$desde}");
-$url_base = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/Inbox/messages";
-// Sin $orderby — cuando no se usa ConsistencyLevel:eventual, orderby puede
-// limitar resultados. El orden se hace en el upsert de Supabase.
-$url      = "{$url_base}?\$filter={$filter}&\$top=999&\$select={$select}";
+// Usar ID de carpeta directo en vez de alias 'Inbox' — más confiable en buzones grandes
+$url_base = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/{$INBOX_FOLDER_ID}/messages";
+// Sin $orderby — puede limitar resultados en filtros sin ConsistencyLevel
+$url      = "{$url_base}?\$filter={$filter}&\$top=50&\$select={$select}";
 
 log_msg("Trayendo correos desde $desde...");
 
