@@ -360,14 +360,13 @@ table.agents-tbl tr:hover td{background:var(--bg)}
 .ac-email{font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ac-cargo{font-size:10px;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* ── Respuestas Rápidas ── */
 .rr-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:all .15s}
-.rr-item:hover{border-color:var(--purple,#7c3aed);background:#f5f3ff}
+.rr-item:hover{border-color:#7c3aed;background:#f5f3ff}
 .rr-item .rr-cat{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--ink3);margin-bottom:3px}
 .rr-item .rr-sit{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:4px}
 .rr-item .rr-prev{font-size:11px;color:var(--ink2);line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rr-cat-btn{background:var(--bg2);border:1px solid var(--border);border-radius:99px;padding:2px 10px;font-size:10px;font-weight:600;cursor:pointer;color:var(--ink2);white-space:nowrap;transition:all .15s}
-.rr-cat-btn.active,.rr-cat-btn:hover{background:#7c3aed;color:#fff;border-color:#7c3aed}
+.rr-cat-btn{background:var(--bg2);border:1px solid var(--border);border-radius:99px;padding:2px 10px;font-size:10px;font-weight:600;cursor:pointer;color:var(--ink2);white-space:nowrap}
+.rr-cat-btn.active{background:#7c3aed;color:#fff;border-color:#7c3aed}
 </style>
 </head>
 <body>
@@ -1523,8 +1522,8 @@ async function loadEmails(horasVentana = 0) {
       body_type: e.body_type || 'text',
       has_attachments: e.has_attachments || false,
       is_read: e.is_read || false,
-      to_recipients: parseJsonField(e.to_recipients),
-      cc_recipients: parseJsonField(e.cc_recipients),
+      to_recipients: e.to_recipients || [],
+      cc_recipients: e.cc_recipients || [],
       sent_at: e.sent_at || e.received_at || e.created_at,
       origen: e.origen || '',
       hilo_count: 0, // cuántos mensajes tiene el hilo
@@ -1785,7 +1784,7 @@ async function selectEmail(id) {
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         ✦ Nova TD
       </button>
-      <button class="btn btn-ghost" onclick="abrirPanelRR()" title="Plantillas de respuesta rápida" style="border-color:#f59e0b;color:#b45309;gap:4px">
+      <button class="btn btn-ghost" onclick="abrirPanelRR()" title="Plantillas de respuesta rápida" style="border-color:#f59e0b;color:#b45309">
         ⚡ Rápidas
       </button>
       `}
@@ -2318,7 +2317,7 @@ async function generarConNovaTD(correoId) {
     toggleReply('reply');
     setTimeout(()=>{ const ed=document.querySelector('#replyBoxArea [contenteditable]'); if(ed) ed.innerHTML=html; },300);
   } catch(err) {
-    area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error al conectar con Nova TD PHP.</div>`;
+    area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error Nova TD PHP.</div>`;
     console.error('Nova TD error:', err);
   }
 }
@@ -2501,14 +2500,6 @@ async function _guardarAdjuntosEnStorage(correoId,archivos,enviadoPor){
   return resultados;
 }
 
-
-// Ensure recipients are always arrays (Supabase may return JSON strings)
-function _parseRecip(val) {
-  if (!val) return [];
-  if (Array.isArray(val)) return val;
-  if (typeof val === 'string') { try { const p=JSON.parse(val); return Array.isArray(p)?p:[]; } catch(e){return[];} }
-  return [];
-}
 function toggleReply(modo) {
   modo = modo || 'reply';
   const area = document.getElementById('replyBoxArea');
@@ -2533,8 +2524,8 @@ function toggleReply(modo) {
     // CC = todos los to_recipients + cc_recipients excepto el buzón propio
     const propioEmail = (window.GRAPH_USER_ID||'').toLowerCase();
     const allCC = [
-      ..._parseRecip(email.to_recipients).map(r=>r?.emailAddress?.address||r),
-      ..._parseRecip(email.cc_recipients).map(r=>r?.emailAddress?.address||r),
+      ...(email.to_recipients||[]).map(r=>r?.emailAddress?.address||r),
+      ...(email.cc_recipients||[]).map(r=>r?.emailAddress?.address||r),
     ].filter(Boolean).filter(a=>a.toLowerCase()!==propioEmail && a.toLowerCase()!==toVal.toLowerCase());
     ccVal = [...new Set(allCC)].join('; ');
     subjectVal = 'RE: '+(email.asunto||'').replace(/^(RE:|RV:|FWD?:)\s*/i,'');
@@ -2547,7 +2538,7 @@ function toggleReply(modo) {
     titleColor = 'var(--orange,#f97316)'; modoLabel = '↪ Reenviar';
   }
 
-  const ccPrev = _parseRecip(email.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ');
+  const ccPrev = (email.cc_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ');
 
   area.innerHTML = `
     <div class="reply-box" style="border:1px solid var(--border);border-radius:var(--r);background:#fff;overflow:hidden;box-shadow:var(--shadow)">
@@ -2575,8 +2566,8 @@ function toggleReply(modo) {
         <div style="font-size:11px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;line-height:1.5">
           <b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br>
           <b>Enviado:</b> ${email?.sent_at ? new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : ''}<br>
-          <b>Para:</b> ${esc(_parseRecip(email?.to_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br>
-          <b>CC:</b> ${esc(_parseRecip(email?.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br>
+          <b>Para:</b> ${esc((email?.to_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br>
+          <b>CC:</b> ${esc((email?.cc_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br>
           <b>Asunto:</b> ${esc(email?.asunto||'')}
         </div>
         <div style="margin-top:8px;font-size:12px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;max-height:180px;overflow-y:auto;border-left:3px solid var(--border);padding-left:10px">${email?.body_content||email?.raw?.body_preview||''}</div>
@@ -2627,7 +2618,7 @@ async function sendReply() {
   if(!body || body==='<br>') { showToast('Escribe un mensaje','info'); return; }
   if(!toInput) { showToast('Escribe un destinatario','info'); return; }
 
-  const hiloHTML=`<br><br><div style="border-left:3px solid #ccc;padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px"><b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br><b>Enviado:</b> ${email?.sent_at?new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}):''}<br><b>Para:</b> ${esc(_parseRecip(email?.to_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br><b>CC:</b> ${esc(_parseRecip(email?.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br><b>Asunto:</b> ${esc(email?.asunto||'')}<br><br>${email?.body_content||''}</div>`;
+  const hiloHTML=`<br><br><div style="border-left:3px solid #ccc;padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px"><b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br><b>Enviado:</b> ${email?.sent_at?new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}):''}<br><b>Para:</b> ${esc((email?.to_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br><b>CC:</b> ${esc((email?.cc_recipients||[]).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br><b>Asunto:</b> ${esc(email?.asunto||'')}<br><br>${email?.body_content||''}</div>`;
 
   const inlineFiles=[], largeFiles=[];
   _attachedFiles.forEach(({file,id:fid})=>{
@@ -3040,17 +3031,14 @@ function mpPreviewAdjunto(url, nombre, tipo, el) {
     // Abrir en ventana emergente pequeña estilo Outlook
     const w = window.open('', '_blank', 'width=860,height=700,resizable=yes,scrollbars=yes');
     if(isPDF) {
-      w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659}iframe{width:100%;height:100vh;border:none}</style></head><body><iframe src="${url}#toolbar=1&navpanes=0"></iframe>
-<!-- Panel Respuestas Rápidas -->
-<div id="panelRR" style="display:none;position:fixed;top:0;right:0;width:380px;height:100vh;background:var(--surface,#fff);border-left:1px solid var(--border);box-shadow:-4px 0 24px rgba(0,0,0,.13);z-index:9999;flex-direction:column">
-  <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0;background:var(--surface,#fff)">
+      w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659}iframe{width:100%;height:100vh;border:none}</style></head><body><iframe src="${url}#toolbar=1&navpanes=0"></iframe><div id="panelRR" style="display:none;position:fixed;top:0;right:0;width:380px;height:100vh;background:#fff;border-left:1px solid var(--border);box-shadow:-4px 0 24px rgba(0,0,0,.13);z-index:9999;flex-direction:column">
+  <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0">
     <span style="font-size:15px">⚡</span>
     <span style="font-weight:700;font-size:14px;color:var(--ink)">Respuestas Rápidas</span>
-    <button onclick="cerrarPanelRR()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);line-height:1;padding:2px 6px;border-radius:4px" title="Cerrar">✕</button>
+    <button onclick="cerrarPanelRR()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:2px 6px">✕</button>
   </div>
   <div style="padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
-    <input type="text" id="rrSearch" placeholder="🔍 Buscar plantilla..." oninput="renderRR()"
-      style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;font-family:inherit;outline:none;background:var(--bg)">
+    <input type="text" id="rrSearch" placeholder="🔍 Buscar plantilla..." oninput="renderRR()" style="width:100%;box-sizing:border-box;border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;font-family:inherit;outline:none">
     <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px"></div>
   </div>
   <div id="rrLista" style="flex:1;overflow-y:auto;padding:8px"></div>
@@ -4022,119 +4010,63 @@ function exportarEncuestasExcel() {
 }
 
 
-// ══════════════════════════════════════════════════════
-// ⚡ RESPUESTAS RÁPIDAS — knowledge_base
-// ══════════════════════════════════════════════════════
-let _rrPlantillas = [];
-let _rrCatActiva  = 'todas';
-let _rrCargado    = false;
-
-async function abrirPanelRR() {
-  const panel = document.getElementById('panelRR');
-  if (!panel) return;
-  panel.style.display = 'flex';
-
-  if (!_rrCargado) {
-    document.getElementById('rrLista').innerHTML = '<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">⏳ Cargando plantillas...</div>';
-    try {
-      const data = await sb('knowledge_base?activo=eq.true&order=categoria.asc,veces_usado.desc&limit=200') || [];
-      _rrPlantillas = data;
-      _rrCargado    = true;
-      _renderCatsRR();
-    } catch(e) {
-      document.getElementById('rrLista').innerHTML = '<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px">❌ Error al cargar plantillas.<br><small>Verifica que la tabla knowledge_base existe.</small></div>';
+// ⚡ RESPUESTAS RÁPIDAS
+let _rrData=[], _rrCat='todas', _rrLoaded=false;
+async function abrirPanelRR(){
+  const p=document.getElementById('panelRR');
+  if(!p) return;
+  p.style.display='flex';
+  if(!_rrLoaded){
+    document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">⏳ Cargando...</div>';
+    try{
+      _rrData=await sb('knowledge_base?activo=eq.true&order=categoria.asc,veces_usado.desc&limit=200')||[];
+      _rrLoaded=true;
+      _rrRenderCats();
+    }catch(e){
+      document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px">❌ Error al cargar plantillas</div>';
       return;
     }
   }
   renderRR();
 }
-
-function cerrarPanelRR() {
-  const p = document.getElementById('panelRR');
-  if (p) p.style.display = 'none';
+function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p)p.style.display='none';}
+function _rrRenderCats(){
+  const cats=['todas',...new Set(_rrData.map(p=>p.categoria).filter(Boolean))];
+  const el=document.getElementById('rrCategorias');
+  if(!el)return;
+  el.innerHTML=cats.map(c=>`<button class="rr-cat-btn${c===_rrCat?' active':''}" onclick="_rrSetCat('${c.replace(/'/g,"\'")}')">${c==='todas'?'Todas':c}</button>`).join('');
 }
-
-function _renderCatsRR() {
-  const cats = ['todas', ...new Set(_rrPlantillas.map(p => p.categoria).filter(Boolean))];
-  const el = document.getElementById('rrCategorias');
-  if (!el) return;
-  el.innerHTML = cats.map(c =>
-    `<button class="rr-cat-btn${c===_rrCatActiva?' active':''}" onclick="_setCategRR('${c.replace(/'/g,"\\'")}')">
-      ${c==='todas'?'Todas':c}
-    </button>`
-  ).join('');
+function _rrSetCat(c){_rrCat=c;_rrRenderCats();renderRR();}
+function renderRR(){
+  const q=(document.getElementById('rrSearch')?.value||'').toLowerCase();
+  let lista=_rrData;
+  if(_rrCat!=='todas') lista=lista.filter(p=>p.categoria===_rrCat);
+  if(q) lista=lista.filter(p=>(p.situacion||'').toLowerCase().includes(q)||(p.categoria||'').toLowerCase().includes(q)||(p.respuesta_modelo||'').toLowerCase().includes(q));
+  const el=document.getElementById('rrLista');
+  if(!el)return;
+  if(!lista.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">Sin resultados</div>';return;}
+  el.innerHTML=lista.map(p=>`<div class="rr-item" onclick="insertarRR(${p.id})">
+    <div class="rr-cat">${esc(p.categoria||'')}${p.veces_usado?` · <span style='color:#2563eb'>${p.veces_usado}x</span>`:''}</div>
+    <div class="rr-sit">${esc(p.situacion||'')}</div>
+    <div class="rr-prev">${esc((p.respuesta_modelo||'').substring(0,100))}…</div>
+  </div>`).join('');
 }
-
-function _setCategRR(cat) {
-  _rrCatActiva = cat;
-  _renderCatsRR();
-  renderRR();
-}
-
-function renderRR() {
-  const search = (document.getElementById('rrSearch')?.value || '').toLowerCase().trim();
-  let lista = _rrPlantillas;
-  if (_rrCatActiva !== 'todas') lista = lista.filter(p => p.categoria === _rrCatActiva);
-  if (search) lista = lista.filter(p =>
-    (p.situacion||'').toLowerCase().includes(search) ||
-    (p.categoria||'').toLowerCase().includes(search) ||
-    (p.respuesta_modelo||'').toLowerCase().includes(search)
-  );
-
-  const el = document.getElementById('rrLista');
-  if (!el) return;
-  if (!lista.length) {
-    el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">Sin resultados para esa búsqueda</div>';
-    return;
-  }
-  el.innerHTML = lista.map(p => `
-    <div class="rr-item" onclick="insertarPlantillaRR(${p.id})">
-      <div class="rr-cat">${esc(p.categoria||'')}${p.veces_usado?` &nbsp;·&nbsp; <span style='color:var(--blue,#2563eb)'>${p.veces_usado}x usado</span>`:''}</div>
-      <div class="rr-sit">${esc(p.situacion||'')}</div>
-      <div class="rr-prev">${esc((p.respuesta_modelo||'').substring(0,100))}…</div>
-    </div>`).join('');
-}
-
-async function insertarPlantillaRR(id) {
-  const p = _rrPlantillas.find(x => x.id === id);
-  if (!p) return;
-
-  // Abrir reply si no está abierto
-  if (typeof toggleReply === 'function') toggleReply('reply');
-  await new Promise(r => setTimeout(r, 300));
-
-  // Insertar en el contenteditable del reply
-  const ed = document.querySelector('#replyBoxArea [contenteditable]');
-  if (!ed) { cerrarPanelRR(); return; }
-
-  // Convertir variables [X] a spans resaltados para edición rápida
-  const html = (p.respuesta_modelo || '')
+async function insertarRR(id){
+  const p=_rrData.find(x=>x.id===id);
+  if(!p)return;
+  if(typeof toggleReply==='function') toggleReply('reply');
+  await new Promise(r=>setTimeout(r,300));
+  const ed=document.querySelector('#replyBoxArea [contenteditable]');
+  if(!ed){cerrarPanelRR();return;}
+  const html=(p.respuesta_modelo||'')
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/\n/g,'<br>')
-    .replace(/\[([^\]]+)\]/g,
-      '<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700;cursor:text">[$1]</span>'
-    );
-
-  ed.innerHTML = html;
+    .replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');
+  ed.innerHTML=html;
   ed.focus();
-
-  // Seleccionar primer [VARIABLE] para edición inmediata
-  const primerVar = ed.querySelector('span[style*="fef08a"]');
-  if (primerVar) {
-    const r = document.createRange();
-    r.selectNodeContents(primerVar);
-    const s = window.getSelection();
-    s.removeAllRanges();
-    s.addRange(r);
-  }
-
-  // Incrementar veces_usado en BD
-  try {
-    await sb(`knowledge_base?id=eq.${id}`, 'PATCH', { veces_usado: (p.veces_usado||0)+1 });
-    p.veces_usado = (p.veces_usado||0)+1;
-    renderRR();
-  } catch(e) {}
-
+  const v=ed.querySelector('span[style*="fef08a"]');
+  if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}
+  try{await sb(`knowledge_base?id=eq.${id}`,'PATCH',{veces_usado:(p.veces_usado||0)+1});p.veces_usado=(p.veces_usado||0)+1;renderRR();}catch(e){}
   cerrarPanelRR();
 }
 
