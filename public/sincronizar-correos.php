@@ -163,24 +163,6 @@ $filter    = urlencode("isDraft eq false and receivedDateTime ge {$desde}");
 $url_base  = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/Inbox/messages"; // Solo Inbox = igual que Outlook
 $url       = "{$url_base}?\$filter={$filter}&\$orderby=receivedDateTime+desc&\$top=999&\$select={$select}";
 
-// Asuntos a IGNORAR en el sync — ya están en correos vía PHP directo
-// Evita duplicados: el PHP ya insertó estos tickets en correos
-$ASUNTOS_IGNORAR = [
-    '/^\[TD-\d{8}-\d{4}\]/i',   // radicados del formulario
-    '/^\[ENC-\d{8}-\d{4}\]/i',  // encuestas del formulario
-    '/^RV:\s*\[TD-/i',             // reenvíos de radicados
-    '/^RE:\s*\[TD-/i',             // respuestas de radicados
-    '/^✅ Su solicitud fue recibida/u',  // acuses al usuario
-    '/^Gracias por su opinión/u',        // confirmación encuesta
-];
-
-function debeSaltarse(string $subject, array $patrones): bool {
-    foreach ($patrones as $p) {
-        if (preg_match($p, $subject)) return true;
-    }
-    return false;
-}
-
 log_msg("Trayendo correos desde $desde...");
 
 $todos_correos = [];
@@ -225,13 +207,6 @@ foreach ($todos_correos as $c) {
     $inet_msg_id = $c['internetMessageId'] ?? '';
 
     if (!$msg_id) continue;
-
-    // Saltar correos que ya están en BD vía PHP (radicados, encuestas, acuses)
-    $subject_raw = $c['subject'] ?? '';
-    if (debeSaltarse($subject_raw, $ASUNTOS_IGNORAR)) {
-        log_msg("  Saltando interno: " . mb_substr($subject_raw, 0, 60));
-        continue;
-    }
 
     $payload = [
         'message_id'           => $msg_id,
