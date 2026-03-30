@@ -238,7 +238,23 @@ if ($OPENAI_KEY) {
 
         if ($respuesta_txt) {
             // Convertir texto a HTML con formato básico
-            $respuesta_html = nl2br(htmlspecialchars($respuesta_txt));
+            // GPT devuelve texto plano — convertir a HTML limpio para el contenteditable
+            // 1. Escapar caracteres especiales
+            // 2. Convertir párrafos (doble salto) en <p>
+            // 3. Convertir saltos simples en <br>
+            $parrafos = explode("\n\n", $respuesta_txt);
+            $parrafos_html = array_map(function($p) {
+                $p = trim($p);
+                if (!$p) return '';
+                // Convertir **texto** en <strong>texto</strong>
+                $p = preg_replace('/\*\*(.+?)\*\*/s', '<strong>$1</strong>', $p);
+                // Saltos simples dentro del párrafo → <br>
+                $p = nl2br(htmlspecialchars($p, ENT_QUOTES, 'UTF-8', false));
+                // Restaurar strong tags que htmlspecialchars escapó
+                $p = str_replace(['&lt;strong&gt;', '&lt;/strong&gt;'], ['<strong>', '</strong>'], $p);
+                return "<p style='margin:0 0 10px 0'>$p</p>";
+            }, $parrafos);
+            $respuesta_html = implode('', array_filter($parrafos_html));
 
             // Calcular confianza basada en fuentes usadas
             $confianza = 60;
