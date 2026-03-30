@@ -157,14 +157,31 @@ if (!$access_token) {
 log_msg("Token OK");
 
 // ── 2. TRAER CORREOS DE LAS ÚLTIMAS 24H ──────────────────────────────
+$desde     = (new DateTime("-{$HORAS_VENTANA} hours", new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
 $select    = 'id,subject,from,toRecipients,ccRecipients,bccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,isRead,isDraft,conversationId,importance,internetMessageId,categories,flag';
+$filter    = urlencode("isDraft eq false and receivedDateTime ge {$desde}");
 $url_base  = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/Inbox/messages"; // Solo Inbox = igual que Outlook
-// Sin filtro de fecha — trae todos los correos del Inbox
-// El upsert on_conflict=message_id garantiza que nunca hay duplicados
-// El cron cada 5 min solo encontrará correos nuevos para insertar
-$url       = "{$url_base}?\$orderby=receivedDateTime+desc&\$top=200&\$select={$select}";
+$url       = "{$url_base}?\$filter={$filter}&\$orderby=receivedDateTime+desc&\$top=999&\$select={$select}";
 
-log_msg("Trayendo últimos 200 correos del Inbox...");
+// Asuntos a IGNORAR en el sync — ya están en correos vía PHP directo
+// Evita duplicados: el PHP ya insertó estos tickets en correos
+$ASUNTOS_IGNORAR = [
+    '/^\[TD-\d{8}-\d{4}\]/i',   // radicados del formulario
+    '/^\[ENC-\d{8}-\d{4}\]/i',  // encuestas del formulario
+    '/^RV:\s*\[TD-/i',             // reenvíos de radicados
+    '/^RE:\s*\[TD-/i',             // respuestas de radicados
+    '/^✅ Su solicitud fue recibida/u',  // acuses al usuario
+    '/^Gracias por su opinión/u',        // confirmación encuesta
+];
+
+function debeSaltarse(string $subject, array $patrones): bool {
+    foreach ($patrones as $p) {
+        if (preg_match($p, $subject)) return true;
+    }
+    return false;
+}
+
+log_msg("Trayendo correos desde $desde...");
 
 $todos_correos = [];
 $paginas       = 0;
@@ -208,6 +225,13 @@ foreach ($todos_correos as $c) {
     $inet_msg_id = $c['internetMessageId'] ?? '';
 
     if (!$msg_id) continue;
+
+    // Saltar correos que ya están en BD vía PHP (radicados, encuestas, acuses)
+    $subject_raw = $c['subject'] ?? '';
+    if (debeSaltarse($subject_raw, $ASUNTOS_IGNORAR)) {
+        log_msg("  Saltando interno: " . mb_substr($subject_raw, 0, 60));
+        continue;
+    }
 
     $payload = [
         'message_id'           => $msg_id,
@@ -443,19 +467,18 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
     $adj_data = json_decode($r['body'], true);
     $adjuntos = $adj_data['value'] ?? [];
 
-    // Filtrar: excluir TODAS las imágenes inline (son firmas/logos embebidos en el cuerpo HTML)
-    // Solo subir a Storage los adjuntos reales (PDFs, docs, imágenes NO inline)
+    // Filtrar: excluir inline imágenes pequeñas (logos, firmas HTML)
     $adjuntos = array_filter($adjuntos, function($adj) {
         $ct      = strtolower($adj['contentType'] ?? '');
+        $nombre  = $adj['name'] ?? '';
+        $tam     = $adj['size'] ?? 0;
         $inline  = (bool)($adj['isInline'] ?? false);
-        $es_img  = str_starts_with($ct, 'image/') || $ct === 'image/gif';
+        $es_img  = str_starts_with($ct, 'image/');
 
-        // Excluir TODAS las imágenes inline — van embebidas en el body HTML, no son adjuntos reales
-        if ($inline && $es_img) return false;
-        // Excluir imágenes Outlook-generadas (logos, firmas automáticas)
-        $nombre = $adj['name'] ?? '';
-        if (preg_match('/^Outlook-[a-z0-9]+\./i', $nombre)) return false;
-        if ($ct === 'image/gif' && $inline) return false;
+        if (!$inline) return true;
+        if ($es_img && $tam < 150000)  return false;
+        if ($es_img && preg_match('/^Outlook-[a-z0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i', $nombre)) return false;
+        if ($es_img && (!$nombre || preg_match('/^\.[a-z]+$/i', $nombre))) return false;
         return true;
     });
 
