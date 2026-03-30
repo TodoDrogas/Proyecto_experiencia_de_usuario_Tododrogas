@@ -50,7 +50,7 @@ $TENANT_ID     = '__AZURE_TENANT_ID__';
 $CLIENT_ID     = '__AZURE_CLIENT_ID__';
 $CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
 $GRAPH_MAILBOX = 'pqrsfd@tododrogas.com.co'; // buzón a leer
-$HORAS_VENTANA = (int)($_GET['horas'] ?? 24);  // ventana de tiempo (default 24h)
+$HORAS_VENTANA = (int)($_GET['horas'] ?? 2);   // ventana de tiempo (default 2h — cron cada 5min cubre bien)
 
 // ── LOG ───────────────────────────────────────────────────────────────
 $log = [];
@@ -236,6 +236,9 @@ foreach ($todos_correos as $c) {
         'updated_at'           => date('c'),
     ];
 
+    // IMPORTANTE: NO incluir estado/prioridad/sentimiento/tipo_pqr en el payload
+    // merge-duplicates actualizaría registros ya gestionados manualmente
+
     // Solo setear estado/prioridad si no existen aún (no sobreescribir gestión manual)
     // Esto se logra con merge-duplicates: si ya existe, no toca los campos omitidos
 
@@ -252,6 +255,14 @@ foreach ($todos_correos as $c) {
 
         if ($es_nuevo) {
             $stats['insertados']++;
+            // Setear estado inicial solo en registros nuevos
+            if ($correo_id) {
+                sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
+                    'estado'    => 'pendiente',
+                    'prioridad' => 'media',
+                    'created_at'=> date('c'),
+                ]);
+            }
             if ($correo_id) {
                 $correos_para_clasificar[] = [
                     'correo_id' => $correo_id,
@@ -440,9 +451,9 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
         $tam        = $adj['size']        ?? 0;
         $inline     = (bool)($adj['isInline'] ?? false);
 
-        // Saltar adjuntos > 150MB
-        if ($tam > 157_286_400) {
-            log_msg("  Adjunto muy grande (>150MB), omitido: $nombre");
+        // Saltar adjuntos > 50MB (límite bucket adjuntos-pqr en Supabase)
+        if ($tam > 52_428_800) {
+            log_msg("  Adjunto muy grande (>50MB), omitido: $nombre");
             continue;
         }
 
