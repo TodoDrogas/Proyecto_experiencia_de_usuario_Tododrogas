@@ -187,11 +187,30 @@ $audio_tono_contexto   = '';   // contexto de tono para el prompt de clasificaci
 if ($canal === 'audio' && $OPENAI_KEY) {
     $audio_b64_pre  = '';
     $mime_type_pre  = 'audio/webm';
+
     if (!empty($audio_url) && strpos($audio_url, 'data:audio') === 0) {
+        // Caso 1: base64 inline directo del formulario
         $b64sep_pre    = strpos($audio_url, ';base64,');
         $mime_type_pre = $b64sep_pre ? substr($audio_url, 5, $b64sep_pre - 5) : 'audio/webm';
         $audio_b64_pre = $b64sep_pre ? substr($audio_url, $b64sep_pre + 8) : '';
+
+    } elseif (!empty($audio_url) && strpos($audio_url, 'http') === 0) {
+        // Caso 2: URL pública de Supabase Storage → descargar y convertir a base64
+        $audio_bytes = fetchUrlBytes($audio_url, $SB_KEY);
+        if ($audio_bytes && strlen($audio_bytes) > 100) {
+            // Detectar mime type real del archivo descargado
+            $finfo_audio = new finfo(FILEINFO_MIME_TYPE);
+            $mime_type_pre = $finfo_audio->buffer($audio_bytes) ?: 'audio/webm';
+            // Inferir extensión desde la URL si finfo devuelve genérico
+            $ext_from_url = strtolower(pathinfo(parse_url($audio_url, PHP_URL_PATH), PATHINFO_EXTENSION));
+            if ($ext_from_url && in_array($ext_from_url, ['webm','mp4','ogg','wav','mp3','m4a'])) {
+                $mime_type_pre = "audio/{$ext_from_url}";
+            }
+            $audio_b64_pre = base64_encode($audio_bytes);
+        }
+
     } elseif (!empty($body['audio_base64'])) {
+        // Caso 3: base64 enviado directamente en el body
         $audio_b64_pre = $body['audio_base64'];
     }
 
@@ -500,9 +519,12 @@ if ($token) {
 
     <!-- Mensaje recibido -->
     <div style='background:#faf5ff;border:1px solid #e9d5ff;border-left:4px solid #7c3aed;border-radius:6px;padding:16px 20px;margin-bottom:16px'>
-      <p style='margin:0 0 8px;font-weight:700;color:#7c3aed;font-size:13px'>{$emoji_canal} Mensaje recibido via {$canal_txt}</p>
-      <p style='margin:0;font-size:13px;line-height:1.6;color:#374151'>" . nl2br(htmlspecialchars($texto_pqr)) . "</p>" .
-      ($resumen_corto ? "<p style='margin:10px 0 0;font-size:12px;color:#6b7280;font-style:italic'>📌 Resumen IA: {$resumen_corto}</p>" : "") .
+      <p style='margin:0 0 8px;font-weight:700;color:#7c3aed;font-size:13px'>{$emoji_canal} Mensaje recibido via {$canal_txt}</p>" .
+      ($canal === 'audio' && $transcripcion
+        ? "<p style='margin:0 0 8px;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px'>🎙️ Transcripción automática (Whisper AI):</p>
+           <p style='margin:0;font-size:13px;line-height:1.6;color:#374151;background:#fff;border:1px solid #e9d5ff;border-radius:4px;padding:10px 14px'>" . nl2br(htmlspecialchars($transcripcion)) . "</p>"
+        : "<p style='margin:0;font-size:13px;line-height:1.6;color:#374151'>" . nl2br(htmlspecialchars($texto_pqr ?: '[Audio adjunto — ver archivo]')) . "</p>") .
+      ($resumen_corto && $resumen_corto !== '[Audio adjunto]' ? "<p style='margin:10px 0 0;font-size:12px;color:#6b7280;font-style:italic'>📌 Resumen IA: {$resumen_corto}</p>" : "") .
       "
     </div>" .
 
