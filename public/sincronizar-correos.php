@@ -17,7 +17,8 @@
  *   9. Libera lock
  *
  * USO:
- *   - Cron cada 5 min: * /5 * * * * php /var/www/pqr/sincronizar-correos.php >> /var/log/sync-correos.log 2>&1
+ *   - Cron cada 10 min: */10 * * * * php /var/www/pqr/sincronizar-correos.php >> /var/log/sync-correos.log 2>&1
+ *     (✅ FIX #B2 — reducido de 5min a 10min; SLA mínimo 4h, el margen es amplio)
  *   - Manual desde admin: GET /sincronizar-correos.php?token=ADMIN_TOKEN
  *   - Forzar ventana: GET /sincronizar-correos.php?horas=48&token=ADMIN_TOKEN
  *
@@ -211,17 +212,39 @@ if (!$access_token) {
 log_msg("Token OK");
 
 // ── 2. TRAER CORREOS ──────────────────────────────────────────────────
-// Ventana: desde el inicio del día de HOY en hora Bogotá (no últimas N horas fijas)
-// Esto garantiza que SIEMPRE se traigan todos los correos del día actual sin importar la hora
-$hoy_bogota = new DateTime('today', new DateTimeZone('America/Bogota'));
-$hoy_utc    = clone $hoy_bogota;
-$hoy_utc->setTimezone(new DateTimeZone('UTC'));
-$desde = $hoy_utc->format('Y-m-d\TH:i:s\Z');
+// ✅ FIX #B1 — Watermark: usar fecha del último correo procesado guardada en Supabase
+// En vez de siempre traer desde las 00:00, solo traer desde el último sync exitoso.
+// Esto evita reprocesar los mismos 200 correos en cada ciclo de cron.
 
-// Si se pasa ?horas=N manualmente (ej: para carga histórica), usar eso en vez de "hoy"
+$WATERMARK_KEY = 'sync_watermark_correos'; // clave en configuration_sistema
+
+$desde = null;
+
+// Si se pasa ?horas=N manualmente (ej: para carga histórica), forzar eso
 if (isset($_GET['horas'])) {
     $horas_manual = (int)$_GET['horas'];
     $desde = (new DateTime("-{$horas_manual} hours", new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
+    log_msg("Modo manual: ventana de {$horas_manual}h");
+} else {
+    // Leer watermark desde Supabase
+    $wm_row = sbGet($SB_URL, $SB_KEY, "configuration_sistema?id=eq.main&select=data");
+    $wm_data = $wm_row[0]['data'] ?? [];
+    $ultima_fecha = $wm_data[$WATERMARK_KEY] ?? null;
+
+    if ($ultima_fecha) {
+        // Traer desde última fecha procesada menos 2 min de margen (evita gaps por latencia)
+        $dt = new DateTime($ultima_fecha, new DateTimeZone('UTC'));
+        $dt->modify('-2 minutes');
+        $desde = $dt->format('Y-m-d\TH:i:s\Z');
+        log_msg("Watermark encontrado: desde $desde (última sync: $ultima_fecha)");
+    } else {
+        // Primera vez o sin watermark: traer el día de hoy
+        $hoy_bogota = new DateTime('today', new DateTimeZone('America/Bogota'));
+        $hoy_utc    = clone $hoy_bogota;
+        $hoy_utc->setTimezone(new DateTimeZone('UTC'));
+        $desde = $hoy_utc->format('Y-m-d\TH:i:s\Z');
+        log_msg("Sin watermark — usando inicio del día: $desde");
+    }
 }
 $select   = 'id,subject,from,toRecipients,ccRecipients,bccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,isRead,isDraft,conversationId,importance,internetMessageId,categories,flag';
 // ID directo de Bandeja de entrada (más confiable que el alias 'Inbox' con 19k correos)
@@ -542,6 +565,29 @@ sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
     ]),
     'created_at' => date('c'),
 ]);
+
+// ✅ FIX #B1 — Guardar watermark: fecha del correo más reciente procesado
+if (!empty($todos_correos) && !isset($_GET['horas'])) {
+    // Encontrar la receivedDateTime más reciente del lote procesado
+    $max_fecha = null;
+    foreach ($todos_correos as $c) {
+        $f = $c['receivedDateTime'] ?? null;
+        if ($f && (!$max_fecha || $f > $max_fecha)) {
+            $max_fecha = $f;
+        }
+    }
+    if ($max_fecha) {
+        // Leer config actual y hacer merge para no sobreescribir otras claves
+        $cfg_actual = sbGet($SB_URL, $SB_KEY, "configuration_sistema?id=eq.main&select=data");
+        $cfg_data   = $cfg_actual[0]['data'] ?? [];
+        $cfg_data[$WATERMARK_KEY] = $max_fecha;
+        sbPatch($SB_URL, $SB_KEY, 'configuration_sistema', 'id=eq.main', [
+            'data'       => $cfg_data,
+            'updated_at' => date('c'),
+        ]);
+        log_msg("Watermark actualizado: $max_fecha");
+    }
+}
 
 log_msg("=== SYNC END v2 ===");
 finalizar(true, 'ok');
