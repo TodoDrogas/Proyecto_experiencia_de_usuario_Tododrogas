@@ -84,6 +84,7 @@ $TENANT_ID     = '__AZURE_TENANT_ID__';
 $CLIENT_ID     = '__AZURE_CLIENT_ID__';
 $CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
 $GRAPH_MAILBOX = 'pqrsfd@tododrogas.com.co';
+$HORAS_VENTANA = (int)($_GET['horas'] ?? 12); // 12h = ventana por defecto (cron cada 5min cubre bien sin duplicar)
 
 // Tamaño de lote para batch upsert — no subir de 25 en Nano
 const BATCH_SIZE = 20;
@@ -97,7 +98,7 @@ function log_msg(string $msg): void {
     if (php_sapi_name() === 'cli') echo "[$ts] $msg\n";
 }
 
-log_msg("=== SYNC START v3 — cursor mode | PID: " . getmypid() . " ===");
+log_msg("=== SYNC START v2 — ventana: {$HORAS_VENTANA}h | PID: " . getmypid() . " ===");
 
 // ── HELPERS ───────────────────────────────────────────────────────────
 
@@ -210,28 +211,17 @@ if (!$access_token) {
 log_msg("Token OK");
 
 // ── 2. TRAER CORREOS ──────────────────────────────────────────────────
-// ── 2. CURSOR PERSISTENTE ─────────────────────────────────────────────
-// Lee el último receivedDateTime procesado desde configuration_sistema.data->sync_cursor
-// Si no existe (primer arranque en producción), usa la hora actual como punto de inicio.
-// Esto garantiza que el sync empieza exactamente cuando se activa en producción
-// y nunca pierde correos si el servidor estuvo caído entre ejecuciones de cron.
-log_msg("Leyendo cursor de sincronización...");
+// Ventana: desde el inicio del día de HOY en hora Bogotá (no últimas N horas fijas)
+// Esto garantiza que SIEMPRE se traigan todos los correos del día actual sin importar la hora
+$hoy_bogota = new DateTime('today', new DateTimeZone('America/Bogota'));
+$hoy_utc    = clone $hoy_bogota;
+$hoy_utc->setTimezone(new DateTimeZone('UTC'));
+$desde = $hoy_utc->format('Y-m-d\TH:i:s\Z');
 
-$config_row = sbGet($SB_URL, $SB_KEY, "configuration_sistema?id=eq.main&select=data");
-$config_data = $config_row[0]['data'] ?? [];
-$cursor_iso  = $config_data['sync_cursor'] ?? null;
-
-if ($cursor_iso) {
-    // Cursor existente: arrancar desde el último correo procesado
-    $desde = $cursor_iso;
-    log_msg("Cursor encontrado: $desde");
-} else {
-    // Primer arranque: usar la hora actual como punto de partida
-    $desde = (new DateTime('now', new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
-    log_msg("Sin cursor — primer arranque. Desde ahora: $desde");
-    // Guardar cursor inicial inmediatamente
-    $config_data['sync_cursor'] = $desde;
-    sbUpsert($SB_URL, $SB_KEY, 'configuration_sistema', [['id' => 'main', 'data' => $config_data, 'updated_at' => date('c')]], 'id');
+// Si se pasa ?horas=N manualmente (ej: para carga histórica), usar eso en vez de "hoy"
+if (isset($_GET['horas'])) {
+    $horas_manual = (int)$_GET['horas'];
+    $desde = (new DateTime("-{$horas_manual} hours", new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
 }
 $select   = 'id,subject,from,toRecipients,ccRecipients,bccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,isRead,isDraft,conversationId,importance,internetMessageId,categories,flag';
 // ID directo de Bandeja de entrada (más confiable que el alias 'Inbox' con 19k correos)
@@ -285,20 +275,11 @@ $payloads = [];  // todos los payloads para batch upsert
 // Mapa message_id → datos crudos del correo (para procesar adjuntos después)
 $map_adjuntos = []; // message_id => ['has_attachments', 'raw']
 
-// Cursor: registrar el receivedDateTime más reciente entre todos los correos procesados
-$cursor_nuevo = $desde; // fallback: si no hay correos, el cursor no retrocede
-
 foreach ($todos_correos as $c) {
     $msg_id      = $c['id']                ?? '';
     $inet_msg_id = $c['internetMessageId'] ?? '';
 
     if (!$msg_id) continue;
-
-    // Actualizar cursor con el receivedDateTime más reciente visto
-    $recv = $c['receivedDateTime'] ?? null;
-    if ($recv && $recv > $cursor_nuevo) {
-        $cursor_nuevo = $recv;
-    }
 
     $payloads[] = [
         'message_id'           => $msg_id,
@@ -322,14 +303,13 @@ foreach ($todos_correos as $c) {
         'importance'           => $c['importance']                     ?? 'normal',
         'categories'           => json_encode($c['categories']         ?? []),
         'flag_status'          => $c['flag']['flagStatus']             ?? 'notFlagged',
-        // raw_payload eliminado: todos los campos ya están en columnas propias.
-        // Guardarlo era duplicar ~3-8KB por correo en Supabase sin beneficio.
+        'raw_payload'          => json_encode($c),
         'origen'               => 'graph_sync',
         'canal_contacto'       => 'correo',
         'updated_at'           => date('c'),
     ];
 
-    if (!empty($c['hasAttachments']) || str_contains($c['body']['content'] ?? '', 'cid:')) {
+    if (!empty($c['hasAttachments'])) {
         $map_adjuntos[$msg_id] = $c;
     }
 }
@@ -549,28 +529,13 @@ PROMPT;
     }
 }
 
-// ── 8. ACTUALIZAR CURSOR ──────────────────────────────────────────────
-// Guardamos el receivedDateTime más reciente procesado.
-// El próximo cron arrancará exactamente desde ahí, sin ventana fija.
-if ($cursor_nuevo !== $desde || !$cursor_iso) {
-    $config_data['sync_cursor'] = $cursor_nuevo;
-    $r_cursor = sbUpsert($SB_URL, $SB_KEY, 'configuration_sistema', [
-        ['id' => 'main', 'data' => $config_data, 'updated_at' => date('c')]
-    ], 'id');
-    if ($r_cursor['code'] >= 200 && $r_cursor['code'] < 300) {
-        log_msg("Cursor actualizado → $cursor_nuevo");
-    } else {
-        log_msg("WARN: No se pudo actualizar cursor: HTTP {$r_cursor['code']}");
-    }
-}
-
-// ── 9. REGISTRAR RESUMEN EN HISTORIAL ────────────────────────────────
+// ── 8. REGISTRAR RESUMEN EN HISTORIAL ────────────────────────────────
 sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
     'evento'      => 'sync_correos',
-    'descripcion' => "Sync v3 completado. Insertados: {$stats['insertados']}, Actualizados: {$stats['actualizados']}, Adjuntos: {$stats['adjuntos']}, Clasificados: {$stats['clasificados']}, Errores: {$stats['errores']}",
+    'descripcion' => "Sync v2 completado. Insertados: {$stats['insertados']}, Actualizados: {$stats['actualizados']}, Adjuntos: {$stats['adjuntos']}, Clasificados: {$stats['clasificados']}, Errores: {$stats['errores']}",
     'datos_extra' => json_encode([
-        'cursor_desde'  => $desde,
-        'cursor_nuevo'  => $cursor_nuevo,
+        'ventana_horas' => $HORAS_VENTANA,
+        'desde'         => $desde,
         'total_correos' => count($todos_correos),
         'lotes'         => count($lotes ?? []),
         'stats'         => $stats,
@@ -578,7 +543,7 @@ sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
     'created_at' => date('c'),
 ]);
 
-log_msg("=== SYNC END v3 ===");
+log_msg("=== SYNC END v2 ===");
 finalizar(true, 'ok');
 
 
@@ -592,9 +557,9 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
     $existentes     = sbGet($SB_URL, $SB_KEY, "adjuntos?correo_id=eq.{$correo_id}&select=attachment_id");
     $ids_existentes = array_column($existentes ?? [], 'attachment_id');
 
-    // Traer lista de adjuntos de Graph — incluir contentId para resolver cid: en el body
+    // Traer lista de adjuntos de Graph
     $r = curlJson(
-        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=150&\$select=id,name,contentType,size,isInline,contentId",
+        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=150&\$select=id,name,contentType,size,isInline",
         [
             CURLOPT_HTTPHEADER => ["Authorization: Bearer $token"],
             CURLOPT_TIMEOUT    => 30,
@@ -606,39 +571,31 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
     $adj_data = json_decode($r['body'], true);
     $adjuntos = $adj_data['value'] ?? [];
 
-    // Filtro conservador: solo descartar logos/firmas sin nombre real o con patrón Outlook-XXXX
-    // Las imágenes inline con contenido real (tablas, capturas) DEBEN guardarse para mostrarlas en el body
+    // Filtrar imágenes inline pequeñas (logos, firmas HTML)
     $adjuntos = array_filter($adjuntos, function ($adj) {
         $ct     = strtolower($adj['contentType'] ?? '');
         $nombre = $adj['name'] ?? '';
+        $tam    = $adj['size'] ?? 0;
         $inline = (bool)($adj['isInline'] ?? false);
         $es_img = str_starts_with($ct, 'image/');
 
-        if (!$inline) return true; // adjuntos normales: siempre guardar
-        if (!$es_img) return true; // inline no-imagen (raro): guardar también
-
-        // Descartar solo los patrones típicos de firma/logo de Outlook:
-        // 1. Nombre tipo "Outlook-a1b2c3d4.png" (generado por Outlook para firmas)
-        if (preg_match('/^Outlook-[a-f0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i', $nombre)) return false;
-        // 2. Sin nombre real (solo extensión o vacío)
-        if (!$nombre || preg_match('/^\.[a-z]+$/i', $nombre)) return false;
-
-        // Todo lo demás (imágenes con nombre real: tablas, capturas, gráficas) → guardar
+        if (!$inline) return true;
+        if ($es_img && $tam < 150000) return false;
+        if ($es_img && preg_match('/^Outlook-[a-z0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i', $nombre)) return false;
+        if ($es_img && (!$nombre || preg_match('/^\.[a-z]+$/i', $nombre))) return false;
         return true;
     });
 
-    $count   = 0;
-    $cid_map = []; // contentId → storage_url (para reemplazar cid: en body_content)
+    $count = 0;
     foreach ($adjuntos as $adj) {
         $adj_id = $adj['id'] ?? '';
         if (!$adj_id) continue;
         if (in_array($adj_id, $ids_existentes)) continue;
 
-        $nombre     = $adj['name']        ?? 'adjunto_sin_nombre';
-        $ct         = $adj['contentType'] ?? 'application/octet-stream';
-        $tam        = $adj['size']        ?? 0;
-        $inline     = (bool)($adj['isInline'] ?? false);
-        $content_id = trim($adj['contentId'] ?? '', '<> ');
+        $nombre = $adj['name']        ?? 'adjunto_sin_nombre';
+        $ct     = $adj['contentType'] ?? 'application/octet-stream';
+        $tam    = $adj['size']        ?? 0;
+        $inline = (bool)($adj['isInline'] ?? false);
 
         // Saltar adjuntos > 50MB
         if ($tam > 52_428_800) {
@@ -703,47 +660,15 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
             'storage_url'    => $storage_url,
             'storage_path'   => $path,
             'direccion'      => 'entrante',
-            'enviado_por'    => 'php-sync-v3',
+            'enviado_por'    => 'php-sync-v2',
             'created_at'     => date('c'),
         ]);
-
-        // Acumular mapa cid → url para reemplazar referencias en body_content
-        if ($content_id) {
-            $cid_map[$content_id] = $storage_url;
-        }
 
         $count++;
         log_msg("  ✅ Adjunto subido: $nombre ($bucket)");
 
         // Pausa entre adjuntos individuales
         usleep(100_000); // 100ms
-    }
-
-    // Reemplazar referencias cid: en body_content con las URLs reales de Supabase
-    // Esto hace que las imágenes embebidas se vean en el admin igual que en Outlook
-    if (!empty($cid_map)) {
-        // Leer body_content actual de la BD
-        $row_body = sbGet($SB_URL, $SB_KEY, "correos?id=eq.{$correo_id}&select=body_content");
-        $body_html = $row_body[0]['body_content'] ?? '';
-
-        if ($body_html) {
-            $body_actualizado = $body_html;
-            foreach ($cid_map as $cid => $url) {
-                // Reemplazar "cid:content_id" → URL pública de Supabase
-                $body_actualizado = str_replace(
-                    ['cid:' . $cid, 'cid:' . strtolower($cid), 'cid:' . strtoupper($cid)],
-                    $url,
-                    $body_actualizado
-                );
-            }
-            if ($body_actualizado !== $body_html) {
-                sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.{$correo_id}", [
-                    'body_content' => $body_actualizado,
-                    'updated_at'   => date('c'),
-                ]);
-                log_msg("  ✅ body_content actualizado con " . count($cid_map) . " imagen(es) inline");
-            }
-        }
     }
 
     return $count;
