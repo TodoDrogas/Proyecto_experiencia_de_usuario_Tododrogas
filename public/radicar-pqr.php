@@ -26,6 +26,7 @@ $CLIENT_ID   = '__AZURE_CLIENT_ID__';
 $CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
 $BUZÓN_PQRS  = 'pqrsfd@tododrogas.com.co';
 $GRAPH_USER_ID = '__GRAPH_USER_ID__';
+$LOGO_URL      = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
 
 // ── HELPERS ──────────────────────────────────────────────────────────
 function sbPost($url, $key, $endpoint, $data, $prefer = 'return=representation') {
