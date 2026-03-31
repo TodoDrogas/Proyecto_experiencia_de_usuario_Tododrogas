@@ -1,38 +1,4 @@
 <?php
-/**
- * sincronizar-correos.php — Sincronizador Graph API → Supabase
- * ─────────────────────────────────────────────────────────────
- * Reemplaza el workflow N8N F00_correos_adjuntos
- *
- * FLUJO:
- *   1. Lock de proceso (evita solapamiento de cron)
- *   2. Obtiene token Azure (client_credentials)
- *   3. Trae correos de las últimas N horas de pqrsfd@tododrogas.com.co
- *   4. Batch upsert en tabla correos (una sola llamada por lote de 20)
- *   5. Patch de estado inicial solo para correos nuevos (batch)
- *   6. Descarga y sube adjuntos con pausa entre cada uno
- *   7. Clasifica con GPT-4o-mini los correos externos sin sentimiento
- *      (separado del upsert, con pausa entre llamadas)
- *   8. Registra resumen en historial_eventos
- *   9. Libera lock
- *
- * USO:
- *   - Cron cada 10 min: */10 * * * * php /var/www/pqr/sincronizar-correos.php >> /var/log/sync-correos.log 2>&1
- *     (✅ FIX #B2 — reducido de 5min a 10min; SLA mínimo 4h, el margen es amplio)
- *   - Manual desde admin: GET /sincronizar-correos.php?token=ADMIN_TOKEN
- *   - Forzar ventana: GET /sincronizar-correos.php?horas=48&token=ADMIN_TOKEN
- *
- * CAMBIOS v2 (anti-lock/timeout):
- *   - Lock de archivo /tmp/sync-correos.lock para evitar ejecuciones solapadas
- *   - Upsert en lotes de 20 correos (en vez de 1 por 1) → menos conexiones
- *   - Patch de estado inicial acumulado y separado del upsert
- *   - usleep(100ms) entre upserts de lote y entre adjuntos
- *   - usleep(300ms) entre llamadas a OpenAI
- *   - Timeout de curl aumentado a 45s para queries pesadas
- *   - Clasificación IA completamente separada del loop de upsert
- */
-
-// ── LOCK — evitar solapamiento de ejecuciones de cron ─────────────────
 $LOCK_FILE = '/tmp/sync-correos.lock';
 $LOCK_TTL  = 4 * 60; // 4 minutos: si el lock tiene más de esto, es un proceso muerto
 
