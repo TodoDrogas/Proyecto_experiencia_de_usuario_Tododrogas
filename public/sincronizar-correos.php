@@ -329,7 +329,7 @@ foreach ($todos_correos as $c) {
         'updated_at'           => date('c'),
     ];
 
-    if (!empty($c['hasAttachments'])) {
+    if (!empty($c['hasAttachments']) || str_contains($c['body']['content'] ?? '', 'cid:')) {
         $map_adjuntos[$msg_id] = $c;
     }
 }
@@ -592,9 +592,9 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
     $existentes     = sbGet($SB_URL, $SB_KEY, "adjuntos?correo_id=eq.{$correo_id}&select=attachment_id");
     $ids_existentes = array_column($existentes ?? [], 'attachment_id');
 
-    // Traer lista de adjuntos de Graph
+    // Traer lista de adjuntos de Graph — incluir contentId para resolver cid: en el body
     $r = curlJson(
-        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=150&\$select=id,name,contentType,size,isInline",
+        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=150&\$select=id,name,contentType,size,isInline,contentId",
         [
             CURLOPT_HTTPHEADER => ["Authorization: Bearer $token"],
             CURLOPT_TIMEOUT    => 30,
@@ -606,31 +606,39 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
     $adj_data = json_decode($r['body'], true);
     $adjuntos = $adj_data['value'] ?? [];
 
-    // Filtrar imágenes inline pequeñas (logos, firmas HTML)
+    // Filtro conservador: solo descartar logos/firmas sin nombre real o con patrón Outlook-XXXX
+    // Las imágenes inline con contenido real (tablas, capturas) DEBEN guardarse para mostrarlas en el body
     $adjuntos = array_filter($adjuntos, function ($adj) {
         $ct     = strtolower($adj['contentType'] ?? '');
         $nombre = $adj['name'] ?? '';
-        $tam    = $adj['size'] ?? 0;
         $inline = (bool)($adj['isInline'] ?? false);
         $es_img = str_starts_with($ct, 'image/');
 
-        if (!$inline) return true;
-        if ($es_img && $tam < 150000) return false;
-        if ($es_img && preg_match('/^Outlook-[a-z0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i', $nombre)) return false;
-        if ($es_img && (!$nombre || preg_match('/^\.[a-z]+$/i', $nombre))) return false;
+        if (!$inline) return true; // adjuntos normales: siempre guardar
+        if (!$es_img) return true; // inline no-imagen (raro): guardar también
+
+        // Descartar solo los patrones típicos de firma/logo de Outlook:
+        // 1. Nombre tipo "Outlook-a1b2c3d4.png" (generado por Outlook para firmas)
+        if (preg_match('/^Outlook-[a-f0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i', $nombre)) return false;
+        // 2. Sin nombre real (solo extensión o vacío)
+        if (!$nombre || preg_match('/^\.[a-z]+$/i', $nombre)) return false;
+
+        // Todo lo demás (imágenes con nombre real: tablas, capturas, gráficas) → guardar
         return true;
     });
 
-    $count = 0;
+    $count   = 0;
+    $cid_map = []; // contentId → storage_url (para reemplazar cid: en body_content)
     foreach ($adjuntos as $adj) {
         $adj_id = $adj['id'] ?? '';
         if (!$adj_id) continue;
         if (in_array($adj_id, $ids_existentes)) continue;
 
-        $nombre = $adj['name']        ?? 'adjunto_sin_nombre';
-        $ct     = $adj['contentType'] ?? 'application/octet-stream';
-        $tam    = $adj['size']        ?? 0;
-        $inline = (bool)($adj['isInline'] ?? false);
+        $nombre     = $adj['name']        ?? 'adjunto_sin_nombre';
+        $ct         = $adj['contentType'] ?? 'application/octet-stream';
+        $tam        = $adj['size']        ?? 0;
+        $inline     = (bool)($adj['isInline'] ?? false);
+        $content_id = trim($adj['contentId'] ?? '', '<> ');
 
         // Saltar adjuntos > 50MB
         if ($tam > 52_428_800) {
@@ -695,15 +703,47 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
             'storage_url'    => $storage_url,
             'storage_path'   => $path,
             'direccion'      => 'entrante',
-            'enviado_por'    => 'php-sync-v2',
+            'enviado_por'    => 'php-sync-v3',
             'created_at'     => date('c'),
         ]);
+
+        // Acumular mapa cid → url para reemplazar referencias en body_content
+        if ($content_id) {
+            $cid_map[$content_id] = $storage_url;
+        }
 
         $count++;
         log_msg("  ✅ Adjunto subido: $nombre ($bucket)");
 
         // Pausa entre adjuntos individuales
         usleep(100_000); // 100ms
+    }
+
+    // Reemplazar referencias cid: en body_content con las URLs reales de Supabase
+    // Esto hace que las imágenes embebidas se vean en el admin igual que en Outlook
+    if (!empty($cid_map)) {
+        // Leer body_content actual de la BD
+        $row_body = sbGet($SB_URL, $SB_KEY, "correos?id=eq.{$correo_id}&select=body_content");
+        $body_html = $row_body[0]['body_content'] ?? '';
+
+        if ($body_html) {
+            $body_actualizado = $body_html;
+            foreach ($cid_map as $cid => $url) {
+                // Reemplazar "cid:content_id" → URL pública de Supabase
+                $body_actualizado = str_replace(
+                    ['cid:' . $cid, 'cid:' . strtolower($cid), 'cid:' . strtoupper($cid)],
+                    $url,
+                    $body_actualizado
+                );
+            }
+            if ($body_actualizado !== $body_html) {
+                sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.{$correo_id}", [
+                    'body_content' => $body_actualizado,
+                    'updated_at'   => date('c'),
+                ]);
+                log_msg("  ✅ body_content actualizado con " . count($cid_map) . " imagen(es) inline");
+            }
+        }
     }
 
     return $count;
