@@ -387,6 +387,14 @@ table.agents-tbl tr:hover td{background:var(--bg)}
   </nav>
   <div class="topbar-right">
     <span class="last-sync" id="lastSync">—</span>
+    <select id="ventanaSync" title="Ventana de correos a mostrar"
+      style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:5px 8px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;outline:none"
+      onchange="syncAll()">
+      <option value="0">Hoy (desde 00:00)</option>
+      <option value="24">Últimas 24h</option>
+      <option value="48">Últimas 48h</option>
+      <option value="72">Últimos 3 días</option>
+    </select>
     <button class="topbar-sync" id="syncBtn" onclick="syncAll()">
       <svg id="syncIcon" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg>
       Actualizar
@@ -2789,12 +2797,14 @@ async function onDropToAgent(e, agentId, agentName) {
 // SYNC
 // ──────────────────────────────────────────────
 async function syncAll() {
-  const btn = document.getElementById('syncBtn');
+  const btn  = document.getElementById('syncBtn');
+  const horas = parseInt(document.getElementById('ventanaSync')?.value || '12');
   btn.classList.add('loading');
   try {
-    await Promise.all([loadEmails(0), loadAgents(), loadHistorial()]);
-    document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')} · Hoy`;
-    showToast('Datos actualizados (Hoy desde 00:00) ✓', 'success');
+    await Promise.all([loadEmails(horas), loadAgents(), loadHistorial()]);
+    const label = horas === 0 ? 'Hoy' : `últimas ${horas}h`;
+    document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')} · ${label}`;
+    showToast(`Datos actualizados (${label}) ✓`, 'success');
   } catch { showToast('Error al actualizar', 'error'); }
   finally { btn.classList.remove('loading'); }
 }
