@@ -961,20 +961,156 @@ function goToForm(){
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 // ══════════════════════════════
-// CHAT
+// CHAT — Nova TD con Supabase
 // ══════════════════════════════
-const SYS = `Eres Nova, asistente virtual de PQRSFD de Tododrogas. Amable, clara y empática.
-Responde siempre en español, máximo 3 oraciones. Eres experta en:
-- PQR: peticiones, quejas, reclamos, sugerencias
-- Tiempo de respuesta: máximo 15 días hábiles
-- Canales: WhatsApp, correo electrónico (con confirmación automática), llamada telefónica, buzón virtual (escritura a mano en tablet), mensaje verbal (audio 2 min)
-- Al radicar: número de radicado + confirmación automática
-- Seguimiento: por número de radicado en tododrogas.com/pqr
-- Datos requeridos: nombre, documento, teléfono, correo, descripción del caso
-- Confidencialidad total
-- Horario asesores: Lun-Vier 7 a.m-5:30 p.m. Nova disponible 24/7.
-Si no puedes resolver escribe exactamente "ESCALAR" al inicio de tu respuesta.
-Si el usuario quiere radicar, indícale que toque el botón "Radicar mi solicitud".`;
+
+// ── Estado de sesión Nova ──
+const novaSession = {
+  estado: 'inicio',
+  eps: null,
+  municipio: null,
+  sede: null,
+  sessionId: 'nova_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+};
+
+const EPS_OPTS = ['Savia Salud','Coosalud','Salud Total','Nueva EPS','Todas / No sé mi EPS'];
+const EPS_MAP  = {
+  'savia salud':'SAVIA','savia':'SAVIA',
+  'coosalud':'COOSALUD',
+  'salud total':'SALUD TOTAL',
+  'nueva eps':'NUEVA EPS',
+  'todas':'TODAS','no sé':'TODAS','no se':'TODAS','todas / no sé mi eps':'TODAS','no se / otra':'TODAS'
+};
+
+// ── Buscar sede en Supabase ──
+async function buscarSede(eps, municipio) {
+  if(!SB_URL||!SB_ANON) return null;
+  try {
+    const mun = encodeURIComponent(municipio.toUpperCase().trim());
+    const sel = 'select=id,nombre,direccion,telefono,horario,modelo,municipio_norm';
+    const base = `${SB_URL}/rest/v1/sedes?activa=eq.true&municipio_norm=eq.${mun}&${sel}&limit=3`;
+    const hdrs = {apikey:SB_ANON,Authorization:'Bearer '+SB_ANON};
+    // 1. Buscar por EPS exacta
+    if(eps && eps !== 'TODAS') {
+      const r1 = await fetch(base + `&eps=cs.{"${eps}"}`, {headers:hdrs});
+      const s1 = r1.ok ? await r1.json() : [];
+      if(s1.length) return s1;
+    }
+    // 2. Buscar sedes con TODAS las EPS
+    const r2 = await fetch(base + `&eps=cs.{"TODAS"}`, {headers:hdrs});
+    const s2 = r2.ok ? await r2.json() : [];
+    if(s2.length) return s2;
+    // 3. Cualquier sede del municipio
+    const r3 = await fetch(base, {headers:hdrs});
+    return r3.ok ? await r3.json() : null;
+  } catch(e){ return null; }
+}
+
+// ── Guardar sesión en Supabase ──
+async function guardarSesion(extra={}) {
+  if(!SB_URL||!SB_ANON) return;
+  try {
+    await fetch(`${SB_URL}/rest/v1/chatbot_sesiones`, {
+      method:'POST',
+      headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
+      body:JSON.stringify({
+        session_id: novaSession.sessionId,
+        eps_usuario: novaSession.eps,
+        municipio_usuario: novaSession.municipio,
+        mensajes: msgs.slice(-20),
+        estado_flujo: novaSession.estado,
+        escalado: extra.escalado||false,
+        contexto_asesor: extra.contexto_asesor||null,
+        updated_at: new Date().toISOString(),
+        ...extra
+      })
+    });
+  } catch(e){}
+}
+
+// ── SYS prompt dinámico ──
+function buildSYS() {
+  const base = `Eres Nova TD, asistente virtual de Tododrogas (operador logístico de medicamentos y tecnologías en salud en Antioquia). Amable, clara y empática. Responde siempre en español, máximo 3 oraciones directas.
+
+MOTIVOS MÁS FRECUENTES DE CONSULTA — resuélvelos sin escalar:
+1. DISPONIBILIDAD / ESTADO DE MEDICAMENTOS: Dirige al usuario al portal de dispensación: https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb — ahí puede consultar disponibilidad y estado de su medicamento con su número de documento.
+2. ESTADO DE RADICADO / SOLICITUD: Pide el número de radicado (formato TD-YYYYMMDD-XXXX) y dile que lo consulte en https://tododrogas.online/consulta.html — también puedes explicarle el estado si te lo indica.
+3. HORARIOS DE ATENCIÓN: Usa el horario de la sede del CONTEXTO. Si no tienes sede asignada, el horario general es Lun-Vie 7:00-3:30, Sáb 8:00-11:00. Asesores: Lun-Vie 7:00 a.m-5:30 p.m.
+4. RECLAMAR MEDICAMENTOS EN OTRA SEDE: Explica que el medicamento se reclama en la sede asignada por la EPS. Para cambio de sede debe solicitarlo a la EPS directamente. Excepcionalmente se puede autorizar en otra sede llamando al PBX 604 322 2432.
+5. DIRECCIÓN DEL PUNTO: Usa directamente la dirección del CONTEXTO de sede. Si no tienes contexto, pide EPS y municipio.
+6. DOMICILIOS: Tododrogas no presta servicio de domicilio de medicamentos directamente. El usuario debe contactar a su EPS para solicitar la modalidad de entrega.
+7. INFORMACIÓN GENERAL (vacunas, exámenes): Tododrogas es operador logístico de medicamentos. Para vacunas y exámenes el usuario debe contactar a su EPS o IPS asignada.
+
+CANALES DE RADICACIÓN PQRSFD: WhatsApp 304 341 2431 · correo pqrsfd@tododrogas.com.co · PBX 604 322 2432 Op.2 · buzón físico en sede · mensaje de voz 2 min en tablet.
+DATOS PARA RADICAR: nombre completo, documento, teléfono, correo, descripción del caso.
+TIEMPO DE RESPUESTA PQR: máximo 15 días hábiles (Ley 1755/2015).
+Si el usuario quiere radicar, dile que toque el botón azul "Radicar mi solicitud aquí".
+SOLO escala (escribe "ESCALAR" al inicio) si: el usuario lo pide explícitamente, hay urgencia médica o riesgo vital, o el reclamo no puede resolverse con la información disponible.`;
+
+  if(!novaSession.sede) return base;
+  const s = Array.isArray(novaSession.sede) ? novaSession.sede[0] : novaSession.sede;
+  const extras = Array.isArray(novaSession.sede) && novaSession.sede.length > 1
+    ? '\nOtras sedes en el municipio: ' + novaSession.sede.slice(1).map(x=>x.nombre).join(', ')
+    : '';
+  return base + `
+
+CONTEXTO ACTUAL DEL USUARIO (responde usando estos datos directamente):
+- EPS: ${novaSession.eps || 'No informada'}
+- Municipio: ${novaSession.municipio}
+- Sede principal asignada: ${s.nombre}
+- Dirección: ${s.direccion}
+- Horario: ${s.horario || 'Consultar por teléfono'}
+- Teléfono sede: ${s.telefono}
+- Modelo: ${s.modelo}${extras}`;
+}
+
+// ── Mostrar botones de EPS ──
+function mostrarBotonesEPS() {
+  const c = document.getElementById('msgs');
+  const div = document.createElement('div');
+  div.className = 'msg msg-bot';
+  div.id = 'eps-btns';
+  div.innerHTML = '<b>¿Con cuál EPS estás afiliado?</b><br><small style="color:#9ba3be">Esto me ayuda a encontrar tu punto de atención exacto</small><br><br>' +
+    EPS_OPTS.map(e =>
+      `<button onclick="elegirEPS('${e}')" style="margin:3px;padding:6px 12px;background:#1e3a5f;color:#fff;border:1px solid #4f8ef7;border-radius:8px;cursor:pointer;font-size:12px;">${e}</button>`
+    ).join('');
+  c.appendChild(div);
+  c.scrollTop = c.scrollHeight;
+}
+
+// ── Mostrar accesos rápidos tras identificar sede ──
+function mostrarAccesosRapidos() {
+  const c = document.getElementById('msgs');
+  const div = document.createElement('div');
+  div.className = 'msg msg-bot';
+  div.id = 'quick-topics';
+  const temas = [
+    ['💊 Estado de mi medicamento','¿Cómo consulto el estado de mi medicamento?'],
+    ['📋 Estado de mi radicado','¿Cómo consulto el estado de mi radicado?'],
+    ['🕐 Horario de atención','¿Cuál es el horario de atención de mi sede?'],
+    ['📍 Dirección del punto','¿Cuál es la dirección de mi punto de dispensación?'],
+    ['📝 Radicar una PQRSFD','Quiero radicar una petición, queja o reclamo'],
+    ['🔄 Reclamar en otra sede','¿Puedo reclamar mi medicamento en otra sede?'],
+  ];
+  div.innerHTML = '<b>¿En qué te puedo ayudar?</b><br><br>' +
+    temas.map(([label, msg]) =>
+      `<button onclick="sendQ('${msg}')" style="display:block;width:100%;margin:3px 0;padding:7px 12px;background:#1e3a5f;color:#fff;border:1px solid #4f8ef7;border-radius:8px;cursor:pointer;font-size:12px;text-align:left;">${label}</button>`
+    ).join('');
+  c.appendChild(div);
+  c.scrollTop = c.scrollHeight;
+}
+
+// ── Usuario elige EPS ──
+async function elegirEPS(epsLabel) {
+  const el = document.getElementById('eps-btns');
+  if(el) el.remove();
+  const epsKey = EPS_MAP[epsLabel.toLowerCase()] || 'TODAS';
+  novaSession.eps = epsKey;
+  novaSession.estado = 'eps_ok';
+  addUser(epsLabel);
+  addBot('Perfecto. ¿En qué municipio de Antioquia recibes tu atención? Escribe el nombre del municipio.');
+  guardarSesion();
+}
 
 let msgs = [];
 let noAns = 0;
@@ -988,7 +1124,12 @@ function openChat(){
   voiceMode=false;
   document.getElementById('overlay').classList.add('open');
   showTextUI();
-  if(msgs.length===0) setTimeout(()=>addBot('¡Hola! 👋 Soy Nova TD. Puedo ayudarte con dudas sobre cómo radicar tu PQRSFD, tiempos y canales disponibles. ¿En qué te ayudo?'),400);
+  if(msgs.length===0){
+    setTimeout(()=>{
+      addBot('¡Hola! 👋 Soy Nova TD, tu asistente de Tododrogas. Te ayudo con tu punto de dispensación, estado de medicamentos, radicados PQRSFD y más.');
+      setTimeout(()=>mostrarBotonesEPS(), 600);
+    },400);
+  }
   setTimeout(()=>document.getElementById('chatInp').focus(),500);
 }
 
@@ -1082,22 +1223,66 @@ async function sendChat(){
 }
 
 async function callClaude(userText, withAudio=false){
-  addUser(userText);showTyping();
-  const history = msgs.filter(m=>m.role==='user'||m.role==='assistant').slice(-10);
-  // Convertir historial al formato OpenAI (igual que Anthropic)
-  const openaiMsgs = [{role:'system',content:SYS}, ...history];
-  try{
-    const r=await fetch('/chatbot.php',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Content-Type':'application/json'},
-      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:400,messages:openaiMsgs,temperature:0.7})
-    });
-    const d=await r.json();
+  // ── Fase 1: capturar municipio sin llamar a GPT ──
+  if(novaSession.estado === 'eps_ok'){
+    addUser(userText); showTyping();
+    const mun = userText.trim();
+    novaSession.municipio = mun;
+    const sedes = await buscarSede(novaSession.eps, mun);
     hideTyping();
-    const reply=d.choices?.[0]?.message?.content||'No pude procesar tu consulta. Toca "Radicar mi solicitud" para continuar.';
-    addBot(reply,withAudio);
-    if(withAudio) speak(reply);
-  }catch(e){
+    if(sedes && sedes.length){
+      novaSession.sede = sedes;
+      novaSession.estado = 'sede_ok';
+      const s = sedes[0];
+      let msg = `✅ Encontré tu punto en ${mun}: *${s.nombre}* — ${s.direccion}. Horario: ${s.horario||'consultar por teléfono'}. Tel: ${s.telefono}.`;
+      if(sedes.length > 1) msg += ` También disponible: ${sedes.slice(1).map(x=>x.nombre).join(', ')}.`;
+      addBot(msg, withAudio);
+      setTimeout(()=>mostrarAccesosRapidos(), 400);
+    } else {
+      novaSession.estado = 'libre';
+      addBot(`No encontré sedes de Tododrogas activas en ${mun} para tu EPS. ¿Deseas ver todos los municipios disponibles o hablar con un asesor?`, withAudio);
+    }
+    guardarSesion();
+    return;
+  }
+
+  // ── Fase 2+: IA libre con contexto de sede ──
+  addUser(userText); showTyping();
+  const history = msgs.filter(m=>m.role==='user'||m.role==='assistant').slice(-10);
+  const openaiMsgs = [{role:'system', content:buildSYS()}, ...history];
+  try{
+    const r = await fetch('/chatbot.php',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'gpt-4o-mini',
+        max_tokens:400,
+        messages:openaiMsgs,
+        temperature:0.2,
+        // Contexto de sesión para que PHP guarde en Supabase
+        session_id:        novaSession.sessionId,
+        eps_usuario:       novaSession.eps,
+        municipio_usuario: novaSession.municipio,
+        estado_flujo:      novaSession.estado,
+        escalado:          false,
+      })
+    });
+    const d = await r.json();
+    hideTyping();
+    const reply = d.choices?.[0]?.message?.content || 'No pude procesar tu consulta. Toca "Radicar mi solicitud" para continuar.';
+    // Detectar señales especiales
+    if(reply.startsWith('ESCALAR')){
+      const txt = reply.replace('ESCALAR','').trim();
+      addBot(txt, withAudio);
+      noAns++;
+      document.getElementById('escBar').classList.add('on');
+      guardarSesion({escalado:true, contexto_asesor:`EPS:${novaSession.eps} Municipio:${novaSession.municipio} Último mensaje:${userText}`});
+    } else {
+      addBot(reply, withAudio);
+      guardarSesion();
+    }
+    if(withAudio) speak(reply.replace('ESCALAR','').trim());
+  } catch(e){
     hideTyping();
     addBot('No pude conectarme ahora. Toca "Radicar mi solicitud" para que un asesor te ayude.',false);
   }
