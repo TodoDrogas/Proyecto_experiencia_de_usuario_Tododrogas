@@ -416,11 +416,13 @@ let FRASES = [
 let currentSlide = 0;
 let carouselTimer = null;
 
-/* ─── APLICAR CONFIG (igual que PQRSFD_bienvenida) ─── */
+/* ─── APLICAR CONFIG ─── */
 function applyConfig(cfg) {
   if (!cfg) return;
-  if (cfg.frases && cfg.frases.length) {
-    FRASES = cfg.frases.map(f => ({ icon:'💬', html: esc(f.text || String(f)) }));
+  // Bug fix: usar frases_login (carrusel del login), no frases (carrusel de bienvenida)
+  const fuente = (cfg.frases_login && cfg.frases_login.length) ? cfg.frases_login : cfg.frases;
+  if (fuente && fuente.length) {
+    FRASES = fuente.map(f => ({ icon: f.icon || '💬', html: esc(f.text || String(f)) }));
   }
   if (cfg.logo) {
     ['formLogo'].forEach(id => {
@@ -431,14 +433,10 @@ function applyConfig(cfg) {
   rebuildCarousel();
 }
 
-// 1) localStorage (panel_config)
-try { const s = localStorage.getItem('PQRSFD_config'); if(s) applyConfig(JSON.parse(s)); } catch(e){}
-
-// 2) Supabase (igual que PQRSFD_bienvenida — tabla configuracion_sistema)
+// Supabase — fuente de verdad única (eliminado caché localStorage que causaba frases viejas)
 async function loadRemoteConfig() {
   try {
     let url = SB_URL, anon = SB_ANON;
-    try { const r=localStorage.getItem('td_sb_cfg'); if(r){const o=JSON.parse(r);if(o.url)url=o.url;if(o.anon)anon=o.anon;} } catch(e){}
     if (!url || !anon || anon==='ANON_KEY_NO_DEFINIDA') return;
     const r = await fetch(`${url}/rest/v1/configuracion_sistema?id=eq.main&select=data`,{
       headers:{apikey:anon,Authorization:'Bearer '+anon}
@@ -447,7 +445,6 @@ async function loadRemoteConfig() {
     const rows = await r.json();
     if (!rows?.length || !rows[0].data) return;
     applyConfig(rows[0].data);
-    localStorage.setItem('PQRSFD_config', JSON.stringify(rows[0].data));
   } catch(e){}
 }
 
