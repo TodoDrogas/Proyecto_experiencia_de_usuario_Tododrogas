@@ -7,8 +7,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- Supabase JS — necesario para Realtime (escucha correos nuevos sin polling) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js" onerror="console.warn('config.js not found')"></script>
 <style>
 :root {
@@ -389,14 +387,6 @@ table.agents-tbl tr:hover td{background:var(--bg)}
   </nav>
   <div class="topbar-right">
     <span class="last-sync" id="lastSync">—</span>
-    <select id="ventanaSync" title="Ventana de correos a mostrar"
-      style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:5px 8px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;outline:none"
-      onchange="syncAll()">
-      <option value="0">Hoy (desde 00:00)</option>
-      <option value="24">Últimas 24h</option>
-      <option value="48">Últimas 48h</option>
-      <option value="72">Últimos 3 días</option>
-    </select>
     <button class="topbar-sync" id="syncBtn" onclick="syncAll()">
       <svg id="syncIcon" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg>
       Actualizar
@@ -542,19 +532,10 @@ table.agents-tbl tr:hover td{background:var(--bg)}
             <div class="page-title">Analytics PQRS</div>
             <div style="font-size:11px;color:var(--ink3)">Tododrogas · actualizado <span id="metLastUpdate">—</span></div>
           </div>
-          <!-- ✅ FIX #8 — Selector de fechas + botón Excel con rango -->
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <div style="display:flex;align-items:center;gap:6px">
-              <label style="font-size:11px;color:var(--ink3);white-space:nowrap">Desde</label>
-              <input type="date" id="mFechaDesde" style="font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-family:'Poppins',sans-serif;color:var(--ink)" onchange="cargarMetricasRango()">
-              <label style="font-size:11px;color:var(--ink3);white-space:nowrap">Hasta</label>
-              <input type="date" id="mFechaHasta" style="font-size:11px;padding:5px 8px;border:1px solid var(--border);border-radius:7px;font-family:'Poppins',sans-serif;color:var(--ink)" onchange="cargarMetricasRango()">
-            </div>
-            <button onclick="exportarExcel()" style="display:flex;align-items:center;gap:7px;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;box-shadow:0 2px 8px rgba(22,163,74,.2);transition:background .15s" onmouseover="this.style.background='#15803d'" onmouseout="this.style.background='#16a34a'">
-              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Exportar Power BI (.xlsx)
-            </button>
-          </div>
+          <button onclick="exportarExcel()" style="display:flex;align-items:center;gap:7px;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;box-shadow:0 2px 8px rgba(22,163,74,.2);transition:background .15s" onmouseover="this.style.background='#15803d'" onmouseout="this.style.background='#16a34a'">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Exportar Power BI (.xlsx)
+          </button>
         </div>
         <div class="metrics-tabs">
           <button class="mtab active" onclick="showMTab('overview',this)">📊 Resumen</button>
@@ -1092,44 +1073,10 @@ function renderMTab(tab){
 }
 
 // ── Entry point ─────────────────────────────
-// ✅ FIX #9 — lazy load métricas: se inicializa el selector de fechas y carga datos solo al abrir el tab
-let _metricasInicializadas = false;
 function updateMetrics() {
-  // Inicializar fechas en el selector si es la primera vez
-  if (!_metricasInicializadas) {
-    const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-    const hace7 = new Date(Date.now() - 7 * 24 * 3600 * 1000).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-    const desdeEl = document.getElementById('mFechaDesde');
-    const hastaEl = document.getElementById('mFechaHasta');
-    if (desdeEl && !desdeEl.value) desdeEl.value = hace7;
-    if (hastaEl && !hastaEl.value) hastaEl.value = hoy;
-    _metricasInicializadas = true;
-  }
   document.getElementById('metLastUpdate').textContent =
     new Date().toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'});
   renderOverview();
-}
-
-// ✅ FIX #10 — cargarMetricasRango: recalcula métricas al cambiar el selector de fechas
-function cargarMetricasRango() {
-  // Métricas actuales trabajan sobre state.emails ya cargados en memoria
-  // Para rangos históricos se recargará loadEmails con la ventana correspondiente
-  const desde = document.getElementById('mFechaDesde')?.value;
-  const hasta = document.getElementById('mFechaHasta')?.value;
-  if (!desde || !hasta) return;
-  const msDesde = new Date(desde + 'T00:00:00-05:00').getTime();
-  const msHasta = new Date(hasta + 'T23:59:59-05:00').getTime();
-  const horasVentana = Math.ceil((Date.now() - msDesde) / 3600000);
-  // Si el rango supera lo que hay en memoria, recargar desde BD
-  if (horasVentana > 24) {
-    loadEmails(horasVentana, false).then(() => {
-      document.getElementById('metLastUpdate').textContent =
-        new Date().toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'});
-      renderMTab(document.querySelector('.mtab.active')?.dataset?.tab || 'overview');
-    });
-  } else {
-    updateMetrics();
-  }
 }
 
 // ── TAB 1: RESUMEN ──────────────────────────
@@ -1374,27 +1321,13 @@ function renderSLA() {
 }
 
 // ── EXPORT EXCEL PARA POWER BI ──────────────
-// ✅ FIX #6 — exportarExcel con filtro de fechas explícito (nunca limit=5000)
-async function exportarExcel(desdeISO, hastaISO) {
-  // Si no se pasan fechas, tomar desde/hasta del selector de métricas (o hoy)
-  const hoy = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-  const desde = desdeISO || document.getElementById('mFechaDesde')?.value || hoy;
-  const hasta = hastaISO || document.getElementById('mFechaHasta')?.value || hoy;
-  const desdeTS = new Date(desde + 'T00:00:00-05:00').toISOString();
-  const hastaTS = new Date(hasta + 'T23:59:59-05:00').toISOString();
-
-  const btn=event?.currentTarget, orig=btn?.innerHTML;
-  if(btn){ btn.innerHTML='⏳ Generando...'; btn.disabled=true; }
+async function exportarExcel() {
+  const btn=event.currentTarget, orig=btn.innerHTML;
+  btn.innerHTML='⏳ Generando...'; btn.disabled=true;
   try {
-    // ✅ Paginación con filtro de fechas — sin limit=5000
-    let H=[], offset=0, page;
-    do {
-      try {
-        page = await sb(`historial_eventos?created_at=gte.${desdeTS}&created_at=lte.${hastaTS}&order=created_at.asc&limit=500&offset=${offset}`) || [];
-      } catch { page = []; }
-      H = H.concat(page);
-      offset += 500;
-    } while (page.length === 500);
+    let H=[];
+    try{H=await sb('historial_eventos?order=created_at.asc&limit=5000')||[];}
+    catch{try{H=await sb('historial?order=fecha.asc&limit=5000')||[];}catch{}}
 
     const wb=XLSX.utils.book_new();
 
@@ -1531,42 +1464,24 @@ function showPage(page, btn) {
 // ──────────────────────────────────────────────
 // DATA LOADING
 // ──────────────────────────────────────────────
-// ✅ FIX #2+#3 — loadEmails con paginación cursor + SELECT proyectado (sin body_content/raw_payload)
-// Parámetros:
-//   horasVentana : 0 = desde 00:00 de hoy (default) | >0 = últimas N horas
-//   silencioso   : true = no re-renderiza (uso interno de Realtime)
-async function loadEmails(horasVentana = 0, silencioso = false) {
+async function loadEmails(horasVentana = 0) {
   try {
-    // ── Columnas útiles para la lista — body_content se carga bajo demanda ──
-    const SELECT_LISTA = [
-      'id','message_id','conversation_id','subject','from_email','from_name',
-      'received_at','created_at','sent_at','estado','asignado_a','prioridad',
-      'es_urgente','nivel_riesgo','horas_sla','fecha_limite_sla','tipo_pqr',
-      'resumen_corto','categoria_ia','sentimiento','ley_aplicable','datos_legales',
-      'body_type','body_preview','has_attachments','is_read',
-      'to_recipients','cc_recipients','origen'
-    ].join(',');
-
+    // ── Ventana: desde el inicio del día de HOY en hora Colombia ──
+    // horasVentana=0 → desde las 00:00 de hoy (default, igual que el PHP)
+    // horasVentana>0 → carga histórica manual (ej: últimas 48h)
     let desde;
     if (horasVentana > 0) {
       desde = new Date(Date.now() - horasVentana * 60 * 60 * 1000).toISOString();
     } else {
+      // Inicio del día en hora Colombia (UTC-5)
       const ahora = new Date();
       const inicioDia = new Date(ahora.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }));
+      // Compensar offset Colombia = UTC-5
       desde = new Date(inicioDia.getTime() + 5 * 60 * 60 * 1000).toISOString();
     }
 
-    // ✅ Paginación: máx 50 por página, scroll infinito carga más
-    const PAGE_SIZE = 50;
-    let allData = [], offset = 0, page;
-    do {
-      page = await sb(`correos?select=${encodeURIComponent(SELECT_LISTA)}&received_at=gte.${desde}&estado=neq.archivado&order=received_at.desc&limit=${PAGE_SIZE}&offset=${offset}`);
-      if (!page || !page.length) break;
-      allData = allData.concat(page);
-      offset += PAGE_SIZE;
-    } while (page.length === PAGE_SIZE && allData.length < 300); // máx 300 correos en memoria
-
-    const data = allData;
+    // Traer correos desde el inicio del día, orden igual que Outlook (más reciente primero)
+    const data = await sb(`correos?received_at=gte.${desde}&order=received_at.desc&limit=500`);
     const allEmails = (data||[]).map(e=>({
       id: e.id,
       message_id: e.message_id,
@@ -1588,10 +1503,7 @@ async function loadEmails(horasVentana = 0, silencioso = false) {
       sentimiento: e.sentimiento || 'neutro',
       tono: (()=>{ try{ return JSON.parse(e.datos_legales||'{}').tono||'neutro'; }catch(x){ return 'neutro'; } })(),
       ley_aplicable: e.ley_aplicable || '',
-      // ✅ FIX #4 — body_content NO viene en la lista (SELECT proyectado)
-      // Se carga bajo demanda en selectEmail() con una query de 1 fila
-      body_content: '',             // vacío hasta que el agente abra el correo
-      body_preview: e.body_preview || '',
+      body_content: e.body_content || e.body_preview || '',
       body_type: e.body_type || 'text',
       has_attachments: e.has_attachments || false,
       is_read: e.is_read || false,
@@ -1599,7 +1511,7 @@ async function loadEmails(horasVentana = 0, silencioso = false) {
       cc_recipients: _arr(e.cc_recipients),
       sent_at: e.sent_at || e.received_at || e.created_at,
       origen: e.origen || '',
-      hilo_count: 0,
+      hilo_count: 0, // cuántos mensajes tiene el hilo
       raw: e,
     }));
 
@@ -1875,29 +1787,17 @@ async function selectEmail(id) {
     <div class="adj-section" style="margin-bottom:14px;display:none" id="mediaFormulario" style="display:none"></div>
       <div id="adjSection"><div class="adj-title">📎 Adjuntos</div><div class="adj-grid" id="adjGrid"></div></div>
     <div class="ev-body" id="evBody">
-      <div id="evBodyLoader" style="padding:20px;text-align:center;color:var(--ink3);font-size:12px">⏳ Cargando contenido...</div>
+      ${email.body_type==='html'
+        ? `<iframe
+            srcdoc="${esc(email.body_content||'')}"
+            sandbox="allow-same-origin allow-popups"
+            referrerpolicy="no-referrer"
+            style="width:100%;height:100%;min-height:400px;border:none;display:block"
+            onload="this.style.height=(this.contentDocument?.body?.scrollHeight||400)+'px'"
+          ></iframe>`
+        : `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`}
     </div>
   `;
-  // ✅ FIX #5 — body_content bajo demanda (1 query de 1 fila, no viene en el listado)
-  (async () => {
-    try {
-      const rows = await sb(`correos?id=eq.${id}&select=body_content,body_type`);
-      const row = rows && rows[0];
-      const bodyContent = row?.body_content || email.body_preview || '';
-      const bodyType = row?.body_type || email.body_type || 'text';
-      email.body_content = bodyContent; // cache local para reply/forward
-      const bodyEl = document.getElementById('evBody');
-      if (!bodyEl) return;
-      if (bodyType === 'html') {
-        bodyEl.innerHTML = `<iframe srcdoc="${esc(bodyContent)}" sandbox="allow-same-origin allow-popups" referrerpolicy="no-referrer" style="width:100%;height:100%;min-height:400px;border:none;display:block" onload="this.style.height=(this.contentDocument?.body?.scrollHeight||400)+'px'"></iframe>`;
-      } else {
-        bodyEl.innerHTML = `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(bodyContent || '(Sin contenido)')}</pre>`;
-      }
-    } catch(e) {
-      const bodyEl = document.getElementById('evBody');
-      if (bodyEl) bodyEl.innerHTML = `<pre style="color:var(--red);font-size:12px">Error al cargar contenido: ${e.message}</pre>`;
-    }
-  })();
 
   // Render mgmt panel
   document.getElementById('mgmtEstadoBadge').className='badge '+email.estado;
@@ -2889,14 +2789,12 @@ async function onDropToAgent(e, agentId, agentName) {
 // SYNC
 // ──────────────────────────────────────────────
 async function syncAll() {
-  const btn  = document.getElementById('syncBtn');
-  const horas = parseInt(document.getElementById('ventanaSync')?.value || '12');
+  const btn = document.getElementById('syncBtn');
   btn.classList.add('loading');
   try {
-    await Promise.all([loadEmails(horas), loadAgents(), loadHistorial()]);
-    const label = horas === 0 ? 'Hoy' : `últimas ${horas}h`;
-    document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')} · ${label}`;
-    showToast(`Datos actualizados (${label}) ✓`, 'success');
+    await Promise.all([loadEmails(0), loadAgents(), loadHistorial()]);
+    document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')} · Hoy`;
+    showToast('Datos actualizados (Hoy desde 00:00) ✓', 'success');
   } catch { showToast('Error al actualizar', 'error'); }
   finally { btn.classList.remove('loading'); }
 }
@@ -3790,83 +3688,9 @@ async function getGraphToken(){
   await Promise.all([loadEmails(), loadAgents(), loadHistorial()]);
   loadTopbarLogo();
   document.getElementById('lastSync').textContent=`sync ${new Date().toLocaleTimeString('es-CO')}`;
-  // ✅ FIX #1 — Realtime en vez de setInterval(90s) — reduce ~960 queries/día/agente
-  iniciarRealtime();
+  // Auto-refresh
+  setInterval(()=>{ loadEmails(); loadHistorial(); }, 90000);
 })();
-
-// ── REALTIME — escucha INSERT/UPDATE en correos sin polling ──────────
-function iniciarRealtime() {
-  try {
-    // Usar las mismas credenciales que el resto del admin (SB_URL/SB_KEY ya inicializadas)
-    const SB_URL_RT = SB_URL;
-    const SB_KEY_RT = SB_KEY;
-    if (!SB_URL_RT || SB_URL_RT.includes('TU_PROYECTO') || typeof window.supabase === 'undefined') {
-      // Fallback: Realtime no disponible → polling cada 5 min (vs 90s original)
-      console.warn('[Realtime] No disponible — fallback polling 5min');
-      setInterval(() => { loadEmails(0, false); loadHistorial(); }, 300000);
-      return;
-    }
-    const client = window.supabase.createClient(SB_URL_RT, SB_KEY_RT);
-    client.channel('admin-correos')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'correos' }, (payload) => {
-        if (!payload.new) return;
-        state.allEmails.unshift(mapearCorreo(payload.new));
-        _reconstruirHilos();
-        renderEmailList();
-        updateFolderCounts();
-        document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')}`;
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'correos' }, (payload) => {
-        if (!payload.new) return;
-        const idx = state.allEmails.findIndex(e => e.id === payload.new.id);
-        if (idx !== -1) {
-          state.allEmails[idx] = mapearCorreo(payload.new);
-          _reconstruirHilos();
-          renderEmailList();
-          updateFolderCounts();
-        }
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[Realtime] Suscrito a correos ✓');
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.warn('[Realtime] Error de canal — fallback polling 5min');
-          setInterval(() => { loadEmails(0, false); loadHistorial(); }, 300000);
-        }
-      });
-    // Historial: sigue con polling reducido (solo se actualiza en acciones del agente)
-    setInterval(() => { loadHistorial(); }, 300000);
-  } catch(e) {
-    console.warn('[Realtime] Excepción — fallback polling 5min:', e);
-    setInterval(() => { loadEmails(0, false); loadHistorial(); }, 300000);
-  }
-}
-
-// Helper: mapear fila cruda de BD al objeto de estado
-function mapearCorreo(e) {
-  return {
-    id: e.id, message_id: e.message_id,
-    conversation_id: e.conversation_id || null,
-    asunto: e.subject || '(Sin asunto)',
-    remitente: e.from_email || '', remitente_nombre: e.from_name || '',
-    fecha: e.received_at || e.created_at,
-    estado: e.estado || 'pendiente',
-    asignado_a: e.asignado_a || null,
-    prioridad: e.prioridad || '', es_urgente: e.es_urgente || false,
-    nivel_riesgo: e.nivel_riesgo || '',
-    horas_sla: e.horas_sla || 120, fecha_limite_sla: e.fecha_limite_sla || null,
-    tipo_pqr: e.tipo_pqr || '', resumen_corto: e.resumen_corto || '',
-    categoria_ia: e.categoria_ia || '', sentimiento: e.sentimiento || 'neutro',
-    tono: (()=>{ try{ return JSON.parse(e.datos_legales||'{}').tono||'neutro'; }catch(x){ return 'neutro'; } })(),
-    ley_aplicable: e.ley_aplicable || '',
-    // ✅ FIX #4 — body_content NO se carga en lista; se carga bajo demanda en selectEmail()
-    body_content: '', body_type: e.body_type || 'text',
-    has_attachments: e.has_attachments || false, is_read: e.is_read || false,
-    to_recipients: _arr(e.to_recipients), cc_recipients: _arr(e.cc_recipients),
-    sent_at: e.sent_at || e.received_at || e.created_at,
-    origen: e.origen || '', hilo_count: 0, raw: e,
-  };
-}
 
 // ── MULTIMEDIA FORMULARIO WEB — con URL firmada para buckets privados ──
 async function getSignedStorageUrl(publicUrl) {
@@ -3979,11 +3803,10 @@ async function renderMediaFormulario(email) {
 // ══════════════════════════════════════════════════════
 // ENCUESTAS — carga, render y export
 // ══════════════════════════════════════════════════════
-// ✅ FIX #7 — loadEncuestas con filtro de fechas (últimos 90 días) y limit=500 vs 2000
 async function loadEncuestas() {
   try {
-    const hace90 = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
-    const data = await sb(`historial_eventos?evento=eq.encuesta_recibida&created_at=gte.${hace90}&order=created_at.desc&limit=500`);
+    // Carga historial_eventos filtrando encuesta_recibida (lleva datos_extra completos)
+    const data = await sb('historial_eventos?evento=eq.encuesta_recibida&order=created_at.desc&limit=2000');
     state.encuestas = (data || []).map(ev => {
       let ex = {};
       try { ex = typeof ev.datos_extra === 'string' ? JSON.parse(ev.datos_extra) : (ev.datos_extra || {}); } catch(_) {}
