@@ -6,9 +6,9 @@ header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
 // ── Credenciales (inyectadas por deploy.yml) ──
-$OPENAI_KEY  = '__OPENAI_KEY__';
-$SB_URL      = '__SUPABASE_URL__';
-$SB_KEY      = '__SUPABASE_KEY__';
+$OPENAI_KEY = '__OPENAI_KEY__';
+$SB_URL     = '__SB_URL__';
+$SB_KEY     = '__SB_KEY__';
 
 // ── Leer body ──
 $body = json_decode(file_get_contents('php://input'), true);
@@ -19,7 +19,7 @@ $model        = $body['model']         ?? 'gpt-4o-mini';
 $max_tokens   = $body['max_tokens']    ?? 400;
 $temperature  = $body['temperature']   ?? 0.7;
 
-// ── Contexto de sesión Nova (opcional, enviado desde el JS) ──
+// ── Contexto de sesión Nova (enviado desde JS) ──
 $session_id        = $body['session_id']        ?? null;
 $eps_usuario       = $body['eps_usuario']       ?? null;
 $municipio_usuario = $body['municipio_usuario'] ?? null;
@@ -48,13 +48,13 @@ $resp = curl_exec($ch);
 $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-// ── Guardar sesión en Supabase (si viene session_id) ──
-if ($session_id && $SB_URL && $SB_KEY && $SB_URL !== '__SUPABASE_URL__' && $code === 200) {
-    $respData = json_decode($resp, true);
-    $reply    = $respData['choices'][0]['message']['content'] ?? '';
+// ── Guardar sesión en Supabase (si viene session_id y credenciales inyectadas) ──
+if ($session_id && $SB_URL && $SB_KEY && $code === 200) {
+    $respData       = json_decode($resp, true);
+    $reply          = $respData['choices'][0]['message']['content'] ?? '';
     $escalado_final = $escalado || str_starts_with(trim($reply), 'ESCALAR');
 
-    // Solo guardar mensajes user/assistant (sin system prompt)
+    // Solo guardar user/assistant (sin system prompt)
     $msgs_guardados = array_values(array_filter($messages, fn($m) => $m['role'] !== 'system'));
     $msgs_guardados[] = ['role' => 'assistant', 'content' => $reply];
 
