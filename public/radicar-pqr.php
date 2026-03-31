@@ -102,18 +102,36 @@ function fetchUrlBytes(string $url, string $sbKey = ''): string {
 }
 
 // ── LOGO desde Supabase configuracion_sistema ───────────────────────
-// $logo_img_html      → correo interno a pqrsfd (Outlook — acepta base64)
-// $logo_img_html_usuario → acuse al usuario (Gmail — NO acepta base64 inline)
+// ✅ FIX #C1 — Caché de logo en APCu (memoria del proceso PHP)
+// En vez de hacer una query a Supabase en cada radicación, el logo se cachea
+// por 1 hora. Una sola query alimenta todos los requests del período.
 $logo_url             = '';
 $logo_img_html        = '';
 $logo_img_html_usuario = '';
 try {
-    $ch_cfg = curl_init("$SB_URL/rest/v1/configuracion_sistema?id=eq.main&select=data");
-    curl_setopt_array($ch_cfg, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
-        CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Accept: application/json']]);
-    $cfg_resp = curl_exec($ch_cfg); curl_close($ch_cfg);
-    $cfg_rows = json_decode($cfg_resp, true);
-    $cfg_data = $cfg_rows[0]['data'] ?? [];
+    // Intentar leer desde caché APCu (si está disponible)
+    $cfg_data = [];
+    $cache_key = 'nova_td_config_main';
+    $cache_hit = false;
+    if (function_exists('apcu_fetch')) {
+        $cached = apcu_fetch($cache_key, $cache_hit);
+        if ($cache_hit) {
+            $cfg_data = $cached;
+        }
+    }
+    if (!$cache_hit) {
+        // Sin caché o expirado: consultar Supabase
+        $ch_cfg = curl_init("$SB_URL/rest/v1/configuration_sistema?id=eq.main&select=data");
+        curl_setopt_array($ch_cfg, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
+            CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Accept: application/json']]);
+        $cfg_resp = curl_exec($ch_cfg); curl_close($ch_cfg);
+        $cfg_rows = json_decode($cfg_resp, true);
+        $cfg_data = $cfg_rows[0]['data'] ?? [];
+        // Guardar en caché por 3600 segundos (1 hora)
+        if (function_exists('apcu_store') && !empty($cfg_data)) {
+            apcu_store($cache_key, $cfg_data, 3600);
+        }
+    }
     if (!empty($cfg_data['logo'])) {
         $logo_url = $cfg_data['logo'];
 
