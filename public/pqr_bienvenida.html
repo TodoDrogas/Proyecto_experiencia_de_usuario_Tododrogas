@@ -1136,6 +1136,26 @@ function switchToText(){
   showTextUI();
 }
 
+function mostrarQRMedicamentos(){
+  const c=document.getElementById('msgs');
+  // Evitar duplicar el QR
+  if(document.getElementById('qr-med-card')) return;
+  const div=document.createElement('div');
+  div.id='qr-med-card';
+  div.className='msg msg-bot';
+  div.style.cssText='text-align:center;padding:14px;';
+  div.innerHTML=''
+    +'<p style="font-size:12px;color:#9ba3be;margin-bottom:8px;">📱 Escanea con tu celular para consultar tu medicamento</p>'
+    +'<img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/QR%20MEDICAMENTOS.jpeg" '
+    +'alt="QR Medicamentos" style="width:160px;height:160px;border-radius:10px;border:2px solid #4f8ef7;display:block;margin:0 auto 10px;">'
+    +'<a href="https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb" '
+    +'target="_blank" style="display:block;background:#1e3a5f;color:#4f8ef7;padding:8px 12px;border-radius:8px;'
+    +'font-size:11px;text-decoration:none;border:1px solid #4f8ef7;word-break:break-all;">'
+    +'🔗 Abrir portal de dispensación</a>';
+  c.appendChild(div);
+  c.scrollTop=c.scrollHeight;
+}
+
 function addBot(text, withAudio=false){
   const container=document.getElementById('msgs');
   const div=document.createElement('div');
@@ -1145,6 +1165,14 @@ function addBot(text, withAudio=false){
     noAns++;
     if(noAns>=1) document.getElementById('escBar').classList.add('on');
   }
+  // Limpiar URLs del texto — se mostrarán como botones aparte
+  const textLimpio = text
+    .replace(/https:\/\/dispensacion\.tododrogas\.com\.co[^\s\])]*/g,'')
+    .replace(/\[https?:\/\/[^\]]*\]/g,'')
+    .replace(/\(https?:\/\/[^\)]*\)/g,'')
+    .replace(/https:\/\/tododrogas\.online\/consulta\.html[^\s]*/g,'')
+    .replace(/\s{2,}/g,' ').trim();
+
   msgs.push({role:'assistant',content:text});
   if(withAudio){
     div.className='msg msg-audio';
@@ -1161,6 +1189,27 @@ function addBot(text, withAudio=false){
     div.textContent=text;
   }
   container.appendChild(div);
+
+  // Mostrar QR si menciona medicamentos/dispensación
+  if(text.includes('dispensacion.tododrogas') || text.includes('QR de medicamento')
+     || text.includes('escanear el QR') || text.includes('portal de dispensación')
+     || text.includes('QR%20MEDICAMENTOS')){
+    setTimeout(()=>mostrarQRMedicamentos(), 300);
+  }
+
+  // Mostrar botón de consulta de radicado si menciona consulta.html
+  if(text.includes('consulta.html') && !document.getElementById('btn-consulta-rad')){
+    const linkDiv=document.createElement('div');
+    linkDiv.id='btn-consulta-rad';
+    linkDiv.className='msg msg-bot';
+    linkDiv.style.cssText='text-align:center;padding:10px;';
+    linkDiv.innerHTML='<a href="https://tododrogas.online/consulta.html" target="_blank" '
+      +'style="display:block;background:#1e3a5f;color:#4f8ef7;padding:8px 12px;border-radius:8px;'
+      +'font-size:12px;text-decoration:none;border:1px solid #4f8ef7;">'
+      +'📋 Consultar estado de mi radicado</a>';
+    container.appendChild(linkDiv);
+  }
+
   container.scrollTop=container.scrollHeight;
 }
 
@@ -1246,7 +1295,7 @@ async function callClaude(userText, withAudio=false){
   }
   // ¿Medicamentos?
   else if(tn.match(/medicament|dispens|pendiente|disponib|stock|listo|recoger/)){
-    contextoExtra='\nCONSULTA MEDICAMENTOS: Indica el portal: https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb con su documento. Menciona el QR de medicamentos disponible en su sede.';
+    contextoExtra='\nCONSULTA MEDICAMENTOS: Di al usuario que puede consultar el estado de su medicamento escaneando el QR de medicamentos con su celular (se mostrará automáticamente) o ingresando al portal de dispensación con su número de documento. NO escribas la URL larga en tu respuesta — el sistema la mostrará como botón. Solo di algo como: "Puedes consultarlo escaneando el QR con tu celular o tocando el botón del portal de dispensación. Solo necesitas tu número de documento."';
   }
   // ¿Asesor disponible?
   else if(tn.match(/asesor|agente|persona|humano|hablar|disponible/)){
