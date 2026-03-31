@@ -788,9 +788,6 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
           </tr>
         </table>
         <p style='margin:12px 0 0;font-size:10px;color:rgba(255,255,255,.55);border-top:1px solid rgba(255,255,255,.1);padding-top:10px'>
-          <strong style='color:#bfdbfe'>PBX Ventas:</strong> 604 448 1534 &nbsp;·&nbsp;
-          <strong style='color:#bfdbfe'>WhatsApp Ventas:</strong> 312 815 2913 &nbsp;·&nbsp;
-          <strong style='color:#bfdbfe'>Tel. Corp:</strong> 304 341 2431
         </p>
       </td></tr>
     </table>
