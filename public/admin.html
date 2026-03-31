@@ -7,6 +7,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Supabase JS — necesario para Realtime (escucha correos nuevos sin polling) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="config.js" onerror="console.warn('config.js not found')"></script>
 <style>
 :root {
@@ -3795,11 +3797,12 @@ async function getGraphToken(){
 // ── REALTIME — escucha INSERT/UPDATE en correos sin polling ──────────
 function iniciarRealtime() {
   try {
-    const SB_URL_RT = window.SUPABASE_URL || document.querySelector('meta[name="sb-url"]')?.content || '';
-    const SB_KEY_RT = window.SUPABASE_KEY || document.querySelector('meta[name="sb-key"]')?.content || '';
-    if (!SB_URL_RT || !SB_KEY_RT || typeof window.supabase === 'undefined') {
-      // Fallback: si no hay cliente Realtime disponible, refrescar cada 5 min (vs 90s original)
-      console.warn('[Realtime] Cliente no disponible — fallback polling 5min');
+    // Usar las mismas credenciales que el resto del admin (SB_URL/SB_KEY ya inicializadas)
+    const SB_URL_RT = SB_URL;
+    const SB_KEY_RT = SB_KEY;
+    if (!SB_URL_RT || SB_URL_RT.includes('TU_PROYECTO') || typeof window.supabase === 'undefined') {
+      // Fallback: Realtime no disponible → polling cada 5 min (vs 90s original)
+      console.warn('[Realtime] No disponible — fallback polling 5min');
       setInterval(() => { loadEmails(0, false); loadHistorial(); }, 300000);
       return;
     }
