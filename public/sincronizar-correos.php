@@ -69,9 +69,6 @@ log_msg("=== SYNC START v2 — ventana: {$HORAS_VENTANA}h | PID: " . getmypid() 
 
 // ── HELPERS ───────────────────────────────────────────────────────────
 
-/**
- * Ejecuta una petición cURL y devuelve código HTTP + body.
- */
 function curlJson(string $url, array $opts = []): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, $opts + [
@@ -86,9 +83,6 @@ function curlJson(string $url, array $opts = []): array {
     return ['code' => $code, 'body' => $resp, 'err' => $err];
 }
 
-/**
- * GET a Supabase REST API.
- */
 function sbGet(string $SB_URL, string $SB_KEY, string $endpoint): ?array {
     $r = curlJson("$SB_URL/rest/v1/$endpoint", [
         CURLOPT_HTTPHEADER => [
@@ -100,10 +94,7 @@ function sbGet(string $SB_URL, string $SB_KEY, string $endpoint): ?array {
     return ($r['code'] >= 200 && $r['code'] < 300) ? json_decode($r['body'], true) : null;
 }
 
-/**
- * Upsert (array de filas) en Supabase. Devuelve la respuesta cruda.
- * IMPORTANTE: siempre enviar un array, aunque sea de 1 elemento.
- */
+
 function sbUpsert(string $SB_URL, string $SB_KEY, string $endpoint, array $rows, string $conflict): array {
     $r = curlJson("$SB_URL/rest/v1/$endpoint?on_conflict=$conflict", [
         CURLOPT_POST        => true,
@@ -118,9 +109,6 @@ function sbUpsert(string $SB_URL, string $SB_KEY, string $endpoint, array $rows,
     return $r;
 }
 
-/**
- * POST simple a Supabase (una sola fila).
- */
 function sbPost(string $SB_URL, string $SB_KEY, string $endpoint, array $data): array {
     $r = curlJson("$SB_URL/rest/v1/$endpoint", [
         CURLOPT_POST        => true,
@@ -135,9 +123,6 @@ function sbPost(string $SB_URL, string $SB_KEY, string $endpoint, array $data): 
     return $r;
 }
 
-/**
- * PATCH a Supabase sobre un filtro.
- */
 function sbPatch(string $SB_URL, string $SB_KEY, string $endpoint, string $filter, array $data): void {
     curlJson("$SB_URL/rest/v1/$endpoint?$filter", [
         CURLOPT_CUSTOMREQUEST => 'PATCH',
