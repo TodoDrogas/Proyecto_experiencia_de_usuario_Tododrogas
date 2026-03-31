@@ -554,7 +554,8 @@ let _gestionForSolucionado = false;
   document.getElementById('agentNameLabel').textContent = AGENT_NAME;
   document.getElementById('agentAv').textContent = (AGENT_NAME||'A').charAt(0).toUpperCase();
   await loadEmails();
-  setInterval(()=>loadEmails(), 60000);
+  // ✅ FIX #A1 — 5 min en vez de 60s — reduce ~1440 queries/día/agente a ~288
+  setInterval(()=>loadEmails(), 300000);
 })();
 
 // ──────────────────────────────────────────────
@@ -562,7 +563,16 @@ let _gestionForSolucionado = false;
 // ──────────────────────────────────────────────
 async function loadEmails() {
   try {
-    const data = await sb(`correos?asignado_a=eq.${AGENT_ID}&order=received_at.desc&limit=200`);
+    // ✅ FIX #A2 — SELECT proyectado: excluye body_content y raw_payload (payload pesado)
+    const SELECT_AGENTE = [
+      'id','message_id','conversation_id','subject','from_email','from_name',
+      'received_at','created_at','sent_at','estado','prioridad','es_urgente',
+      'nivel_riesgo','horas_sla','fecha_limite_sla','tipo_pqr','resumen_corto',
+      'categoria_ia','sentimiento','ley_aplicable','datos_legales',
+      'body_type','body_preview','has_attachments','is_read',
+      'to_recipients','cc_recipients','asignado_a','origen'
+    ].join(',');
+    const data = await sb(`correos?select=${encodeURIComponent(SELECT_AGENTE)}&asignado_a=eq.${AGENT_ID}&estado=neq.archivado&order=received_at.desc&limit=100`);
     state.emails = (data||[]).map(e=>({
       id: e.id,
       message_id: e.message_id,
@@ -582,7 +592,9 @@ async function loadEmails() {
       sentimiento: e.sentimiento || 'neutro',
       tono: (()=>{ try{ return JSON.parse(e.datos_legales||'{}').tono||'neutro'; }catch(x){ return 'neutro'; } })(),
       ley_aplicable: e.ley_aplicable || '',
-      body_content: e.body_content || e.body_preview || '',
+      // ✅ body_content vacío — se carga bajo demanda al abrir el correo
+      body_content: '',
+      body_preview: e.body_preview || '',
       body_type: e.body_type || 'text',
       has_attachments: e.has_attachments || false,
       is_read: e.is_read || false,
@@ -735,11 +747,30 @@ async function selectEmail(id) {
     <div id="replyBoxArea"></div>
     <div class="adj-section" style="margin-bottom:12px;display:none" id="mediaFormulario" style="display:none"></div>
       <div id="adjSection"><div class="adj-title">📎 Adjuntos</div><div id="adjGrid"></div></div>
-    <div class="ev-body">
-      ${email.body_type==='html'?`<iframe srcdoc="${esc(email.body_content||'')}" sandbox="allow-same-origin" style="width:100%;height:100%;min-height:260px;border:none"></iframe>`:
-        `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`}
+    <div class="ev-body" id="evBody">
+      <div style="padding:16px;text-align:center;color:var(--ink3);font-size:12px">⏳ Cargando contenido...</div>
     </div>
   `;
+  // ✅ FIX #A3 — body_content bajo demanda (1 query de 1 fila)
+  (async () => {
+    try {
+      const rows = await sb(`correos?id=eq.${id}&select=body_content,body_type`);
+      const row = rows && rows[0];
+      const bodyContent = row?.body_content || email.body_preview || '';
+      const bodyType = row?.body_type || email.body_type || 'text';
+      email.body_content = bodyContent;
+      const bodyEl = document.getElementById('evBody');
+      if (!bodyEl) return;
+      if (bodyType === 'html') {
+        bodyEl.innerHTML = `<iframe srcdoc="${esc(bodyContent)}" sandbox="allow-same-origin" style="width:100%;height:100%;min-height:260px;border:none"></iframe>`;
+      } else {
+        bodyEl.innerHTML = `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(bodyContent || '(Sin contenido)')}</pre>`;
+      }
+    } catch(e) {
+      const bodyEl = document.getElementById('evBody');
+      if (bodyEl) bodyEl.innerHTML = `<pre style="color:var(--red);font-size:12px">Error al cargar: ${e.message}</pre>`;
+    }
+  })();
 
   // Mgmt panel
   document.getElementById('mgmtEstadoBadge').className='badge '+email.estado;
