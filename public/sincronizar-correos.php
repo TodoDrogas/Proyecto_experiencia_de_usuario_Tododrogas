@@ -1,4 +1,37 @@
 <?php
+/**
+ * sincronizar-correos.php — Sincronizador Graph API → Supabase
+ * ─────────────────────────────────────────────────────────────
+ * Reemplaza el workflow N8N F00_correos_adjuntos
+ *
+ * FLUJO:
+ *   1. Lock de proceso (evita solapamiento de cron)
+ *   2. Obtiene token Azure (client_credentials)
+ *   3. Trae correos de las últimas N horas de pqrsfd@tododrogas.com.co
+ *   4. Batch upsert en tabla correos (una sola llamada por lote de 20)
+ *   5. Patch de estado inicial solo para correos nuevos (batch)
+ *   6. Descarga y sube adjuntos con pausa entre cada uno
+ *   7. Clasifica con GPT-4o-mini los correos externos sin sentimiento
+ *      (separado del upsert, con pausa entre llamadas)
+ *   8. Registra resumen en historial_eventos
+ *   9. Libera lock
+ *
+ * USO:
+ *   - Cron cada 5 min: * /5 * * * * php /var/www/pqr/sincronizar-correos.php >> /var/log/sync-correos.log 2>&1
+ *   - Manual desde admin: GET /sincronizar-correos.php?token=ADMIN_TOKEN
+ *   - Forzar ventana: GET /sincronizar-correos.php?horas=48&token=ADMIN_TOKEN
+ *
+ * CAMBIOS v2 (anti-lock/timeout):
+ *   - Lock de archivo /tmp/sync-correos.lock para evitar ejecuciones solapadas
+ *   - Upsert en lotes de 20 correos (en vez de 1 por 1) → menos conexiones
+ *   - Patch de estado inicial acumulado y separado del upsert
+ *   - usleep(100ms) entre upserts de lote y entre adjuntos
+ *   - usleep(300ms) entre llamadas a OpenAI
+ *   - Timeout de curl aumentado a 45s para queries pesadas
+ *   - Clasificación IA completamente separada del loop de upsert
+ */
+
+// ── LOCK — evitar solapamiento de ejecuciones de cron ─────────────────
 $LOCK_FILE = '/tmp/sync-correos.lock';
 $LOCK_TTL  = 4 * 60; // 4 minutos: si el lock tiene más de esto, es un proceso muerto
 
@@ -51,7 +84,6 @@ $TENANT_ID     = '__AZURE_TENANT_ID__';
 $CLIENT_ID     = '__AZURE_CLIENT_ID__';
 $CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
 $GRAPH_MAILBOX = 'pqrsfd@tododrogas.com.co';
-$HORAS_VENTANA = (int)($_GET['horas'] ?? 12); // 12h = ventana manual; cron recomendado: */10 * * * *
 
 // Tamaño de lote para batch upsert — no subir de 25 en Nano
 const BATCH_SIZE = 20;
@@ -65,10 +97,13 @@ function log_msg(string $msg): void {
     if (php_sapi_name() === 'cli') echo "[$ts] $msg\n";
 }
 
-log_msg("=== SYNC START v2 — ventana: {$HORAS_VENTANA}h | PID: " . getmypid() . " ===");
+log_msg("=== SYNC START v3 — cursor mode | PID: " . getmypid() . " ===");
 
 // ── HELPERS ───────────────────────────────────────────────────────────
 
+/**
+ * Ejecuta una petición cURL y devuelve código HTTP + body.
+ */
 function curlJson(string $url, array $opts = []): array {
     $ch = curl_init($url);
     curl_setopt_array($ch, $opts + [
@@ -83,6 +118,9 @@ function curlJson(string $url, array $opts = []): array {
     return ['code' => $code, 'body' => $resp, 'err' => $err];
 }
 
+/**
+ * GET a Supabase REST API.
+ */
 function sbGet(string $SB_URL, string $SB_KEY, string $endpoint): ?array {
     $r = curlJson("$SB_URL/rest/v1/$endpoint", [
         CURLOPT_HTTPHEADER => [
@@ -94,7 +132,10 @@ function sbGet(string $SB_URL, string $SB_KEY, string $endpoint): ?array {
     return ($r['code'] >= 200 && $r['code'] < 300) ? json_decode($r['body'], true) : null;
 }
 
-
+/**
+ * Upsert (array de filas) en Supabase. Devuelve la respuesta cruda.
+ * IMPORTANTE: siempre enviar un array, aunque sea de 1 elemento.
+ */
 function sbUpsert(string $SB_URL, string $SB_KEY, string $endpoint, array $rows, string $conflict): array {
     $r = curlJson("$SB_URL/rest/v1/$endpoint?on_conflict=$conflict", [
         CURLOPT_POST        => true,
@@ -109,6 +150,9 @@ function sbUpsert(string $SB_URL, string $SB_KEY, string $endpoint, array $rows,
     return $r;
 }
 
+/**
+ * POST simple a Supabase (una sola fila).
+ */
 function sbPost(string $SB_URL, string $SB_KEY, string $endpoint, array $data): array {
     $r = curlJson("$SB_URL/rest/v1/$endpoint", [
         CURLOPT_POST        => true,
@@ -123,6 +167,9 @@ function sbPost(string $SB_URL, string $SB_KEY, string $endpoint, array $data): 
     return $r;
 }
 
+/**
+ * PATCH a Supabase sobre un filtro.
+ */
 function sbPatch(string $SB_URL, string $SB_KEY, string $endpoint, string $filter, array $data): void {
     curlJson("$SB_URL/rest/v1/$endpoint?$filter", [
         CURLOPT_CUSTOMREQUEST => 'PATCH',
@@ -163,39 +210,28 @@ if (!$access_token) {
 log_msg("Token OK");
 
 // ── 2. TRAER CORREOS ──────────────────────────────────────────────────
-// ✅ FIX #B1 — Watermark: usar fecha del último correo procesado guardada en Supabase
-// En vez de siempre traer desde las 00:00, solo traer desde el último sync exitoso.
-// Esto evita reprocesar los mismos 200 correos en cada ciclo de cron.
+// ── 2. CURSOR PERSISTENTE ─────────────────────────────────────────────
+// Lee el último receivedDateTime procesado desde configuration_sistema.data->sync_cursor
+// Si no existe (primer arranque en producción), usa la hora actual como punto de inicio.
+// Esto garantiza que el sync empieza exactamente cuando se activa en producción
+// y nunca pierde correos si el servidor estuvo caído entre ejecuciones de cron.
+log_msg("Leyendo cursor de sincronización...");
 
-$WATERMARK_KEY = 'sync_watermark_correos'; // clave en configuracion_sistema
+$config_row = sbGet($SB_URL, $SB_KEY, "configuration_sistema?id=eq.main&select=data");
+$config_data = $config_row[0]['data'] ?? [];
+$cursor_iso  = $config_data['sync_cursor'] ?? null;
 
-$desde = null;
-
-// Si se pasa ?horas=N manualmente (ej: para carga histórica), forzar eso
-if (isset($_GET['horas'])) {
-    $horas_manual = (int)$_GET['horas'];
-    $desde = (new DateTime("-{$horas_manual} hours", new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
-    log_msg("Modo manual: ventana de {$horas_manual}h");
+if ($cursor_iso) {
+    // Cursor existente: arrancar desde el último correo procesado
+    $desde = $cursor_iso;
+    log_msg("Cursor encontrado: $desde");
 } else {
-    // Leer watermark desde Supabase
-    $wm_row = sbGet($SB_URL, $SB_KEY, "configuracion_sistema?id=eq.main&select=data");
-    $wm_data = $wm_row[0]['data'] ?? [];
-    $ultima_fecha = $wm_data[$WATERMARK_KEY] ?? null;
-
-    if ($ultima_fecha) {
-        // Traer desde última fecha procesada menos 2 min de margen (evita gaps por latencia)
-        $dt = new DateTime($ultima_fecha, new DateTimeZone('UTC'));
-        $dt->modify('-2 minutes');
-        $desde = $dt->format('Y-m-d\TH:i:s\Z');
-        log_msg("Watermark encontrado: desde $desde (última sync: $ultima_fecha)");
-    } else {
-        // Primera vez o sin watermark: traer el día de hoy
-        $hoy_bogota = new DateTime('today', new DateTimeZone('America/Bogota'));
-        $hoy_utc    = clone $hoy_bogota;
-        $hoy_utc->setTimezone(new DateTimeZone('UTC'));
-        $desde = $hoy_utc->format('Y-m-d\TH:i:s\Z');
-        log_msg("Sin watermark — usando inicio del día: $desde");
-    }
+    // Primer arranque: usar la hora actual como punto de partida
+    $desde = (new DateTime('now', new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
+    log_msg("Sin cursor — primer arranque. Desde ahora: $desde");
+    // Guardar cursor inicial inmediatamente
+    $config_data['sync_cursor'] = $desde;
+    sbUpsert($SB_URL, $SB_KEY, 'configuration_sistema', [['id' => 'main', 'data' => $config_data, 'updated_at' => date('c')]], 'id');
 }
 $select   = 'id,subject,from,toRecipients,ccRecipients,bccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,isRead,isDraft,conversationId,importance,internetMessageId,categories,flag';
 // ID directo de Bandeja de entrada (más confiable que el alias 'Inbox' con 19k correos)
@@ -249,11 +285,20 @@ $payloads = [];  // todos los payloads para batch upsert
 // Mapa message_id → datos crudos del correo (para procesar adjuntos después)
 $map_adjuntos = []; // message_id => ['has_attachments', 'raw']
 
+// Cursor: registrar el receivedDateTime más reciente entre todos los correos procesados
+$cursor_nuevo = $desde; // fallback: si no hay correos, el cursor no retrocede
+
 foreach ($todos_correos as $c) {
     $msg_id      = $c['id']                ?? '';
     $inet_msg_id = $c['internetMessageId'] ?? '';
 
     if (!$msg_id) continue;
+
+    // Actualizar cursor con el receivedDateTime más reciente visto
+    $recv = $c['receivedDateTime'] ?? null;
+    if ($recv && $recv > $cursor_nuevo) {
+        $cursor_nuevo = $recv;
+    }
 
     $payloads[] = [
         'message_id'           => $msg_id,
@@ -277,7 +322,8 @@ foreach ($todos_correos as $c) {
         'importance'           => $c['importance']                     ?? 'normal',
         'categories'           => json_encode($c['categories']         ?? []),
         'flag_status'          => $c['flag']['flagStatus']             ?? 'notFlagged',
-        'raw_payload'          => json_encode($c),
+        // raw_payload eliminado: todos los campos ya están en columnas propias.
+        // Guardarlo era duplicar ~3-8KB por correo en Supabase sin beneficio.
         'origen'               => 'graph_sync',
         'canal_contacto'       => 'correo',
         'updated_at'           => date('c'),
@@ -503,13 +549,28 @@ PROMPT;
     }
 }
 
-// ── 8. REGISTRAR RESUMEN EN HISTORIAL ────────────────────────────────
+// ── 8. ACTUALIZAR CURSOR ──────────────────────────────────────────────
+// Guardamos el receivedDateTime más reciente procesado.
+// El próximo cron arrancará exactamente desde ahí, sin ventana fija.
+if ($cursor_nuevo !== $desde || !$cursor_iso) {
+    $config_data['sync_cursor'] = $cursor_nuevo;
+    $r_cursor = sbUpsert($SB_URL, $SB_KEY, 'configuration_sistema', [
+        ['id' => 'main', 'data' => $config_data, 'updated_at' => date('c')]
+    ], 'id');
+    if ($r_cursor['code'] >= 200 && $r_cursor['code'] < 300) {
+        log_msg("Cursor actualizado → $cursor_nuevo");
+    } else {
+        log_msg("WARN: No se pudo actualizar cursor: HTTP {$r_cursor['code']}");
+    }
+}
+
+// ── 9. REGISTRAR RESUMEN EN HISTORIAL ────────────────────────────────
 sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
     'evento'      => 'sync_correos',
-    'descripcion' => "Sync v2 completado. Insertados: {$stats['insertados']}, Actualizados: {$stats['actualizados']}, Adjuntos: {$stats['adjuntos']}, Clasificados: {$stats['clasificados']}, Errores: {$stats['errores']}",
+    'descripcion' => "Sync v3 completado. Insertados: {$stats['insertados']}, Actualizados: {$stats['actualizados']}, Adjuntos: {$stats['adjuntos']}, Clasificados: {$stats['clasificados']}, Errores: {$stats['errores']}",
     'datos_extra' => json_encode([
-        'ventana_horas' => $HORAS_VENTANA,
-        'desde'         => $desde,
+        'cursor_desde'  => $desde,
+        'cursor_nuevo'  => $cursor_nuevo,
         'total_correos' => count($todos_correos),
         'lotes'         => count($lotes ?? []),
         'stats'         => $stats,
@@ -517,30 +578,7 @@ sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
     'created_at' => date('c'),
 ]);
 
-// ✅ FIX #B1 — Guardar watermark: fecha del correo más reciente procesado
-if (!empty($todos_correos) && !isset($_GET['horas'])) {
-    // Encontrar la receivedDateTime más reciente del lote procesado
-    $max_fecha = null;
-    foreach ($todos_correos as $c) {
-        $f = $c['receivedDateTime'] ?? null;
-        if ($f && (!$max_fecha || $f > $max_fecha)) {
-            $max_fecha = $f;
-        }
-    }
-    if ($max_fecha) {
-        // Leer config actual y hacer merge para no sobreescribir otras claves
-        $cfg_actual = sbGet($SB_URL, $SB_KEY, "configuracion_sistema?id=eq.main&select=data");
-        $cfg_data   = $cfg_actual[0]['data'] ?? [];
-        $cfg_data[$WATERMARK_KEY] = $max_fecha;
-        sbPatch($SB_URL, $SB_KEY, 'configuracion_sistema', 'id=eq.main', [
-            'data'       => $cfg_data,
-            'updated_at' => date('c'),
-        ]);
-        log_msg("Watermark actualizado: $max_fecha");
-    }
-}
-
-log_msg("=== SYNC END v2 ===");
+log_msg("=== SYNC END v3 ===");
 finalizar(true, 'ok');
 
 
