@@ -51,7 +51,7 @@ $TENANT_ID     = '__AZURE_TENANT_ID__';
 $CLIENT_ID     = '__AZURE_CLIENT_ID__';
 $CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
 $GRAPH_MAILBOX = 'pqrsfd@tododrogas.com.co';
-$HORAS_VENTANA = (int)($_GET['horas'] ?? 12); // 12h = ventana por defecto (cron cada 5min cubre bien sin duplicar)
+$HORAS_VENTANA = (int)($_GET['horas'] ?? 12); // 12h = ventana manual; cron recomendado: */10 * * * *
 
 // Tamaño de lote para batch upsert — no subir de 25 en Nano
 const BATCH_SIZE = 20;
@@ -167,7 +167,7 @@ log_msg("Token OK");
 // En vez de siempre traer desde las 00:00, solo traer desde el último sync exitoso.
 // Esto evita reprocesar los mismos 200 correos en cada ciclo de cron.
 
-$WATERMARK_KEY = 'sync_watermark_correos'; // clave en configuration_sistema
+$WATERMARK_KEY = 'sync_watermark_correos'; // clave en configuracion_sistema
 
 $desde = null;
 
@@ -178,7 +178,7 @@ if (isset($_GET['horas'])) {
     log_msg("Modo manual: ventana de {$horas_manual}h");
 } else {
     // Leer watermark desde Supabase
-    $wm_row = sbGet($SB_URL, $SB_KEY, "configuration_sistema?id=eq.main&select=data");
+    $wm_row = sbGet($SB_URL, $SB_KEY, "configuracion_sistema?id=eq.main&select=data");
     $wm_data = $wm_row[0]['data'] ?? [];
     $ultima_fecha = $wm_data[$WATERMARK_KEY] ?? null;
 
@@ -529,10 +529,10 @@ if (!empty($todos_correos) && !isset($_GET['horas'])) {
     }
     if ($max_fecha) {
         // Leer config actual y hacer merge para no sobreescribir otras claves
-        $cfg_actual = sbGet($SB_URL, $SB_KEY, "configuration_sistema?id=eq.main&select=data");
+        $cfg_actual = sbGet($SB_URL, $SB_KEY, "configuracion_sistema?id=eq.main&select=data");
         $cfg_data   = $cfg_actual[0]['data'] ?? [];
         $cfg_data[$WATERMARK_KEY] = $max_fecha;
-        sbPatch($SB_URL, $SB_KEY, 'configuration_sistema', 'id=eq.main', [
+        sbPatch($SB_URL, $SB_KEY, 'configuracion_sistema', 'id=eq.main', [
             'data'       => $cfg_data,
             'updated_at' => date('c'),
         ]);
