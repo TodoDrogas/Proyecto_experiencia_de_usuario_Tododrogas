@@ -1025,7 +1025,7 @@ function buildSYS(){
     +'\n1. MEDICAMENTOS: https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb — con número de documento.'
     +'\n2. RADICADO PQRSFD: pide número TD-YYYYMMDD-XXXX y envía a https://tododrogas.online/consulta.html'
     +'\n3. HORARIO: usa el del CONTEXTO. General: Lun-Vie 7:00-3:30, Sáb 8:00-11:00.'
-    +'\n4. RECLAMAR OTRA SEDE: PBX 604 322 2432 Op.2.'
+    +'\n4. RECLAMAR OTRA SEDE: El medicamento se reclama en la sede asignada por la EPS. Si necesitas cambiarlo, escribe al WhatsApp 304 341 2431 y un asesor te ayudará.'
     +'\n5. DIRECCIÓN: usa el CONTEXTO. Sin contexto: pide EPS y municipio.'
     +'\n6. DOMICILIOS: no hacemos. Solicitar a la EPS.'
     +'\n7. RADICAR: pide nombre, documento, teléfono, correo, descripción. Indica botón Radicar.'
@@ -1195,14 +1195,19 @@ function addBot(text, withAudio=false){
     setTimeout(()=>mostrarQRMedicamentos(), 300);
   }
 
-  // Mostrar botón de consulta de radicado si menciona consulta.html
-  if(text.includes('consulta.html') && !document.getElementById('btn-consulta-rad')){
+  // Mostrar botón link directo consulta cuando menciona radicado/consulta.html
+  if((text.includes('consulta.html')||text.includes('radicado')) && !document.getElementById('btn-consulta-rad')){
     const linkDiv=document.createElement('div');
     linkDiv.id='btn-consulta-rad';
     linkDiv.className='msg msg-bot';
     linkDiv.style.cssText='text-align:center;padding:10px;';
-    linkDiv.innerHTML='<p style="font-size:12px;color:#9ba3be;">📋 Consulta el estado de tu radicado en:</p>'
-      +'<p style="font-size:11px;color:#5a6180;word-break:break-all;">tododrogas.online/consulta.html</p>';
+    // Detectar si hay ticket_id en el contexto para link directo
+    const ticketEnTexto=(text.match(/TD-\d{8}-[A-Z0-9]{4}/)||[])[0]||'';
+    const urlConsulta='https://tododrogas.online/consulta.html'+(ticketEnTexto?'?t='+ticketEnTexto:'');
+    linkDiv.innerHTML='<a href="'+urlConsulta+'" target="_blank" '
+      +'style="display:inline-flex;align-items:center;gap:6px;background:#1e3a5f;'
+      +'color:#4f8ef7;padding:9px 16px;border-radius:10px;font-size:12px;font-weight:600;'
+      +'text-decoration:none;border:1px solid #4f8ef7;">📋 Consultar estado de mi radicado</a>';
     container.appendChild(linkDiv);
   }
 
@@ -1275,7 +1280,8 @@ async function callClaude(userText, withAudio=false){
     if(res&&res.encontrado){
       const est={abierto:'📬 Abierto',en_gestion:'⚙️ En gestión',
         respondido:'✅ Respondido',cerrado:'🔒 Cerrado',escalado:'🔺 Escalado'};
-      contextoExtra='\nDATO REAL DEL RADICADO:'
+      const linkConsulta='https://tododrogas.online/consulta.html?t='+(radId||'');
+      contextoExtra='\nDATO REAL DEL RADICADO (link directo: '+linkConsulta+'):'
         +'\n- Ticket: '+res.ticket_id
         +'\n- Estado: '+(est[res.estado]||res.estado)
         +'\n- Tipo: '+res.tipo+' | Prioridad: '+res.prioridad
@@ -1286,7 +1292,7 @@ async function callClaude(userText, withAudio=false){
         +'\n- Último evento: '+(res.ultimo_evento?res.ultimo_evento.descripcion:'Sin eventos')
         +'\nResponde informando el estado real de forma clara y empática.';
     }else{
-      contextoExtra='\nNo se encontró radicado "'+(radId||correoId)+'". Pide verificar el número o consultar en https://tododrogas.online/consulta.html';
+      contextoExtra='\nNo se encontró radicado "'+(radId||correoId)+'". Indica al usuario que verifique el número o que acceda directamente a https://tododrogas.online/consulta.html';
     }
   }
   // ¿Medicamentos?
