@@ -1,291 +1,768 @@
-<?php
-/**
- * nova-consulta.php — Backend inteligente de Nova TD
- * Consulta Supabase server-side con service_role (seguro)
- * Nova llama este endpoint para obtener datos reales antes de responder
- */
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consulta de Radicado · Tododrogas</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="config.js" onerror="console.warn('config.js no cargó')"></script>
+<style>
+:root{
+  --ink:#0a0e1a;--ink2:#3a4258;--ink3:#8892a4;
+  --bg:#f2f4f8;--surface:#ffffff;--border:#dde1eb;
+  --blue:#2563eb;--blue-d:#1d4ed8;--blue-glow:rgba(37,99,235,.22);
+  --cyan:#00c4e8;--cyan-dim:rgba(0,196,232,.13);
+  --green:#16a34a;--red:#dc2626;--yellow:#d97706;--orange:#ea580c;
+  --shadow:0 4px 24px rgba(10,14,26,.12),0 1px 4px rgba(10,14,26,.06);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;font-family:'Poppins',sans-serif}
+body{background:var(--ink);display:flex;flex-direction:row;height:100vh;overflow:hidden;position:relative;}
+#bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
 
-$SB_URL = '__SB_URL__';
-$SB_KEY = '__SB_KEY__'; // service_role — solo en PHP, nunca en JS
+/* ── LEFT PANEL ── */
+.left-panel{
+  flex:1;position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:52px 48px;overflow:hidden;height:100vh;overflow-y:auto;
+}
+.left-panel::before{
+  content:'';position:absolute;width:680px;height:680px;top:-180px;left:-160px;
+  background:radial-gradient(circle,rgba(37,99,235,.2) 0%,transparent 68%);
+  animation:orb1 14s ease-in-out infinite alternate;pointer-events:none;
+}
+.left-panel::after{
+  content:'';position:absolute;width:460px;height:460px;bottom:-120px;right:-80px;
+  background:radial-gradient(circle,rgba(0,196,232,.12) 0%,transparent 65%);
+  animation:orb2 18s ease-in-out infinite alternate;pointer-events:none;
+}
+@keyframes orb1{from{transform:translate(0,0) scale(1);}to{transform:translate(70px,50px) scale(1.18);}}
+@keyframes orb2{from{transform:translate(0,0);}to{transform:translate(-50px,-35px) scale(1.12);}}
+.left-grid{
+  position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,196,232,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,196,232,.03) 1px,transparent 1px);
+  background-size:56px 56px;
+  mask-image:radial-gradient(ellipse 72% 72% at 50% 50%,black 40%,transparent 100%);
+}
+.scan-line{
+  position:absolute;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,196,232,.25),transparent);
+  animation:scan 9s linear infinite;pointer-events:none;
+}
+@keyframes scan{0%{top:-2%;opacity:0;}8%{opacity:1;}92%{opacity:1;}100%{top:102%;opacity:0;}}
+.left-content{position:relative;z-index:2;max-width:480px;text-align:center;}
+.sigi-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  border-radius:8px;padding:7px 16px;margin-bottom:16px;
+  font-family:'DM Mono',monospace;font-size:10px;font-weight:500;
+  letter-spacing:2px;color:var(--cyan);backdrop-filter:blur(8px);
+  background:rgba(0,196,232,.08);border:1px solid rgba(0,196,232,.2);
+}
+.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 8px var(--cyan);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.left-headline{
+  font-size:clamp(28px,3.5vw,42px);font-weight:800;line-height:1.15;
+  color:#fff;margin-bottom:12px;letter-spacing:-.5px;
+}
+.left-headline .hl{
+  background:linear-gradient(135deg,var(--blue) 0%,var(--cyan) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.left-sub{font-size:13px;color:rgba(255,255,255,.45);margin-bottom:40px;font-weight:400;}
 
-$body = json_decode(file_get_contents('php://input'), true);
-if (!$body) { http_response_code(400); echo json_encode(['error'=>'Invalid JSON']); exit; }
+/* Stats */
+.stats-row{display:flex;gap:12px;justify-content:center;margin-bottom:32px;}
+.stat-box{
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:14px 20px;text-align:center;
+}
+.stat-val{font-size:22px;font-weight:800;color:#fff;font-family:'DM Mono',monospace;line-height:1;}
+.stat-lbl{font-size:10px;color:rgba(255,255,255,.35);letter-spacing:1px;text-transform:uppercase;margin-top:4px;}
 
-$accion = $body['accion'] ?? '';
+/* Info cards */
+.info-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:20px;padding:6px 14px;font-size:11px;color:rgba(255,255,255,.6);
+}
+.chip-dot{width:5px;height:5px;border-radius:50%;box-shadow:0 0 5px currentColor;}
+.chip-dot.blue{background:var(--blue);color:var(--blue);}
 
-// ── Helper: query a Supabase ─────────────────────────────────
-function sb_get(string $endpoint, string $SB_URL, string $SB_KEY): ?array {
-    $ch = curl_init($SB_URL . $endpoint);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_HTTPHEADER     => [
-            "apikey: $SB_KEY",
-            "Authorization: Bearer $SB_KEY",
-            'Accept: application/json',
-        ],
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($code !== 200) return null;
-    return json_decode($resp, true);
+/* Carrusel frases consulta */
+.carousel-slide-consulta{
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  border-radius:14px;padding:16px 20px;text-align:center;
+  animation:slideInC .5s cubic-bezier(.16,1,.3,1);
+}
+@keyframes slideInC{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.carousel-icon-c{font-size:28px;margin-bottom:8px;display:block;}
+.carousel-text-c{font-size:13px;color:rgba(200,215,255,.8);line-height:1.5;}
+.carousel-dots-c{display:flex;gap:5px;justify-content:center;margin-top:10px;}
+.cdot-c{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.2);}
+.cdot-c.active{width:20px;border-radius:4px;background:linear-gradient(90deg,var(--blue),var(--cyan));}
+.chip-dot.cyan{background:var(--cyan);color:var(--cyan);}
+.chip-dot.green{background:#16a34a;color:#16a34a;}
+
+/* ── RIGHT PANEL ── */
+.right-panel{
+  width:48%;min-width:0;position:relative;z-index:1;
+  background:var(--surface);
+  display:flex;flex-direction:column;align-items:stretch;justify-content:center;
+  padding:0 44px;box-shadow:8px 0 48px rgba(10,14,26,.18);
+  overflow-y:auto;height:100vh;
+}
+.right-panel::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--blue),var(--cyan),#7c3aed);
+}
+.panel-logo{margin-bottom:24px;width:100%;text-align:center;}
+.panel-logo img{height:36px;object-fit:contain;}
+
+/* Search */
+.panel-title{font-size:20px;font-weight:700;color:var(--ink);margin-bottom:6px;letter-spacing:-.3px;}
+.panel-sub{font-size:12px;color:var(--ink3);margin-bottom:24px;line-height:1.5;}
+.form-group{width:100%;margin-bottom:14px;}
+.form-label{display:block;font-size:11px;font-weight:700;letter-spacing:.8px;
+  text-transform:uppercase;color:var(--ink3);margin-bottom:8px;}
+.form-input{
+  width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;
+  padding:13px 16px;font-size:13px;font-family:'DM Mono',monospace;font-weight:500;
+  color:var(--ink);outline:none;transition:all .2s;letter-spacing:.5px;
+}
+.form-input:focus{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.08);}
+.form-input::placeholder{color:var(--ink3);font-family:'Poppins',sans-serif;letter-spacing:0;font-size:12px;}
+.btn-submit{
+  width:100%;background:var(--blue);color:#fff;border:none;border-radius:10px;
+  padding:14px;font-size:14px;font-family:'Poppins',sans-serif;font-weight:700;
+  cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;
+  gap:8px;letter-spacing:.3px;
+}
+.btn-submit:hover:not(:disabled){background:var(--blue-d);transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,.3);}
+.btn-submit:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+.hint{font-size:11px;color:var(--ink3);margin-top:8px;text-align:center;}
+
+/* Error */
+.error-msg{
+  background:#fef2f2;border:1px solid #fecaca;color:var(--red);
+  border-radius:8px;padding:10px 14px;font-size:12px;font-weight:600;
+  margin-bottom:14px;display:none;align-items:center;gap:8px;
+}
+.error-msg.show{display:flex;}
+
+/* Loading */
+.loading-wrap{display:none;text-align:center;padding:24px 0;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--blue);
+  border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px;}
+.loading-txt{font-size:12px;color:var(--ink3);}
+
+/* Divider */
+.divider{width:100%;height:1px;background:var(--border);margin:20px 0;}
+
+/* ── RESULTADO ── */
+.result-wrap{display:none;width:100%;}
+
+/* Ticket header */
+.ticket-top{
+  background:var(--bg);border:1.5px solid var(--border);border-radius:12px;
+  padding:16px;margin-bottom:12px;
+}
+.ticket-id-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.ticket-id{font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--blue);}
+.estado-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;
+}
+.eb-abierto{background:#eff6ff;color:var(--blue);border:1px solid #bfdbfe;}
+.eb-en_gestion{background:#fffbeb;color:var(--yellow);border:1px solid #fde68a;}
+.eb-respondido{background:#f0fdf4;color:var(--green);border:1px solid #bbf7d0;}
+.eb-cerrado{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb;}
+.eb-escalado{background:#fef2f2;color:var(--red);border:1px solid #fecaca;}
+.ticket-resumen{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:4px;line-height:1.4;}
+.ticket-meta{font-size:11px;color:var(--ink3);}
+
+/* Info grid */
+.info-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;
+}
+.info-cell{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+}
+.info-cell.full{grid-column:span 2;}
+.ic-label{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--ink3);margin-bottom:3px;}
+.ic-value{font-size:12px;font-weight:600;color:var(--ink);}
+.ic-value.mono{font-family:'DM Mono',monospace;font-size:11px;}
+.sla-ok{color:var(--green);}
+.sla-warn{color:var(--yellow);}
+.sla-vencido{color:var(--red);}
+
+/* Timeline */
+.tl-card{
+  background:var(--bg);border:1.5px solid var(--border);border-radius:12px;overflow:hidden;
+}
+.tl-head{
+  padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  background:#fff;
+}
+.tl-title{font-size:12px;font-weight:700;color:var(--ink);}
+.tl-count{font-size:10px;color:var(--ink3);background:var(--bg);
+  border-radius:20px;padding:2px 10px;border:1px solid var(--border);}
+.tl-body{padding:4px 0;}
+.tl-item{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.04);}
+.tl-item:last-child{border-bottom:none;}
+.tl-spine{display:flex;flex-direction:column;align-items:center;flex-shrink:0;}
+.tl-dot{width:9px;height:9px;border-radius:50%;border:2px solid #fff;
+  flex-shrink:0;margin-top:2px;box-shadow:0 0 0 1px currentColor;}
+.tl-dot.blue{color:var(--blue);background:var(--blue);}
+.tl-dot.green{color:var(--green);background:var(--green);}
+.tl-dot.yellow{color:var(--yellow);background:var(--yellow);}
+.tl-dot.red{color:var(--red);background:var(--red);}
+.tl-dot.gray{color:#9ca3af;background:#9ca3af;}
+.tl-line{width:2px;flex:1;background:var(--border);margin-top:4px;}
+.tl-ev{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--blue);margin-bottom:2px;}
+.tl-desc{font-size:12px;color:var(--ink2);line-height:1.5;}
+.tl-time{font-size:10px;color:var(--ink3);font-family:'DM Mono',monospace;margin-top:3px;}
+
+/* Respuesta */
+.resp-card{
+  background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+  padding:12px 14px;margin:8px 16px;
+}
+.resp-label{font-size:10px;font-weight:700;color:var(--green);
+  text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;}
+.resp-txt{font-size:11px;color:var(--ink2);line-height:1.6;
+  max-height:100px;overflow-y:auto;}
+
+/* Back link */
+.back-link{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12px;color:var(--ink3);text-decoration:none;
+  margin-top:20px;transition:color .2s;
+}
+.back-link:hover{color:var(--blue);}
+
+/* ── RESPONSIVE ── */
+@media(max-width:860px){
+  body{flex-direction:column;height:auto;overflow:auto;}
+  .right-panel{
+    width:100%;padding:80px 24px 36px;
+    height:auto;box-shadow:none;
+    border-bottom:3px solid var(--blue);
+  }
+  .left-panel{
+    width:100%;height:auto;padding:36px 24px 40px;
+    order:1;overflow:visible;
+  }
+  .left-panel::before,.left-panel::after{width:300px;height:300px;}
+  .left-content{max-width:100%;}
+  .left-headline{font-size:clamp(24px,6vw,36px);}
+  .stats-row{justify-content:center;gap:10px;}
+  .info-chips{justify-content:center;}
+  .info-grid{grid-template-columns:1fr 1fr;}
+}
+@media(max-width:480px){
+  .right-panel{padding:24px 18px 28px;}
+  .left-panel{padding:28px 18px 36px;}
+  .form-input{font-size:15px;padding:14px 16px;}
+  .btn-submit{padding:15px;font-size:15px;}
+  .info-grid{grid-template-columns:1fr;}
+  .info-cell.full{grid-column:span 1;}
+  .stats-row{flex-wrap:wrap;}
+  .stat-box{min-width:80px;}
+  .panel-logo img{height:30px;}
+  .left-headline{font-size:clamp(22px,7vw,30px);}
+}
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+
+<!-- ══ RIGHT ══ -->
+<div class="right-panel">
+
+  <!-- Contenedor centrado: logo + form -->
+  <div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px 0;">
+
+    <!-- Logo -->
+    <div style="width:100%;text-align:center;margin-bottom:36px;margin-top:-20px;">
+      <img id="formLogo"
+        src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png"
+        alt="Tododrogas"
+        style="height:54px;object-fit:contain;display:inline-block;"
+        onerror="this.outerHTML='<span style=\'font-size:24px;font-weight:800;color:var(--blue);\'>Tododrogas</span>'">
+    </div>
+
+  <div style="width:100%;">
+    <div class="panel-title">Consulta el estado de tu PQRSFD</div>
+    <div class="panel-sub">Ingresa tu número de radicado o correo electrónico para ver el estado y las gestiones realizadas.</div>
+
+    <div class="error-msg" id="error-msg">
+      <span>⚠️</span><span id="error-txt"></span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Número de radicado o correo</label>
+      <input class="form-input" id="inp-ticket" type="text"
+        placeholder="TD-20260401-XXXX o tu correo"
+        oninput="autoFormat(this)"
+        onkeydown="if(event.key==='Enter') buscar()">
+    </div>
+
+    <button class="btn-submit" id="btn-buscar" onclick="buscar()">
+      <span id="btn-icon">🔍</span>
+      <span id="btn-txt">Consultar radicado</span>
+    </button>
+    <div class="hint">Ley 1755/2015 · Respuesta máximo 15 días hábiles</div>
+
+  </div>
+
+  <!-- Loading -->
+  <div class="loading-wrap" id="loading-wrap">
+    <div class="spinner"></div>
+    <div class="loading-txt">Consultando tu caso…</div>
+  </div>
+
+  <!-- Resultado -->
+  <div class="result-wrap" id="result-wrap">
+    <div class="divider"></div>
+
+    <!-- Ticket -->
+    <div class="ticket-top">
+      <div class="ticket-id-row">
+        <div class="ticket-id" id="r-id"></div>
+        <div class="estado-badge" id="r-badge"></div>
+      </div>
+      <div class="ticket-resumen" id="r-resumen"></div>
+      <div class="ticket-meta" id="r-meta"></div>
+    </div>
+
+    <!-- Mensaje de estado para el ciudadano -->
+    <div id="r-msg-estado" style="display:none;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:12px;"></div>
+
+    <!-- Grid info simplificado -->
+    <div class="info-grid">
+      <div class="info-cell">
+        <div class="ic-label">Tipo</div>
+        <div class="ic-value" id="r-tipo"></div>
+      </div>
+      <div class="info-cell">
+        <div class="ic-label">Canal de radicación</div>
+        <div class="ic-value" id="r-canal"></div>
+      </div>
+      <div class="info-cell full">
+        <div class="ic-label">Última actualización</div>
+        <div class="ic-value mono" id="r-updated"></div>
+      </div>
+    </div>
+
+    <!-- Adjunto: audio, canvas o transcripción -->
+    <div id="r-adjunto" style="display:none;margin-bottom:12px;"></div>
+
+    <!-- Timeline -->
+    <div class="tl-card">
+      <div class="tl-head">
+        <div class="tl-title">📋 Historial de gestiones</div>
+        <div class="tl-count" id="r-count">0 eventos</div>
+      </div>
+      <div class="tl-body" id="r-timeline"></div>
+    </div>
+
+    <!-- Adjunto solución (si está cerrado/resuelto) -->
+    <div id="r-adjunto-solucion" style="display:none;margin-top:12px;"></div>
+
+    <a class="back-link" href="pqr_bienvenida.html">← Volver al inicio</a>
+  </div>
+  </div><!-- cierre contenedor centrado -->
+
+</div>
+
+<!-- ══ LEFT ══ -->
+<div class="left-panel">
+  <div class="left-grid"></div>
+  <div class="scan-line"></div>
+  <div class="left-content" style="padding-top:0;">
+
+    <div class="sigi-badge">
+      <span class="badge-dot"></span>
+      PQRSFD · Tododrogas CIA S.A.S
+    </div>
+
+    <div class="left-headline">
+      Consulta el estado<br>de <span class="hl">tu radicado</span>
+    </div>
+    <div class="left-sub">Seguimiento en tiempo real · Transparencia total</div>
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-val">15</div>
+        <div class="stat-lbl">Días SLA</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val">24/7</div>
+        <div class="stat-lbl">Nova TD</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val">100%</div>
+        <div class="stat-lbl">Trazable</div>
+      </div>
+    </div>
+
+    <!-- Carrusel dinámico desde configuracion_sistema.frases_consulta -->
+    <div id="consulta-carousel" style="min-height:60px;margin-bottom:4px;">
+      <div class="info-chips" id="chips-static">
+        <div class="chip"><span class="chip-dot blue"></span>Estado en tiempo real</div>
+        <div class="chip"><span class="chip-dot cyan"></span>Historial de gestiones</div>
+        <div class="chip"><span class="chip-dot green"></span>Respuestas del equipo</div>
+        <div class="chip"><span class="chip-dot blue"></span>Línea de tiempo completa</div>
+      </div>
+    </div>
+
+    <!-- QR Medicamentos centrado -->
+    <div style="margin-top:36px;display:flex;flex-direction:column;align-items:center;gap:12px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);">📱 Escanea si quieres conocer el estado de tus medicamentos</div>
+      <img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/QR%20MEDICAMENTOS.jpeg"
+        alt="QR Medicamentos"
+        style="width:170px;height:170px;border-radius:14px;border:3px solid rgba(0,196,232,.4);display:block;box-shadow:0 0 28px rgba(0,196,232,.18);">
+      <div style="margin-top:6px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;">o ingresa a este link</div>
+        <a href="https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb"
+          target="_blank"
+          style="display:inline-block;background:rgba(0,196,232,.15);border:1.5px solid rgba(0,196,232,.5);
+          border-radius:10px;padding:10px 18px;font-size:12px;color:var(--cyan);
+          font-family:'DM Mono',monospace;letter-spacing:.3px;text-decoration:none;
+          transition:all .2s;word-break:break-all;line-height:1.5;"
+          onmouseover="this.style.background='rgba(0,196,232,.28)';this.style.boxShadow='0 0 16px rgba(0,196,232,.3)'"
+          onmouseout="this.style.background='rgba(0,196,232,.15)';this.style.boxShadow='none'">
+          🔗 dispensacion.tododrogas.com.co
+        </a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<script>
+const SB_URL  = window.SUPABASE_URL  || '';
+const SB_ANON = window.SUPABASE_KEY  || '';
+
+const ESTADOS = {
+  abierto:    {label:'📬 Recibido',    cls:'eb-abierto'},
+  pendiente:  {label:'📬 Recibido',    cls:'eb-abierto'},
+  en_gestion: {label:'⚙️ En gestión', cls:'eb-en_gestion'},
+  respondido: {label:'✅ Respondido', cls:'eb-respondido'},
+  cerrado:    {label:'🔒 Solucionado', cls:'eb-respondido'},
+  escalado:   {label:'🔺 Escalado',   cls:'eb-escalado'},
+};
+
+const EV_COLOR = {
+  creado:'blue',asignado:'blue',respondido:'green',cerrado:'gray',
+  escalado:'red',reabierto:'yellow',acuse_enviado:'green',
+  audio_procesado:'blue',canvas_procesado:'blue',
+};
+
+function fmt(iso){
+  if(!iso) return '—';
+  const d=new Date(iso);
+  return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})
+    +' '+d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+}
+function fmtDate(iso){
+  if(!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'});
+}
+function setText(id,txt){const el=document.getElementById(id);if(el)el.textContent=txt||'—';}
+
+function autoFormat(inp){
+  // Si parece ticket, forzar mayúsculas; si parece correo, no tocar
+  if(!inp.value.includes('@')) inp.value=inp.value.toUpperCase();
 }
 
-switch ($accion) {
-
-    // ══════════════════════════════════════════════════════════
-    // 1. ESTADO DE RADICADO — por ticket_id o por correo
-    // ══════════════════════════════════════════════════════════
-    case 'radicado':
-        $ticket_id = trim($body['ticket_id'] ?? '');
-        $correo    = trim($body['correo']    ?? '');
-
-        if (!$ticket_id && !$correo) {
-            echo json_encode(['error' => 'Se requiere ticket_id o correo']); exit;
-        }
-
-        $filtro = $ticket_id
-            ? "ticket_id=eq.{$ticket_id}"
-            : "from_email=eq." . urlencode($correo);
-
-        $correos = sb_get(
-            "/rest/v1/correos?{$filtro}&select=ticket_id,estado,prioridad,tipo_pqr,categoria_ia,sentimiento,nivel_riesgo,resumen_corto,agente_id,fecha_limite_sla,sla_vencido,created_at,updated_at,canal_contacto,nombre,correo,telefono_contacto&order=created_at.desc&limit=5",
-            $SB_URL, $SB_KEY
-        );
-
-        if (empty($correos)) {
-            echo json_encode(['encontrado' => false, 'mensaje' => 'No se encontró ningún radicado con ese número o correo.']);
-            exit;
-        }
-
-        $c = $correos[0];
-
-        // Obtener último evento del historial
-        $eventos = sb_get(
-            "/rest/v1/historial_eventos?correo_id=eq." . $c['ticket_id'] . "&select=evento,descripcion,created_at&order=created_at.desc&limit=3",
-            $SB_URL, $SB_KEY
-        );
-
-        // Obtener nombre del agente si está asignado
-        $agente_nombre = null;
-        if (!empty($c['agente_id'])) {
-            $agentes = sb_get(
-                "/rest/v1/agentes?id=eq.{$c['agente_id']}&select=nombre,email",
-                $SB_URL, $SB_KEY
-            );
-            $agente_nombre = $agentes[0]['nombre'] ?? null;
-        }
-
-        echo json_encode([
-            'encontrado'    => true,
-            'ticket_id'     => $c['ticket_id'],
-            'estado'        => $c['estado'],
-            'prioridad'     => $c['prioridad'],
-            'tipo'          => $c['tipo_pqr'],
-            'categoria'     => $c['categoria_ia'],
-            'resumen'       => $c['resumen_corto'],
-            'canal'         => $c['canal_contacto'],
-            'agente'        => $agente_nombre,
-            'fecha_limite'  => $c['fecha_limite_sla'],
-            'sla_vencido'   => $c['sla_vencido'],
-            'creado'        => $c['created_at'],
-            'actualizado'   => $c['updated_at'],
-            'ultimo_evento' => $eventos[0] ?? null,
-            'historial'     => $eventos,
-            'otros_radicados' => count($correos) > 1 ? array_slice($correos, 1) : [],
-        ]);
-        break;
-
-    // ══════════════════════════════════════════════════════════
-    // 2. SEDE POR EPS + MUNICIPIO
-    // ══════════════════════════════════════════════════════════
-    case 'sede':
-        $eps      = strtoupper(trim($body['eps']      ?? 'TODAS'));
-        $municipio = strtoupper(trim($body['municipio'] ?? ''));
-
-        // Normalizar: quitar tildes
-        $municipio = iconv('UTF-8', 'ASCII//TRANSLIT', $municipio);
-        $municipio = preg_replace('/[^A-Z0-9\s\-]/', '', $municipio);
-        $municipio = trim($municipio);
-
-        if (!$municipio) {
-            echo json_encode(['error' => 'municipio requerido']); exit;
-        }
-
-        $sedes = sb_get(
-            "/rest/v1/sedes?activa=eq.true&municipio_norm=eq." . urlencode($municipio) .
-            "&select=id,nombre,ciudad,direccion,telefono,horario,modelo,eps,lat,lng,encargado&limit=5",
-            $SB_URL, $SB_KEY
-        );
-
-        if (empty($sedes)) {
-            echo json_encode(['encontrado' => false, 'municipio' => $municipio,
-                'mensaje' => "No encontré sedes activas en {$municipio}."]);
-            exit;
-        }
-
-        // Filtrar por EPS en PHP
-        $coinciden = array_filter($sedes, function($s) use ($eps) {
-            $epsArr = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
-            return in_array($eps, $epsArr) || in_array('TODAS', $epsArr);
-        });
-
-        $resultado = array_values($coinciden ?: $sedes); // fallback: todas del municipio
-
-        echo json_encode([
-            'encontrado' => true,
-            'municipio'  => $municipio,
-            'eps'        => $eps,
-            'sedes'      => $resultado,
-            'total'      => count($resultado),
-        ]);
-        break;
-
-    // ══════════════════════════════════════════════════════════
-    // 3. KNOWLEDGE BASE — por texto libre
-    // ══════════════════════════════════════════════════════════
-    case 'knowledge':
-        $texto = strtolower(trim($body['texto'] ?? ''));
-        $texto = iconv('UTF-8', 'ASCII//TRANSLIT', $texto);
-
-        $items = sb_get(
-            "/rest/v1/knowledge_base?activo=eq.true&select=tipo_pqr,categoria,situacion,respuesta_modelo,tags,veces_usado",
-            $SB_URL, $SB_KEY
-        );
-
-        if (empty($items)) { echo json_encode(['encontrado' => false]); exit; }
-
-        $mejor = null;
-        $score_max = 0;
-
-        foreach ($items as $item) {
-            $score = 0;
-            $tags = is_array($item['tags']) ? $item['tags'] : json_decode($item['tags'] ?? '[]', true);
-            $situacion = strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $item['situacion'] ?? ''));
-
-            foreach ($tags as $tag) {
-                $tagNorm = strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $tag));
-                if (str_contains($texto, $tagNorm)) $score += 3;
-            }
-            $palabras = preg_split('/\s+/', $situacion);
-            foreach ($palabras as $p) {
-                if (strlen($p) > 4 && str_contains($texto, $p)) $score += 1;
-            }
-            if ($score > $score_max) { $score_max = $score; $mejor = $item; }
-        }
-
-        if ($score_max < 2) { echo json_encode(['encontrado' => false]); exit; }
-
-        // Incrementar veces_usado
-        $ch = curl_init("{$SB_URL}/rest/v1/knowledge_base?tipo_pqr=eq.{$mejor['tipo_pqr']}&categoria=eq.{$mejor['categoria']}");
-        curl_setopt_array($ch, [
-            CURLOPT_CUSTOMREQUEST  => 'PATCH',
-            CURLOPT_POSTFIELDS     => json_encode(['veces_usado' => ($mejor['veces_usado'] ?? 0) + 1]),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => ["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Content-Type: application/json'],
-            CURLOPT_TIMEOUT        => 5,
-        ]);
-        curl_exec($ch); curl_close($ch);
-
-        echo json_encode(['encontrado' => true, 'score' => $score_max, 'item' => $mejor]);
-        break;
-
-    // ══════════════════════════════════════════════════════════
-    // 4. AGENTES DISPONIBLES AHORA
-    // ══════════════════════════════════════════════════════════
-    case 'agentes':
-        $agentes = sb_get(
-            "/rest/v1/agentes?activo=eq.true&select=nombre,sede,casos_activos,rol&order=casos_activos.asc&limit=5",
-            $SB_URL, $SB_KEY
-        );
-
-        $hora = (int) date('G', strtotime('now -5 hours')); // hora Colombia
-        $dia  = (int) date('N', strtotime('now -5 hours')); // 1=lun, 7=dom
-        $en_horario = ($dia >= 1 && $dia <= 5 && $hora >= 7 && $hora < 17);
-
-        echo json_encode([
-            'en_horario'   => $en_horario,
-            'hora_colombia'=> date('H:i', strtotime('now -5 hours')),
-            'horario'      => 'Lun-Vie 7:00 a.m - 5:30 p.m.',
-            'agentes'      => $agentes ?? [],
-            'disponibles'  => count(array_filter($agentes ?? [], fn($a) => ($a['casos_activos'] ?? 0) < 10)),
-        ]);
-        break;
-
-    // ══════════════════════════════════════════════════════════
-    // 5. CANALES DE CONTACTO (desde configuracion_sistema)
-    // ══════════════════════════════════════════════════════════
-    case 'canales':
-        $cfg = sb_get(
-            "/rest/v1/configuracion_sistema?id=eq.main&select=data",
-            $SB_URL, $SB_KEY
-        );
-
-        $canales = $cfg[0]['data']['canales'] ?? [
-            'whatsapp'     => '573043412431',
-            'whatsappLabel'=> '304 341 2431',
-            'correo'       => 'pqrsfd@tododrogas.com.co',
-            'pbx'          => '6043222432',
-            'pbxLabel'     => '604 322 2432',
-            'horario'      => 'Lun-Vier 7 a.m-5:30 p.m. · Nova 24/7',
-        ];
-
-        echo json_encode(['canales' => $canales]);
-        break;
-
-    // ══════════════════════════════════════════════════════════
-    // 6. CONTEXTO COMPLETO — todo junto para Nova al iniciar
-    // ══════════════════════════════════════════════════════════
-    case 'contexto_completo':
-        $eps      = strtoupper(trim($body['eps']       ?? 'TODAS'));
-        $municipio = trim($body['municipio'] ?? '');
-        $munNorm  = strtoupper(iconv('UTF-8', 'ASCII//TRANSLIT', $municipio));
-        $munNorm  = preg_replace('/[^A-Z0-9\s\-]/', '', $munNorm);
-
-        // Sede
-        $sedes = $munNorm ? sb_get(
-            "/rest/v1/sedes?activa=eq.true&municipio_norm=eq." . urlencode(trim($munNorm)) .
-            "&select=id,nombre,ciudad,direccion,telefono,horario,modelo,eps,encargado&limit=5",
-            $SB_URL, $SB_KEY
-        ) : [];
-
-        $sedesFiltradas = array_values(array_filter($sedes ?? [], function($s) use ($eps) {
-            $epsArr = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
-            return in_array($eps, $epsArr) || in_array('TODAS', $epsArr);
-        })) ?: ($sedes ?? []);
-
-        // Canales
-        $cfg = sb_get("/rest/v1/configuracion_sistema?id=eq.main&select=data", $SB_URL, $SB_KEY);
-        $canales = $cfg[0]['data']['canales'] ?? [];
-
-        // Agentes
-        $hora = (int) date('G', strtotime('now -5 hours'));
-        $dia  = (int) date('N', strtotime('now -5 hours'));
-        $en_horario = ($dia >= 1 && $dia <= 5 && $hora >= 7 && $hora < 17);
-
-        // Knowledge base completa (para que JS filtre)
-        $kb = sb_get(
-            "/rest/v1/knowledge_base?activo=eq.true&select=tipo_pqr,categoria,situacion,respuesta_modelo,tags",
-            $SB_URL, $SB_KEY
-        );
-
-        echo json_encode([
-            'sedes'       => $sedesFiltradas,
-            'canales'     => $canales,
-            'en_horario'  => $en_horario,
-            'knowledge'   => $kb ?? [],
-            'timestamp'   => date('c'),
-        ]);
-        break;
-
-    default:
-        http_response_code(400);
-        echo json_encode(['error' => "Acción '{$accion}' no reconocida"]);
+function showError(msg){
+  document.getElementById('loading-wrap').style.display='none';
+  const em=document.getElementById('error-msg');
+  document.getElementById('error-txt').textContent=msg;
+  em.classList.add('show');
+  resetBtn();
 }
 
+function resetBtn(){
+  document.getElementById('btn-buscar').disabled=false;
+  document.getElementById('btn-icon').textContent='🔍';
+  document.getElementById('btn-txt').textContent='Consultar radicado';
+}
+
+async function buscar(){
+  const raw=document.getElementById('inp-ticket').value.trim();
+  if(!raw){showError('Ingresa un número de radicado o correo electrónico.');return;}
+  if(!SB_URL||!SB_ANON){showError('Sin conexión. Intenta más tarde.');return;}
+
+  // Reset UI
+  document.getElementById('error-msg').classList.remove('show');
+  document.getElementById('result-wrap').style.display='none';
+  document.getElementById('loading-wrap').style.display='block';
+  document.getElementById('btn-buscar').disabled=true;
+  document.getElementById('btn-icon').textContent='⏳';
+  document.getElementById('btn-txt').textContent='Consultando…';
+
+  try{
+    const esCorreo=raw.includes('@');
+    const filtro=esCorreo
+      ?'from_email=eq.'+encodeURIComponent(raw.toLowerCase())
+      :'ticket_id=eq.'+encodeURIComponent(raw);
+
+    const campos='ticket_id,estado,prioridad,tipo_pqr,categoria_ia,resumen_corto,'
+      +'canal_contacto,agente_id,fecha_limite_sla,sla_vencido,created_at,updated_at,'
+      +'nombre,from_name';
+
+    const r=await fetch(SB_URL+'/rest/v1/correos?'+filtro+'&select='+campos+'&order=created_at.desc&limit=1',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    if(!r.ok) throw new Error('Error de conexión ('+r.status+')');
+    const rows=await r.json();
+
+    if(!rows||!rows.length){
+      showError('No encontramos ningún radicado con ese dato. Verifica el número o correo.');
+      return;
+    }
+    const c=rows[0];
+
+    // Historial
+    const rEv=await fetch(SB_URL+'/rest/v1/historial_eventos?correo_id=eq.'+c.ticket_id
+      +'&select=evento,descripcion,created_at&order=created_at.asc',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    const eventos=rEv.ok?await rEv.json():[];
+
+    // Respuestas
+    const rResp=await fetch(SB_URL+'/rest/v1/respuestas?correo_id=eq.'+c.ticket_id
+      +'&select=contenido,canal,created_at&order=created_at.desc&limit=3',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    const respuestas=rResp.ok?await rResp.json():[];
+
+    // Agente
+    let agente='Pendiente de asignación';
+    if(c.agente_id){
+      const rAg=await fetch(SB_URL+'/rest/v1/agentes?id=eq.'+c.agente_id+'&select=nombre',
+        {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+      const ag=rAg.ok?await rAg.json():[];
+      if(ag[0]?.nombre) agente=ag[0].nombre;
+    }
+
+    // ── Renderizar ──
+    document.getElementById('loading-wrap').style.display='none';
+    document.getElementById('result-wrap').style.display='block';
+
+    // ── Estado badge ──
+    const est=ESTADOS[c.estado]||{label:c.estado,cls:'eb-abierto'};
+    const badge=document.getElementById('r-badge');
+    badge.textContent=est.label; badge.className='estado-badge '+est.cls;
+
+    setText('r-id', c.ticket_id);
+    setText('r-resumen', c.resumen_corto||c.categoria_ia||'Sin descripción');
+    document.getElementById('r-meta').innerHTML=
+      'Radicado el '+fmtDate(c.created_at)
+      +' · <span style="color:var(--ink2)">'+(c.nombre||c.from_name||'Ciudadano')+'</span>';
+
+    // ── Mensaje de estado para el ciudadano ──
+    const msgEl=document.getElementById('r-msg-estado');
+    const MENSAJES_ESTADO={
+      pendiente:  {txt:'✅ Tu radicado fue recibido correctamente en el sistema y está siendo revisado por nuestro equipo.',bg:'#eff6ff',color:'#1d4ed8',border:'#bfdbfe'},
+      abierto:    {txt:'✅ Tu radicado fue recibido correctamente en el sistema y está siendo revisado por nuestro equipo.',bg:'#eff6ff',color:'#1d4ed8',border:'#bfdbfe'},
+      en_gestion: {txt:'⚙️ Tu caso está en gestión activa. Un asesor está trabajando en él y recibirás respuesta próximamente.',bg:'#fffbeb',color:'#92400e',border:'#fde68a'},
+      respondido: {txt:'✉️ Hemos enviado una respuesta a tu caso. Revisa tu correo electrónico o consulta el historial abajo.',bg:'#f0fdf4',color:'#166534',border:'#bbf7d0'},
+      cerrado:    {txt:'🔒 Este radicado fue cerrado. Si necesitas seguimiento adicional, puedes radicar una nueva solicitud.',bg:'#f9fafb',color:'#374151',border:'#e5e7eb'},
+      escalado:   {txt:'🔺 Tu caso fue escalado para atención prioritaria. Un supervisor lo está revisando.',bg:'#fef2f2',color:'#991b1b',border:'#fecaca'},
+    };
+    const msgData=MENSAJES_ESTADO[c.estado]||MENSAJES_ESTADO['abierto'];
+    msgEl.style.cssText='display:block;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:500;margin-bottom:12px;'
+      +'background:'+msgData.bg+';color:'+msgData.color+';border:1px solid '+msgData.border+';line-height:1.5;';
+    msgEl.textContent=msgData.txt;
+
+    // ── Info grid ──
+    const canalLabels={'formulario_web':'Formulario Web','whatsapp':'WhatsApp',
+      'correo':'Correo electrónico','pbx':'PBX telefónico',
+      'verbal':'Verbal presencial','canvas':'Dibujo/Escritura tablet','audio':'Mensaje de voz'};
+    setText('r-tipo', (c.tipo_pqr||'').toUpperCase()+(c.categoria_ia?' · '+c.categoria_ia:''));
+    setText('r-canal', canalLabels[c.canal_contacto]||c.canal_contacto||'—');
+    setText('r-updated', fmt(c.updated_at));
+
+    // ── Cargar adjuntos ──
+    const rAdj=await fetch(SB_URL+'/rest/v1/adjuntos?correo_id=eq.'+c.ticket_id
+      +'&select=nombre,tipo_contenido,storage_url,direccion&order=created_at.asc',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    const adjuntos=rAdj.ok?await rAdj.json():[];
+
+    // Separar adjuntos del radicado vs de la solución
+    const adjRadicado=adjuntos.filter(a=>a.direccion==='entrante'||!a.direccion);
+    const adjSolucion=adjuntos.filter(a=>a.direccion==='saliente');
+
+    // ── Mostrar adjunto del radicado (solo si NO está cerrado/resuelto) ──
+    const adjEl=document.getElementById('r-adjunto');
+    const esCerrado=['cerrado','respondido','solucionado'].includes(c.estado);
+
+    if(!esCerrado && adjRadicado.length){
+      adjEl.style.display='block';
+      adjEl.innerHTML=adjRadicado.map(adj=>{
+        const esAudio=adj.tipo_contenido&&adj.tipo_contenido.includes('audio');
+        const esImg=adj.tipo_contenido&&(adj.tipo_contenido.includes('image')||adj.tipo_contenido.includes('png')||adj.tipo_contenido.includes('jpg'));
+        if(esAudio&&adj.storage_url){
+          return '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px;">'
+            +'<div style="font-size:11px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">🎤 Mensaje de voz</div>'
+            +'<audio controls style="width:100%;border-radius:8px;" src="'+adj.storage_url+'"></audio>'
+            +(c.transcripcion?'<div style="margin-top:10px;font-size:12px;color:#374151;background:#fff;border-radius:8px;padding:10px;border:1px solid #e0f2fe;line-height:1.6;"><strong>Transcripción:</strong><br>'+c.transcripcion+'</div>':'')
+            +'</div>';
+        } else if(esImg&&adj.storage_url){
+          return '<div style="background:#fafaf9;border:1px solid #e7e5e4;border-radius:10px;padding:14px;">'
+            +'<div style="font-size:11px;font-weight:700;color:#57534e;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">🖊️ Solicitud escrita / Dibujo</div>'
+            +'<img src="'+adj.storage_url+'" alt="Adjunto" style="max-width:100%;border-radius:8px;border:1px solid #e7e5e4;">'
+            +'</div>';
+        } else {
+          return '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px;font-size:12px;color:#374151;">📎 '+adj.nombre+'</div>';
+        }
+      }).join('');
+    }
+
+    // ── Adjunto de la solución (si está cerrado) ──
+    const adjSolEl=document.getElementById('r-adjunto-solucion');
+    if(adjSolucion.length||esCerrado){
+      let solHTML='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:16px;margin-top:4px;">'
+        +'<div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:10px;">✅ Radicado SOLUCIONADO — Documentación de cierre</div>';
+      if(adjSolucion.length){
+        solHTML+=adjSolucion.map(adj=>{
+          const esImg=adj.tipo_contenido&&(adj.tipo_contenido.includes('image')||adj.tipo_contenido.includes('png'));
+          return esImg&&adj.storage_url
+            ?'<img src="'+adj.storage_url+'" alt="Solución" style="max-width:100%;border-radius:8px;margin-top:8px;">'
+            :'<div style="font-size:12px;color:#166534;">📎 '+adj.nombre+'</div>';
+        }).join('');
+      } else {
+        solHTML+='<div style="font-size:12px;color:#166534;">Tu caso fue atendido y cerrado por nuestro equipo.</div>';
+      }
+      solHTML+='</div>';
+      adjSolEl.style.display='block';
+      adjSolEl.innerHTML=solHTML;
+    }
+
+    // ── Timeline ──
+    const tl=document.getElementById('r-timeline');
+    tl.innerHTML='';
+    const todos=eventos.length?eventos
+      :[{evento:'creado',descripcion:'Radicado recibido en el sistema.',created_at:c.created_at}];
+    setText('r-count', todos.length+' evento'+(todos.length===1?'':'s'));
+
+    todos.forEach((ev,i)=>{
+      const col=EV_COLOR[ev.evento]||'blue';
+      const isLast=i===todos.length-1;
+      const div=document.createElement('div');
+      div.className='tl-item';
+      div.innerHTML=
+        '<div class="tl-spine">'
+          +'<div class="tl-dot '+col+'"></div>'
+          +(isLast?'':'<div class="tl-line"></div>')
+        +'</div>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div class="tl-ev">'+(ev.evento||'').replace(/_/g,' ')+'</div>'
+          +'<div class="tl-desc">'+(ev.descripcion||'Sin descripción')+'</div>'
+          +'<div class="tl-time">'+fmt(ev.created_at)+'</div>'
+        +'</div>';
+      tl.appendChild(div);
+    });
+
+    // Respuestas del agente en el timeline
+    respuestas.forEach(resp=>{
+      if(!resp.contenido) return;
+      const txt=resp.contenido.replace(/<[^>]*>/g,'').slice(0,280);
+      const div=document.createElement('div');
+      div.className='resp-card';
+      div.innerHTML='<div class="resp-label">✉️ Respuesta enviada · '+fmt(resp.created_at)+'</div>'
+        +'<div class="resp-txt">'+txt+(resp.contenido.length>280?'…':'')+'</div>';
+      tl.appendChild(div);
+    });
+
+  }catch(e){showError('Error al consultar: '+e.message);}
+  resetBtn();
+}
+
+// ── Carrusel frases_consulta desde Supabase ──
+(async()=>{
+  if(!SB_URL||!SB_ANON) return;
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/configuracion_sistema?id=eq.main&select=data',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    if(!r.ok) return;
+    const rows=await r.json();
+    const frases=rows?.[0]?.data?.frases_consulta;
+    if(!frases||!frases.length) return;
+
+    // Ocultar chips estáticos y mostrar carrusel
+    const staticEl=document.getElementById('chips-static');
+    if(staticEl) staticEl.style.display='none';
+
+    const wrap=document.getElementById('consulta-carousel');
+    if(!wrap) return;
+
+    let idx=0;
+    function renderSlide(){
+      const f=frases[idx%frases.length];
+      wrap.innerHTML=`
+        <div class="carousel-slide-consulta">
+          <span class="carousel-icon-c">${f.icon||'📋'}</span>
+          <div class="carousel-text-c">${f.text||''}</div>
+        </div>
+        <div class="carousel-dots-c">
+          ${frases.map((_,i)=>'<div class="cdot-c'+(i===idx%frases.length?' active':'')+'"></div>').join('')}
+        </div>`;
+    }
+    renderSlide();
+    setInterval(()=>{idx++;renderSlide();},3500);
+  }catch(e){}
+})();
+
+// Auto-buscar desde URL ?t=TD-xxx
+(()=>{
+  const t=new URLSearchParams(window.location.search).get('t');
+  if(t){document.getElementById('inp-ticket').value=t.toUpperCase();buscar();}
+})();
+
+// Canvas fondo animado (igual que login)
+(()=>{
+  const canvas=document.getElementById('bg-canvas');
+  const ctx=canvas.getContext('2d');
+  let W,H,pts=[];
+  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;init();}
+  function init(){
+    pts=[];
+    for(let i=0;i<55;i++) pts.push({
+      x:Math.random()*W,y:Math.random()*H,
+      vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,
+      r:Math.random()*1.5+.5
+    });
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    pts.forEach(p=>{
+      p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0||p.x>W)p.vx*=-1;
+      if(p.y<0||p.y>H)p.vy*=-1;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle='rgba(37,99,235,.25)';ctx.fill();
+    });
+    pts.forEach((a,i)=>pts.slice(i+1).forEach(b=>{
+      const d=Math.hypot(a.x-b.x,a.y-b.y);
+      if(d<130){
+        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+        ctx.strokeStyle='rgba(37,99,235,'+(1-d/130)*.08+')';ctx.stroke();
+      }
+    }));
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize',resize);
+  resize();draw();
+})();
+</script>
+</body>
+</html>
