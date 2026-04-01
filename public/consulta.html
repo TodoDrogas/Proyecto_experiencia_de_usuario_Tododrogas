@@ -90,6 +90,19 @@ body{background:var(--ink);display:flex;flex-direction:row;height:100vh;overflow
 }
 .chip-dot{width:5px;height:5px;border-radius:50%;box-shadow:0 0 5px currentColor;}
 .chip-dot.blue{background:var(--blue);color:var(--blue);}
+
+/* Carrusel frases consulta */
+.carousel-slide-consulta{
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
+  border-radius:14px;padding:16px 20px;text-align:center;
+  animation:slideInC .5s cubic-bezier(.16,1,.3,1);
+}
+@keyframes slideInC{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+.carousel-icon-c{font-size:28px;margin-bottom:8px;display:block;}
+.carousel-text-c{font-size:13px;color:rgba(200,215,255,.8);line-height:1.5;}
+.carousel-dots-c{display:flex;gap:5px;justify-content:center;margin-top:10px;}
+.cdot-c{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.2);}
+.cdot-c.active{width:20px;border-radius:4px;background:linear-gradient(90deg,var(--blue),var(--cyan));}
 .chip-dot.cyan{background:var(--cyan);color:var(--cyan);}
 .chip-dot.green{background:#16a34a;color:#16a34a;}
 
@@ -329,33 +342,27 @@ body{background:var(--ink);display:flex;flex-direction:row;height:100vh;overflow
       <div class="ticket-meta" id="r-meta"></div>
     </div>
 
-    <!-- Grid info -->
+    <!-- Mensaje de estado para el ciudadano -->
+    <div id="r-msg-estado" style="display:none;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:12px;"></div>
+
+    <!-- Grid info simplificado -->
     <div class="info-grid">
       <div class="info-cell">
         <div class="ic-label">Tipo</div>
         <div class="ic-value" id="r-tipo"></div>
       </div>
       <div class="info-cell">
-        <div class="ic-label">Prioridad</div>
-        <div class="ic-value" id="r-prioridad"></div>
-      </div>
-      <div class="info-cell">
-        <div class="ic-label">Canal</div>
+        <div class="ic-label">Canal de radicación</div>
         <div class="ic-value" id="r-canal"></div>
       </div>
-      <div class="info-cell">
-        <div class="ic-label">Agente</div>
-        <div class="ic-value" id="r-agente"></div>
-      </div>
-      <div class="info-cell">
-        <div class="ic-label">Límite de respuesta</div>
-        <div class="ic-value" id="r-sla"></div>
-      </div>
-      <div class="info-cell">
-        <div class="ic-label">Actualizado</div>
+      <div class="info-cell full">
+        <div class="ic-label">Última actualización</div>
         <div class="ic-value mono" id="r-updated"></div>
       </div>
     </div>
+
+    <!-- Adjunto: audio, canvas o transcripción -->
+    <div id="r-adjunto" style="display:none;margin-bottom:12px;"></div>
 
     <!-- Timeline -->
     <div class="tl-card">
@@ -365,6 +372,9 @@ body{background:var(--ink);display:flex;flex-direction:row;height:100vh;overflow
       </div>
       <div class="tl-body" id="r-timeline"></div>
     </div>
+
+    <!-- Adjunto solución (si está cerrado/resuelto) -->
+    <div id="r-adjunto-solucion" style="display:none;margin-top:12px;"></div>
 
     <a class="back-link" href="pqr_bienvenida.html">← Volver al inicio</a>
   </div>
@@ -403,11 +413,14 @@ body{background:var(--ink);display:flex;flex-direction:row;height:100vh;overflow
       </div>
     </div>
 
-    <div class="info-chips">
-      <div class="chip"><span class="chip-dot blue"></span>Estado en tiempo real</div>
-      <div class="chip"><span class="chip-dot cyan"></span>Historial de gestiones</div>
-      <div class="chip"><span class="chip-dot green"></span>Respuestas del equipo</div>
-      <div class="chip"><span class="chip-dot blue"></span>Línea de tiempo completa</div>
+    <!-- Carrusel dinámico desde configuracion_sistema.frases_consulta -->
+    <div id="consulta-carousel" style="min-height:60px;margin-bottom:4px;">
+      <div class="info-chips" id="chips-static">
+        <div class="chip"><span class="chip-dot blue"></span>Estado en tiempo real</div>
+        <div class="chip"><span class="chip-dot cyan"></span>Historial de gestiones</div>
+        <div class="chip"><span class="chip-dot green"></span>Respuestas del equipo</div>
+        <div class="chip"><span class="chip-dot blue"></span>Línea de tiempo completa</div>
+      </div>
     </div>
 
     <!-- QR Medicamentos centrado -->
@@ -440,10 +453,11 @@ const SB_URL  = window.SUPABASE_URL  || '';
 const SB_ANON = window.SUPABASE_KEY  || '';
 
 const ESTADOS = {
-  abierto:    {label:'📬 Abierto',    cls:'eb-abierto'},
+  abierto:    {label:'📬 Recibido',    cls:'eb-abierto'},
+  pendiente:  {label:'📬 Recibido',    cls:'eb-abierto'},
   en_gestion: {label:'⚙️ En gestión', cls:'eb-en_gestion'},
   respondido: {label:'✅ Respondido', cls:'eb-respondido'},
-  cerrado:    {label:'🔒 Cerrado',    cls:'eb-cerrado'},
+  cerrado:    {label:'🔒 Solucionado', cls:'eb-respondido'},
   escalado:   {label:'🔺 Escalado',   cls:'eb-escalado'},
 };
 
@@ -543,6 +557,7 @@ async function buscar(){
     document.getElementById('loading-wrap').style.display='none';
     document.getElementById('result-wrap').style.display='block';
 
+    // ── Estado badge ──
     const est=ESTADOS[c.estado]||{label:c.estado,cls:'eb-abierto'};
     const badge=document.getElementById('r-badge');
     badge.textContent=est.label; badge.className='estado-badge '+est.cls;
@@ -553,29 +568,90 @@ async function buscar(){
       'Radicado el '+fmtDate(c.created_at)
       +' · <span style="color:var(--ink2)">'+(c.nombre||c.from_name||'Ciudadano')+'</span>';
 
+    // ── Mensaje de estado para el ciudadano ──
+    const msgEl=document.getElementById('r-msg-estado');
+    const MENSAJES_ESTADO={
+      pendiente:  {txt:'✅ Tu radicado fue recibido correctamente en el sistema y está siendo revisado por nuestro equipo.',bg:'#eff6ff',color:'#1d4ed8',border:'#bfdbfe'},
+      abierto:    {txt:'✅ Tu radicado fue recibido correctamente en el sistema y está siendo revisado por nuestro equipo.',bg:'#eff6ff',color:'#1d4ed8',border:'#bfdbfe'},
+      en_gestion: {txt:'⚙️ Tu caso está en gestión activa. Un asesor está trabajando en él y recibirás respuesta próximamente.',bg:'#fffbeb',color:'#92400e',border:'#fde68a'},
+      respondido: {txt:'✉️ Hemos enviado una respuesta a tu caso. Revisa tu correo electrónico o consulta el historial abajo.',bg:'#f0fdf4',color:'#166534',border:'#bbf7d0'},
+      cerrado:    {txt:'🔒 Este radicado fue cerrado. Si necesitas seguimiento adicional, puedes radicar una nueva solicitud.',bg:'#f9fafb',color:'#374151',border:'#e5e7eb'},
+      escalado:   {txt:'🔺 Tu caso fue escalado para atención prioritaria. Un supervisor lo está revisando.',bg:'#fef2f2',color:'#991b1b',border:'#fecaca'},
+    };
+    const msgData=MENSAJES_ESTADO[c.estado]||MENSAJES_ESTADO['abierto'];
+    msgEl.style.cssText='display:block;padding:12px 16px;border-radius:10px;font-size:13px;font-weight:500;margin-bottom:12px;'
+      +'background:'+msgData.bg+';color:'+msgData.color+';border:1px solid '+msgData.border+';line-height:1.5;';
+    msgEl.textContent=msgData.txt;
+
+    // ── Info grid ──
+    const canalLabels={'formulario_web':'Formulario Web','whatsapp':'WhatsApp',
+      'correo':'Correo electrónico','pbx':'PBX telefónico',
+      'verbal':'Verbal presencial','canvas':'Dibujo/Escritura tablet','audio':'Mensaje de voz'};
     setText('r-tipo', (c.tipo_pqr||'').toUpperCase()+(c.categoria_ia?' · '+c.categoria_ia:''));
-    setText('r-prioridad', c.prioridad||'Normal');
-    setText('r-canal', c.canal_contacto||'—');
-    setText('r-agente', agente);
+    setText('r-canal', canalLabels[c.canal_contacto]||c.canal_contacto||'—');
     setText('r-updated', fmt(c.updated_at));
 
-    // SLA
-    const slaEl=document.getElementById('r-sla');
-    if(c.fecha_limite_sla){
-      const lim=new Date(c.fecha_limite_sla);
-      const dias=Math.ceil((lim-new Date())/(864e5));
-      slaEl.textContent=fmtDate(c.fecha_limite_sla);
-      if(c.sla_vencido){slaEl.textContent+=' ⚠️ Vencido';slaEl.className='ic-value sla-vencido';}
-      else if(dias<=2){slaEl.textContent+=' ('+dias+'d restante'+(dias===1?'':'s')+')';slaEl.className='ic-value sla-warn';}
-      else slaEl.className='ic-value sla-ok';
-    } else {slaEl.textContent='—';slaEl.className='ic-value';}
+    // ── Cargar adjuntos ──
+    const rAdj=await fetch(SB_URL+'/rest/v1/adjuntos?correo_id=eq.'+c.ticket_id
+      +'&select=nombre,tipo_contenido,storage_url,direccion&order=created_at.asc',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    const adjuntos=rAdj.ok?await rAdj.json():[];
 
-    // Timeline
+    // Separar adjuntos del radicado vs de la solución
+    const adjRadicado=adjuntos.filter(a=>a.direccion==='entrante'||!a.direccion);
+    const adjSolucion=adjuntos.filter(a=>a.direccion==='saliente');
+
+    // ── Mostrar adjunto del radicado (solo si NO está cerrado/resuelto) ──
+    const adjEl=document.getElementById('r-adjunto');
+    const esCerrado=['cerrado','respondido','solucionado'].includes(c.estado);
+
+    if(!esCerrado && adjRadicado.length){
+      adjEl.style.display='block';
+      adjEl.innerHTML=adjRadicado.map(adj=>{
+        const esAudio=adj.tipo_contenido&&adj.tipo_contenido.includes('audio');
+        const esImg=adj.tipo_contenido&&(adj.tipo_contenido.includes('image')||adj.tipo_contenido.includes('png')||adj.tipo_contenido.includes('jpg'));
+        if(esAudio&&adj.storage_url){
+          return '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:14px;">'
+            +'<div style="font-size:11px;font-weight:700;color:#0369a1;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">🎤 Mensaje de voz</div>'
+            +'<audio controls style="width:100%;border-radius:8px;" src="'+adj.storage_url+'"></audio>'
+            +(c.transcripcion?'<div style="margin-top:10px;font-size:12px;color:#374151;background:#fff;border-radius:8px;padding:10px;border:1px solid #e0f2fe;line-height:1.6;"><strong>Transcripción:</strong><br>'+c.transcripcion+'</div>':'')
+            +'</div>';
+        } else if(esImg&&adj.storage_url){
+          return '<div style="background:#fafaf9;border:1px solid #e7e5e4;border-radius:10px;padding:14px;">'
+            +'<div style="font-size:11px;font-weight:700;color:#57534e;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">🖊️ Solicitud escrita / Dibujo</div>'
+            +'<img src="'+adj.storage_url+'" alt="Adjunto" style="max-width:100%;border-radius:8px;border:1px solid #e7e5e4;">'
+            +'</div>';
+        } else {
+          return '<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:12px;font-size:12px;color:#374151;">📎 '+adj.nombre+'</div>';
+        }
+      }).join('');
+    }
+
+    // ── Adjunto de la solución (si está cerrado) ──
+    const adjSolEl=document.getElementById('r-adjunto-solucion');
+    if(adjSolucion.length||esCerrado){
+      let solHTML='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:16px;margin-top:4px;">'
+        +'<div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:10px;">✅ Radicado SOLUCIONADO — Documentación de cierre</div>';
+      if(adjSolucion.length){
+        solHTML+=adjSolucion.map(adj=>{
+          const esImg=adj.tipo_contenido&&(adj.tipo_contenido.includes('image')||adj.tipo_contenido.includes('png'));
+          return esImg&&adj.storage_url
+            ?'<img src="'+adj.storage_url+'" alt="Solución" style="max-width:100%;border-radius:8px;margin-top:8px;">'
+            :'<div style="font-size:12px;color:#166534;">📎 '+adj.nombre+'</div>';
+        }).join('');
+      } else {
+        solHTML+='<div style="font-size:12px;color:#166534;">Tu caso fue atendido y cerrado por nuestro equipo.</div>';
+      }
+      solHTML+='</div>';
+      adjSolEl.style.display='block';
+      adjSolEl.innerHTML=solHTML;
+    }
+
+    // ── Timeline ──
     const tl=document.getElementById('r-timeline');
     tl.innerHTML='';
     const todos=eventos.length?eventos
       :[{evento:'creado',descripcion:'Radicado recibido en el sistema.',created_at:c.created_at}];
-
     setText('r-count', todos.length+' evento'+(todos.length===1?'':'s'));
 
     todos.forEach((ev,i)=>{
@@ -596,7 +672,7 @@ async function buscar(){
       tl.appendChild(div);
     });
 
-    // Respuestas
+    // Respuestas del agente en el timeline
     respuestas.forEach(resp=>{
       if(!resp.contenido) return;
       const txt=resp.contenido.replace(/<[^>]*>/g,'').slice(0,280);
@@ -610,6 +686,41 @@ async function buscar(){
   }catch(e){showError('Error al consultar: '+e.message);}
   resetBtn();
 }
+
+// ── Carrusel frases_consulta desde Supabase ──
+(async()=>{
+  if(!SB_URL||!SB_ANON) return;
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/configuracion_sistema?id=eq.main&select=data',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    if(!r.ok) return;
+    const rows=await r.json();
+    const frases=rows?.[0]?.data?.frases_consulta;
+    if(!frases||!frases.length) return;
+
+    // Ocultar chips estáticos y mostrar carrusel
+    const staticEl=document.getElementById('chips-static');
+    if(staticEl) staticEl.style.display='none';
+
+    const wrap=document.getElementById('consulta-carousel');
+    if(!wrap) return;
+
+    let idx=0;
+    function renderSlide(){
+      const f=frases[idx%frases.length];
+      wrap.innerHTML=`
+        <div class="carousel-slide-consulta">
+          <span class="carousel-icon-c">${f.icon||'📋'}</span>
+          <div class="carousel-text-c">${f.text||''}</div>
+        </div>
+        <div class="carousel-dots-c">
+          ${frases.map((_,i)=>'<div class="cdot-c'+(i===idx%frases.length?' active':'')+'"></div>').join('')}
+        </div>`;
+    }
+    renderSlide();
+    setInterval(()=>{idx++;renderSlide();},3500);
+  }catch(e){}
+})();
 
 // Auto-buscar desde URL ?t=TD-xxx
 (()=>{
