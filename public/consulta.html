@@ -355,10 +355,7 @@ body{background:var(--ink);display:flex;flex-direction:row;height:100vh;overflow
         <div class="ic-label">Canal de radicación</div>
         <div class="ic-value" id="r-canal"></div>
       </div>
-      <div class="info-cell full">
-        <div class="ic-label">Última actualización</div>
-        <div class="ic-value mono" id="r-updated"></div>
-      </div>
+      <!-- Última actualización quitada -->
     </div>
 
     <!-- Adjunto: audio, canvas o transcripción -->
@@ -465,6 +462,7 @@ const EV_COLOR = {
   creado:'blue',asignado:'blue',respondido:'green',cerrado:'gray',
   escalado:'red',reabierto:'yellow',acuse_enviado:'green',
   audio_procesado:'blue',canvas_procesado:'blue',
+  en_gestion:'yellow',solucionado:'green',
 };
 
 function fmt(iso){
@@ -589,7 +587,6 @@ async function buscar(){
       'verbal':'Verbal presencial','canvas':'Dibujo/Escritura tablet','audio':'Mensaje de voz'};
     setText('r-tipo', (c.tipo_pqr||'').toUpperCase()+(c.categoria_ia?' · '+c.categoria_ia:''));
     setText('r-canal', canalLabels[c.canal_contacto]||c.canal_contacto||'—');
-    setText('r-updated', fmt(c.updated_at));
 
     // ── Cargar adjuntos ──
     const rAdj=await fetch(SB_URL+'/rest/v1/adjuntos?correo_id=eq.'+c.ticket_id
@@ -629,19 +626,33 @@ async function buscar(){
 
     // ── Adjunto de la solución (si está cerrado) ──
     const adjSolEl=document.getElementById('r-adjunto-solucion');
-    if(adjSolucion.length||esCerrado){
+    if(esCerrado){
       let solHTML='<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:16px;margin-top:4px;">'
-        +'<div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:10px;">✅ Radicado SOLUCIONADO — Documentación de cierre</div>';
+        +'<div style="font-size:13px;font-weight:700;color:#166534;margin-bottom:12px;">✅ Radicado SOLUCIONADO</div>';
+
+      // Adjuntos salientes (documentos de solución)
       if(adjSolucion.length){
         solHTML+=adjSolucion.map(adj=>{
-          const esImg=adj.tipo_contenido&&(adj.tipo_contenido.includes('image')||adj.tipo_contenido.includes('png'));
-          return esImg&&adj.storage_url
-            ?'<img src="'+adj.storage_url+'" alt="Solución" style="max-width:100%;border-radius:8px;margin-top:8px;">'
-            :'<div style="font-size:12px;color:#166534;">📎 '+adj.nombre+'</div>';
+          const esImg=adj.tipo_contenido&&(adj.tipo_contenido.includes('image')||adj.tipo_contenido.includes('png')||adj.tipo_contenido.includes('jpg'));
+          const esPdf=adj.tipo_contenido&&adj.tipo_contenido.includes('pdf');
+          if(esImg&&adj.storage_url)
+            return '<img src="'+adj.storage_url+'" alt="Documento solución" style="max-width:100%;border-radius:8px;margin-bottom:8px;border:1px solid #bbf7d0;">';
+          if(esPdf&&adj.storage_url)
+            return '<iframe src="'+adj.storage_url+'" style="width:100%;height:300px;border-radius:8px;border:1px solid #bbf7d0;margin-bottom:8px;"></iframe>';
+          return '<div style="font-size:12px;color:#166534;padding:6px 0;">📎 '+adj.nombre+'</div>';
         }).join('');
-      } else {
-        solHTML+='<div style="font-size:12px;color:#166534;">Tu caso fue atendido y cerrado por nuestro equipo.</div>';
       }
+
+      // Respuesta del agente como parte de la solución
+      if(respuestas.length){
+        const r=respuestas[0];
+        const txtSol=r.contenido?r.contenido.replace(/<[^>]*>/g,'').slice(0,500):'';
+        if(txtSol) solHTML+='<div style="font-size:12px;color:#166534;background:#fff;border-radius:8px;padding:12px;border:1px solid #bbf7d0;line-height:1.6;margin-top:8px;"><strong>Respuesta del equipo:</strong><br>'+txtSol+(r.contenido&&r.contenido.length>500?'…':'')+'</div>';
+      }
+
+      if(!adjSolucion.length && !respuestas.length)
+        solHTML+='<div style="font-size:12px;color:#166534;">Tu caso fue atendido y cerrado satisfactoriamente por nuestro equipo.</div>';
+
       solHTML+='</div>';
       adjSolEl.style.display='block';
       adjSolEl.innerHTML=solHTML;
@@ -650,8 +661,31 @@ async function buscar(){
     // ── Timeline ──
     const tl=document.getElementById('r-timeline');
     tl.innerHTML='';
-    const todos=eventos.length?eventos
+    // Construir lista de eventos base
+    let todos=eventos.length?[...eventos]
       :[{evento:'creado',descripcion:'Radicado recibido en el sistema.',created_at:c.created_at}];
+
+    // Si el estado no es cerrado/solucionado, agregar punto "En gestión" automático
+    const estadosFinal=['cerrado','respondido','solucionado'];
+    const yaEnGestion = todos.some(e=>e.evento==='en_gestion'||e.evento==='asignado'||e.evento==='respondido');
+    if(!yaEnGestion && !estadosFinal.includes(c.estado)){
+      todos.push({
+        evento:'en_gestion',
+        descripcion:'Tu caso está siendo revisado por uno de nuestros agentes especializados.',
+        created_at: c.updated_at||c.created_at,
+        _auto:true
+      });
+    }
+    // Si está solucionado/cerrado agregar evento final
+    if(estadosFinal.includes(c.estado) && !todos.some(e=>e.evento==='cerrado'||e.evento==='solucionado')){
+      todos.push({
+        evento:'solucionado',
+        descripcion:'Tu caso fue atendido y solucionado por nuestro equipo. Gracias por comunicarte con Tododrogas.',
+        created_at: c.updated_at||c.created_at,
+        _auto:true
+      });
+    }
+
     setText('r-count', todos.length+' evento'+(todos.length===1?'':'s'));
 
     todos.forEach((ev,i)=>{
@@ -665,7 +699,18 @@ async function buscar(){
           +(isLast?'':'<div class="tl-line"></div>')
         +'</div>'
         +'<div style="flex:1;min-width:0">'
-          +'<div class="tl-ev">'+(ev.evento||'').replace(/_/g,' ')+'</div>'
+          +(()=>{
+            const labels={
+              creado:'Radicado creado',en_gestion:'En gestión',
+              asignado:'Agente asignado',respondido:'Respuesta enviada',
+              cerrado:'Caso cerrado',solucionado:'✅ Solucionado',
+              escalado:'Escalado a supervisor',reabierto:'Reabierto',
+              acuse_enviado:'Acuse de recibo enviado',
+              audio_procesado:'Audio procesado',canvas_procesado:'Dibujo procesado',
+            };
+            const lbl=labels[ev.evento]||(ev.evento||'').replace(/_/g,' ');
+            return '<div class="tl-ev">'+lbl+'</div>';
+          })()
           +'<div class="tl-desc">'+(ev.descripcion||'Sin descripción')+'</div>'
           +'<div class="tl-time">'+fmt(ev.created_at)+'</div>'
         +'</div>';
