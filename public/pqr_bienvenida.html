@@ -989,8 +989,58 @@ async function novaConsulta(accion, params){
   }catch(e){return null;}
 }
 
+// Municipios conocidos de Antioquia con variantes de escritura
+const MUNICIPIOS_MAP = {
+  'medellin':'MEDELLIN','medellín':'MEDELLIN','medelln':'MEDELLIN',
+  'envigado':'ENVIGADO','bello':'BELLO','itagui':'ITAGUI','itagüi':'ITAGUI',
+  'apartado':'APARTADO','apartadó':'APARTADO',
+  'turbo':'TURBO','caucasia':'CAUCASIA','carepa':'CAREPA',
+  'chigorodo':'CHIGORODO','chigorodó':'CHIGORODO',
+  'rionegro':'RIONEGRO','la ceja':'LA CEJA','laceja':'LA CEJA',
+  'el bagre':'EL BAGRE','elbagre':'EL BAGRE',
+  'puerto berrio':'PUERTO BERRIO','puertoberrio':'PUERTO BERRIO',
+  'santa barbara':'SANTA BARBARA','santabarbara':'SANTA BARBARA',
+  'santa barbara antioquia':'SANTA BARBARA',
+  'santa fe de antioquia':'SANTA FE DE ANTIOQUIA',
+  'santafe':'SANTA FE DE ANTIOQUIA','santafe de antioquia':'SANTA FE DE ANTIOQUIA',
+  'ciudad bolivar':'CIUDAD BOLIVAR','ciudadbolivar':'CIUDAD BOLIVAR',
+  'segovia':'SEGOVIA','yarumal':'YARUMAL','tamesis':'TAMESIS','támesis':'TAMESIS',
+  'andes':'ANDES','amaga':'AMAGA','amagá':'AMAGA',
+  'sopetran':'SOPETRAN','sopetrán':'SOPETRAN',
+  'yolombo':'YOLOMBO','yolombó':'YOLOMBO',
+  'zaragoza':'ZARAGOZA','nechi':'NECHI','nechí':'NECHI',
+  'caceres':'CACERES','cáceres':'CACERES',
+  'taraza':'TARAZA','tarazá':'TARAZA',
+  'necocli':'NECOCLI','necoclí':'NECOCLI',
+  'mutata':'MUTATA','mutatá':'MUTATA',
+  'frontino':'FRONTINO','dabeiba':'DABEIBA',
+  'remedios':'REMEDIOS','amalfi':'AMALFI',
+  'angostura':'ANGOSTURA','anori':'ANORI','anorí':'ANORI',
+  'jerico':'JERICO','jericó':'JERICO',
+  'betulia':'BETULIA','anza':'ANZA','anzá':'ANZA',
+  'buritica':'BURITICA','buriticá':'BURITICA',
+  'caicedo':'CAICEDO','liborina':'LIBORINA',
+  'jardin':'JARDIN','jardín':'JARDIN',
+  'sabanalarga':'SABANALARGA','san jeronimo':'SAN JERONIMO',
+  'pueblorrico':'PUEBLORRICO','hispania':'HISPANIA',
+  'valdivia':'VALDIVIA','uramita':'URAMITA',
+  'barbosa':'BARBOSA','girardota':'GIRARDOTA',
+  'concordia':'CONCORDIA','copacabana':'COPACABANA',
+  'sabaneta':'SABANETA','giraldo':'GIRALDO',
+  'yali':'YALI','briceño':'BRICEÑO','briceno':'BRICEÑO',
+  'armenia':'ARMENIA','peque':'PEQUE','pequeño':'PEQUE',
+  'olaya':'OLAYA','olaya llanadas':'OLAYA - LLANADAS',
+  'puerto nare':'PUERTO NARE','samana':'SAMANA','samaná':'SAMANA',
+};
+
+function normalizarMunicipio(txt){
+  const t = txt.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  return MUNICIPIOS_MAP[t] || MUNICIPIOS_MAP[txt.toLowerCase().trim()] || t.toUpperCase();
+}
+
 async function buscarSede(eps,municipio){
-  const res=await novaConsulta('sede',{eps,municipio});
+  const munNorm = normalizarMunicipio(municipio);
+  const res=await novaConsulta('sede',{eps,municipio:munNorm});
   return(res&&res.encontrado)?res.sedes:null;
 }
 
@@ -1413,30 +1463,68 @@ function updateTimer(){
 
 async function processVoice(chunks){
   document.getElementById('msgs').style.display='flex';
-  showTextUI();showTyping();
+  showTextUI();
+  // Mostrar que está procesando
+  const typingMsg = document.createElement('div');
+  typingMsg.className='msg msg-bot';typingMsg.id='voice-processing';
+  typingMsg.textContent='🎤 Procesando tu audio…';
+  document.getElementById('msgs').appendChild(typingMsg);
+  document.getElementById('msgs').scrollTop=9999;
+
   try{
-    // Whisper: transcribir audio real via chatbot.php (modo multipart)
-    const blob=new Blob(chunks,{type:'audio/webm'});
+    // Intentar con webm, si falla intentar con ogg
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                   : MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg'
+                   : 'audio/mp4';
+    const blob=new Blob(chunks,{type:mimeType});
+
+    // Verificar que el audio tiene contenido
+    if(blob.size < 500){
+      typingMsg.remove();
+      addBot('El audio fue muy corto. Intenta hablar por al menos 2 segundos.',false);
+      return;
+    }
+
+    const ext = mimeType.includes('ogg')?'ogg':mimeType.includes('mp4')?'mp4':'webm';
     const fd=new FormData();
-    fd.append('audio',blob,'audio.webm');
+    fd.append('audio',blob,'audio.'+ext);
     fd.append('language','es');
+
+    // Llamar a chatbot.php en modo Whisper (multipart/form-data)
     const tr=await fetch('/chatbot.php',{method:'POST',body:fd});
+
+    if(!tr.ok){
+      typingMsg.remove();
+      addBot('Error al procesar el audio ('+tr.status+'). Escríbeme tu consulta.',false);
+      return;
+    }
+
     const td=await tr.json();
-    const texto=td?.text?.trim()||'';
+    const texto=(td?.text||'').trim();
+
+    typingMsg.remove();
+
     if(texto){
-      hideTyping();
+      // Mostrar lo que dijo el usuario
+      const userDiv=document.createElement('div');
+      userDiv.className='msg msg-user';
+      userDiv.innerHTML='🎤 <em>'+texto+'</em>';
+      document.getElementById('msgs').appendChild(userDiv);
+      msgs.push({role:'user',content:texto});
+      // Procesar como mensaje normal
+      showTyping();
       await callClaude(texto,true);
     }else{
-      hideTyping();
-      addBot('No pude escucharte bien. ¿Puedes repetirlo o escribirlo?',true);
-      speak('No pude escucharte bien. ¿Puedes repetirlo o escribirlo?');
+      addBot('No pude escuchar el audio con claridad. ¿Puedes repetirlo o escribirlo?',false);
     }
   }catch(e){
+    const vp=document.getElementById('voice-processing');
+    if(vp)vp.remove();
     hideTyping();
-    addBot('Hubo un problema con el audio. Escríbeme y te ayudo.',false);
+    addBot('Hubo un problema con el audio: '+e.message+'. Escríbeme tu consulta.',false);
   }
   const vc=document.getElementById('vc');
-  vc.textContent='🎤';
+  if(vc){vc.textContent='🎤';vc.classList.remove('rec');}
   document.getElementById('vlabel').textContent='Toca el micrófono para hablar';
 }
 
