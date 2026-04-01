@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consulta de Radicado · Tododrogas</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="config.js" onerror="console.warn('config.js no cargó')"></script>
+<style>
+:root{
+  --ink:#0a0e1a;--ink2:#3a4258;--ink3:#8892a4;
+  --bg:#f2f4f8;--surface:#ffffff;--border:#dde1eb;
+  --blue:#2563eb;--blue-d:#1d4ed8;--blue-glow:rgba(37,99,235,.22);
+  --cyan:#00c4e8;--cyan-dim:rgba(0,196,232,.13);
+  --green:#16a34a;--red:#dc2626;--yellow:#d97706;--orange:#ea580c;
+  --shadow:0 4px 24px rgba(10,14,26,.12),0 1px 4px rgba(10,14,26,.06);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;font-family:'Poppins',sans-serif}
+body{background:var(--ink);display:flex;flex-direction:row;height:100vh;overflow:hidden;position:relative;}
+#bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
+
+/* ── LEFT PANEL ── */
+.left-panel{
+  flex:1;position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:52px 48px;overflow:hidden;height:100vh;overflow-y:auto;
+}
+.left-panel::before{
+  content:'';position:absolute;width:680px;height:680px;top:-180px;left:-160px;
+  background:radial-gradient(circle,rgba(37,99,235,.2) 0%,transparent 68%);
+  animation:orb1 14s ease-in-out infinite alternate;pointer-events:none;
+}
+.left-panel::after{
+  content:'';position:absolute;width:460px;height:460px;bottom:-120px;right:-80px;
+  background:radial-gradient(circle,rgba(0,196,232,.12) 0%,transparent 65%);
+  animation:orb2 18s ease-in-out infinite alternate;pointer-events:none;
+}
+@keyframes orb1{from{transform:translate(0,0) scale(1);}to{transform:translate(70px,50px) scale(1.18);}}
+@keyframes orb2{from{transform:translate(0,0);}to{transform:translate(-50px,-35px) scale(1.12);}}
+.left-grid{
+  position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,196,232,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,196,232,.03) 1px,transparent 1px);
+  background-size:56px 56px;
+  mask-image:radial-gradient(ellipse 72% 72% at 50% 50%,black 40%,transparent 100%);
+}
+.scan-line{
+  position:absolute;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,196,232,.25),transparent);
+  animation:scan 9s linear infinite;pointer-events:none;
+}
+@keyframes scan{0%{top:-2%;opacity:0;}8%{opacity:1;}92%{opacity:1;}100%{top:102%;opacity:0;}}
+.left-content{position:relative;z-index:2;max-width:480px;text-align:center;}
+.sigi-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  border-radius:8px;padding:7px 16px;margin-bottom:16px;
+  font-family:'DM Mono',monospace;font-size:10px;font-weight:500;
+  letter-spacing:2px;color:var(--cyan);backdrop-filter:blur(8px);
+  background:rgba(0,196,232,.08);border:1px solid rgba(0,196,232,.2);
+}
+.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 8px var(--cyan);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.left-headline{
+  font-size:clamp(28px,3.5vw,42px);font-weight:800;line-height:1.15;
+  color:#fff;margin-bottom:12px;letter-spacing:-.5px;
+}
+.left-headline .hl{
+  background:linear-gradient(135deg,var(--blue) 0%,var(--cyan) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.left-sub{font-size:13px;color:rgba(255,255,255,.45);margin-bottom:40px;font-weight:400;}
+
+/* Stats */
+.stats-row{display:flex;gap:12px;justify-content:center;margin-bottom:32px;}
+.stat-box{
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:14px 20px;text-align:center;
+}
+.stat-val{font-size:22px;font-weight:800;color:#fff;font-family:'DM Mono',monospace;line-height:1;}
+.stat-lbl{font-size:10px;color:rgba(255,255,255,.35);letter-spacing:1px;text-transform:uppercase;margin-top:4px;}
+
+/* Info cards */
+.info-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:20px;padding:6px 14px;font-size:11px;color:rgba(255,255,255,.6);
+}
+.chip-dot{width:5px;height:5px;border-radius:50%;box-shadow:0 0 5px currentColor;}
+.chip-dot.blue{background:var(--blue);color:var(--blue);}
+.chip-dot.cyan{background:var(--cyan);color:var(--cyan);}
+.chip-dot.green{background:#16a34a;color:#16a34a;}
+
+/* ── RIGHT PANEL ── */
+.right-panel{
+  width:48%;min-width:0;position:relative;z-index:1;
+  background:var(--surface);
+  display:flex;flex-direction:column;align-items:stretch;justify-content:center;
+  padding:0 44px;box-shadow:8px 0 48px rgba(10,14,26,.18);
+  overflow-y:auto;height:100vh;
+}
+.right-panel::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--blue),var(--cyan),#7c3aed);
+}
+.panel-logo{margin-bottom:24px;width:100%;text-align:center;}
+.panel-logo img{height:36px;object-fit:contain;}
+
+/* Search */
+.panel-title{font-size:20px;font-weight:700;color:var(--ink);margin-bottom:6px;letter-spacing:-.3px;}
+.panel-sub{font-size:12px;color:var(--ink3);margin-bottom:24px;line-height:1.5;}
+.form-group{width:100%;margin-bottom:14px;}
+.form-label{display:block;font-size:11px;font-weight:700;letter-spacing:.8px;
+  text-transform:uppercase;color:var(--ink3);margin-bottom:8px;}
+.form-input{
+  width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;
+  padding:13px 16px;font-size:13px;font-family:'DM Mono',monospace;font-weight:500;
+  color:var(--ink);outline:none;transition:all .2s;letter-spacing:.5px;
+}
+.form-input:focus{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.08);}
+.form-input::placeholder{color:var(--ink3);font-family:'Poppins',sans-serif;letter-spacing:0;font-size:12px;}
+.btn-submit{
+  width:100%;background:var(--blue);color:#fff;border:none;border-radius:10px;
+  padding:14px;font-size:14px;font-family:'Poppins',sans-serif;font-weight:700;
+  cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;
+  gap:8px;letter-spacing:.3px;
+}
+.btn-submit:hover:not(:disabled){background:var(--blue-d);transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,.3);}
+.btn-submit:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+.hint{font-size:11px;color:var(--ink3);margin-top:8px;text-align:center;}
+
+/* Error */
+.error-msg{
+  background:#fef2f2;border:1px solid #fecaca;color:var(--red);
+  border-radius:8px;padding:10px 14px;font-size:12px;font-weight:600;
+  margin-bottom:14px;display:none;align-items:center;gap:8px;
+}
+.error-msg.show{display:flex;}
+
+/* Loading */
+.loading-wrap{display:none;text-align:center;padding:24px 0;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--blue);
+  border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px;}
+.loading-txt{font-size:12px;color:var(--ink3);}
+
+/* Divider */
+.divider{width:100%;height:1px;background:var(--border);margin:20px 0;}
+
+/* ── RESULTADO ── */
+.result-wrap{display:none;width:100%;}
+
+/* Ticket header */
+.ticket-top{
+  background:var(--bg);border:1.5px solid var(--border);border-radius:12px;
+  padding:16px;margin-bottom:12px;
+}
+.ticket-id-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.ticket-id{font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--blue);}
+.estado-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;
+}
+.eb-abierto{background:#eff6ff;color:var(--blue);border:1px solid #bfdbfe;}
+.eb-en_gestion{background:#fffbeb;color:var(--yellow);border:1px solid #fde68a;}
+.eb-respondido{background:#f0fdf4;color:var(--green);border:1px solid #bbf7d0;}
+.eb-cerrado{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb;}
+.eb-escalado{background:#fef2f2;color:var(--red);border:1px solid #fecaca;}
+.ticket-resumen{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:4px;line-height:1.4;}
+.ticket-meta{font-size:11px;color:var(--ink3);}
+
+/* Info grid */
+.info-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;
+}
+.info-cell{
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+}
+.info-cell.full{grid-column:span 2;}
+.ic-label{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--ink3);margin-bottom:3px;}
+.ic-value{font-size:12px;font-weight:600;color:var(--ink);}
+.ic-value.mono{font-family:'DM Mono',monospace;font-size:11px;}
+.sla-ok{color:var(--green);}
+.sla-warn{color:var(--yellow);}
+.sla-vencido{color:var(--red);}
+
+/* Timeline */
+.tl-card{
+  background:var(--bg);border:1.5px solid var(--border);border-radius:12px;overflow:hidden;
+}
+.tl-head{
+  padding:12px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  background:#fff;
+}
+.tl-title{font-size:12px;font-weight:700;color:var(--ink);}
+.tl-count{font-size:10px;color:var(--ink3);background:var(--bg);
+  border-radius:20px;padding:2px 10px;border:1px solid var(--border);}
+.tl-body{padding:4px 0;}
+.tl-item{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(0,0,0,.04);}
+.tl-item:last-child{border-bottom:none;}
+.tl-spine{display:flex;flex-direction:column;align-items:center;flex-shrink:0;}
+.tl-dot{width:9px;height:9px;border-radius:50%;border:2px solid #fff;
+  flex-shrink:0;margin-top:2px;box-shadow:0 0 0 1px currentColor;}
+.tl-dot.blue{color:var(--blue);background:var(--blue);}
+.tl-dot.green{color:var(--green);background:var(--green);}
+.tl-dot.yellow{color:var(--yellow);background:var(--yellow);}
+.tl-dot.red{color:var(--red);background:var(--red);}
+.tl-dot.gray{color:#9ca3af;background:#9ca3af;}
+.tl-line{width:2px;flex:1;background:var(--border);margin-top:4px;}
+.tl-ev{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--blue);margin-bottom:2px;}
+.tl-desc{font-size:12px;color:var(--ink2);line-height:1.5;}
+.tl-time{font-size:10px;color:var(--ink3);font-family:'DM Mono',monospace;margin-top:3px;}
+
+/* Respuesta */
+.resp-card{
+  background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+  padding:12px 14px;margin:8px 16px;
+}
+.resp-label{font-size:10px;font-weight:700;color:var(--green);
+  text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;}
+.resp-txt{font-size:11px;color:var(--ink2);line-height:1.6;
+  max-height:100px;overflow-y:auto;}
+
+/* Back link */
+.back-link{
+  display:inline-flex;align-items:center;gap:6px;
+  font-size:12px;color:var(--ink3);text-decoration:none;
+  margin-top:20px;transition:color .2s;
+}
+.back-link:hover{color:var(--blue);}
+
+/* ── RESPONSIVE ── */
+@media(max-width:860px){
+  body{flex-direction:column;height:auto;overflow:auto;}
+  .right-panel{
+    width:100%;padding:80px 24px 36px;
+    height:auto;box-shadow:none;
+    border-bottom:3px solid var(--blue);
+  }
+  .left-panel{
+    width:100%;height:auto;padding:36px 24px 40px;
+    order:1;overflow:visible;
+  }
+  .left-panel::before,.left-panel::after{width:300px;height:300px;}
+  .left-content{max-width:100%;}
+  .left-headline{font-size:clamp(24px,6vw,36px);}
+  .stats-row{justify-content:center;gap:10px;}
+  .info-chips{justify-content:center;}
+  .info-grid{grid-template-columns:1fr 1fr;}
+}
+@media(max-width:480px){
+  .right-panel{padding:24px 18px 28px;}
+  .left-panel{padding:28px 18px 36px;}
+  .form-input{font-size:15px;padding:14px 16px;}
+  .btn-submit{padding:15px;font-size:15px;}
+  .info-grid{grid-template-columns:1fr;}
+  .info-cell.full{grid-column:span 1;}
+  .stats-row{flex-wrap:wrap;}
+  .stat-box{min-width:80px;}
+  .panel-logo img{height:30px;}
+  .left-headline{font-size:clamp(22px,7vw,30px);}
+}
+</style>
+</head>
+<body>
+<canvas id="bg-canvas"></canvas>
+
+<!-- ══ RIGHT ══ -->
+<div class="right-panel">
+
+  <!-- Contenedor centrado: logo + form -->
+  <div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;padding:40px 0;">
+
+    <!-- Logo -->
+    <div style="width:100%;text-align:center;margin-bottom:36px;margin-top:-20px;">
+      <img id="formLogo"
+        src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png"
+        alt="Tododrogas"
+        style="height:54px;object-fit:contain;display:inline-block;"
+        onerror="this.outerHTML='<span style=\'font-size:24px;font-weight:800;color:var(--blue);\'>Tododrogas</span>'">
+    </div>
+
+  <div style="width:100%;">
+    <div class="panel-title">Consulta el estado de tu PQRSFD</div>
+    <div class="panel-sub">Ingresa tu número de radicado o correo electrónico para ver el estado y las gestiones realizadas.</div>
+
+    <div class="error-msg" id="error-msg">
+      <span>⚠️</span><span id="error-txt"></span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Número de radicado o correo</label>
+      <input class="form-input" id="inp-ticket" type="text"
+        placeholder="TD-20260401-XXXX o tu correo"
+        oninput="autoFormat(this)"
+        onkeydown="if(event.key==='Enter') buscar()">
+    </div>
+
+    <button class="btn-submit" id="btn-buscar" onclick="buscar()">
+      <span id="btn-icon">🔍</span>
+      <span id="btn-txt">Consultar radicado</span>
+    </button>
+    <div class="hint">Ley 1755/2015 · Respuesta máximo 15 días hábiles</div>
+
+  </div>
+
+  <!-- Loading -->
+  <div class="loading-wrap" id="loading-wrap">
+    <div class="spinner"></div>
+    <div class="loading-txt">Consultando tu caso…</div>
+  </div>
+
+  <!-- Resultado -->
+  <div class="result-wrap" id="result-wrap">
+    <div class="divider"></div>
+
+    <!-- Ticket -->
+    <div class="ticket-top">
+      <div class="ticket-id-row">
+        <div class="ticket-id" id="r-id"></div>
+        <div class="estado-badge" id="r-badge"></div>
+      </div>
+      <div class="ticket-resumen" id="r-resumen"></div>
+      <div class="ticket-meta" id="r-meta"></div>
+    </div>
+
+    <!-- Grid info -->
+    <div class="info-grid">
+      <div class="info-cell">
+        <div class="ic-label">Tipo</div>
+        <div class="ic-value" id="r-tipo"></div>
+      </div>
+      <div class="info-cell">
+        <div class="ic-label">Prioridad</div>
+        <div class="ic-value" id="r-prioridad"></div>
+      </div>
+      <div class="info-cell">
+        <div class="ic-label">Canal</div>
+        <div class="ic-value" id="r-canal"></div>
+      </div>
+      <div class="info-cell">
+        <div class="ic-label">Agente</div>
+        <div class="ic-value" id="r-agente"></div>
+      </div>
+      <div class="info-cell">
+        <div class="ic-label">Límite de respuesta</div>
+        <div class="ic-value" id="r-sla"></div>
+      </div>
+      <div class="info-cell">
+        <div class="ic-label">Actualizado</div>
+        <div class="ic-value mono" id="r-updated"></div>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="tl-card">
+      <div class="tl-head">
+        <div class="tl-title">📋 Historial de gestiones</div>
+        <div class="tl-count" id="r-count">0 eventos</div>
+      </div>
+      <div class="tl-body" id="r-timeline"></div>
+    </div>
+
+    <a class="back-link" href="pqr_bienvenida.html">← Volver al inicio</a>
+  </div>
+  </div><!-- cierre contenedor centrado -->
+
+</div>
+
+<!-- ══ LEFT ══ -->
+<div class="left-panel">
+  <div class="left-grid"></div>
+  <div class="scan-line"></div>
+  <div class="left-content" style="padding-top:0;">
+
+    <div class="sigi-badge">
+      <span class="badge-dot"></span>
+      PQRSFD · Tododrogas CIA S.A.S
+    </div>
+
+    <div class="left-headline">
+      Consulta el estado<br>de <span class="hl">tu radicado</span>
+    </div>
+    <div class="left-sub">Seguimiento en tiempo real · Transparencia total</div>
+
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-val">15</div>
+        <div class="stat-lbl">Días SLA</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val">24/7</div>
+        <div class="stat-lbl">Nova TD</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val">100%</div>
+        <div class="stat-lbl">Trazable</div>
+      </div>
+    </div>
+
+    <div class="info-chips">
+      <div class="chip"><span class="chip-dot blue"></span>Estado en tiempo real</div>
+      <div class="chip"><span class="chip-dot cyan"></span>Historial de gestiones</div>
+      <div class="chip"><span class="chip-dot green"></span>Respuestas del equipo</div>
+      <div class="chip"><span class="chip-dot blue"></span>Línea de tiempo completa</div>
+    </div>
+
+    <!-- QR Medicamentos centrado -->
+    <div style="margin-top:36px;display:flex;flex-direction:column;align-items:center;gap:12px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);">📱 Escanea si quieres conocer el estado de tus medicamentos</div>
+      <img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/QR%20MEDICAMENTOS.jpeg"
+        alt="QR Medicamentos"
+        style="width:170px;height:170px;border-radius:14px;border:3px solid rgba(0,196,232,.4);display:block;box-shadow:0 0 28px rgba(0,196,232,.18);">
+      <div style="margin-top:6px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.5);margin-bottom:6px;">o ingresa a este link</div>
+        <a href="https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb"
+          target="_blank"
+          style="display:inline-block;background:rgba(0,196,232,.15);border:1.5px solid rgba(0,196,232,.5);
+          border-radius:10px;padding:10px 18px;font-size:12px;color:var(--cyan);
+          font-family:'DM Mono',monospace;letter-spacing:.3px;text-decoration:none;
+          transition:all .2s;word-break:break-all;line-height:1.5;"
+          onmouseover="this.style.background='rgba(0,196,232,.28)';this.style.boxShadow='0 0 16px rgba(0,196,232,.3)'"
+          onmouseout="this.style.background='rgba(0,196,232,.15)';this.style.boxShadow='none'">
+          🔗 dispensacion.tododrogas.com.co
+        </a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<script>
+const SB_URL  = window.SUPABASE_URL  || '';
+const SB_ANON = window.SUPABASE_KEY  || '';
+
+const ESTADOS = {
+  abierto:    {label:'📬 Abierto',    cls:'eb-abierto'},
+  en_gestion: {label:'⚙️ En gestión', cls:'eb-en_gestion'},
+  respondido: {label:'✅ Respondido', cls:'eb-respondido'},
+  cerrado:    {label:'🔒 Cerrado',    cls:'eb-cerrado'},
+  escalado:   {label:'🔺 Escalado',   cls:'eb-escalado'},
+};
+
+const EV_COLOR = {
+  creado:'blue',asignado:'blue',respondido:'green',cerrado:'gray',
+  escalado:'red',reabierto:'yellow',acuse_enviado:'green',
+  audio_procesado:'blue',canvas_procesado:'blue',
+};
+
+function fmt(iso){
+  if(!iso) return '—';
+  const d=new Date(iso);
+  return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})
+    +' '+d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+}
+function fmtDate(iso){
+  if(!iso) return '—';
+  return new Date(iso).toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'});
+}
+function setText(id,txt){const el=document.getElementById(id);if(el)el.textContent=txt||'—';}
+
+function autoFormat(inp){
+  // Si parece ticket, forzar mayúsculas; si parece correo, no tocar
+  if(!inp.value.includes('@')) inp.value=inp.value.toUpperCase();
+}
+
+function showError(msg){
+  document.getElementById('loading-wrap').style.display='none';
+  const em=document.getElementById('error-msg');
+  document.getElementById('error-txt').textContent=msg;
+  em.classList.add('show');
+  resetBtn();
+}
+
+function resetBtn(){
+  document.getElementById('btn-buscar').disabled=false;
+  document.getElementById('btn-icon').textContent='🔍';
+  document.getElementById('btn-txt').textContent='Consultar radicado';
+}
+
+async function buscar(){
+  const raw=document.getElementById('inp-ticket').value.trim();
+  if(!raw){showError('Ingresa un número de radicado o correo electrónico.');return;}
+  if(!SB_URL||!SB_ANON){showError('Sin conexión. Intenta más tarde.');return;}
+
+  // Reset UI
+  document.getElementById('error-msg').classList.remove('show');
+  document.getElementById('result-wrap').style.display='none';
+  document.getElementById('loading-wrap').style.display='block';
+  document.getElementById('btn-buscar').disabled=true;
+  document.getElementById('btn-icon').textContent='⏳';
+  document.getElementById('btn-txt').textContent='Consultando…';
+
+  try{
+    const esCorreo=raw.includes('@');
+    const filtro=esCorreo
+      ?'from_email=eq.'+encodeURIComponent(raw.toLowerCase())
+      :'ticket_id=eq.'+encodeURIComponent(raw);
+
+    const campos='ticket_id,estado,prioridad,tipo_pqr,categoria_ia,resumen_corto,'
+      +'canal_contacto,agente_id,fecha_limite_sla,sla_vencido,created_at,updated_at,'
+      +'nombre,from_name';
+
+    const r=await fetch(SB_URL+'/rest/v1/correos?'+filtro+'&select='+campos+'&order=created_at.desc&limit=1',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    if(!r.ok) throw new Error('Error de conexión ('+r.status+')');
+    const rows=await r.json();
+
+    if(!rows||!rows.length){
+      showError('No encontramos ningún radicado con ese dato. Verifica el número o correo.');
+      return;
+    }
+    const c=rows[0];
+
+    // Historial
+    const rEv=await fetch(SB_URL+'/rest/v1/historial_eventos?correo_id=eq.'+c.ticket_id
+      +'&select=evento,descripcion,created_at&order=created_at.asc',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    const eventos=rEv.ok?await rEv.json():[];
+
+    // Respuestas
+    const rResp=await fetch(SB_URL+'/rest/v1/respuestas?correo_id=eq.'+c.ticket_id
+      +'&select=contenido,canal,created_at&order=created_at.desc&limit=3',
+      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+    const respuestas=rResp.ok?await rResp.json():[];
+
+    // Agente
+    let agente='Pendiente de asignación';
+    if(c.agente_id){
+      const rAg=await fetch(SB_URL+'/rest/v1/agentes?id=eq.'+c.agente_id+'&select=nombre',
+        {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+      const ag=rAg.ok?await rAg.json():[];
+      if(ag[0]?.nombre) agente=ag[0].nombre;
+    }
+
+    // ── Renderizar ──
+    document.getElementById('loading-wrap').style.display='none';
+    document.getElementById('result-wrap').style.display='block';
+
+    const est=ESTADOS[c.estado]||{label:c.estado,cls:'eb-abierto'};
+    const badge=document.getElementById('r-badge');
+    badge.textContent=est.label; badge.className='estado-badge '+est.cls;
+
+    setText('r-id', c.ticket_id);
+    setText('r-resumen', c.resumen_corto||c.categoria_ia||'Sin descripción');
+    document.getElementById('r-meta').innerHTML=
+      'Radicado el '+fmtDate(c.created_at)
+      +' · <span style="color:var(--ink2)">'+(c.nombre||c.from_name||'Ciudadano')+'</span>';
+
+    setText('r-tipo', (c.tipo_pqr||'').toUpperCase()+(c.categoria_ia?' · '+c.categoria_ia:''));
+    setText('r-prioridad', c.prioridad||'Normal');
+    setText('r-canal', c.canal_contacto||'—');
+    setText('r-agente', agente);
+    setText('r-updated', fmt(c.updated_at));
+
+    // SLA
+    const slaEl=document.getElementById('r-sla');
+    if(c.fecha_limite_sla){
+      const lim=new Date(c.fecha_limite_sla);
+      const dias=Math.ceil((lim-new Date())/(864e5));
+      slaEl.textContent=fmtDate(c.fecha_limite_sla);
+      if(c.sla_vencido){slaEl.textContent+=' ⚠️ Vencido';slaEl.className='ic-value sla-vencido';}
+      else if(dias<=2){slaEl.textContent+=' ('+dias+'d restante'+(dias===1?'':'s')+')';slaEl.className='ic-value sla-warn';}
+      else slaEl.className='ic-value sla-ok';
+    } else {slaEl.textContent='—';slaEl.className='ic-value';}
+
+    // Timeline
+    const tl=document.getElementById('r-timeline');
+    tl.innerHTML='';
+    const todos=eventos.length?eventos
+      :[{evento:'creado',descripcion:'Radicado recibido en el sistema.',created_at:c.created_at}];
+
+    setText('r-count', todos.length+' evento'+(todos.length===1?'':'s'));
+
+    todos.forEach((ev,i)=>{
+      const col=EV_COLOR[ev.evento]||'blue';
+      const isLast=i===todos.length-1;
+      const div=document.createElement('div');
+      div.className='tl-item';
+      div.innerHTML=
+        '<div class="tl-spine">'
+          +'<div class="tl-dot '+col+'"></div>'
+          +(isLast?'':'<div class="tl-line"></div>')
+        +'</div>'
+        +'<div style="flex:1;min-width:0">'
+          +'<div class="tl-ev">'+(ev.evento||'').replace(/_/g,' ')+'</div>'
+          +'<div class="tl-desc">'+(ev.descripcion||'Sin descripción')+'</div>'
+          +'<div class="tl-time">'+fmt(ev.created_at)+'</div>'
+        +'</div>';
+      tl.appendChild(div);
+    });
+
+    // Respuestas
+    respuestas.forEach(resp=>{
+      if(!resp.contenido) return;
+      const txt=resp.contenido.replace(/<[^>]*>/g,'').slice(0,280);
+      const div=document.createElement('div');
+      div.className='resp-card';
+      div.innerHTML='<div class="resp-label">✉️ Respuesta enviada · '+fmt(resp.created_at)+'</div>'
+        +'<div class="resp-txt">'+txt+(resp.contenido.length>280?'…':'')+'</div>';
+      tl.appendChild(div);
+    });
+
+  }catch(e){showError('Error al consultar: '+e.message);}
+  resetBtn();
+}
+
+// Auto-buscar desde URL ?t=TD-xxx
+(()=>{
+  const t=new URLSearchParams(window.location.search).get('t');
+  if(t){document.getElementById('inp-ticket').value=t.toUpperCase();buscar();}
+})();
+
+// Canvas fondo animado (igual que login)
+(()=>{
+  const canvas=document.getElementById('bg-canvas');
+  const ctx=canvas.getContext('2d');
+  let W,H,pts=[];
+  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;init();}
+  function init(){
+    pts=[];
+    for(let i=0;i<55;i++) pts.push({
+      x:Math.random()*W,y:Math.random()*H,
+      vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,
+      r:Math.random()*1.5+.5
+    });
+  }
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    pts.forEach(p=>{
+      p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0||p.x>W)p.vx*=-1;
+      if(p.y<0||p.y>H)p.vy*=-1;
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle='rgba(37,99,235,.25)';ctx.fill();
+    });
+    pts.forEach((a,i)=>pts.slice(i+1).forEach(b=>{
+      const d=Math.hypot(a.x-b.x,a.y-b.y);
+      if(d<130){
+        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
+        ctx.strokeStyle='rgba(37,99,235,'+(1-d/130)*.08+')';ctx.stroke();
+      }
+    }));
+    requestAnimationFrame(draw);
+  }
+  window.addEventListener('resize',resize);
+  resize();draw();
+})();
+</script>
+</body>
+</html>
