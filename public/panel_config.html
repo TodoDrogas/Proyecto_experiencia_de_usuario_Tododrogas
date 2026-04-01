@@ -253,6 +253,9 @@ html,body{height:100%;font-family:'Space Grotesk',sans-serif;background:var(--bg
       <div class="nav-item" onclick="goTo('frases-login',this)">
         <span class="icon">🔐</span> Carrusel Login
       </div>
+      <div class="nav-item" onclick="goTo('frases-consulta',this)">
+        <span class="icon">🔍</span> Carrusel Consulta
+      </div>
       <div class="nav-item" onclick="goTo('logo',this)">
         <span class="icon">🖼</span> Logo & Colores
       </div>
@@ -560,6 +563,26 @@ html,body{height:100%;font-family:'Space Grotesk',sans-serif;background:var(--bg
       </div>
 
       <!-- SEDES -->
+      <!-- FRASES CONSULTA -->
+      <div class="page" id="page-frases-consulta">
+        <div class="section-head">
+          <h2>Carrusel de la Pantalla de Consulta</h2>
+          <p>Se muestra en la página consulta.html en el panel derecho. Arrastra para reordenar.</p>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Frases activas</h3><span class="badge badge-blue" id="frases-consulta-count">0 slides</span></div>
+          <div class="frase-list" id="frase-consulta-list"></div>
+          <div class="add-frase">
+            <select id="new-frase-consulta-icon" style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-s);color:var(--ink);font-size:16px;padding:8px;cursor:pointer;">
+              <option>📋</option><option>💊</option><option>⏱️</option><option>🔒</option>
+              <option>✅</option><option>📱</option><option>🔍</option><option>📞</option>
+            </select>
+            <input id="new-frase-consulta-input" placeholder="Escribe una nueva frase y presiona Agregar…" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-s);padding:8px 14px;color:var(--ink);font-size:13px;font-family:inherit;outline:none;">
+            <button class="btn btn-primary btn-sm" onclick="addFraseConsulta()">+ Agregar</button>
+          </div>
+        </div>
+      </div>
+
       <div class="page" id="page-sedes">
         <div class="section-head" style="display:flex;align-items:flex-start;justify-content:space-between;">
           <div>
@@ -760,7 +783,7 @@ function goTo(page,el){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
   el.classList.add('active');
-  const T={frases:'Carrusel Bienvenida','frases-login':'Carrusel Login (SIGI)',logo:'Logo & Colores',faq:'Preguntas Frecuentes',canales:'Canales de Contacto',qr:'Código QR',sedes:'Gestión de Sedes',supabase:'Conexión BD'};
+  const T={frases:'Carrusel Bienvenida','frases-login':'Carrusel Login (SIGI)','frases-consulta':'Carrusel Consulta',logo:'Logo & Colores',faq:'Preguntas Frecuentes',canales:'Canales de Contacto',qr:'Código QR',sedes:'Gestión de Sedes',supabase:'Conexión BD'};
   document.getElementById('topbar-title').textContent=T[page]||page;
   if(page==='qr') setTimeout(generateQR,100);
   if(page==='frases') startPreview(); else stopPreview();
@@ -913,6 +936,33 @@ function syncHex(cId,hId){document.getElementById(hId).value=document.getElement
 function syncSwatch(hId,cId){const v=document.getElementById(hId).value;if(/^#[0-9a-fA-F]{6}$/.test(v)){document.getElementById(cId).value=v;STATE.colors[cId.replace('c-','')]=v;}}
 
 // FAQ
+// ── FRASES CONSULTA ──────────────────────────────────────
+function renderFrasesConsulta(){
+  const list=document.getElementById('frase-consulta-list');
+  if(!list) return;
+  list.innerHTML='';
+  STATE.frases_consulta.forEach((f,i)=>{
+    const div=document.createElement('div');
+    div.className='frase-item';div.draggable=true;div.dataset.id=f.id;
+    div.innerHTML=`<span class="drag-handle">⠿</span><span class="frase-num">${String(i+1).padStart(2,'0')}</span><span style="font-size:18px;margin:0 6px;">${f.icon||'📋'}</span><input class="frase-text" value="${escHtml(f.text)}" maxlength="140" oninput="STATE.frases_consulta[${i}].text=this.value"><button class="frase-del" onclick="delFraseConsulta(${f.id})">✕</button>`;
+    list.appendChild(div);
+  });
+  const cnt=document.getElementById('frases-consulta-count');
+  if(cnt) cnt.textContent=STATE.frases_consulta.length+' slides';
+}
+function addFraseConsulta(){
+  const inp=document.getElementById('new-frase-consulta-input');
+  const icon=document.getElementById('new-frase-consulta-icon');
+  const text=inp?.value.trim();
+  if(!text){showToast('Escribe una frase primero','err');return;}
+  STATE.frases_consulta.push({id:STATE.nextIdConsulta++,icon:icon?.value||'📋',text});
+  inp.value='';renderFrasesConsulta();showToast('Frase agregada al carrusel de consulta');
+}
+function delFraseConsulta(id){
+  if(STATE.frases_consulta.length<=1){showToast('Necesitas al menos 1 frase','err');return;}
+  STATE.frases_consulta=STATE.frases_consulta.filter(f=>f.id!==id);renderFrasesConsulta();
+}
+
 function renderFaq(){
   const list=document.getElementById('faq-list'); list.innerHTML='';
   STATE.faq.forEach((f,i)=>{
@@ -1010,7 +1060,7 @@ async function saveAll(){
   }
 }
 function buildConfig(){
-  return{frases:STATE.frases,frases_login:STATE.frases_login,colors:STATE.colors,logo:STATE.logo,faq:STATE.faq,canales:STATE.canales,qrUrl:STATE.qrUrl,instName:document.getElementById('inst-name')?.value||STATE.instName,updatedAt:new Date().toISOString()};
+  return{frases:STATE.frases,frases_login:STATE.frases_login,frases_consulta:STATE.frases_consulta,colors:STATE.colors,logo:STATE.logo,faq:STATE.faq,canales:STATE.canales,qrUrl:STATE.qrUrl,instName:document.getElementById('inst-name')?.value||STATE.instName,updatedAt:new Date().toISOString()};
 }
 function exportConfig(){
   const blob=new Blob([JSON.stringify(buildConfig(),null,2)],{type:'application/json'});
@@ -1044,7 +1094,7 @@ function showToast(msg,type='success'){
 }
 
 // INIT
-renderFrases(); renderFrasesLogin(); renderFaq(); startPreview();
+renderFrases(); renderFrasesLogin(); renderFrasesConsulta(); renderFaq(); startPreview();
 
 // ── Carga config SOLO desde Supabase (fuente de verdad única) ──────
 (async()=>{
@@ -1080,6 +1130,7 @@ renderFrases(); renderFrasesLogin(); renderFaq(); startPreview();
 function applyFullConfig(cfg){
   if(!cfg) return;
   if(cfg.frases){STATE.frases=cfg.frases;renderFrases();}
+  if(cfg.frases_consulta){STATE.frases_consulta=cfg.frases_consulta;renderFrasesConsulta();}
   if(cfg.frases_login){STATE.frases_login=cfg.frases_login;renderFrasesLogin();}
   if(cfg.faq){STATE.faq=cfg.faq;renderFaq();}
   if(cfg.logo){
