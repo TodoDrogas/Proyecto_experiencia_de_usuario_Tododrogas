@@ -452,95 +452,144 @@ if ($token) {
     $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} " . mb_strtoupper($canal, "UTF-8") . "</span>";
 
     $cuerpo_html = "
-<!DOCTYPE html><html><head><meta charset='UTF-8'>
-<style>@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap');body,table,td,p,span,div,a{font-family:'Poppins',Arial,sans-serif!important}</style>
-</head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Poppins,Arial,sans-serif'>
-<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
+<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
+<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
 <tr><td align='center'>
-<table width='680' cellpadding='0' cellspacing='0' style='max-width:680px;width:100%'>
+<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
 
   <!-- HEADER -->
-  <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:24px 32px'>
-    <table width='100%'><tr>
-      <td><div style='background:#fff;border-radius:10px;padding:8px 16px;display:inline-block'>
-        <img src='{$logo_url}' alt='Tododrogas' style='height:34px;max-width:180px;object-fit:contain;display:block'>
-      </div></td>
-      <td align='right'><span style='color:#93c5fd;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase'>NUEVA PQRSFD RECIBIDA</span></td>
-    </tr></table>
+  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
+    <img src='{$logo_url}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 12px;filter:brightness(0) invert(1);opacity:.92'>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Nueva PQRSFD recibida &middot; Plataforma Nova TD</p>
   </td></tr>
 
   <!-- RADICADO BAND -->
-  <tr><td style='background:#1e3a8a;padding:18px 32px;text-align:center'>
-    <p style='color:#93c5fd;margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase'>Número de radicado</p>
-    <p style='color:#fff;margin:6px 0 2px;font-size:28px;font-weight:800;letter-spacing:3px;font-family:monospace'>{$ticket_id}</p>
-    <p style='color:#bfdbfe;margin:0;font-size:11px'>{$fecha_fmt} &nbsp;·&nbsp; {$badge_canal}</p>
+  <tr><td style='background:#0a2448;padding:20px 44px;text-align:center'>
+    <p style='color:#6a90b8;margin:0;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Número de radicado</p>
+    <p style='color:#ffffff;margin:8px 0 4px;font-size:26px;font-weight:700;letter-spacing:4px;font-family:monospace'>{$ticket_id}</p>
+    <p style='color:#4a6a90;margin:0;font-size:10px'>{$fecha_fmt}</p>
   </td></tr>
 
   <!-- BODY -->
-  <tr><td style='background:#fff;padding:24px 32px;border:1px solid #e2e8f0;border-top:none'>
-    <p style='margin:0 0 16px;color:#374151;font-size:14px'>Estimado equipo PQRSFD,</p>
-    <p style='margin:0 0 20px;color:#374151;font-size:14px;line-height:1.6'>Mediante la <strong>Plataforma Inteligente Nova TD</strong> se ha recibido el siguiente caso radicado:</p>
+  <tr><td style='background:#ffffff;padding:36px 44px'>
 
-    <!-- Tabla de datos del ticket -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:20px;font-size:13px'>
-      <tr style='background:#eff6ff'><td style='padding:9px 14px;font-weight:700;color:#1e40af;width:160px;border-bottom:1px solid #e5e7eb'>Radicado</td>
-          <td style='padding:9px 14px;font-weight:700;color:#1e40af;font-size:15px;border-bottom:1px solid #e5e7eb'>{$ticket_id}</td></tr>
-      <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Fecha</td>
-          <td style='padding:9px 14px;color:#111827;border-bottom:1px solid #f3f4f6'>{$fecha_fmt}</td></tr>
-      <tr style='background:#fafafa'><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Canal</td>
-          <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$badge_canal}</td></tr>
-      <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Tipo</td>
-          <td style='padding:9px 14px;color:#111827;font-weight:700;border-bottom:1px solid #f3f4f6'>" . mb_strtoupper($tipo_pqr, "UTF-8") . "" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " — {$categoria_ia}" : '') . "</td></tr>
-      <tr style='background:#fafafa'><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Sentimiento</td>
-          <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$badge_sent}</td></tr>
-      <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>Prioridad</td>
-          <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$badge_prio}</td></tr>
-      <tr style='background:#fafafa'><td style='padding:9px 14px;font-weight:600;color:#6b7280;border-bottom:1px solid #f3f4f6'>SLA</td>
-          <td style='padding:9px 14px;border-bottom:1px solid #f3f4f6'>{$horas_sla}h · Límite: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "</td></tr>
-      <tr><td style='padding:9px 14px;font-weight:600;color:#6b7280'>Ley aplicable</td>
-          <td style='padding:9px 14px;color:#111827'>{$ley_aplicable}</td></tr>
+    <p style='margin:0 0 10px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Estimado equipo PQRSFD,</p>
+    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Se ha recibido el siguiente caso mediante la <strong style='font-weight:500;color:#0c2d5e'>Plataforma Inteligente Nova TD</strong>:</p>
+
+    <!-- DIVIDER DATOS TICKET -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Datos del radicado</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
     </table>
 
-    <!-- Datos del ciudadano -->
-    <div style='background:#f0f7ff;border:1px solid #bfdbfe;border-left:4px solid #1e40af;border-radius:6px;padding:16px 20px;margin-bottom:16px'>
-      <p style='margin:0 0 10px;font-weight:700;color:#1e40af;font-size:13px'>👤 Datos del ciudadano</p>
-      <p style='margin:3px 0;font-size:13px;color:#374151'><strong>Nombre:</strong> {$nombre}</p>" .
-      ($documento ? "<p style='margin:3px 0;font-size:13px;color:#374151'><strong>Documento:</strong> {$documento}</p>" : "") .
-      ($correo ? "<p style='margin:3px 0;font-size:13px;color:#374151'><strong>Correo:</strong> <a href='mailto:{$correo}' style='color:#2563eb'>{$correo}</a></p>" : "") .
-      ($telefono ? "<p style='margin:3px 0;font-size:13px;color:#374151'><strong>Celular:</strong> {$telefono}</p>" : "") .
-      "<p style='margin:3px 0;font-size:13px;color:#374151'><strong>Canal preferido:</strong> {$canal_contacto}</p>
-    </div>
+    <!-- TABLA RADICADO -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:9px 14px;font-size:11px;font-weight:500;color:#0c2d5e;width:150px;border-bottom:1px solid #d4dce8'>Radicado</td>
+        <td style='padding:9px 14px;font-size:13px;font-weight:700;color:#0c2d5e;letter-spacing:1px;border-bottom:1px solid #d4dce8'>{$ticket_id}</td>
+      </tr>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Fecha</td>
+        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$fecha_fmt}</td>
+      </tr>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Canal</td>
+        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$emoji_canal} " . mb_strtoupper($canal, "UTF-8") . "</td>
+      </tr>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Tipo</td>
+        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>" . mb_strtoupper($tipo_pqr, "UTF-8") . "" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " &mdash; {$categoria_ia}" : '') . "</td>
+      </tr>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Sentimiento</td>
+        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$emoji_sent} " . mb_strtoupper($sentimiento, "UTF-8") . "</td>
+      </tr>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Prioridad</td>
+        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$emoji_prio} " . mb_strtoupper($prioridad, "UTF-8") . "</td>
+      </tr>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>SLA</td>
+        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$horas_sla}h &middot; Límite: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "</td>
+      </tr>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Ley aplicable</td>
+        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a'>{$ley_aplicable}</td>
+      </tr>
+    </table>
 
-    <!-- Mensaje recibido -->
-    <div style='background:#faf5ff;border:1px solid #e9d5ff;border-left:4px solid #7c3aed;border-radius:6px;padding:16px 20px;margin-bottom:16px'>
-      <p style='margin:0 0 8px;font-weight:700;color:#7c3aed;font-size:13px'>{$emoji_canal} Mensaje recibido via {$canal_txt}</p>" .
+    <!-- DIVIDER CIUDADANO -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Datos del ciudadano</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <!-- TABLA CIUDADANO -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #e8eef6'>Nombre</td>
+        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$nombre}</td>
+      </tr>" .
+      ($documento ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Documento</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$documento}</td></tr>" : "") .
+      ($correo ? "<tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Correo</td><td style='padding:9px 14px;font-size:12px;border-bottom:1px solid #e8eef6'><a href='mailto:{$correo}' style='color:#0c2d5e;font-weight:500;text-decoration:none'>{$correo}</a></td></tr>" : "") .
+      ($telefono ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Celular</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$telefono}</td></tr>" : "") .
+      "<tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Canal preferido</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a'>{$canal_contacto}</td></tr>
+    </table>
+
+    <!-- DIVIDER MENSAJE -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Mensaje recibido &mdash; {$canal_txt}</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <!-- BLOQUE MENSAJE -->
+    <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:24px'>" .
       ($canal === 'audio' && $transcripcion
-        ? "<p style='margin:0 0 6px;font-size:10px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.5px'>🎙️ Transcripción Whisper AI:</p>
-           <p style='margin:0;font-size:13px;line-height:1.6;color:#374151;background:#fff;border:1px solid #e9d5ff;border-radius:4px;padding:10px 14px'>" . nl2br(htmlspecialchars($transcripcion)) . "</p>"
-        : "<p style='margin:0;font-size:13px;line-height:1.6;color:#374151'>" . nl2br(htmlspecialchars($texto_pqr ?: '[Audio adjunto — escuchar archivo adjunto]')) . "</p>") .
-      ($resumen_corto && !str_starts_with($resumen_corto, '[Audio') ? "<p style='margin:10px 0 0;font-size:12px;color:#6b7280;font-style:italic'>📌 Resumen IA: " . htmlspecialchars($resumen_corto) . "</p>" : "") .
+        ? "<p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Transcripción Whisper AI</p>
+           <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . nl2br(htmlspecialchars($transcripcion)) . "</p>"
+        : "<p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7'>" . nl2br(htmlspecialchars($texto_pqr ?: '[Audio adjunto — escuchar archivo adjunto]')) . "</p>") .
+      ($resumen_corto && !str_starts_with($resumen_corto, '[Audio') ? "<p style='margin:12px 0 0;font-size:10px;color:#7a90a8;font-style:normal;letter-spacing:.3px'><span style='font-weight:500;color:#0c2d5e'>Resumen IA:</span> " . htmlspecialchars($resumen_corto) . "</p>" : "") .
       "
     </div>" .
 
     ($audio_url || $canvas_url ? "
-    <div style='background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:12px 16px;margin-bottom:16px;font-size:12px;color:#92400e'>
-      <strong>📎 Adjunto incluido:</strong> " . ($audio_url ? "Archivo de audio (🎤 .webm)" : "Imagen del lápiz inteligente (✏️)") . " — ver adjunto en este correo.
+    <div style='background:#f6f9fd;border:1px solid #d4dce8;padding:12px 18px;margin-bottom:24px;font-size:11px;color:#2a4870'>
+      <strong>Adjunto incluido:</strong> " . ($audio_url ? "Archivo de audio (🎤 .webm)" : "Imagen del lápiz inteligente (✏️)") . " &mdash; ver adjunto en este correo.
     </div>" : "") . "
 
-    <!-- Estado sistema -->
-    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:12px 16px;margin-bottom:0;font-size:12px;color:#166534'>
-      ✅ Este caso ha sido <strong>guardado automáticamente en el sistema</strong>. Si hay problemas de conectividad, el registro persiste en la base de datos y estará disponible cuando se recupere la conexión.
-    </div>
+    <!-- BLOQUE ESTADO SISTEMA -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:0'>
+      <tr><td style='padding:16px 20px'>
+        <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:10px'>
+          <tr>
+            <td style='width:20px;border-top:2px solid #0c2d5e;vertical-align:middle'></td>
+            <td style='padding-left:10px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:500'>Estado del sistema</td>
+          </tr>
+        </table>
+        <p style='margin:0;font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Este caso ha sido <strong style='font-weight:500'>guardado automáticamente</strong>. El registro persiste en la base de datos y estará disponible cuando se recupere la conexión.</p>
+      </td></tr>
+    </table>
+
   </td></tr>
 
   <!-- FOOTER -->
-  <tr><td style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center'>
-    <p style='font-size:11px;color:#9ca3af;margin:0'>Experiencia de Servicio al Cliente · Tododrogas CIA SAS · Nova TD v4 · {$fecha_fmt}<br>
-    Radicado: <strong>{$ticket_id}</strong> · ID interno: " . ($correo_id ?? 'N/A') . "</p>
+  <tr><td style='background:#0c2d5e;padding:18px 44px'>
+    <table width='100%' cellpadding='0' cellspacing='0'>
+      <tr>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente &middot; Nova TD v4</td>
+        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Radicado: {$ticket_id}<br>ID: " . ($correo_id ?? 'N/A') . "</td>
+      </tr>
+    </table>
   </td></tr>
 
-</table>
-</td></tr></table>
+</table></td></tr></table>
 </body></html>";
 
 
@@ -654,34 +703,68 @@ if ($token) {
         $emoji_sent_f = ['positivo'=>'😊','neutro'=>'😐','negativo'=>'😤','urgente'=>'🚨'][$sentimiento] ?? '📋';
         $emoji_prio_f = ['baja'=>'🟢','media'=>'🟡','alta'=>'🟠','critica'=>'🔴'][$prioridad] ?? '🟡';
         $fecha_fmt_f  = date('d/m/Y H:i', strtotime($now));
-        $body_fallback = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
-<div style='max-width:680px;margin:24px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1)'>
-  <div style='background:#1e3a8a;padding:20px 28px;text-align:center'>
-    <p style='color:#93c5fd;margin:0;font-size:10px;letter-spacing:1.5px;text-transform:uppercase'>Número de radicado</p>
-    <p style='color:#fff;margin:6px 0;font-size:26px;font-weight:800;letter-spacing:3px;font-family:monospace'>{$ticket_id}</p>
-    <p style='color:#bfdbfe;margin:0;font-size:11px'>{$fecha_fmt_f}</p>
-  </div>
-  <div style='padding:20px 28px'>
-    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:16px;font-size:13px'>
-      <tr style='background:#eff6ff'><td style='padding:8px 14px;font-weight:700;color:#1e40af;width:140px'>Radicado</td><td style='padding:8px 14px;font-weight:700;color:#1e40af'>{$ticket_id}</td></tr>
-      <tr><td style='padding:8px 14px;color:#6b7280'>Tipo</td><td style='padding:8px 14px;font-weight:700'>" . mb_strtoupper($tipo_pqr,'UTF-8') . "</td></tr>
-      <tr style='background:#fafafa'><td style='padding:8px 14px;color:#6b7280'>Sentimiento</td><td style='padding:8px 14px'>{$emoji_sent_f} " . mb_strtoupper($sentimiento,'UTF-8') . "</td></tr>
-      <tr><td style='padding:8px 14px;color:#6b7280'>Prioridad</td><td style='padding:8px 14px'>{$emoji_prio_f} " . mb_strtoupper($prioridad,'UTF-8') . "</td></tr>
-      <tr style='background:#fafafa'><td style='padding:8px 14px;color:#6b7280'>Canal</td><td style='padding:8px 14px'>" . mb_strtoupper($canal,'UTF-8') . "</td></tr>
+        $body_fallback = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
+<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
+<tr><td align='center'>
+<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
+  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Nueva PQRSFD &middot; Plataforma Nova TD</p>
+    <p style='color:#ffffff;margin:12px 0 4px;font-size:24px;font-weight:700;letter-spacing:4px;font-family:monospace'>{$ticket_id}</p>
+    <p style='color:#4a6a90;margin:0;font-size:10px'>{$fecha_fmt_f}</p>
+  </td></tr>
+  <tr><td style='background:#ffffff;padding:36px 44px'>
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Datos del radicado</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
     </table>
-    <div style='background:#f0f7ff;border-left:4px solid #1e40af;border-radius:6px;padding:14px 18px;margin-bottom:14px'>
-      <p style='margin:0 0 8px;font-weight:700;color:#1e40af;font-size:13px'>👤 Datos del ciudadano</p>
-      <p style='margin:3px 0;font-size:13px'><strong>Nombre:</strong> {$nombre}</p>" .
-      ($documento ? "<p style='margin:3px 0;font-size:13px'><strong>Documento:</strong> {$documento}</p>" : "") .
-      ($correo ? "<p style='margin:3px 0;font-size:13px'><strong>Correo:</strong> {$correo}</p>" : "") .
-      ($telefono ? "<p style='margin:3px 0;font-size:13px'><strong>Celular:</strong> {$telefono}</p>" : "") . "
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      <tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #d4dce8'>Radicado</td><td style='padding:9px 14px;font-size:12px;font-weight:700;color:#0c2d5e;border-bottom:1px solid #d4dce8'>{$ticket_id}</td></tr>
+      <tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Tipo</td><td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>" . mb_strtoupper($tipo_pqr,'UTF-8') . "</td></tr>
+      <tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Sentimiento</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$emoji_sent_f} " . mb_strtoupper($sentimiento,'UTF-8') . "</td></tr>
+      <tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Prioridad</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$emoji_prio_f} " . mb_strtoupper($prioridad,'UTF-8') . "</td></tr>
+      <tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Canal</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a'>" . mb_strtoupper($canal,'UTF-8') . "</td></tr>
+    </table>
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Datos del ciudadano</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      <tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #e8eef6'>Nombre</td><td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$nombre}</td></tr>" .
+      ($documento ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Documento</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$documento}</td></tr>" : "") .
+      ($correo ? "<tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Correo</td><td style='padding:9px 14px;font-size:12px;border-bottom:1px solid #e8eef6'><a href='mailto:{$correo}' style='color:#0c2d5e;font-weight:500;text-decoration:none'>{$correo}</a></td></tr>" : "") .
+      ($telefono ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Celular</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a'>{$telefono}</td></tr>" : "") . "
+    </table>
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Mensaje</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:0'>
+      <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7'>" . nl2br(htmlspecialchars($texto_pqr)) . "</p>
     </div>
-    <div style='background:#faf5ff;border-left:4px solid #7c3aed;border-radius:6px;padding:14px 18px'>
-      <p style='margin:0 0 8px;font-weight:700;color:#7c3aed;font-size:13px'>📝 Mensaje</p>
-      <p style='margin:0;font-size:13px;line-height:1.7'>" . nl2br(htmlspecialchars($texto_pqr)) . "</p>
-    </div>
-  </div>
-</div>
+
+  </td></tr>
+  <tr><td style='background:#0c2d5e;padding:18px 44px'>
+    <table width='100%' cellpadding='0' cellspacing='0'>
+      <tr>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente &middot; Nova TD</td>
+        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Sistema PQRSFD</td>
+      </tr>
+    </table>
+  </td></tr>
+</table></td></tr></table>
 </body></html>";
         sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
             'body_content' => $body_fallback,
@@ -701,90 +784,131 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     $emoji_tipo_u = ['PETICIÓN'=>'💡','QUEJA'=>'😤','RECLAMO'=>'⚠️','SUGERENCIA'=>'💬','FELICITACIÓN'=>'⭐','DENUNCIA'=>'🚨'][mb_strtoupper($tipo_pqr_raw, "UTF-8")] ?? '📋';
 
     $cuerpo_acuse = "
-<!DOCTYPE html><html><head><style>@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');body,table,td,p,span,div{font-family:'Poppins',Arial,sans-serif!important}</style></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Poppins,Arial,sans-serif'>
-<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
+<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
+<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
 <tr><td align='center'>
-<table width='640' cellpadding='0' cellspacing='0' style='max-width:640px;width:100%'>
+<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
 
-  <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
+  <!-- HEADER -->
+  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
     ".($logo_img_html_usuario ?: "")."
-    <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente</p>
-    <h2 style='color:#fff;margin:6px 0 0;font-size:20px;font-weight:700'>Su solicitud fue recibida</h2>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Acuse de recibo &middot; Tododrogas CIA SAS &middot; PQRSFD</p>
   </td></tr>
 
-  <tr><td style='background:#1e3a8a;padding:20px 32px;text-align:center'>
-    <p style='color:#93c5fd;margin:0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase'>Su número de radicado</p>
-    <p style='color:#fff;margin:6px 0;font-size:30px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_id}</p>
-    <p style='color:#93c5fd;margin:0;font-size:11px'>Guárdelo para hacer seguimiento</p>
+  <!-- RADICADO -->
+  <tr><td style='background:#0a2448;padding:24px 44px;text-align:center'>
+    <p style='color:#6a90b8;margin:0;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Su número de radicado</p>
+    <p style='color:#ffffff;margin:10px 0 6px;font-size:28px;font-weight:700;letter-spacing:4px;font-family:monospace'>{$ticket_id}</p>
+    <p style='color:#4a6a90;margin:0;font-size:10px;letter-spacing:.5px'>Guárdelo para hacer seguimiento</p>
   </td></tr>
 
-  <tr><td style='background:#fff;padding:24px 32px;border:1px solid #e2e8f0;border-top:none'>
-    <p style='margin:0 0 16px;color:#374151;font-size:14px'>Estimado/a <strong>{$nombre}</strong>,</p>
-    <p style='margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6'>Hemos recibido su solicitud. Queremos que sepa que para nosotros su bienestar es lo más importante y estamos comprometidos a darle una respuesta oportuna y de calidad.</p>
+  <!-- BODY -->
+  <tr><td style='background:#ffffff;padding:36px 44px'>
 
-    <table width='100%' cellpadding='8' cellspacing='0' style='font-size:13px;border-collapse:collapse;margin-bottom:20px'>
-      <tr><td style='color:#6b7280;width:160px;border-bottom:1px solid #f3f4f6'>Fecha de radicado</td>
-          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$fecha_fmt_u} (hora Colombia)</td></tr>
-      <tr><td style='color:#6b7280;border-bottom:1px solid #f3f4f6'>Tipo de solicitud</td>
-          <td style='color:#111827;font-weight:600;border-bottom:1px solid #f3f4f6'>{$emoji_tipo_u} {$tipo_label_u}" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " — {$categoria_ia}" : '') . "</td></tr>
+    <p style='margin:0 0 10px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hola, <strong style='font-weight:500;color:#0c2d5e'>{$nombre}</strong>,</p>
+    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hemos recibido su solicitud. Su bienestar es lo más importante para nosotros y estamos comprometidos a darle una respuesta oportuna y de calidad.</p>
 
-      <tr><td style='color:#6b7280'>Canal de contacto</td>
-          <td style='color:#111827;font-weight:600'>{$canal_contacto}</td></tr>
+    <!-- DIVIDER DETALLES -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Detalles de su solicitud</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
     </table>
 
-    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:20px'>
-      <p style='margin:0 0 8px;font-size:13px;font-weight:700;color:#166534'>¿Qué sigue?</p>
-      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Su caso será revisado por uno de nuestros asesores especializados.</p>
-      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Recibirá respuesta a este correo en el plazo indicado.</p>
-      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Si necesita información urgente, responda este correo con su número de radicado.</p>
-    </div>
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:11px 14px;font-size:11px;color:#7a90a8;width:160px;border-bottom:1px solid #d4dce8'>Fecha de radicado</td>
+        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$fecha_fmt_u} (hora Colombia)</td>
+      </tr>
+      <tr>
+        <td style='padding:11px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Tipo de solicitud</td>
+        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$emoji_tipo_u} {$tipo_label_u}" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " &mdash; {$categoria_ia}" : '') . "</td>
+      </tr>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:11px 14px;font-size:11px;color:#7a90a8'>Canal de contacto</td>
+        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a'>{$canal_contacto}</td>
+      </tr>
+    </table>
 
-    ".( ($audio_url || $canvas_url || $texto_pqr) ? "
-    <div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #7c3aed;border-radius:4px;padding:14px 16px;margin-bottom:20px'>
-      <p style='margin:0 0 6px;font-size:12px;font-weight:700;color:#7c3aed'>📋 Copia de su mensaje (para su referencia)</p>
-      <p style='margin:0;font-size:12px;color:#374151;line-height:1.6'>".htmlspecialchars(mb_substr($texto_pqr, 0, 500)).(strlen($texto_pqr)>500?'…':'')."</p>
-      ".($audio_url || $canvas_url ? "<p style='margin:8px 0 0;font-size:11px;color:#6b7280'>📎 Su ".($audio_url?'audio':'imagen')." fue adjuntado a este correo como evidencia.</p>" : "")."
-    </div>" : "")."
-
-  </td></tr>
-
-  <!-- CANALES PQRSFD -->
-  <tr><td style='padding:0'>
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse'>
-      <tr><td style='background:linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%);padding:22px 32px'>
-        <p style='margin:0 0 14px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#93c5fd'>📍 Nuestros canales de atención · Tododrogas CIA SAS</p>
-        <table width='100%' cellpadding='0' cellspacing='0'>
+    <!-- BLOQUE QUÉ SIGUE -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      <tr><td style='padding:22px 24px'>
+        <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:16px'>
           <tr>
-            <td width='50%' style='vertical-align:top;padding-right:8px'>
-              <p style='margin:0 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>💬 WhatsApp</p>
-              <a href='https://wa.me/573043412431' style='color:#fff;font-size:14px;font-weight:700;text-decoration:none'>304 341 2431</a>
-              <p style='margin:10px 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>📞 PBX Atención</p>
-              <a href='tel:6043222432' style='color:#fff;font-size:14px;font-weight:700;text-decoration:none'>604 322 2432 Op. 2</a>
-            </td>
-            <td width='50%' style='vertical-align:top;padding-left:8px'>
-              <p style='margin:0 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>📧 Correo PQRSFD</p>
-              <a href='mailto:pqrsfd@tododrogas.com.co' style='color:#fff;font-size:13px;font-weight:700;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
-              <p style='margin:10px 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>🌐 Formulario PQR</p>
-              <a href='https://tododrogas.online/pqr_form.html' style='color:#fff;font-size:13px;font-weight:700;text-decoration:none'>tododrogas.online/pqr</a>
-            </td>
+            <td style='width:20px;border-top:2px solid #0c2d5e;vertical-align:middle'></td>
+            <td style='padding-left:10px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:500'>¿Qué sigue?</td>
           </tr>
         </table>
-        <p style='margin:12px 0 0;font-size:10px;color:rgba(255,255,255,.55);border-top:1px solid rgba(255,255,255,.1);padding-top:10px'>
-          <strong style='color:#bfdbfe'>PBX Ventas:</strong> 604 448 1534 &nbsp;·&nbsp;
-          <strong style='color:#bfdbfe'>WhatsApp Ventas:</strong> 312 815 2913 &nbsp;·&nbsp;
-          <strong style='color:#bfdbfe'>Tel. Corp:</strong> 304 341 2431
-        </p>
+        <table width='100%' cellpadding='0' cellspacing='0'>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>01</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Su caso será revisado por uno de nuestros asesores especializados.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Recibirá respuesta a este correo en el plazo indicado.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top'>03</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Si necesita información urgente, responda este correo con su número de radicado.</td></tr>
+        </table>
       </td></tr>
     </table>
-  </td></tr>
-  <!-- FIN CANALES PQRSFD -->
 
-  <tr><td style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center'>
-    <p style='font-size:11px;color:#9ca3af;margin:0'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente<br>
-    Este es un mensaje automático, no responda directamente a este correo.</p>
+    ".( ($audio_url || $canvas_url || $texto_pqr) ? "
+    <!-- DIVIDER COPIA -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Copia de su mensaje</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:24px'>
+      <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>".htmlspecialchars(mb_substr($texto_pqr, 0, 500)).(strlen($texto_pqr)>500?'…':'')."</p>
+      ".($audio_url || $canvas_url ? "<p style='margin:10px 0 0;font-size:10px;color:#7a90a8'>Su ".($audio_url?'audio':'imagen')." fue adjuntado a este correo como evidencia.</p>" : "")."
+    </div>" : "")."
+
+    <!-- DIVIDER CANALES -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Canales de atención</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <!-- CANALES GRILLA 2x2 -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8'>
+      <tr>
+        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>WhatsApp</p>
+          <a href='https://wa.me/573043412431' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>304 341 2431</a>
+        </td>
+        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX Atención</p>
+          <a href='tel:6043222432' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>604 322 2432 Op. 2</a>
+        </td>
+      </tr>
+      <tr>
+        <td width='50%' style='padding:16px 18px;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Correo PQRSFD</p>
+          <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
+        </td>
+        <td width='50%' style='padding:16px 18px;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Portal web</p>
+          <a href='https://tododrogas.online/pqr_form.html' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.online/pqr</a>
+        </td>
+      </tr>
+    </table>
+
   </td></tr>
 
-</table></td></tr></table></body></html>";
+  <!-- FOOTER -->
+  <tr><td style='background:#0c2d5e;padding:18px 44px'>
+    <table width='100%' cellpadding='0' cellspacing='0'>
+      <tr>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente</td>
+        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Sistema PQRSFD</td>
+      </tr>
+    </table>
+  </td></tr>
+
+</table></td></tr></table>
+</body></html>";
 
     $acuse_payload = [
         'subject'      => "✅ Su solicitud fue recibida · Radicado {$ticket_id} · Tododrogas CIA SAS",
