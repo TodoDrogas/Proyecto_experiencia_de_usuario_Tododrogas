@@ -231,7 +231,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         if ($comentario) {
             $bloque_comentario = "
             <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:24px'>
-              <p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Observación del cliente</p>
+              <p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Observación del usuario</p>
               <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . htmlspecialchars($comentario) . "</p>
             </div>";
         }
