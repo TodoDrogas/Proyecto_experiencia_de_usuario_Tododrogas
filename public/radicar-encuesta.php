@@ -204,124 +204,133 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         $color_cal     = $calificacion >= 4 ? '#10b981' : ($calificacion >= 3 ? '#f59e0b' : '#ef4444');
         $nombre_first  = explode(' ', $nombre)[0];
 
-        $labels = ['Instalaciones', 'Atención', 'Tiempos', 'Medicamentos', 'Recomienda'];
+        $labels = ['Instalaciones', 'Atención al cliente', 'Tiempos de espera', 'Disponibilidad de medicamentos', 'Recomendaría el servicio'];
         $valores = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
-        $emojis_cats = [
-            ['😞','😐','🙂','😊','🤩'],
-            ['😞','😐','🙂','😊','🤩'],
-            ['⏳','😐','🙂','⚡','🚀'],
-            ['❌','⚠️','✅','💊','🌟'],
-            ['👎','🤔','👍','😊','🙌'],
-        ];
 
         $filas_calificaciones = '';
         foreach ($labels as $i => $label) {
-            $v   = $valores[$i];
-            $emo = $v > 0 ? ($emojis_cats[$i][$v - 1] ?? '⭐') : '—';
+            $v = $valores[$i];
             $barras = '';
             for ($b = 1; $b <= 5; $b++) {
-                $col = $b <= $v ? '#2563eb' : '#e2e8f0';
-                $barras .= "<span style='display:inline-block;width:18px;height:6px;background:{$col};border-radius:3px;margin-right:2px'></span>";
+                $col = $b <= $v ? '#0c2d5e' : '#d8e4f0';
+                $barras .= "<span style='display:inline-block;width:18px;height:3px;background:{$col};border-radius:2px;margin-right:2px'></span>";
             }
+            if ($v >= 4) { $score_color = '#0f5c2e'; }
+            elseif ($v >= 3) { $score_color = '#7a5200'; }
+            else { $score_color = '#8a1a1a'; }
+            $border_bottom = ($i < count($labels) - 1) ? "border-bottom:1px solid #e8eef6;" : "";
             $filas_calificaciones .= "
             <tr>
-              <td style='padding:8px 12px;color:#6b7280;font-size:13px;border-bottom:1px solid #f3f4f6'>{$label}</td>
-              <td style='padding:8px 12px;border-bottom:1px solid #f3f4f6;font-size:13px'>{$emo} {$barras}</td>
-              <td style='padding:8px 12px;border-bottom:1px solid #f3f4f6;font-weight:700;font-size:13px;color:{$color_cal}'>{$v}/5</td>
+              <td style='padding:11px 0;font-size:12px;color:#2a3a4a;font-weight:400;width:40%;{$border_bottom}'>{$label}</td>
+              <td style='padding:11px 14px 11px 0;width:40%;{$border_bottom}'>{$barras}</td>
+              <td style='padding:11px 0;font-size:12px;font-weight:500;text-align:right;width:20%;color:{$score_color};{$border_bottom}'>{$v} / 5</td>
             </tr>";
         }
 
         $bloque_comentario = '';
         if ($comentario) {
             $bloque_comentario = "
-            <div style='background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #7c3aed;border-radius:4px;padding:14px 16px;margin-bottom:20px'>
-              <p style='margin:0 0 6px;font-size:12px;font-weight:700;color:#7c3aed'>💬 Tu comentario</p>
-              <p style='margin:0;font-size:13px;color:#374151;line-height:1.6'>" . htmlspecialchars($comentario) . "</p>
+            <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:24px'>
+              <p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Observación del cliente</p>
+              <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . htmlspecialchars($comentario) . "</p>
             </div>";
         }
 
         $cuerpo = "
 <!DOCTYPE html><html><head><meta charset='UTF-8'></head>
-<body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
-<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:32px 16px'>
+<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
 <tr><td align='center'>
-<table width='640' cellpadding='0' cellspacing='0' style='max-width:640px;width:100%'>
+<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
 
-  <tr><td style='background:#1e40af;border-radius:12px 12px 0 0;padding:28px 32px;text-align:center'>
-    <div style='background:#fff;border-radius:10px;padding:10px 20px;display:inline-block;margin:0 auto 14px'><img src='{$LOGO_URL}' alt='Tododrogas' style='height:44px;max-width:200px;object-fit:contain;display:block'></div>
-    <p style='color:#bfdbfe;margin:0;font-size:11px;letter-spacing:1px;text-transform:uppercase'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente</p>
-    <h2 style='color:#fff;margin:8px 0 0;font-size:22px;font-weight:700'>¡Gracias por tu opinión!</h2>
+  <!-- HEADER -->
+  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
+    <img src='{$LOGO_URL}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 12px;filter:brightness(0) invert(1);opacity:.92'>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Evaluación de experiencia &middot; Servicio farmacéutico</p>
   </td></tr>
 
-  <tr><td style='background:#1e3a8a;padding:20px 32px;text-align:center'>
-    <p style='color:#93c5fd;margin:0;font-size:11px;letter-spacing:1.5px;text-transform:uppercase'>Tu calificación global</p>
-    <p style='color:#fff;margin:8px 0 4px;font-size:42px;font-weight:700;line-height:1'>{$emoji_final} {$promedio}</p>
-    <p style='color:#93c5fd;margin:0;font-size:18px;letter-spacing:3px'>{$estrellas}</p>
-  </td></tr>
+  <!-- CUERPO -->
+  <tr><td style='background:#ffffff;padding:36px 44px'>
 
-  <tr><td style='background:#fff;padding:24px 32px;border:1px solid #e2e8f0;border-top:none'>
-    <p style='margin:0 0 16px;color:#374151;font-size:14px'>Hola <strong>{$nombre_first}</strong>,</p>
-    <p style='margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6'>
-      Recibimos tu encuesta de satisfacción en <strong>{$sede_nombre}</strong>
-      " . ($sede_ciudad ? "({$sede_ciudad})" : '') . ".
-      Tu opinión es muy valiosa para seguir mejorando nuestro servicio.
-    </p>
+    <p style='margin:0 0 10px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hola, <strong style='font-weight:500;color:#0c2d5e'>{$nombre_first}</strong>,</p>
+    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hemos recibido tu evaluación de experiencia. Tu retroalimentación es parte fundamental de nuestro proceso de mejora continua &mdash; cada respuesta se revisa de manera directa por el equipo de calidad de servicio.</p>
 
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;margin-bottom:20px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden'>
-      <tr style='background:#f8fafc'>
-        <th style='padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e2e8f0'>Categoría</th>
-        <th style='padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e2e8f0'>Valoración</th>
-        <th style='padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #e2e8f0'>Puntaje</th>
+    <p style='display:inline-block;background:#eef2f8;border:1px solid #a8bed8;border-radius:2px;padding:4px 10px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:#2a4870;font-weight:500;margin:0 0 28px'>{$sede_nombre}</p>
+
+    <!-- DIVIDER INDICADORES -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Resumen de indicadores</td>
+        <td style='border-top:1px solid #d4dce8'></td>
       </tr>
+    </table>
+
+    <!-- TABLA INDICADORES -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;margin-bottom:24px'>
       {$filas_calificaciones}
     </table>
 
     {$bloque_comentario}
 
-    <div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;margin-bottom:20px'>
-      <p style='margin:0 0 6px;font-size:13px;font-weight:700;color:#166534'>¿Qué pasa con tu opinión?</p>
-      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Tu calificación será revisada por el equipo de calidad.</p>
-      <p style='margin:2px 0;font-size:12px;color:#166534'>→ Usamos tus respuestas para mejorar nuestros servicios.</p>
-      <p style='margin:2px 0;font-size:12px;color:#166534'>→ ¡Gracias por tomarte el tiempo de ayudarnos a crecer!</p>
-    </div>
-
-  </td></tr>
-
-
-  <!-- CANALES PQRSFD -->
-  <tr><td style='padding:0'>
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border-radius:0'>
-      <tr><td style='background:linear-gradient(135deg,#1e3a5f 0%,#1e40af 100%);padding:22px 32px'>
-        <p style='margin:0 0 14px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#93c5fd'>📍 Canales de atención · Tododrogas CIA SAS</p>
-        <table width='100%' cellpadding='0' cellspacing='0'>
+    <!-- BLOQUE QUÉ SUCEDE -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:28px'>
+      <tr><td style='padding:22px 24px'>
+        <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:16px'>
           <tr>
-            <td width='50%' style='vertical-align:top;padding-right:8px'>
-              <p style='margin:0 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>💬 WhatsApp</p>
-              <a href='https://wa.me/573043412431' style='color:#fff;font-size:14px;font-weight:700;text-decoration:none'>304 341 2431</a>
-              <p style='margin:10px 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>📞 PBX Atención</p>
-              <a href='tel:6043222432' style='color:#fff;font-size:14px;font-weight:700;text-decoration:none'>604 322 2432 Op. 2</a>
-            </td>
-            <td width='50%' style='vertical-align:top;padding-left:8px'>
-              <p style='margin:0 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>📧 Correo PQRSFD</p>
-              <a href='mailto:pqrsfd@tododrogas.com.co' style='color:#fff;font-size:13px;font-weight:700;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
-              <p style='margin:10px 0 2px;font-size:10px;color:#93c5fd;text-transform:uppercase;letter-spacing:.7px;font-weight:700'>🌐 Portal Web</p>
-              <a href='https://tododrogas.online/pqr_form.html' style='color:#fff;font-size:13px;font-weight:700;text-decoration:none'>tododrogas.online/pqr</a>
-            </td>
+            <td style='width:20px;border-top:2px solid #0c2d5e;vertical-align:middle'></td>
+            <td style='padding-left:10px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:500'>Qué sucede con tu evaluación</td>
           </tr>
         </table>
-        <p style='margin:12px 0 0;font-size:10px;color:rgba(255,255,255,.55);border-top:1px solid rgba(255,255,255,.1);padding-top:10px'>
-          <strong style='color:#bfdbfe'>PBX Ventas:</strong> 604 448 1534 &nbsp;·&nbsp;
-          <strong style='color:#bfdbfe'>WhatsApp Ventas:</strong> 312 815 2913 &nbsp;·&nbsp;
-          <strong style='color:#bfdbfe'>Tel. Corp:</strong> 304 341 2431
-        </p>
+        <table width='100%' cellpadding='0' cellspacing='0'>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>01</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Tu calificación es revisada por el equipo de calidad de la sede.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Los indicadores con oportunidad de mejora son escalados al área correspondiente.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top'>03</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Si tu caso requiere seguimiento, nos pondremos en contacto contigo.</td></tr>
+        </table>
       </td></tr>
     </table>
-  </td></tr>
-  <!-- FIN CANALES PQRSFD -->
 
-  <tr><td style='background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:16px 32px;text-align:center'>
-    <p style='font-size:11px;color:#9ca3af;margin:0'>Tododrogas CIA SAS · Experiencia de Servicio al Cliente<br>
-    Este es un mensaje automático. Si tienes una solicitud o queja, usa nuestro formulario PQRSFD.</p>
+    <!-- DIVIDER CANALES -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Canales de atención</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <!-- CANALES GRILLA 2x2 -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8'>
+      <tr>
+        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>WhatsApp</p>
+          <a href='https://wa.me/573043412431' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>304 341 2431</a>
+        </td>
+        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX Atención</p>
+          <a href='tel:6043222432' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>604 322 2432 Op. 2</a>
+        </td>
+      </tr>
+      <tr>
+        <td width='50%' style='padding:16px 18px;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Correo PQRSFD</p>
+          <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
+        </td>
+        <td width='50%' style='padding:16px 18px;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Portal web</p>
+          <a href='https://tododrogas.online/pqr_form.html' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.online/pqr</a>
+        </td>
+      </tr>
+    </table>
+
+  </td></tr>
+
+  <!-- FOOTER -->
+  <tr><td style='background:#0c2d5e;padding:18px 44px'>
+    <table width='100%' cellpadding='0' cellspacing='0'>
+      <tr>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente</td>
+        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Sistema PQRSFD</td>
+      </tr>
+    </table>
   </td></tr>
 
 </table></td></tr></table>
@@ -607,4 +616,3 @@ echo json_encode([
         ? "Encuesta registrada correctamente. ¡Gracias, {$nombre}!"
         : "No se pudo guardar en BD — se guardó localmente.",
 ]);
-
