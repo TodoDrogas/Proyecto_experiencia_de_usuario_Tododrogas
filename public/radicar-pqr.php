@@ -296,6 +296,11 @@ if (!$texto_pqr && $canal === 'audio') {
         'reclamo'      => ['sentimiento'=>'negativo','tono'=>'enojado',   'prioridad'=>'alta','horas_sla'=>72, 'nivel_riesgo'=>'medio'],
         'denuncia'     => ['sentimiento'=>'negativo','tono'=>'enojado',   'prioridad'=>'alta','horas_sla'=>24, 'nivel_riesgo'=>'alto'],
         'urgente'      => ['sentimiento'=>'urgente', 'tono'=>'ansioso',   'prioridad'=>'critica','horas_sla'=>4,'nivel_riesgo'=>'critico'],
+        // Tipos del botón Varios
+        'solicitud'    => ['sentimiento'=>'neutro',  'tono'=>'neutro',    'prioridad'=>'media','horas_sla'=>120,'nivel_riesgo'=>'bajo'],
+        'información'  => ['sentimiento'=>'neutro',  'tono'=>'neutro',    'prioridad'=>'baja', 'horas_sla'=>360,'nivel_riesgo'=>'bajo'],
+        'informacion'  => ['sentimiento'=>'neutro',  'tono'=>'neutro',    'prioridad'=>'baja', 'horas_sla'=>360,'nivel_riesgo'=>'bajo'],
+        'otros'        => ['sentimiento'=>'neutro',  'tono'=>'neutro',    'prioridad'=>'media','horas_sla'=>120,'nivel_riesgo'=>'bajo'],
     ];
     if (isset($map_tipo[$tipo_pqr])) {
         $d = $map_tipo[$tipo_pqr];
@@ -781,7 +786,17 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     $fecha_lim_u = date('d/m/Y H:i', strtotime($fecha_limite_sla));
 
     $tipo_label_u = mb_strtoupper($tipo_pqr_raw, "UTF-8");
-    $emoji_tipo_u = ['PETICIÓN'=>'💡','QUEJA'=>'😤','RECLAMO'=>'⚠️','SUGERENCIA'=>'💬','FELICITACIÓN'=>'⭐','DENUNCIA'=>'🚨'][mb_strtoupper($tipo_pqr_raw, "UTF-8")] ?? '📋';
+    $emoji_tipo_u = [
+        'PETICIÓN'    => '💡',
+        'QUEJA'       => '😤',
+        'RECLAMO'     => '⚠️',
+        'SUGERENCIA'  => '💬',
+        'FELICITACIÓN'=> '⭐',
+        'DENUNCIA'    => '🚨',
+        'SOLICITUD'   => '📋',
+        'INFORMACIÓN' => 'ℹ️',
+        'OTROS'       => '📝',
+    ][mb_strtoupper($tipo_pqr_raw, 'UTF-8')] ?? '📋';
 
     $cuerpo_acuse = "
 <!DOCTYPE html><html><head><meta charset='UTF-8'></head>
