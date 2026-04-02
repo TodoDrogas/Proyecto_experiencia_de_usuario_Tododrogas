@@ -806,7 +806,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
   <!-- BODY -->
   <tr><td style='background:#ffffff;padding:36px 44px'>
 
-    <p style='margin:0 0 10px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hola, <strong style='font-weight:500;color:#0c2d5e'>{$nombre}</strong>,</p>
+    <p style='margin:0 0 10px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Estimado/a <strong style='font-weight:500;color:#0c2d5e'>{$nombre}</strong>,</p>
     <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hemos recibido su solicitud. Su bienestar es lo más importante para nosotros y estamos comprometidos a darle una respuesta oportuna y de calidad.</p>
 
     <!-- DIVIDER DETALLES -->
@@ -844,7 +844,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         <table width='100%' cellpadding='0' cellspacing='0'>
           <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>01</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Su caso será revisado por uno de nuestros asesores especializados.</td></tr>
           <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Recibirá respuesta a este correo en el plazo indicado.</td></tr>
-          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top'>03</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Si necesita información urgente, responda este correo con su número de radicado.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top'>03</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Tododrogas CIA SAS se compromete a gestionar su solicitud con transparencia, diligencia y respeto, conforme a los estándares del servicio farmacéutico colombiano.</td></tr>
         </table>
       </td></tr>
     </table>
@@ -911,7 +911,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 </body></html>";
 
     $acuse_payload = [
-        'subject'      => "✅ Su solicitud fue recibida · Radicado {$ticket_id} · Tododrogas CIA SAS",
+        'subject'      => "Su solicitud fue recibida · Radicado {$ticket_id} · Tododrogas CIA SAS",
         'importance'   => 'normal',
         'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_acuse],
         'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
