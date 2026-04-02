@@ -253,7 +253,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
   <tr><td style='background:#ffffff;padding:36px 44px'>
 
     <p style='margin:0 0 10px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hola, <strong style='font-weight:500;color:#0c2d5e'>{$nombre_first}</strong>,</p>
-    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hemos recibido tu evaluación de experiencia. Tu retroalimentación es parte fundamental de nuestro proceso de mejora continua &mdash; cada respuesta se revisa de manera directa por el equipo de calidad de servicio.</p>
+    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hemos recibido su evaluación de experiencia. Su retroalimentación es parte fundamental de nuestro proceso de mejora continua &mdash; cada respuesta se revisa de manera directa por el equipo de calidad de servicio.</p>
 
     <p style='display:inline-block;background:#eef2f8;border:1px solid #a8bed8;border-radius:2px;padding:4px 10px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:#2a4870;font-weight:500;margin:0 0 28px'>{$sede_nombre}</p>
 
