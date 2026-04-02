@@ -22,7 +22,7 @@
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;background:var(--bg)}
-@media(max-width:900px){html,body{overflow-y:auto;height:auto;}}
+@media(max-width:900px){html,body{overflow:hidden;height:100%;}}
 
 /* ── TOPBAR ── */
 .topbar{
@@ -314,7 +314,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 /* ── Texto izquierdo ── */
 .left-section-title{font-size:12px;font-weight:700;color:var(--c2);
   margin-bottom:12px;display:flex;align-items:center;gap:7px;}
-.msg-textarea{background:rgba(0,176,255,.05);border:1.5px solid rgba(0,176,255,.22);
+.msg-textarea{background:rgba(0,176,255,.05);border:1.5px solid rgba(0,176,255,.22);text-transform:uppercase;
   border-radius:12px;padding:14px;font-size:13px;font-family:'Poppins',sans-serif;
   color:var(--text);outline:none;resize:none;width:100%;line-height:1.7;
   transition:all .18s;flex:1;min-height:180px;box-shadow:var(--float);}
@@ -505,9 +505,9 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 
 /* Tablet (≤900px): split → stacked, contenido más compacto */
 @media(max-width:900px){
-  html,body{overflow:auto;}
-  .slides-wrap{position:relative;top:0;display:block;height:auto;transform:none!important;}
-  .slide,.slide-split{min-width:100%;width:100%;min-height:100vh;height:auto;padding:70px 20px 80px;}
+  html,body{overflow:hidden;height:100%;}
+  .slides-wrap{position:fixed;top:55px;left:0;right:0;bottom:0;display:flex;overflow:hidden;transform:none!important;}
+  .slide,.slide-split{min-width:100vw;width:100vw;height:100%;overflow-y:auto;padding:70px 20px 80px;}
   .slide-split{flex-direction:column;}
   .split-left,.split-right{width:100%;border-right:none;border-bottom:1px solid var(--border);
     overflow:visible;padding:20px 16px 24px;}
@@ -521,9 +521,9 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 
 /* Móvil (≤600px): diseño columna, tipografía reducida */
 @media(max-width:600px){
-  html,body{overflow:auto;}
-  .slides-wrap{position:relative;top:0;display:block;height:auto;transform:none!important;}
-  .slide,.slide-split{min-width:100%;width:100%;min-height:100vh;height:auto;
+  html,body{overflow:hidden;height:100%;}
+  .slides-wrap{position:fixed;top:52px;left:0;right:0;bottom:0;display:flex;overflow:hidden;transform:none!important;}
+  .slide,.slide-split{min-width:100vw;width:100vw;height:100%;overflow-y:auto;
     padding:64px 14px 72px;justify-content:flex-start;padding-top:72px;}
   .slide-title{font-size:clamp(20px,6vw,28px);}
   .slide-sub{font-size:12px;margin-bottom:18px;}
@@ -581,6 +581,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
   .tipo-card{padding:24px 18px;}
   .tc-emoji{font-size:36px;}
 }
+input[type="email"].pqr-input{text-transform:none;letter-spacing:normal;}
 </style>
 </head>
 <body>
@@ -668,14 +669,17 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
       <div class="tipo-card" onclick="selSubVarios(this,'Solicitud')">
         <div class="tc-emoji">📋</div>
         <div class="tc-name">Solicitud</div>
+        <div class="tc-desc">Requerimiento formal de trámite</div>
       </div>
       <div class="tipo-card" onclick="selSubVarios(this,'Información')">
         <div class="tc-emoji">ℹ️</div>
         <div class="tc-name">Información</div>
+        <div class="tc-desc">Consulta sobre productos o servicios</div>
       </div>
       <div class="tipo-card" onclick="selSubVarios(this,'Otros')">
         <div class="tc-emoji">📝</div>
         <div class="tc-name">Otros</div>
+        <div class="tc-desc">Cualquier otro tipo de caso</div>
       </div>
     </div>
     <button class="btn-next" id="btnVarios" onclick="goTo(1)" disabled>
@@ -882,7 +886,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
           <div class="field-row">
             <div class="field-wrap">
               <label>Nombre <span class="req">*</span></label>
-              <input class="pqr-input" type="text" id="fNombre" placeholder="María González">
+              <input class="pqr-input" type="text" id="fNombre" placeholder="NOMBRE Y APELLIDO">
             </div>
             <div class="field-wrap">
               <label>Documento <span class="req">*</span></label>
@@ -1054,7 +1058,7 @@ function updateCarousel(idx){
     // Mostrar el slide correcto según índice lógico
     const allSlides = Array.from(document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split')).filter(s=>s!==slideVarios);
     if(allSlides[idx]) allSlides[idx].style.display = 'flex';
-    window.scrollTo({top:0,behavior:'smooth'});
+    window.scrollTo(0,0);
     document.getElementById('slidesWrap').style.transform='';
   } else {
     document.querySelectorAll('.slide,.slide-split').forEach(s=>{
@@ -1080,7 +1084,7 @@ function goTo(next){
       document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split').forEach(s=>{
         if(s!==slideVarios) s.style.display='none';
       });
-      window.scrollTo({top:0,behavior:'smooth'});
+      window.scrollTo(0,0);
     } else {
       // Desktop: insertar slideVarios en posición 1 del carousel lógico
       document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split').forEach(s=>s.style.display='');
@@ -1794,6 +1798,25 @@ function showToast(msg,type='info'){
   const tc=document.getElementById('toasts'),t=document.createElement('div');
   t.className=`toast ${type}`; t.textContent=msg;
   tc.appendChild(t); setTimeout(()=>t.remove(),4000);
+}
+
+// ── MAYÚSCULAS AUTOMÁTICAS ──
+['fNombre','fDocumento','fTelefono'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('input',function(){
+    const pos=this.selectionStart;
+    this.value=this.value.toUpperCase();
+    this.setSelectionRange(pos,pos);
+  });
+});
+const msgTextEl=document.getElementById('msgText');
+if(msgTextEl){
+  msgTextEl.addEventListener('input',function(){
+    const pos=this.selectionStart;
+    this.value=this.value.toUpperCase();
+    this.setSelectionRange(pos,pos);
+  });
 }
 
 // ── LÓGICA CORREO OPCIONAL ──
