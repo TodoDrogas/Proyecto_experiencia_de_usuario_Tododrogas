@@ -246,7 +246,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
   <!-- HEADER -->
   <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
     <img src='{$LOGO_URL}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 12px;filter:brightness(0) invert(1);opacity:.92'>
-    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Evaluación de experiencia de usuario &middot; PQRSFD</p>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Evaluación de experiencia de usuario &middot; Servicio Farmaceutico</p>
   </td></tr>
 
   <!-- CUERPO -->
