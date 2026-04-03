@@ -15,6 +15,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 $SB_URL = '__SB_URL__';
 $SB_KEY = '__SB_KEY__';
 
+// Verificar que las credenciales fueron inyectadas
+if ($SB_URL === '__SB_URL__' || $SB_KEY === '__SB_KEY__' || empty($SB_URL) || empty($SB_KEY)) {
+    http_response_code(503);
+    echo json_encode(['ok'=>false,'razon'=>'servicio_no_disponible','msg'=>'Servicio de validación no configurado. Intente más tarde o comuníquese al 604 322 2432.']);
+    exit;
+}
+
 // ── LEER INPUT ───────────────────────────────────────────
 $body = json_decode(file_get_contents('php://input'), true);
 if (!$body) { http_response_code(400); echo json_encode(['ok'=>false,'razon'=>'invalid_json']); exit; }
@@ -54,9 +61,25 @@ $resp = curl_exec($ch);
 $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-// Error de red o Supabase caído → dejar pasar
-if (!$resp || $code >= 500) {
-    echo json_encode(['ok'=>true,'razon'=>'error_api']);
+// Error de red o Supabase caído → BLOQUEAR por seguridad
+if (!$resp || $code >= 500 || $code === 0) {
+    http_response_code(503);
+    echo json_encode([
+        'ok'    => false,
+        'razon' => 'servicio_no_disponible',
+        'msg'   => 'No fue posible verificar su registro en este momento. Intente nuevamente o comuníquese al 604 322 2432.'
+    ]);
+    exit;
+}
+
+// Respuesta inesperada de Supabase (401, 403, etc.) → BLOQUEAR
+if ($code >= 400) {
+    http_response_code(503);
+    echo json_encode([
+        'ok'    => false,
+        'razon' => 'error_autorizacion',
+        'msg'   => 'No fue posible verificar su registro. Comuníquese al 604 322 2432.'
+    ]);
     exit;
 }
 
