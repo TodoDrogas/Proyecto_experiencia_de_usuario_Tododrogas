@@ -11,7 +11,7 @@ $SB_KEY = '__SB_KEY__';
 $body = json_decode(file_get_contents('php://input'), true);
 if (!$body) { http_response_code(400); echo json_encode(['ok'=>false,'razon'=>'invalid_json']); exit; }
 
-$cedula   = preg_replace('/\D/', '', trim($body['cedula']   ?? '')); // solo dígitos
+$cedula   = preg_replace('/\D/', '', trim($body['cedula']   ?? ''));
 $nombre   = strtoupper(trim($body['nombre']   ?? ''));
 $telefono = preg_replace('/\D/', '', trim($body['telefono'] ?? ''));
 $debug    = !empty($body['debug']);
@@ -38,7 +38,7 @@ function sbRpc($sb_url, $sb_key, $fn, $params) {
     return ['code'=>$code, 'rows'=>json_decode($resp,true), 'raw'=>$resp, 'err'=>$err];
 }
 
-// ── BUSCAR ────────────────────────────────────────────────
+// ── BUSCAR PACIENTE ───────────────────────────────────────
 $r_ced = $cedula   ? sbRpc($SB_URL, $SB_KEY, 'buscar_paciente',     ['p_cedula'   => $cedula])   : null;
 $r_tel = $telefono ? sbRpc($SB_URL, $SB_KEY, 'buscar_paciente_tel', ['p_telefono' => $telefono]) : null;
 
@@ -54,16 +54,17 @@ if (!$rows && $r_tel && $r_tel['code']===200 && is_array($r_tel['rows']) && coun
     $rows = $r_tel['rows'];
 
 if (!$rows) {
-    echo json_encode(['ok'=>false,'razon'=>'no_encontrado','msg'=>'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
+    echo json_encode([
+        'ok'    => false,
+        'razon' => 'no_encontrado',
+        'msg'   => 'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.',
+    ]);
     exit;
 }
 
-// ── EVALUAR 2 DE 3 con tolerancia ────────────────────────
-// Nombre: comparar solo primeras 4 letras del primer token (tolerante a errores)
-$partes   = array_values(array_filter(explode(' ', $nombre)));
-$tok1     = $partes[0] ?? '';                        // primer nombre
-$tok1_4   = substr($tok1, 0, 4);                     // primeras 4 letras
-$tok2     = $partes[1] ?? '';                        // segundo nombre (si existe)
+// ── EVALUAR 2 DE 3 ───────────────────────────────────────
+$tok1   = $nombre ? (array_values(array_filter(explode(' ', $nombre)))[0] ?? '') : '';
+$tok1_4 = substr($tok1, 0, 4);
 
 foreach ($rows as $row) {
     $puntos = 0;
@@ -72,23 +73,39 @@ foreach ($rows as $row) {
     $dbTel1 = preg_replace('/\D/', '', $row['Telefono']   ?? '');
     $dbTel2 = preg_replace('/\D/', '', $row['Telefono 2'] ?? '');
 
-    // CÉDULA: exacta (solo dígitos, sin espacios ni guiones)
-    if ($cedula && $dbCed === $cedula) $puntos++;
-
-    // NOMBRE: al menos las primeras 4 letras del primer nombre coinciden
-    // Ej: "LUNA" encuentra "LUNA NAZARETH URDANETA GONZALEZ" ✅
-    // Ej: "LUN" (3 letras) también funciona si están en la BD
-    if ($tok1_4 && strlen($tok1_4) >= 3 && str_contains($dbNom, $tok1_4)) $puntos++;
-
-    // TELÉFONO: exacto (solo dígitos)
-    // Si el campo en BD está vacío o es EMPTY, no suma ni resta
-    if ($telefono && $dbTel1 && strlen($dbTel1) >= 7 && $dbTel1 === $telefono) $puntos++;
-    if ($telefono && $dbTel2 && strlen($dbTel2) >= 7 && $dbTel2 === $telefono) $puntos++;
+    if ($cedula   && $dbCed === $cedula)                                   $puntos++;
+    if ($tok1_4   && strlen($tok1_4)>=3 && str_contains($dbNom,$tok1_4))  $puntos++;
+    if ($telefono && $dbTel1 && strlen($dbTel1)>=7 && $dbTel1===$telefono) $puntos++;
+    if ($telefono && $dbTel2 && strlen($dbTel2)>=7 && $dbTel2===$telefono) $puntos++;
 
     if ($puntos >= 2) {
-        echo json_encode(['ok'=>true,'razon'=>'validado','nombre'=>$row['Nombre Paciente']]);
+        // ── VERIFICAR SI ES VIP ───────────────────────────
+        $vip = null;
+        if ($cedula) {
+            $r_vip = sbRpc($SB_URL, $SB_KEY, 'verificar_vip', ['p_cedula' => $cedula]);
+            if ($r_vip['code']===200 && is_array($r_vip['rows']) && count($r_vip['rows'])>0) {
+                $vip = $r_vip['rows'][0];
+            }
+        }
+
+        $response = [
+            'ok'     => true,
+            'razon'  => 'validado',
+            'nombre' => $row['Nombre Paciente'],
+        ];
+
+        if ($vip) {
+            $response['vip']    = true;
+            $response['saludo'] = $vip['saludo'];
+        }
+
+        echo json_encode($response);
         exit;
     }
 }
 
-echo json_encode(['ok'=>false,'razon'=>'datos_no_coinciden','msg'=>'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
+echo json_encode([
+    'ok'    => false,
+    'razon' => 'datos_no_coinciden',
+    'msg'   => 'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.',
+]);
