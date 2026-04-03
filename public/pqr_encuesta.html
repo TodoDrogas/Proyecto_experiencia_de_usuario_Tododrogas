@@ -518,19 +518,19 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 <script>
 
 // ══════════════════════════════════════════
-// VALIDACIÓN PACIENTE — 2 de 3 campos
+// VALIDACIÓN PACIENTE vía validar-paciente.php
 // ══════════════════════════════════════════
-async function validarPaciente(cedula, nombre, telefono) {
-  try {
-    const r = await fetch('/validar-paciente.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cedula, nombre, telefono })
+async function validarPaciente(cedula, nombre, telefono){
+  try{
+    const r = await fetch('/validar-paciente.php',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cedula, nombre, telefono})
     });
-    if (!r.ok) return { ok: true, razon: 'error_api' };
+    if(!r.ok) return {ok:true, razon:'error_api'};
     return await r.json();
-  } catch(e) {
-    return { ok: true, razon: 'error_red' };
+  }catch(e){
+    return {ok:true, razon:'error_red'};
   }
 }
 
@@ -747,30 +747,26 @@ document.getElementById('btn0').addEventListener('click', async ()=>{
   if(document.getElementById('inTel').value.trim().replace(/\D/g,'').length<7){markErr('inTel','errTel',true);ok=false;}
   if(!ok) return;
 
-  // ── VALIDACIÓN PACIENTE ─────────────────────────────
   const btn0el = document.getElementById('btn0');
-  const textoOriginal = btn0el.innerHTML;
+  const txtOrig = btn0el.innerHTML;
   btn0el.disabled = true;
   btn0el.innerHTML = '⏳ Verificando registro…';
 
   const cedula   = document.getElementById('inDoc').value.trim();
   const nombre   = document.getElementById('inNombre').value.trim();
   const telefono = document.getElementById('inTel').value.trim();
-  const validacion = await validarPaciente(cedula, nombre, telefono);
-
-  if (!validacion.ok) {
-    btn0el.disabled = false;
-    btn0el.innerHTML = textoOriginal;
-    const msg = validacion.razon === 'no_encontrado'
-      ? 'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.'
-      : 'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.';
-    showToast(msg, 'error');
-    return;
-  }
+  const val = await validarPaciente(cedula, nombre, telefono);
 
   btn0el.disabled = false;
-  btn0el.innerHTML = textoOriginal;
-  // ── FIN VALIDACIÓN ──────────────────────────────────
+  btn0el.innerHTML = txtOrig;
+
+  if(!val.ok){
+    const msg = val.razon==='no_encontrado'
+      ? 'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.'
+      : 'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.';
+    showToast(msg,'error');
+    return;
+  }
 
   userData={
     nombre:document.getElementById('inNombre').value.trim(),
