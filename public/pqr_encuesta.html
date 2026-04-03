@@ -521,32 +521,14 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 // VALIDACIÓN PACIENTE — 2 de 3 campos
 // ══════════════════════════════════════════
 async function validarPaciente(cedula, nombre, telefono) {
-  const SB_URL = window.SUPABASE_URL || '';
-  const SB_KEY = window.SUPABASE_KEY || '';
-  if (!SB_URL || !SB_KEY) return { ok: true, razon: 'sin_config' };
   try {
-    const telLimpio    = (telefono || '').replace(/\D/g, '');
-    const cedulaLimpia = (cedula   || '').trim();
-    const url = `${SB_URL}/rest/v1/tabla_usuarios?or=("Cedula Pacientes".eq.${encodeURIComponent(cedulaLimpia)},"Telefono".eq.${encodeURIComponent(telLimpio)},"Telefono 2".eq.${encodeURIComponent(telLimpio)})&select="Cedula Pacientes","Nombre Paciente","Telefono","Telefono 2"&limit=5`;
-    const r = await fetch(url, {
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Accept': 'application/json' }
+    const r = await fetch('/validar-paciente.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cedula, nombre, telefono })
     });
     if (!r.ok) return { ok: true, razon: 'error_api' };
-    const rows = await r.json();
-    if (!rows || rows.length === 0) return { ok: false, razon: 'no_encontrado' };
-    const nombreNorm = (nombre || '').toUpperCase().trim();
-    for (const row of rows) {
-      let puntos = 0;
-      const dbCedula = (row['Cedula Pacientes'] || '').trim();
-      const dbNombre = (row['Nombre Paciente']  || '').toUpperCase().trim();
-      const dbTel1   = (row['Telefono']          || '').replace(/\D/g,'');
-      const dbTel2   = (row['Telefono 2']        || '').replace(/\D/g,'');
-      if (dbCedula === cedulaLimpia) puntos++;
-      if (nombreNorm && dbNombre.includes(nombreNorm.split(' ')[0])) puntos++;
-      if (telLimpio && (dbTel1 === telLimpio || dbTel2 === telLimpio)) puntos++;
-      if (puntos >= 2) return { ok: true, razon: 'validado', nombre: row['Nombre Paciente'] };
-    }
-    return { ok: false, razon: 'datos_no_coinciden' };
+    return await r.json();
   } catch(e) {
     return { ok: true, razon: 'error_red' };
   }
