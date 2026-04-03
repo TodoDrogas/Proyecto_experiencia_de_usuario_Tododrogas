@@ -1178,14 +1178,14 @@ async function avanzarDesdeDatos(){
   // ── VIP: mostrar saludo antes de continuar ────────────
   if(val.vip && val.saludo){
     showVipModal(val.saludo, ()=>{
-      currentSlide = 1; updateCarousel(1); updateProgress(1);
+      currentSlide = 0; updateCarousel(0); updateProgress(1);
     });
     return;
   }
 
-  // Avanzar al slide Tipo (índice 1 en el carousel)
-  currentSlide = 1;
-  updateCarousel(1);
+  // Avanzar al slide Tipo (índice 0 del carousel, excluyendo slideDatos)
+  currentSlide = 0;
+  updateCarousel(0);
   updateProgress(1);
 }
 
@@ -1284,26 +1284,65 @@ updateProgress(0);
 
 // CAROUSEL
 function updateCarousel(idx){
-  const isMobile = window.innerWidth <= 900;
-  // Slide Varios tiene display:none por defecto; lo manejamos por separado
+  const isMobile   = window.innerWidth <= 900;
   const slideVarios = document.getElementById('slideVarios');
+  const slideDatos  = document.getElementById('slideDatos');
+
+  // Slides que participan en el carousel (excluir slideDatos y slideVarios)
+  const allDom = Array.from(document.querySelectorAll(
+    '#slidesWrap > .slide, #slidesWrap > .slide-split'
+  )).filter(s => s !== slideVarios && s !== slideDatos);
+
   if(isMobile){
-    document.querySelectorAll('.slide,.slide-split').forEach((s)=>{
-      if(s === slideVarios) return; // lo controla goTo
+    // Ocultar todos
+    document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split').forEach(s=>{
+      if(s === slideVarios || s === slideDatos) return;
       s.style.display = 'none';
     });
-    // Mostrar el slide correcto según índice lógico
-    const allSlides = Array.from(document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split')).filter(s=>s!==slideVarios);
-    if(allSlides[idx]) allSlides[idx].style.display = 'flex';
+    if(slideDatos) slideDatos.style.display = 'none';
+    // Mostrar el correcto
+    if(allDom[idx]) allDom[idx].style.display = 'flex';
     window.scrollTo(0,0);
-    document.getElementById('slidesWrap').style.transform='';
+    document.getElementById('slidesWrap').style.transform = '';
   } else {
-    document.querySelectorAll('.slide,.slide-split').forEach(s=>{
-      if(s===slideVarios) return;
-      s.style.display='';
+    // Ocultar slideDatos, mostrar resto
+    if(slideDatos) slideDatos.style.display = 'none';
+    document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split').forEach(s=>{
+      if(s === slideVarios || s === slideDatos) return;
+      s.style.display = '';
     });
-    document.getElementById('slidesWrap').style.transform=`translateX(-${idx*100}vw)`;
+    // Calcular posición DOM real del slide idx
+    if(allDom[idx]){
+      const allFull = Array.from(document.querySelectorAll(
+        '#slidesWrap > .slide, #slidesWrap > .slide-split'
+      ));
+      const domPos = allFull.indexOf(allDom[idx]);
+      document.getElementById('slidesWrap').style.transform = `translateX(-${domPos*100}vw)`;
+    }
   }
+}
+
+function showSlideDatos(){
+  const slideDatos  = document.getElementById('slideDatos');
+  const slideVarios = document.getElementById('slideVarios');
+  const isMobile    = window.innerWidth <= 900;
+  // Ocultar todos los slides del carousel
+  document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split').forEach(s=>{
+    if(s === slideVarios) return;
+    s.style.display = 'none';
+  });
+  // Mostrar slideDatos
+  if(slideDatos){
+    slideDatos.style.display = 'flex';
+    if(!isMobile){
+      const allFull = Array.from(document.querySelectorAll(
+        '#slidesWrap > .slide, #slidesWrap > .slide-split'
+      ));
+      const domPos = allFull.indexOf(slideDatos);
+      document.getElementById('slidesWrap').style.transform = `translateX(-${domPos*100}vw)`;
+    }
+  }
+  window.scrollTo(0,0);
 }
 
 // ══════════════════════════════════════════
@@ -1362,15 +1401,23 @@ function goTo(next){
 }
 
 function goBack(){
-  if(currentSlide===0){
-    document.body.style.opacity='0';
-    document.body.style.transition='opacity .35s';
-    setTimeout(()=>window.location.href='pqr_bienvenida.html',350);
-    return;
+  // Desde slideDatos → ir a bienvenida
+  if(currentSlide==='datos' || currentSlide===0){
+    // Si estamos en slideDatos (currentSlide=0 al inicio), ir a bienvenida
+    const sd = document.getElementById('slideDatos');
+    const sdVisible = sd && sd.style.display !== 'none' && sd.style.display !== '';
+    if(sdVisible || currentSlide==='datos'){
+      document.body.style.opacity='0';
+      document.body.style.transition='opacity .35s';
+      setTimeout(()=>window.location.href='pqr_bienvenida.html',350);
+      return;
+    }
+    // currentSlide===0 pero estamos en Tipo → volver a Datos
+    showSlideDatos(); updateProgress(0); return;
   }
-  // Si estamos en tipo (slide 1 del carousel = index 1), volver a datos (index 0)
+  // Desde Tipo (currentSlide===1) → volver a slideDatos
   if(currentSlide===1){
-    currentSlide=0; updateCarousel(0); updateProgress(0); return;
+    showSlideDatos(); updateProgress(0); return;
   }
   // Si estamos en slide Varios → volver al slide Tipo
   if(currentSlide==='varios'){
@@ -2042,7 +2089,7 @@ function resetAll(){
   document.getElementById('resumNombre').textContent='—';
   document.getElementById('resumDoc').textContent='—';
   document.getElementById('resumTel').textContent='—';
-  updateCarousel(0); updateProgress(0);
+  showSlideDatos(); currentSlide=0; updateProgress(0);
 }
 
 
@@ -2150,8 +2197,8 @@ document.body.style.opacity='0'; document.body.style.transition='opacity .4s eas
 setTimeout(()=>{document.body.style.opacity='1';},50);
 
 // Init responsive slides on load
-window.addEventListener('load', ()=>updateCarousel(0));
-window.addEventListener('resize', ()=>updateCarousel(currentSlide));
+window.addEventListener('load', ()=>showSlideDatos());
+window.addEventListener('resize', ()=>{ if(currentSlide===0 || currentSlide==='datos') showSlideDatos(); else updateCarousel(currentSlide); });
 
 // ── Helper: URL firmada Supabase para buckets privados ──────────────
 async function getSignedUrl(path, bucket) {
