@@ -5,7 +5,7 @@ header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
-$SB_URL = '__SB_URL__';
+$SB_URL = rtrim('__SB_URL__', '/'); // quitar slash final si existe
 $SB_KEY = '__SB_KEY__';
 
 $body = json_decode(file_get_contents('php://input'), true);
@@ -17,60 +17,66 @@ $telefono = preg_replace('/\D/', '', $body['telefono'] ?? '');
 $debug    = !empty($body['debug']);
 
 function sbRpc($sb_url, $sb_key, $fn, $params) {
-    $ch = curl_init("$sb_url/rest/v1/rpc/$fn");
+    $url = $sb_url . '/rest/v1/rpc/' . $fn;
+    $ch  = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => json_encode($params),
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_HTTPHEADER     => [
-            "apikey: $sb_key",
-            "Authorization: Bearer $sb_key",
+            'apikey: '         . $sb_key,
+            'Authorization: Bearer ' . $sb_key,
             'Content-Type: application/json',
             'Accept: application/json',
         ],
     ]);
     $resp = curl_exec($ch);
+    $err  = curl_error($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return ['code' => $code, 'rows' => json_decode($resp, true), 'raw' => $resp];
+    return [
+        'code' => $code,
+        'rows' => json_decode($resp, true),
+        'raw'  => $resp,
+        'err'  => $err,
+    ];
 }
 
-// Buscar por cédula
-$r1 = sbRpc($SB_URL, $SB_KEY, 'buscar_paciente', ['p_cedula' => $cedula]);
-
-// Buscar por teléfono
-$r2 = sbRpc($SB_URL, $SB_KEY, 'buscar_paciente_tel', ['p_telefono' => $telefono]);
+// ── BUSCAR ────────────────────────────────────────────────
+$r_ced = $cedula   ? sbRpc($SB_URL, $SB_KEY, 'buscar_paciente',     ['p_cedula'   => $cedula])   : null;
+$r_tel = $telefono ? sbRpc($SB_URL, $SB_KEY, 'buscar_paciente_tel', ['p_telefono' => $telefono]) : null;
 
 if ($debug) {
     echo json_encode([
-        'cedula_enviada'   => $cedula,
-        'nombre_enviado'   => $nombre,
-        'telefono_enviado' => $telefono,
-        'rpc_cedula' => [
-            'code' => $r1['code'],
-            'rows' => $r1['rows'],
-            'raw'  => $r1['raw'],
-        ],
-        'rpc_tel' => [
-            'code' => $r2['code'],
-            'rows' => $r2['rows'],
-            'raw'  => $r2['raw'],
-        ],
+        'sb_url'   => $SB_URL,
+        'cedula'   => $cedula,
+        'nombre'   => $nombre,
+        'telefono' => $telefono,
+        'rpc_ced'  => $r_ced,
+        'rpc_tel'  => $r_tel,
     ], JSON_PRETTY_PRINT);
     exit;
 }
 
-// Lógica real
+// ── OBTENER FILAS ─────────────────────────────────────────
 $rows = null;
-if ($r1['code'] === 200 && is_array($r1['rows']) && count($r1['rows']) > 0) $rows = $r1['rows'];
-if (!$rows && $r2['code'] === 200 && is_array($r2['rows']) && count($r2['rows']) > 0) $rows = $r2['rows'];
+if ($r_ced && $r_ced['code'] === 200 && is_array($r_ced['rows']) && count($r_ced['rows']) > 0)
+    $rows = $r_ced['rows'];
+if (!$rows && $r_tel && $r_tel['code'] === 200 && is_array($r_tel['rows']) && count($r_tel['rows']) > 0)
+    $rows = $r_tel['rows'];
 
 if (!$rows) {
-    echo json_encode(['ok'=>false,'razon'=>'no_encontrado','msg'=>'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
+    echo json_encode([
+        'ok'    => false,
+        'razon' => 'no_encontrado',
+        'msg'   => 'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.',
+    ]);
     exit;
 }
 
+// ── EVALUAR 2 DE 3 ────────────────────────────────────────
 $tok1 = $nombre ? (array_values(array_filter(explode(' ', $nombre)))[0] ?? '') : '';
 
 foreach ($rows as $row) {
@@ -91,4 +97,8 @@ foreach ($rows as $row) {
     }
 }
 
-echo json_encode(['ok'=>false,'razon'=>'datos_no_coinciden','msg'=>'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
+echo json_encode([
+    'ok'    => false,
+    'razon' => 'datos_no_coinciden',
+    'msg'   => 'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.',
+]);
