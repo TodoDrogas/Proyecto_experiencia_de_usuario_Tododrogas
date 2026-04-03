@@ -43,7 +43,8 @@ $r_ced = $cedula   ? sbRpc($SB_URL, $SB_KEY, 'buscar_paciente',     ['p_cedula' 
 $r_tel = $telefono ? sbRpc($SB_URL, $SB_KEY, 'buscar_paciente_tel', ['p_telefono' => $telefono]) : null;
 
 if ($debug) {
-    echo json_encode(['sb_url'=>$SB_URL,'cedula'=>$cedula,'nombre'=>$nombre,'telefono'=>$telefono,'rpc_ced'=>$r_ced,'rpc_tel'=>$r_tel], JSON_PRETTY_PRINT);
+    echo json_encode(['sb_url'=>$SB_URL,'cedula'=>$cedula,'nombre'=>$nombre,'telefono'=>$telefono,
+        'rpc_ced'=>$r_ced,'rpc_tel'=>$r_tel], JSON_PRETTY_PRINT);
     exit;
 }
 
@@ -54,11 +55,8 @@ if (!$rows && $r_tel && $r_tel['code']===200 && is_array($r_tel['rows']) && coun
     $rows = $r_tel['rows'];
 
 if (!$rows) {
-    echo json_encode([
-        'ok'    => false,
-        'razon' => 'no_encontrado',
-        'msg'   => 'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.',
-    ]);
+    echo json_encode(['ok'=>false,'razon'=>'no_encontrado',
+        'msg'=>'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
     exit;
 }
 
@@ -73,39 +71,30 @@ foreach ($rows as $row) {
     $dbTel1 = preg_replace('/\D/', '', $row['Telefono']   ?? '');
     $dbTel2 = preg_replace('/\D/', '', $row['Telefono 2'] ?? '');
 
-    if ($cedula   && $dbCed === $cedula)                                   $puntos++;
-    if ($tok1_4   && strlen($tok1_4)>=3 && str_contains($dbNom,$tok1_4))  $puntos++;
+    if ($cedula   && $dbCed === $cedula)                                    $puntos++;
+    if ($tok1_4   && strlen($tok1_4)>=3 && str_contains($dbNom, $tok1_4))  $puntos++;
     if ($telefono && $dbTel1 && strlen($dbTel1)>=7 && $dbTel1===$telefono) $puntos++;
     if ($telefono && $dbTel2 && strlen($dbTel2)>=7 && $dbTel2===$telefono) $puntos++;
 
     if ($puntos >= 2) {
-        // ── VERIFICAR SI ES VIP ───────────────────────────
-        $vip = null;
+        // ── VERIFICAR VIP ─────────────────────────────────
+        $vip_data = null;
         if ($cedula) {
             $r_vip = sbRpc($SB_URL, $SB_KEY, 'verificar_vip', ['p_cedula' => $cedula]);
             if ($r_vip['code']===200 && is_array($r_vip['rows']) && count($r_vip['rows'])>0) {
-                $vip = $r_vip['rows'][0];
+                $vip_data = $r_vip['rows'][0];
             }
         }
 
-        $response = [
-            'ok'     => true,
-            'razon'  => 'validado',
-            'nombre' => $row['Nombre Paciente'],
-        ];
-
-        if ($vip) {
-            $response['vip']    = true;
-            $response['saludo'] = $vip['saludo'];
+        $resp = ['ok'=>true, 'razon'=>'validado', 'nombre'=>$row['Nombre Paciente']];
+        if ($vip_data) {
+            $resp['vip']    = true;
+            $resp['saludo'] = $vip_data['saludo'];
         }
-
-        echo json_encode($response);
+        echo json_encode($resp);
         exit;
     }
 }
 
-echo json_encode([
-    'ok'    => false,
-    'razon' => 'datos_no_coinciden',
-    'msg'   => 'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.',
-]);
+echo json_encode(['ok'=>false,'razon'=>'datos_no_coinciden',
+    'msg'=>'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
