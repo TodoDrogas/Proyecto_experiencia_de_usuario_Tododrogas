@@ -973,57 +973,15 @@ input[type="email"].pqr-input{text-transform:none;letter-spacing:normal;}
 // Consulta tabla_usuarios en Supabase
 // ══════════════════════════════════════════
 async function validarPaciente(cedula, nombre, telefono) {
-  const SB_URL = window.SUPABASE_URL || '';
-  const SB_KEY = window.SUPABASE_KEY || '';
-
-  // Sin credenciales: dejar pasar (entorno dev o panel no configurado)
-  if (!SB_URL || !SB_KEY) return { ok: true, razon: 'sin_config' };
-
   try {
-    // Buscar por cédula O teléfono (al menos uno debe encontrar al paciente)
-    const telLimpio = (telefono || '').replace(/\D/g, '');
-    const cedulaLimpia = (cedula || '').trim();
-
-    // Query: buscar por cédula primero
-    let url = `${SB_URL}/rest/v1/tabla_usuarios?select=Cedula Pacientes,Nombre Paciente,Telefono,Telefono 2&`;
-    // Usar OR: cédula o cualquiera de los teléfonos
-    url = `${SB_URL}/rest/v1/tabla_usuarios?or=("Cedula Pacientes".eq.${encodeURIComponent(cedulaLimpia)},"Telefono".eq.${encodeURIComponent(telLimpio)},"Telefono 2".eq.${encodeURIComponent(telLimpio)})&select="Cedula Pacientes","Nombre Paciente","Telefono","Telefono 2"&limit=5`;
-
-    const r = await fetch(url, {
-      headers: {
-        'apikey': SB_KEY,
-        'Authorization': 'Bearer ' + SB_KEY,
-        'Accept': 'application/json'
-      }
+    const r = await fetch('/validar-paciente.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cedula, nombre, telefono })
     });
-
-    if (!r.ok) return { ok: true, razon: 'error_api' }; // ante duda, dejar pasar
-
-    const rows = await r.json();
-    if (!rows || rows.length === 0) {
-      return { ok: false, razon: 'no_encontrado' };
-    }
-
-    // Evaluar coincidencias en cada fila encontrada
-    const nombreNorm = (nombre || '').toUpperCase().trim();
-    for (const row of rows) {
-      let puntos = 0;
-      const dbCedula   = (row['Cedula Pacientes'] || '').trim();
-      const dbNombre   = (row['Nombre Paciente']  || '').toUpperCase().trim();
-      const dbTel1     = (row['Telefono']          || '').replace(/\D/g,'');
-      const dbTel2     = (row['Telefono 2']        || '').replace(/\D/g,'');
-
-      if (dbCedula === cedulaLimpia)                        puntos++;
-      if (nombreNorm && dbNombre.includes(nombreNorm.split(' ')[0])) puntos++;
-      if (telLimpio && (dbTel1 === telLimpio || dbTel2 === telLimpio)) puntos++;
-
-      if (puntos >= 2) return { ok: true, razon: 'validado', nombre: row['Nombre Paciente'] };
-    }
-
-    return { ok: false, razon: 'datos_no_coinciden' };
-
+    if (!r.ok) return { ok: true, razon: 'error_api' };
+    return await r.json();
   } catch(e) {
-    // Error de red: dejar pasar para no bloquear al usuario
     return { ok: true, razon: 'error_red' };
   }
 }
