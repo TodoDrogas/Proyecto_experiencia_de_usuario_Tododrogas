@@ -57,7 +57,7 @@ if (!$resp || $code === 0 || $code >= 500) {
     echo json_encode([
         'ok'    => false,
         'razon' => 'error_conexion',
-        'msg'   => 'No fue posible verificar su registro en este momento. Intente nuevamente o comuníquese al 604 322 2432.',
+        'msg'   => 'No nos fue posible validar su registro activo en nuestro sistema. Intente nuevamente o comuníquese al 604 322 2432. o Whatsapp +57 304 341 2431',
     ]);
     exit;
 }
