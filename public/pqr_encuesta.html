@@ -379,6 +379,77 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
   .sb-label{font-size:8px;}
   .btn-next,.btn-submit{padding:14px;font-size:14px;}
 }
+
+/* ── MODAL ERROR VALIDACIÓN ─────────────────────────────── */
+.val-modal-bg{
+  position:fixed;inset:0;z-index:999;
+  background:rgba(2,6,14,.85);backdrop-filter:blur(12px);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;
+  transition:opacity .3s ease;
+}
+.val-modal-bg.show{opacity:1;pointer-events:auto;}
+.val-modal{
+  position:relative;
+  background:linear-gradient(145deg,rgba(6,14,32,.99),rgba(3,8,20,.99));
+  border:1px solid rgba(239,83,80,.45);
+  border-radius:20px;
+  padding:36px 32px 28px;
+  max-width:420px;width:90%;
+  text-align:center;
+  animation:modalIn .35s cubic-bezier(.34,1.56,.64,1) both;
+  box-shadow:0 0 60px rgba(239,83,80,.15),0 24px 80px rgba(0,0,0,.9);
+}
+.val-modal::before{
+  content:'';position:absolute;top:0;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(239,83,80,.6),transparent);
+}
+@keyframes modalIn{from{transform:scale(.82);opacity:0}to{transform:scale(1);opacity:1}}
+.val-modal-icon{
+  width:64px;height:64px;border-radius:50%;
+  background:radial-gradient(circle,rgba(239,83,80,.18) 0%,rgba(239,83,80,.06) 100%);
+  border:1.5px solid rgba(239,83,80,.5);
+  display:flex;align-items:center;justify-content:center;
+  font-size:28px;margin:0 auto 18px;
+  box-shadow:0 0 28px rgba(239,83,80,.3),0 0 0 6px rgba(239,83,80,.05);
+  animation:iconPulse 2.5s ease-in-out infinite;
+}
+@keyframes iconPulse{
+  0%,100%{box-shadow:0 0 28px rgba(239,83,80,.3),0 0 0 6px rgba(239,83,80,.05);}
+  50%{box-shadow:0 0 40px rgba(239,83,80,.5),0 0 0 12px rgba(239,83,80,.03);}
+}
+.val-modal-title{
+  font-size:17px;font-weight:700;color:#fff;margin-bottom:10px;
+  text-shadow:0 0 20px rgba(239,83,80,.3);
+}
+.val-modal-msg{
+  font-size:13px;color:rgba(190,225,255,.85);line-height:1.7;margin-bottom:22px;
+}
+.val-modal-countdown{
+  font-size:11px;color:rgba(140,190,230,.5);
+  font-family:'DM Mono',monospace;margin-bottom:16px;
+}
+.val-modal-bar{
+  width:100%;height:2px;background:rgba(255,255,255,.06);
+  border-radius:99px;overflow:hidden;margin-bottom:20px;
+}
+.val-modal-bar-fill{
+  height:100%;border-radius:99px;
+  background:linear-gradient(90deg,#ef5350,#ff9800);
+  width:100%;transition:width 1s linear;
+}
+.val-modal-btn{
+  background:rgba(239,83,80,.1);
+  border:1px solid rgba(239,83,80,.4);
+  color:#ef5350;border-radius:10px;
+  padding:10px 28px;font-size:13px;font-weight:600;
+  font-family:'Poppins',sans-serif;cursor:pointer;
+  transition:all .18s;letter-spacing:.3px;
+}
+.val-modal-btn:hover{
+  background:rgba(239,83,80,.2);border-color:rgba(239,83,80,.7);
+  color:#fff;box-shadow:0 0 20px rgba(239,83,80,.25);
+}
 </style>
 </head>
 <body>
@@ -510,6 +581,19 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
     </div>
     <div class="countdown-text" id="sCountdown">Volviendo al inicio en 10s…</div>
     <button class="btn-home" onclick="irInicio()">🏠 Ir al inicio</button>
+  </div>
+</div>
+
+
+<!-- MODAL ERROR VALIDACIÓN -->
+<div class="val-modal-bg" id="valModalBg">
+  <div class="val-modal">
+    <div class="val-modal-icon">🚫</div>
+    <div class="val-modal-title">Acceso no autorizado</div>
+    <div class="val-modal-msg" id="valModalMsg">—</div>
+    <div class="val-modal-bar"><div class="val-modal-bar-fill" id="valModalBar"></div></div>
+    <div class="val-modal-countdown" id="valModalCountdown">Cerrando en 15s…</div>
+    <button class="val-modal-btn" onclick="cerrarValModal()">Cerrar</button>
   </div>
 </div>
 
@@ -840,6 +924,33 @@ function irInicio(){document.body.style.opacity='0';document.body.style.transiti
 function markErr(a,b,s){
   const e=document.getElementById(a);if(e)e.classList.toggle('error',s);
   const r=document.getElementById(b);if(r)r.classList.toggle('show',s);
+}
+
+
+// ── MODAL ERROR VALIDACIÓN ───────────────────────────────
+let _valModalTimer = null;
+function showValModal(msg){
+  document.getElementById('valModalMsg').textContent = msg;
+  document.getElementById('valModalBar').style.transition = 'none';
+  document.getElementById('valModalBar').style.width = '100%';
+  document.getElementById('valModalBg').classList.add('show');
+  let secs = 15;
+  document.getElementById('valModalCountdown').textContent = 'Cerrando en ' + secs + 's…';
+  // Animar barra
+  setTimeout(()=>{
+    document.getElementById('valModalBar').style.transition = 'width 15s linear';
+    document.getElementById('valModalBar').style.width = '0%';
+  }, 50);
+  clearInterval(_valModalTimer);
+  _valModalTimer = setInterval(()=>{
+    secs--;
+    document.getElementById('valModalCountdown').textContent = 'Cerrando en ' + secs + 's…';
+    if(secs <= 0){ clearInterval(_valModalTimer); cerrarValModal(); }
+  }, 1000);
+}
+function cerrarValModal(){
+  clearInterval(_valModalTimer);
+  document.getElementById('valModalBg').classList.remove('show');
 }
 
 function showToast(msg,type='info'){
