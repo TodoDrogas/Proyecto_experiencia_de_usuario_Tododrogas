@@ -516,6 +516,42 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 <div id="toasts"></div>
 
 <script>
+
+// ══════════════════════════════════════════
+// VALIDACIÓN PACIENTE — 2 de 3 campos
+// ══════════════════════════════════════════
+async function validarPaciente(cedula, nombre, telefono) {
+  const SB_URL = window.SUPABASE_URL || '';
+  const SB_KEY = window.SUPABASE_KEY || '';
+  if (!SB_URL || !SB_KEY) return { ok: true, razon: 'sin_config' };
+  try {
+    const telLimpio    = (telefono || '').replace(/\D/g, '');
+    const cedulaLimpia = (cedula   || '').trim();
+    const url = `${SB_URL}/rest/v1/tabla_usuarios?or=("Cedula Pacientes".eq.${encodeURIComponent(cedulaLimpia)},"Telefono".eq.${encodeURIComponent(telLimpio)},"Telefono 2".eq.${encodeURIComponent(telLimpio)})&select="Cedula Pacientes","Nombre Paciente","Telefono","Telefono 2"&limit=5`;
+    const r = await fetch(url, {
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Accept': 'application/json' }
+    });
+    if (!r.ok) return { ok: true, razon: 'error_api' };
+    const rows = await r.json();
+    if (!rows || rows.length === 0) return { ok: false, razon: 'no_encontrado' };
+    const nombreNorm = (nombre || '').toUpperCase().trim();
+    for (const row of rows) {
+      let puntos = 0;
+      const dbCedula = (row['Cedula Pacientes'] || '').trim();
+      const dbNombre = (row['Nombre Paciente']  || '').toUpperCase().trim();
+      const dbTel1   = (row['Telefono']          || '').replace(/\D/g,'');
+      const dbTel2   = (row['Telefono 2']        || '').replace(/\D/g,'');
+      if (dbCedula === cedulaLimpia) puntos++;
+      if (nombreNorm && dbNombre.includes(nombreNorm.split(' ')[0])) puntos++;
+      if (telLimpio && (dbTel1 === telLimpio || dbTel2 === telLimpio)) puntos++;
+      if (puntos >= 2) return { ok: true, razon: 'validado', nombre: row['Nombre Paciente'] };
+    }
+    return { ok: false, razon: 'datos_no_coinciden' };
+  } catch(e) {
+    return { ok: true, razon: 'error_red' };
+  }
+}
+
 const LOGO_URL='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
 (function(){
   const tb=document.getElementById('topbarLogo'),tn=document.getElementById('topbarName');
@@ -721,13 +757,39 @@ function checkBtn0(){
 // Correo: solo checkBtn0, sin mayúsculas
 document.getElementById('inCorreo').addEventListener('input',checkBtn0);
 
-document.getElementById('btn0').addEventListener('click',()=>{
+document.getElementById('btn0').addEventListener('click', async ()=>{
   let ok=true;
   if(!sedeSeleccionada){markErr('inputSede','errSede',true);ok=false;}
   if(document.getElementById('inNombre').value.trim().length<2){markErr('inNombre','errNombre',true);ok=false;}
   if(document.getElementById('inDoc').value.trim().length<4){markErr('inDoc','errDoc',true);ok=false;}
   if(document.getElementById('inTel').value.trim().replace(/\D/g,'').length<7){markErr('inTel','errTel',true);ok=false;}
-  if(!ok)return;
+  if(!ok) return;
+
+  // ── VALIDACIÓN PACIENTE ─────────────────────────────
+  const btn0el = document.getElementById('btn0');
+  const textoOriginal = btn0el.innerHTML;
+  btn0el.disabled = true;
+  btn0el.innerHTML = '⏳ Verificando registro…';
+
+  const cedula   = document.getElementById('inDoc').value.trim();
+  const nombre   = document.getElementById('inNombre').value.trim();
+  const telefono = document.getElementById('inTel').value.trim();
+  const validacion = await validarPaciente(cedula, nombre, telefono);
+
+  if (!validacion.ok) {
+    btn0el.disabled = false;
+    btn0el.innerHTML = textoOriginal;
+    const msg = validacion.razon === 'no_encontrado'
+      ? 'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.'
+      : 'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.';
+    showToast(msg, 'error');
+    return;
+  }
+
+  btn0el.disabled = false;
+  btn0el.innerHTML = textoOriginal;
+  // ── FIN VALIDACIÓN ──────────────────────────────────
+
   userData={
     nombre:document.getElementById('inNombre').value.trim(),
     documento:document.getElementById('inDoc').value.trim(),
