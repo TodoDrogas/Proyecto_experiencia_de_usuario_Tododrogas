@@ -338,7 +338,7 @@ table.agents-tbl tr:hover td{background:var(--bg)}
   .metrics-content,.config-page { padding:16px; }
 }
 /* Pantalla pequeña: KPIs en 1 col, folders con solo iconos */
-@media (max-width:899px) {
+@media (max-width:700px) {
   .folder-item span:not(.folder-cnt) { display:none; }
   .folder-cnt { margin-left:0; }
   .email-detail-panel,.mgmt-panel { display:none!important; }
@@ -3542,8 +3542,8 @@ async function _calcularAutoAsignacion() {
   if(!tickets.length) return { total: 0, asignaciones: [], distribucion: [] };
 
   // 2. Obtener agentes activos ordenados por carga
-  const agentes = (await sb('agentes?activo=eq.true&select=id,nombre,correo,carga_actual&order=carga_actual.asc') || [])
-    .map(a => ({ ...a, carga_actual: parseInt(a.carga_actual) || 0 }));
+  const agentes = (await sb('agentes?activo=eq.true&select=id,nombre,email,casos_activos&order=casos_activos.asc') || [])
+    .map(a => ({ ...a, carga_actual: parseInt(a.casos_activos) || 0 }));
   if(!agentes.length) throw new Error('No hay agentes activos en el sistema.');
 
   // 3. Algoritmo round-robin ponderado
@@ -3634,7 +3634,7 @@ async function confirmarAutoAsignar() {
     const cargaFinalPorAgente = {};
     asignaciones.forEach(a => cargaFinalPorAgente[a.agente_id] = a.carga_resultante);
     for (const [agenteId, carga] of Object.entries(cargaFinalPorAgente)) {
-      try { await sb(`agentes?id=eq.${agenteId}`, 'PATCH', { carga_actual: carga }); }
+      try { await sb(`agentes?id=eq.${agenteId}`, 'PATCH', { casos_activos: carga }); }
       catch { /* no crítico */ }
     }
 
