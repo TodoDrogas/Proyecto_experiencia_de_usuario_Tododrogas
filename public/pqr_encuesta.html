@@ -13,7 +13,7 @@
 ═══════════════════════════════════════════════ */
 :root{
   --c1:#2979ff; --c2:#00b0ff; --c3:#00e5ff; --c4:#0091ea; --c5:#1565c0;
-  --r1:#ef5350; --r2:#ff9800; --r3:#ffc107; --r4:#66bb6a; --r5:#00e676;
+  --r1:#ef5350; --r2:#ffc107; --r3:#00e676; --r4:#66bb6a; --r5:#00e676;
   --bg:#04080f; --text:#e4f0ff; --text2:rgba(190,225,255,.9); --text3:rgba(140,190,230,.7);
   --border:rgba(0,176,255,.22);
   --float:0 8px 28px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.35);
@@ -178,16 +178,16 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 .q-sub{font-size:14px;color:var(--text2);line-height:1.6;}
 
 /* ── STAR BUTTONS — amplios, flotantes, color por nivel ── */
-.star-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;}
+.star-grid{display:flex;justify-content:center;gap:12px;margin-bottom:16px;}
 .star-btn{
   background:rgba(0,176,255,.07);border:1.5px solid rgba(0,176,255,.2);
   border-radius:18px;
-  padding:22px 8px 16px;   /* más alto */
+  padding:22px 8px 16px;
+  width:140px;flex-shrink:0;
   cursor:pointer;
   transition:all .22s cubic-bezier(.34,1.5,.64,1);
   display:flex;flex-direction:column;align-items:center;gap:10px;
   position:relative;overflow:hidden;
-  /* Flotante de base */
   box-shadow:0 8px 24px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.35),
              0 0 0 1px rgba(0,176,255,.1);
 }
@@ -623,7 +623,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
     <p>Su calificación ha sido recibida exitosamente.<br>Gracias por contribuir a la mejora de nuestro servicio.</p>
     <div class="score-badge">
       <div class="score-num" id="sAvg">—</div>
-      <div class="score-lbl">Promedio<br>/ 5.0</div>
+      <div class="score-lbl">Promedio<br>/ 3.0</div>
     </div>
     <div style="font-size:12px;color:rgba(203,213,225,.65);margin-bottom:10px;" id="sSede"></div>
     <div class="success-chips" id="sChips"></div>
@@ -748,11 +748,11 @@ const SEDES=[
 ];
 
 const QUESTIONS=[
-  {id:'instalaciones',icon:'🏥',label:'Instalaciones y limpieza',sub:'¿Cómo encontró el estado y aseo de nuestras instalaciones?',labels:['Muy insatisfecho','Insatisfecho','Neutral','Satisfecho','Muy satisfecho']},
-  {id:'atencion',icon:'🤝',label:'Atención del personal',sub:'¿Cómo califica el trato y profesionalismo de nuestro equipo?',labels:['Muy insatisfecho','Insatisfecho','Neutral','Satisfecho','Muy satisfecho']},
-  {id:'tiempos',icon:'⏱',label:'Tiempos de espera',sub:'¿La atención fue oportuna y sin esperas innecesarias?',labels:['Muy insatisfecho','Insatisfecho','Neutral','Satisfecho','Muy satisfecho']},
-  {id:'medicamentos',icon:'💊',label:'Disponibilidad de medicamentos',sub:'¿Encontró los medicamentos que necesitaba?',labels:['Muy insatisfecho','Insatisfecho','Neutral','Satisfecho','Muy satisfecho']},
-  {id:'recomendacion',icon:'⭐',label:'¿Recomendaría nuestro servicio?',sub:'¿Con qué probabilidad recomendaría Tododrogas a un familiar o amigo?',labels:['Definitivamente no','Probablemente no','Tal vez','Probablemente sí','Definitivamente sí']},
+  {id:'instalaciones',icon:'🏥',label:'Instalaciones y limpieza',sub:'¿Cómo encontró el estado y aseo de nuestras instalaciones?',labels:['Insatisfecho','Neutral','Satisfecho']},
+  {id:'atencion',icon:'🤝',label:'Atención del personal',sub:'¿Cómo califica el trato y profesionalismo de nuestro equipo?',labels:['Insatisfecho','Neutral','Satisfecho']},
+  {id:'tiempos',icon:'⏱',label:'Tiempos de espera',sub:'¿La atención fue oportuna y sin esperas innecesarias?',labels:['Insatisfecho','Neutral','Satisfecho']},
+  {id:'medicamentos',icon:'💊',label:'Disponibilidad de medicamentos',sub:'¿Encontró los medicamentos que necesitaba?',labels:['Insatisfecho','Neutral','Satisfecho']},
+  {id:'recomendacion',icon:'⭐',label:'¿Recomendaría nuestro servicio?',sub:'¿Con qué probabilidad recomendaría Tododrogas a un familiar o amigo?',labels:['No recomendaría','Tal vez','Definitivamente sí']},
 ];
 const FEEDBACK={
   1:['Lamentamos su experiencia. Su comentario nos ayuda a mejorar.','bad'],
@@ -788,7 +788,7 @@ function buildSlides(){
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
       </button>`;
     wrap.insertBefore(s,cs);
-    for(let v=1;v<=5;v++){
+    for(let v=1;v<=3;v++){
       const b=document.createElement('button');
       b.className='star-btn'; b.dataset.q=qi; b.dataset.v=v;
       b.innerHTML=`<span class="sb-label">${q.labels[v-1]}</span><span class="sb-num">${v}</span>`;
@@ -970,7 +970,7 @@ async function submitSurvey(){
   const btn=document.getElementById('submitBtn');
   btn.classList.add('loading');btn.disabled=true;
   btn.innerHTML='⏳ Registrando encuesta…';
-  const avg=ratings.reduce((a,b)=>a+b,0)/5;
+  const avg=ratings.reduce((a,b)=>a+b,0)/3;
   const payload={...userData,
     instalaciones:ratings[0],atencion:ratings[1],tiempos:ratings[2],
     medicamentos:ratings[3],recomendacion:ratings[4],
@@ -993,7 +993,7 @@ function showSuccess(avg,payload){
   document.getElementById('sAvg').textContent=avg.toFixed(1);
   document.getElementById('sSede').textContent='📍 '+(payload.sede_nombre||'');
   const labels=['Instalaciones','Atención','Tiempos','Medicamentos','Recomienda'];
-  document.getElementById('sChips').innerHTML=ratings.map((r,i)=>`<div class="s-chip">${labels[i]}: <strong>${QUESTIONS[i].labels[r-1]}</strong> (${r}/5)</div>`).join('');
+  document.getElementById('sChips').innerHTML=ratings.map((r,i)=>`<div class="s-chip">${labels[i]}: <strong>${QUESTIONS[i].labels[r-1]}</strong> (${r}/3)</div>`).join('');
   if(payload.correo&&payload.correo.includes('@')){document.getElementById('sEmail').textContent=payload.correo;document.getElementById('sEmailLine').style.display='block';}
   spawnConfetti();
   document.getElementById('successOverlay').classList.add('show');
