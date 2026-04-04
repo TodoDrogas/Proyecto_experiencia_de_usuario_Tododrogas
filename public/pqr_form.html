@@ -1261,25 +1261,38 @@ updateProgress(0);
 
 // CAROUSEL
 function updateCarousel(idx){
-  const isMobile = window.innerWidth <= 900;
-  // Slide Varios tiene display:none por defecto; lo manejamos por separado
+  const isMobile   = window.innerWidth <= 900;
   const slideVarios = document.getElementById('slideVarios');
+  const slideDatos  = document.getElementById('slideDatos');
+
+  // Slides que participan en el carousel (excluir slideDatos y slideVarios)
+  const allDom = Array.from(document.querySelectorAll(
+    '#slidesWrap > .slide, #slidesWrap > .slide-split'
+  )).filter(s => s !== slideVarios && s !== slideDatos);
+
   if(isMobile){
-    document.querySelectorAll('.slide,.slide-split').forEach((s)=>{
-      if(s === slideVarios) return; // lo controla goTo
+    document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split').forEach(s=>{
+      if(s === slideVarios) return;
       s.style.display = 'none';
     });
-    // Mostrar el slide correcto según índice lógico
-    const allSlides = Array.from(document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split')).filter(s=>s!==slideVarios);
-    if(allSlides[idx]) allSlides[idx].style.display = 'flex';
+    if(allDom[idx]) allDom[idx].style.display = 'flex';
     window.scrollTo(0,0);
-    document.getElementById('slidesWrap').style.transform='';
+    document.getElementById('slidesWrap').style.transform = '';
   } else {
-    document.querySelectorAll('.slide,.slide-split').forEach(s=>{
-      if(s===slideVarios) return;
-      s.style.display='';
+    // Ocultar slideDatos, mostrar resto
+    if(slideDatos) slideDatos.style.display = 'none';
+    document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split').forEach(s=>{
+      if(s === slideVarios || s === slideDatos) return;
+      s.style.display = '';
     });
-    document.getElementById('slidesWrap').style.transform=`translateX(-${idx*100}vw)`;
+    // Calcular posición DOM real (excluyendo slideDatos del offset)
+    if(allDom[idx]){
+      const allFull = Array.from(document.querySelectorAll(
+        '#slidesWrap > .slide, #slidesWrap > .slide-split'
+      ));
+      const domPos = allFull.indexOf(allDom[idx]);
+      document.getElementById('slidesWrap').style.transform = `translateX(-${domPos*100}vw)`;
+    }
   }
 }
 
@@ -1300,10 +1313,14 @@ function goTo(next){
       });
       window.scrollTo(0,0);
     } else {
-      // Desktop: insertar slideVarios en posición 1 del carousel lógico
-      document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split').forEach(s=>s.style.display='');
+      // Desktop: mostrar slideVarios
+      const slideDatosEl = document.getElementById('slideDatos');
+      if(slideDatosEl) slideDatosEl.style.display='none';
+      document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split').forEach(s=>{
+        if(s===slideDatosEl) return;
+        s.style.display='';
+      });
       slideVarios.style.display='flex';
-      // Recalcular transform: slideVarios es índice 1 en el DOM
       const allDom = Array.from(document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split'));
       const vIdx = allDom.indexOf(slideVarios);
       document.getElementById('slidesWrap').style.transform=`translateX(-${vIdx*100}vw)`;
@@ -2126,7 +2143,13 @@ document.body.style.opacity='0'; document.body.style.transition='opacity .4s eas
 setTimeout(()=>{document.body.style.opacity='1';},50);
 
 // Init responsive slides on load
-window.addEventListener('load', ()=>updateCarousel(0));
+window.addEventListener('load', ()=>{
+  // Mostrar slideDatos al inicio
+  const sd = document.getElementById('slideDatos');
+  const allSlides = document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split');
+  allSlides.forEach(s=>{ if(s!==sd) s.style.display='none'; });
+  if(sd) sd.style.display='flex';
+});
 window.addEventListener('resize', ()=>updateCarousel(currentSlide));
 
 // ── Helper: URL firmada Supabase para buckets privados ──────────────
