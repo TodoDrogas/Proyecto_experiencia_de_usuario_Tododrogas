@@ -113,11 +113,11 @@ $rand_enc   = str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
 $ticket_enc = "ENC-{$fecha_enc}-{$rand_enc}";
 
 // Clasificacion sin emojis
-$prio_enc  = $calificacion >= 4 ? 'baja'     : ($calificacion >= 3 ? 'media'   : 'alta');
-$sent_enc  = $calificacion >= 4 ? 'positivo' : ($calificacion >= 3 ? 'neutro'  : 'negativo');
-$color_cal = $calificacion >= 4 ? '#0f5c2e'  : ($calificacion >= 3 ? '#7a5200' : '#8a1a1a');
-$bg_cal    = $calificacion >= 4 ? '#dcfce7'  : ($calificacion >= 3 ? '#fef9c3' : '#fee2e2');
-$nivel_cal = $calificacion >= 4 ? 'SATISFACTORIO' : ($calificacion >= 3 ? 'NEUTRO' : 'INSATISFACTORIO');
+$prio_enc  = $calificacion >= 3 ? 'baja'     : ($calificacion >= 2 ? 'media'   : 'alta');
+$sent_enc  = $calificacion >= 3 ? 'positivo' : ($calificacion >= 2 ? 'neutro'  : 'negativo');
+$color_cal = $calificacion >= 3 ? '#0f5c2e'  : ($calificacion >= 2 ? '#7a5200' : '#8a1a1a');
+$bg_cal    = $calificacion >= 3 ? '#dcfce7'  : ($calificacion >= 2 ? '#fef9c3' : '#fee2e2');
+$nivel_cal = $calificacion >= 3 ? 'SATISFACTORIO' : ($calificacion >= 2 ? 'NEUTRO' : 'INSATISFACTORIO');
 
 // ── PASO 1: INSERTAR EN encuestas_satisfaccion ────────────────────────
 $payload = [
@@ -154,7 +154,7 @@ $filas_usuario = '';
 foreach ($labels as $i => $label) {
     $v = $valores[$i];
     $barras = '';
-    for ($b = 1; $b <= 5; $b++) {
+    for ($b = 1; $b <= 3; $b++) {
         $col = $b <= $v ? '#0c2d5e' : '#d8e4f0';
         $barras .= "<span style='display:inline-block;width:18px;height:3px;background:{$col};border-radius:2px;margin-right:2px'></span>";
     }
@@ -173,7 +173,7 @@ $filas_interno = '';
 foreach ($labels as $i => $label) {
     $v = $valores[$i];
     $barras = '';
-    for ($b = 1; $b <= 5; $b++) {
+    for ($b = 1; $b <= 3; $b++) {
         $col = $b <= $v ? '#2563eb' : '#d8e4f0';
         $barras .= "<span style='display:inline-block;width:16px;height:5px;background:{$col};border-radius:3px;margin-right:2px'></span>";
     }
@@ -244,7 +244,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
       </tr>
       <tr style='background:#f6f9fd'>
         <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Promedio</td>
-        <td style='padding:9px 14px;font-size:13px;font-weight:700;color:{$color_cal};border-bottom:1px solid #d4dce8'>{$promedio} / 5.0</td>
+        <td style='padding:9px 14px;font-size:13px;font-weight:700;color:{$color_cal};border-bottom:1px solid #d4dce8'>{$promedio} / 3.0</td>
       </tr>
       <tr>
         <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Resultado</td>
@@ -393,7 +393,7 @@ if ($token) {
       </tr>
       <tr>
         <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Promedio</td>
-        <td colspan='2' style='padding:9px 14px;font-size:14px;font-weight:700;color:{$color_cal};border-bottom:1px solid #e8eef6'>{$promedio} / 5.0</td>
+        <td colspan='2' style='padding:9px 14px;font-size:14px;font-weight:700;color:{$color_cal};border-bottom:1px solid #e8eef6'>{$promedio} / 3.0</td>
       </tr>
       <tr style='background:#f6f9fd'>
         <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Resultado</td>
