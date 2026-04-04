@@ -1,11 +1,13 @@
 <?php
 /**
- * radicar-encuesta.php — Encuesta de Satisfacción · Tododrogas CIA SAS
- * ─────────────────────────────────────────────────────────────────────
+ * radicar-encuesta.php — Encuesta de Satisfaccion · Tododrogas CIA SAS
+ * ──────────────────────────────────────────────────────────────────────
  * 1. Recibe datos de la encuesta desde pqr_encuesta.html
  * 2. Inserta en Supabase tabla encuestas_satisfaccion
- * 3. Envía correo de confirmación al usuario vía Graph API
- * 4. Registra en historial_eventos
+ * 3. Envia correo al usuario con formato formal (igual que radicar-pqr)
+ * 4. Envia notificacion interna a pqrsfd con mismo formato
+ * 5. Registra en historial_eventos
+ * NO inserta en tabla correos (no aparece en admin como PQR)
  */
 
 header('Content-Type: application/json');
@@ -14,17 +16,17 @@ header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
-// ── CREDENCIALES (inyectadas por deploy.yml) ─────────────────────────
+// ── CREDENCIALES ──────────────────────────────────────────────────────
 $SB_URL        = '__SB_URL__';
 $SB_KEY        = '__SB_KEY__';
 $TENANT_ID     = '__AZURE_TENANT_ID__';
 $CLIENT_ID     = '__AZURE_CLIENT_ID__';
 $CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
 $GRAPH_USER_ID = '__GRAPH_USER_ID__';
-$BUZÓN_PQRS    = 'pqrsfd@tododrogas.com.co';
+$BUZON_PQRS    = 'pqrsfd@tododrogas.com.co';
 $LOGO_URL      = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
 
-// ── HELPERS ──────────────────────────────────────────────────────────
+// ── HELPERS ───────────────────────────────────────────────────────────
 function sbPost($url, $key, $endpoint, $data, $prefer = 'return=representation') {
     $ch = curl_init("$url/rest/v1/$endpoint");
     curl_setopt_array($ch, [
@@ -63,199 +65,194 @@ function getGraphToken($tenant, $client_id, $client_secret) {
     return $data['access_token'] ?? null;
 }
 
-// ── LEER INPUT ───────────────────────────────────────────────────────
+function sendMail($token, $graph_user_id, $payload) {
+    $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$graph_user_id}/sendMail");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode(['message' => $payload, 'saveToSentItems' => true]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 30,
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return $code === 202;
+}
+
+// ── LEER INPUT ────────────────────────────────────────────────────────
 $body = json_decode(file_get_contents('php://input'), true);
 if (!$body) { http_response_code(400); echo json_encode(['error' => 'Invalid JSON']); exit; }
 
-$now    = date('c');
-$nombre = trim($body['nombre']       ?? '');
-$correo = trim($body['correo']       ?? '');
-$telefono = trim($body['telefono']   ?? '');
-$documento = trim($body['documento'] ?? '');
+date_default_timezone_set('America/Bogota');
+$now      = date('c');
+$fecha_fmt = date('d/m/Y H:i');
 
-// Ratings individuales
+$nombre        = trim($body['nombre']        ?? '');
+$correo        = trim($body['correo']        ?? '');
+$telefono      = trim($body['telefono']      ?? '');
+$documento     = trim($body['documento']     ?? '');
+$comentario    = trim($body['comentario']    ?? '');
+$sede_id       = trim($body['sede_id']       ?? '');
+$sede_nombre   = trim($body['sede_nombre']   ?? '');
+$sede_ciudad   = trim($body['sede_ciudad']   ?? '');
+$sede_direccion = trim($body['sede_direccion'] ?? '');
+$canal         = trim($body['canal']         ?? 'web');
+
 $instalaciones = intval($body['instalaciones'] ?? 0);
 $atencion      = intval($body['atencion']      ?? 0);
 $tiempos       = intval($body['tiempos']       ?? 0);
 $medicamentos  = intval($body['medicamentos']  ?? 0);
 $recomendacion = intval($body['recomendacion'] ?? 0);
 $promedio      = floatval($body['promedio']    ?? 0);
-
-$comentario    = trim($body['comentario']      ?? '');
-$sede_id       = trim($body['sede_id']         ?? '');
-$sede_nombre   = trim($body['sede_nombre']     ?? '');
-$sede_ciudad   = trim($body['sede_ciudad']     ?? '');
-$sede_direccion = trim($body['sede_direccion'] ?? '');
-$canal         = trim($body['canal']           ?? 'web');
-$ip_origen     = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? ($body['ip_origen'] ?? 'web');
-
-// Calificacion final = promedio redondeado a entero para la tabla
 $calificacion  = (int) round($promedio);
 
-// ── PASO 1: INSERTAR EN SUPABASE ─────────────────────────────────────
+// Ticket encuesta
+$fecha_enc  = date('Ymd');
+$rand_enc   = str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
+$ticket_enc = "ENC-{$fecha_enc}-{$rand_enc}";
+
+// Clasificacion sin emojis
+$prio_enc  = $calificacion >= 4 ? 'baja'     : ($calificacion >= 3 ? 'media'   : 'alta');
+$sent_enc  = $calificacion >= 4 ? 'positivo' : ($calificacion >= 3 ? 'neutro'  : 'negativo');
+$color_cal = $calificacion >= 4 ? '#0f5c2e'  : ($calificacion >= 3 ? '#7a5200' : '#8a1a1a');
+$bg_cal    = $calificacion >= 4 ? '#dcfce7'  : ($calificacion >= 3 ? '#fef9c3' : '#fee2e2');
+$nivel_cal = $calificacion >= 4 ? 'SATISFACTORIO' : ($calificacion >= 3 ? 'NEUTRO' : 'INSATISFACTORIO');
+
+// ── PASO 1: INSERTAR EN encuestas_satisfaccion ────────────────────────
 $payload = [
     'calificacion'    => $calificacion,
     'comentario'      => $comentario ?: null,
     'sede_id'         => $sede_id    ?: null,
     'canal'           => $canal,
-    'ip_origen'       => $ip_origen,
-    'ticket_id'       => null,
+    'ip_origen'       => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? 'web',
+    'ticket_id'       => $ticket_enc,
     'correo_id'       => null,
     'created_at'      => $now,
 ];
 
-$sb_result  = sbPost($SB_URL, $SB_KEY, 'encuestas_satisfaccion', $payload);
+$sb_result   = sbPost($SB_URL, $SB_KEY, 'encuestas_satisfaccion', $payload);
 $encuesta_id = null;
 $saved       = ($sb_result['code'] >= 200 && $sb_result['code'] < 300);
-
 if ($saved) {
     $inserted    = json_decode($sb_result['body'], true);
     $encuesta_id = $inserted[0]['id'] ?? null;
-} else {
-    error_log('[radicar-encuesta] Supabase error: ' . $sb_result['code'] . ' — ' . $sb_result['body']);
 }
 
-// ── PASO 1B: INSERTAR EN TABLA CORREOS (igual que radicación) ─────────
-// Así las encuestas aparecen en el buzón del admin automáticamente
-$fecha_enc   = date('Ymd');
-$rand_enc    = str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
-$ticket_enc  = "ENC-{$fecha_enc}-{$rand_enc}";
-
-$emoji_cal   = [1=>'😞',2=>'😐',3=>'🙂',4=>'😊',5=>'🤩'][$calificacion] ?? '⭐';
-$emoji_prio  = $calificacion >= 4 ? '🟢' : ($calificacion >= 3 ? '🟡' : '🔴');
-$sent_enc    = $calificacion >= 4 ? 'positivo' : ($calificacion >= 3 ? 'neutro' : 'negativo');
-$prio_enc    = $calificacion >= 4 ? 'baja'     : ($calificacion >= 3 ? 'media'  : 'alta');
-
-$subject_enc = "[{$ticket_enc}] ⭐ ENCUESTA | {$emoji_cal} {$calificacion}/5 | {$emoji_prio} " . mb_strtoupper($prio_enc,'UTF-8') . " | 📍 {$sede_nombre}";
-
-$resumen_enc = "Encuesta de satisfacción. Promedio: {$promedio}/5. " .
-               "Instalaciones:{$instalaciones} Atención:{$atencion} " .
-               "Tiempos:{$tiempos} Medicamentos:{$medicamentos} Recomienda:{$recomendacion}." .
-               ($comentario ? " Comentario: {$comentario}" : '');
-
-$horas_enc        = 360; // SLA encuestas = 15 días
-$fecha_limite_enc = date('c', strtotime("+{$horas_enc} hours"));
-
-$payload_correo_enc = [
-    'ticket_id'         => $ticket_enc,
-    'from_email'        => $correo ?: ($telefono ? $telefono.'@encuesta' : 'anonimo@encuesta'),
-    'from_name'         => $nombre ?: 'Anónimo',
-    'nombre'            => $nombre ?: 'Anónimo',
-    'correo'            => $correo ?: null,
-    'telefono_contacto' => $telefono ?: null,
-    'subject'           => $subject_enc,
-    'descripcion'       => $resumen_enc,
-    'body_preview'      => mb_substr($resumen_enc, 0, 200),
-    'body_content'      => $resumen_enc . ($comentario ? "
-
-Comentario: {$comentario}" : ''),
-    'body_type'         => 'text',
-    'tipo_pqr'          => 'encuesta',
-    'categoria_ia'      => "Encuesta · {$sede_nombre}",
-    'sentimiento'       => $sent_enc,
-    'nivel_riesgo'      => $calificacion <= 2 ? 'medio' : 'bajo',
-    'resumen_corto'     => "Encuesta {$calificacion}/5 — {$sede_nombre}" . ($sede_ciudad ? ", {$sede_ciudad}" : ''),
-    'ley_aplicable'     => 'N/A',
-    'canal_contacto'    => $canal,
-    'origen'            => 'formulario_encuesta',
-    'estado'            => 'solucionado', // encuestas no requieren gestión
-    'prioridad'         => $prio_enc,
-    'es_urgente'        => false,
-    'horas_sla'         => $horas_enc,
-    'fecha_limite_sla'  => $fecha_limite_enc,
-    'has_attachments'   => false,
-    'is_read'           => false,
-    'datos_legales'     => json_encode([
-        'encuesta_id'   => $encuesta_id,
-        'instalaciones' => $instalaciones,
-        'atencion'      => $atencion,
-        'tiempos'       => $tiempos,
-        'medicamentos'  => $medicamentos,
-        'recomendacion' => $recomendacion,
-        'promedio'      => $promedio,
-        'sede_nombre'   => $sede_nombre,
-        'sede_ciudad'   => $sede_ciudad,
-        'sede_direccion'=> $sede_direccion,
-    ]),
-    'received_at'       => $now,
-    'created_at'        => $now,
-    'updated_at'        => $now,
+// ── HELPER: construir filas de calificaciones ─────────────────────────
+$labels = [
+    'Instalaciones y limpieza',
+    'Atencion al cliente',
+    'Tiempos de espera',
+    'Disponibilidad de medicamentos',
+    'Recomendaria el servicio',
 ];
+$valores = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
 
-$enc_correo_result = sbPost($SB_URL, $SB_KEY, 'correos', $payload_correo_enc);
-$enc_correo_id = null;
-if ($enc_correo_result['code'] < 400) {
-    $enc_ins = json_decode($enc_correo_result['body'], true);
-    $enc_correo_id = $enc_ins[0]['id'] ?? null;
-} else {
-    error_log('[radicar-encuesta] correos insert error: ' . $enc_correo_result['code']);
+// ── Filas para correo al USUARIO (fondo blanco, barras azul marino) ───
+$filas_usuario = '';
+foreach ($labels as $i => $label) {
+    $v = $valores[$i];
+    $barras = '';
+    for ($b = 1; $b <= 5; $b++) {
+        $col = $b <= $v ? '#0c2d5e' : '#d8e4f0';
+        $barras .= "<span style='display:inline-block;width:18px;height:3px;background:{$col};border-radius:2px;margin-right:2px'></span>";
+    }
+    $vc = $v >= 4 ? '#0f5c2e' : ($v >= 3 ? '#7a5200' : '#8a1a1a');
+    $bb = ($i < count($labels)-1) ? 'border-bottom:1px solid #e8eef6;' : '';
+    $filas_usuario .= "
+    <tr>
+      <td style='padding:11px 0;font-size:12px;color:#2a3a4a;width:42%;{$bb}'>{$label}</td>
+      <td style='padding:11px 14px 11px 0;width:38%;{$bb}'>{$barras}</td>
+      <td style='padding:11px 0;font-size:12px;font-weight:500;text-align:right;color:{$vc};{$bb}'>{$v} / 5</td>
+    </tr>";
 }
 
-// ── PASO 2: CORREO DE CONFIRMACIÓN AL USUARIO ────────────────────────
+// ── Filas para correo INTERNO a pqrsfd ────────────────────────────────
+$filas_interno = '';
+foreach ($labels as $i => $label) {
+    $v = $valores[$i];
+    $barras = '';
+    for ($b = 1; $b <= 5; $b++) {
+        $col = $b <= $v ? '#2563eb' : '#d8e4f0';
+        $barras .= "<span style='display:inline-block;width:16px;height:5px;background:{$col};border-radius:3px;margin-right:2px'></span>";
+    }
+    $vc = $v >= 4 ? '#0f5c2e' : ($v >= 3 ? '#7a5200' : '#8a1a1a');
+    $bb = ($i < count($labels)-1) ? 'border-bottom:1px solid #e8eef6;' : '';
+    $filas_interno .= "
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:200px;{$bb}'>{$label}</td>
+        <td style='padding:9px 14px;{$bb}'>{$barras}</td>
+        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:{$vc};text-align:right;{$bb}'>{$v} / 5</td>
+      </tr>";
+}
+
+// ── PASO 2: CORREO AL USUARIO ─────────────────────────────────────────
 $correo_enviado = false;
+$token = null;
+
 if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     $token = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
 
     if ($token) {
-        // Determinar emoji de calificación
-        $emojis_rating = [1=>'😞', 2=>'😐', 3=>'🙂', 4=>'😊', 5=>'🤩'];
-        $emoji_final   = $emojis_rating[$calificacion] ?? '⭐';
-        $estrellas     = str_repeat('⭐', $calificacion) . str_repeat('☆', 5 - $calificacion);
-        $color_cal     = $calificacion >= 4 ? '#10b981' : ($calificacion >= 3 ? '#f59e0b' : '#ef4444');
-        $nombre_first  = explode(' ', $nombre)[0];
+        $nombre_first = explode(' ', $nombre)[0];
 
-        $labels = ['Instalaciones', 'Atención al cliente', 'Tiempos de espera', 'Disponibilidad de medicamentos', 'Recomendaría el servicio'];
-        $valores = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
-
-        $filas_calificaciones = '';
-        foreach ($labels as $i => $label) {
-            $v = $valores[$i];
-            $barras = '';
-            for ($b = 1; $b <= 5; $b++) {
-                $col = $b <= $v ? '#0c2d5e' : '#d8e4f0';
-                $barras .= "<span style='display:inline-block;width:18px;height:3px;background:{$col};border-radius:2px;margin-right:2px'></span>";
-            }
-            if ($v >= 4) { $score_color = '#0f5c2e'; }
-            elseif ($v >= 3) { $score_color = '#7a5200'; }
-            else { $score_color = '#8a1a1a'; }
-            $border_bottom = ($i < count($labels) - 1) ? "border-bottom:1px solid #e8eef6;" : "";
-            $filas_calificaciones .= "
-            <tr>
-              <td style='padding:11px 0;font-size:12px;color:#2a3a4a;font-weight:400;width:40%;{$border_bottom}'>{$label}</td>
-              <td style='padding:11px 14px 11px 0;width:40%;{$border_bottom}'>{$barras}</td>
-              <td style='padding:11px 0;font-size:12px;font-weight:500;text-align:right;width:20%;color:{$score_color};{$border_bottom}'>{$v} / 5</td>
-            </tr>";
-        }
-
-        $bloque_comentario = '';
+        $bloque_comentario_u = '';
         if ($comentario) {
-            $bloque_comentario = "
+            $bloque_comentario_u = "
             <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:24px'>
-              <p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Observación del usuario</p>
-              <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . htmlspecialchars($comentario) . "</p>
+              <p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Observacion del usuario</p>
+              <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . htmlspecialchars($comentario, ENT_QUOTES) . "</p>
             </div>";
         }
 
-        $cuerpo = "
+        $cuerpo_usuario = "
 <!DOCTYPE html><html><head><meta charset='UTF-8'></head>
 <body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
 <table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
 <tr><td align='center'>
 <table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
 
-  <!-- HEADER -->
   <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
     <img src='{$LOGO_URL}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 12px;filter:brightness(0) invert(1);opacity:.92'>
-    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Evaluación de experiencia de usuario &middot; Servicio Farmacéutico</p>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Evaluacion de experiencia de usuario &middot; Servicio Farmaceutico</p>
   </td></tr>
 
-  <!-- CUERPO -->
+  <tr><td style='background:#0a2448;padding:20px 44px;text-align:center'>
+    <p style='color:#6a90b8;margin:0;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Registro</p>
+    <p style='color:#ffffff;margin:8px 0 4px;font-size:22px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_enc}</p>
+    <p style='color:#4a6a90;margin:0;font-size:10px'>{$fecha_fmt} &middot; {$sede_nombre}</p>
+  </td></tr>
+
   <tr><td style='background:#ffffff;padding:36px 44px'>
 
-    <p style='margin:0 0 10px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hola, <strong style='font-weight:500;color:#0c2d5e'>{$nombre_first}</strong>,</p>
-    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hemos recibido su evaluación de experiencia. Su retroalimentación es parte fundamental de nuestro proceso de mejora continua &mdash; cada respuesta se revisa de manera directa por el equipo de calidad de servicio.</p>
+    <p style='margin:0 0 10px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Estimado/a, <strong style='font-weight:500;color:#0c2d5e'>{$nombre_first}</strong>,</p>
+    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hemos recibido su evaluacion de experiencia. Su retroalimentacion es parte fundamental de nuestro proceso de mejora continua. Cada respuesta es revisada de manera directa por el equipo de calidad de servicio.</p>
 
-    <p style='display:inline-block;background:#eef2f8;border:1px solid #a8bed8;border-radius:2px;padding:4px 10px;font-size:11px;letter-spacing:.8px;text-transform:uppercase;color:#2a4870;font-weight:500;margin:0 0 28px'>{$sede_nombre}</p>
+    <!-- DIVIDER CALIFICACION GLOBAL -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Calificacion global</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #e8eef6'>Sede</td>
+        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . "</td>
+      </tr>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Promedio</td>
+        <td style='padding:9px 14px;font-size:13px;font-weight:700;color:{$color_cal};border-bottom:1px solid #d4dce8'>{$promedio} / 5.0</td>
+      </tr>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Resultado</td>
+        <td style='padding:9px 14px'>
+          <span style='background:{$bg_cal};color:{$color_cal};padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:.5px'>{$nivel_cal}</span>
+        </td>
+      </tr>
+    </table>
 
     <!-- DIVIDER INDICADORES -->
     <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
@@ -265,26 +262,25 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
       </tr>
     </table>
 
-    <!-- TABLA INDICADORES -->
     <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;margin-bottom:24px'>
-      {$filas_calificaciones}
+      {$filas_usuario}
     </table>
 
-    {$bloque_comentario}
+    {$bloque_comentario_u}
 
-    <!-- BLOQUE QUÉ SUCEDE -->
+    <!-- BLOQUE QUE SUCEDE -->
     <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:28px'>
       <tr><td style='padding:22px 24px'>
         <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:16px'>
           <tr>
             <td style='width:20px;border-top:2px solid #0c2d5e;vertical-align:middle'></td>
-            <td style='padding-left:10px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:500'>Qué sucede con tu evaluación</td>
+            <td style='padding-left:10px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:500'>Que sucede con su evaluacion</td>
           </tr>
         </table>
         <table width='100%' cellpadding='0' cellspacing='0'>
-          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>01</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Tu calificación es revisada por el equipo de calidad de la sede.</td></tr>
-          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Los indicadores con oportunidad de mejora son escalados al área correspondiente.</td></tr>
-          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top'>03</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Si tu caso requiere seguimiento, nos pondremos en contacto contigo.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>01</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Su calificacion es revisada por el equipo de calidad de la sede.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Los indicadores con oportunidad de mejora son escalados al area correspondiente.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top'>03</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Si su caso requiere seguimiento, nos pondremos en contacto.</td></tr>
         </table>
       </td></tr>
     </table>
@@ -292,12 +288,11 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     <!-- DIVIDER CANALES -->
     <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
       <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Canales de atención</td>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Canales de atencion</td>
         <td style='border-top:1px solid #d4dce8'></td>
       </tr>
     </table>
 
-    <!-- CANALES GRILLA 2x2 -->
     <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8'>
       <tr>
         <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;border-right:1px solid #d4dce8;vertical-align:top'>
@@ -305,7 +300,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
           <a href='https://wa.me/573043412431' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>304 341 2431</a>
         </td>
         <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX Atención</p>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX Atencion</p>
           <a href='tel:6043222432' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>604 322 2432 Op. 2</a>
         </td>
       </tr>
@@ -323,12 +318,11 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 
   </td></tr>
 
-  <!-- FOOTER -->
   <tr><td style='background:#0c2d5e;padding:18px 44px'>
     <table width='100%' cellpadding='0' cellspacing='0'>
       <tr>
         <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente</td>
-        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Sistema PQRSFD</td>
+        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Sistema PQRSFD<br>{$ticket_enc}</td>
       </tr>
     </table>
   </td></tr>
@@ -336,283 +330,188 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 </table></td></tr></table>
 </body></html>";
 
-        $mail_payload = [
-            'subject'      => "Gracias por su opinión {$nombre} - Tododrogas CIA SAS",
+        $correo_enviado = sendMail($token, $GRAPH_USER_ID, [
+            'subject'      => "Su evaluacion fue recibida · {$ticket_enc} · Tododrogas CIA SAS",
             'importance'   => 'normal',
-            'body'         => ['contentType' => 'HTML', 'content' => $cuerpo],
+            'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_usuario],
             'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
-        ];
-
-        $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => json_encode(['message' => $mail_payload, 'saveToSentItems' => false]),
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
-            CURLOPT_TIMEOUT        => 30,
         ]);
-        $mail_resp = curl_exec($ch);
-        $mail_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        $correo_enviado = ($mail_code === 202);
+    }
+}
 
-        // ── NOTIFICACIÓN INTERNA A PQRSFD ──────────────────────────────────
-        if ($token) {
-            $estrellas_admin = str_repeat('★', $calificacion) . str_repeat('☆', 5 - $calificacion);
-            $color_cal_admin = $calificacion >= 4 ? '#16a34a' : ($calificacion >= 3 ? '#d97706' : '#dc2626');
-            $badge_cal       = $calificacion >= 4 ? '✅ Satisfecho' : ($calificacion >= 3 ? '⚠️ Neutro' : '🔴 Insatisfecho');
+// ── PASO 3: CORREO INTERNO A pqrsfd ──────────────────────────────────
+if (!$token) {
+    $token = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
+}
 
-            $filas_admin = '';
-            $labels_a = ['Instalaciones', 'Atención al cliente', 'Tiempos de espera', 'Disponibilidad medicamentos', 'Recomendaría'];
-            $vals_a   = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
-            foreach ($labels_a as $i => $lbl) {
-                $v = $vals_a[$i];
-                $bar = '';
-                for ($b = 1; $b <= 5; $b++) {
-                    $col = $b <= $v ? '#2563eb' : '#e2e8f0';
-                    $bar .= "<span style='display:inline-block;width:16px;height:5px;background:{$col};border-radius:3px;margin-right:2px'></span>";
-                }
-                $filas_admin .= "<tr><td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$lbl}</td>"
-                              . "<td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$bar} <span style='color:#6b7280;font-size:11px'>{$v}/5</span></td></tr>";
-            }
+if ($token) {
+    $bloque_comentario_i = '';
+    if ($comentario) {
+        $bloque_comentario_i = "
+      <tr>
+        <td colspan='3' style='padding:12px 14px;background:#f6f9fd;border-top:2px solid #0c2d5e'>
+          <p style='margin:0 0 6px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Observacion del usuario</p>
+          <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . htmlspecialchars($comentario, ENT_QUOTES) . "</p>
+        </td>
+      </tr>";
+    }
 
-            $bloque_comentario_admin = $comentario
-                ? "<tr><td colspan='2' style='padding:8px 10px;font-size:12px;background:#fefce8;border-top:2px solid #facc15'><strong>💬 Comentario:</strong> " . htmlspecialchars($comentario, ENT_QUOTES) . "</td></tr>"
-                : '';
-
-            $cuerpo_admin = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
-<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:24px 0'>
+    $cuerpo_interno = "
+<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
+<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
 <tr><td align='center'>
-<table width='680' cellpadding='0' cellspacing='0' style='background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1);max-width:680px;width:100%'>
+<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
 
-  <tr><td style='background:#1e3a5f;padding:20px 28px'>
-    <table width='100%'><tr>
-      <td><div style='background:#fff;border-radius:8px;padding:6px 12px;display:inline-block'><img src='{$LOGO_URL}' alt='Tododrogas' style='height:28px;object-fit:contain'></div></td>
-      <td align='right'><span style='color:#93c5fd;font-size:11px;font-weight:700'>NUEVA ENCUESTA RECIBIDA</span></td>
-    </tr></table>
+  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
+    <img src='{$LOGO_URL}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 12px;filter:brightness(0) invert(1);opacity:.92'>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Nueva encuesta de satisfaccion recibida &middot; Plataforma Nova TD</p>
   </td></tr>
 
-  <tr><td style='padding:20px 28px 12px'>
-    <table width='100%'><tr>
-      <td><p style='margin:0 0 4px;font-size:16px;font-weight:700;color:#111827'>Calificación: <span style='color:{$color_cal_admin}'>{$estrellas_admin} ({$calificacion}/5)</span></p>
-          <p style='margin:0;font-size:12px;color:#6b7280'>{$badge_cal}</p></td>
-      <td align='right'><p style='margin:0;font-size:11px;color:#6b7280'>Sede: <strong style='color:#111827'>{$sede_nombre}</strong>" . (($sede_ciudad && stripos(iconv('UTF-8','ASCII//TRANSLIT',$sede_nombre), iconv('UTF-8','ASCII//TRANSLIT',$sede_ciudad)) === false) ? "<br>{$sede_ciudad}" : "") . "</p></td>
-    </tr></table>
+  <tr><td style='background:#0a2448;padding:20px 44px;text-align:center'>
+    <p style='color:#6a90b8;margin:0;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Numero de registro</p>
+    <p style='color:#ffffff;margin:8px 0 4px;font-size:22px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_enc}</p>
+    <p style='color:#4a6a90;margin:0;font-size:10px'>{$fecha_fmt}</p>
   </td></tr>
 
-  <tr><td style='padding:4px 28px 16px'>
-    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
-      <tr style='background:#f9fafb'><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DATOS DEL ENCUESTADO</th><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DETALLES</th></tr>
-      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Nombre</td><td style='padding:7px 10px;font-size:12px;color:#111827;font-weight:600'>" . htmlspecialchars($nombre, ENT_QUOTES) . "</td></tr>
-      " . ($documento ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Documento</td><td style='padding:7px 10px;font-size:12px;color:#111827;font-weight:600'>" . htmlspecialchars($documento, ENT_QUOTES) . "</td></tr>" : "") . "
-      " . ($correo ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Correo</td><td style='padding:7px 10px;font-size:12px;color:#2563eb'>" . htmlspecialchars($correo, ENT_QUOTES) . "</td></tr>" : "") . "
-      " . ($telefono ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Teléfono</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . htmlspecialchars($telefono, ENT_QUOTES) . "</td></tr>" : "") . "
-      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Canal</td><td style='padding:7px 10px;font-size:12px;color:#111827;text-transform:capitalize'>{$canal}</td></tr>
-      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Fecha</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . date('d/m/Y H:i', strtotime($now)) . "</td></tr>
+  <tr><td style='background:#ffffff;padding:36px 44px'>
+
+    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Se ha recibido una nueva encuesta de satisfaccion mediante la <strong style='font-weight:500;color:#0c2d5e'>Plataforma Inteligente Nova TD</strong>.</p>
+
+    <!-- DIVIDER RESULTADO -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Resultado de la evaluacion</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
     </table>
-  </td></tr>
 
-  <tr><td style='padding:0 28px 16px'>
-    <p style='margin:0 0 8px;font-size:12px;font-weight:700;color:#374151'>Calificaciones por categoría:</p>
-    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
-      {$filas_admin}
-      {$bloque_comentario_admin}
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #d4dce8'>Sede</td>
+        <td colspan='2' style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . ($sede_direccion ? "<br><span style='font-size:11px;color:#7a90a8;font-weight:400'>{$sede_direccion}</span>" : "") . "</td>
+      </tr>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Promedio</td>
+        <td colspan='2' style='padding:9px 14px;font-size:14px;font-weight:700;color:{$color_cal};border-bottom:1px solid #e8eef6'>{$promedio} / 5.0</td>
+      </tr>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Resultado</td>
+        <td colspan='2' style='padding:9px 14px;border-bottom:1px solid #d4dce8'>
+          <span style='background:{$bg_cal};color:{$color_cal};padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:.5px'>{$nivel_cal}</span>
+        </td>
+      </tr>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Prioridad</td>
+        <td colspan='2' style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>" . mb_strtoupper($prio_enc, 'UTF-8') . "</td>
+      </tr>
+      <tr style='background:#f6f9fd'>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Fecha</td>
+        <td colspan='2' style='padding:9px 14px;font-size:12px;color:#2a3a4a'>{$fecha_fmt}</td>
+      </tr>
     </table>
+
+    <!-- DIVIDER CIUDADANO -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Datos del encuestado</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      <tr>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #e8eef6'>Nombre</td>
+        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>" . htmlspecialchars($nombre, ENT_QUOTES) . "</td>
+      </tr>" .
+      ($documento ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Documento</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>" . htmlspecialchars($documento, ENT_QUOTES) . "</td></tr>" : "") .
+      ($correo ? "<tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Correo</td><td style='padding:9px 14px;font-size:12px;border-bottom:1px solid #e8eef6'><a href='mailto:{$correo}' style='color:#0c2d5e;font-weight:500;text-decoration:none'>" . htmlspecialchars($correo, ENT_QUOTES) . "</a></td></tr>" : "") .
+      ($telefono ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Telefono</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>" . htmlspecialchars($telefono, ENT_QUOTES) . "</td></tr>" : "") .
+      "<tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Canal</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;text-transform:capitalize'>{$canal}</td></tr>
+    </table>
+
+    <!-- DIVIDER INDICADORES -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Calificaciones por indicador</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+      {$filas_interno}
+      {$bloque_comentario_i}
+    </table>
+
+    <!-- BLOQUE ESTADO -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8'>
+      <tr><td style='padding:16px 20px'>
+        <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:10px'>
+          <tr>
+            <td style='width:20px;border-top:2px solid #0c2d5e;vertical-align:middle'></td>
+            <td style='padding-left:10px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:500'>Estado del sistema</td>
+          </tr>
+        </table>
+        <p style='margin:0;font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Esta encuesta ha sido <strong style='font-weight:500'>guardada automaticamente</strong> en la tabla de encuestas_satisfaccion. No requiere gestion en el buzon PQRSFD.</p>
+      </td></tr>
+    </table>
+
   </td></tr>
 
-  <tr><td style='background:#f8fafc;border-top:1px solid #e5e7eb;padding:14px 28px;text-align:center'>
-    <p style='font-size:11px;color:#9ca3af;margin:0'>Notificación automática · Sistema PQRSFD · Tododrogas CIA SAS</p>
+  <tr><td style='background:#0c2d5e;padding:18px 44px'>
+    <table width='100%' cellpadding='0' cellspacing='0'>
+      <tr>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente &middot; Nova TD</td>
+        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Registro: {$ticket_enc}<br>ID: " . ($encuesta_id ?? 'N/A') . "</td>
+      </tr>
+    </table>
   </td></tr>
 
 </table></td></tr></table>
 </body></html>";
 
-            $admin_payload = [
-                'subject'      => "⭐ Nueva encuesta [{$calificacion}/5] · {$sede_nombre} · " . htmlspecialchars($nombre, ENT_QUOTES),
-                'importance'   => $calificacion <= 2 ? 'high' : 'normal',
-                'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_admin],
-                'toRecipients' => [['emailAddress' => ['address' => $BUZÓN_PQRS, 'name' => 'PQRSFD Tododrogas']]],
-            ];
-            $ch2 = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
-            curl_setopt_array($ch2, [
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => json_encode(['message' => $admin_payload, 'saveToSentItems' => true]),
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
-                CURLOPT_TIMEOUT        => 30,
-            ]);
-            curl_exec($ch2);
-            curl_close($ch2);
-        }
-        // ── FIN NOTIFICACIÓN INTERNA (dentro de bloque correo usuario) ─────
-    }
-}
+    $subject_interno = "[{$ticket_enc}] ENCUESTA | {$calificacion}/5 | {$nivel_cal} | {$sede_nombre}";
 
-// ── PASO 2B: NOTIFICACIÓN INTERNA A PQRSFD (SIEMPRE, sin importar si el usuario tiene correo) ──
-// Esto garantiza que las encuestas lleguen al admin aunque el usuario no haya dado su correo
-$token_admin = $token ?? getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
-if ($token_admin && !isset($token)) {
-    // token_admin recién obtenido (usuario no tenía correo, no se generó antes)
-    $token = $token_admin;
-}
-if ($token_admin && !$correo_enviado) {
-    // Solo enviar si NO se envió ya dentro del bloque de correo usuario
-    // (cuando hay correo, ya se envió adentro)
-    $estrellas_admin2 = str_repeat('★', $calificacion) . str_repeat('☆', 5 - $calificacion);
-    $color_cal_admin2 = $calificacion >= 4 ? '#16a34a' : ($calificacion >= 3 ? '#d97706' : '#dc2626');
-    $badge_cal2       = $calificacion >= 4 ? '✅ Satisfecho' : ($calificacion >= 3 ? '⚠️ Neutro' : '🔴 Insatisfecho');
-    $LOGO_URL_A       = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
-
-    $labels_a2 = ['Instalaciones', 'Atención al cliente', 'Tiempos de espera', 'Disponibilidad medicamentos', 'Recomendaría'];
-    $vals_a2   = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
-    $filas_a2  = '';
-    foreach ($labels_a2 as $i => $lbl) {
-        $v = $vals_a2[$i];
-        $bar = '';
-        for ($b = 1; $b <= 5; $b++) {
-            $col = $b <= $v ? '#2563eb' : '#e2e8f0';
-            $bar .= "<span style='display:inline-block;width:16px;height:5px;background:{$col};border-radius:3px;margin-right:2px'></span>";
-        }
-        $filas_a2 .= "<tr><td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$lbl}</td>"
-                   . "<td style='padding:6px 10px;font-size:12px;color:#374151;border-bottom:1px solid #f3f4f6'>{$bar} <span style='color:#6b7280;font-size:11px'>{$v}/5</span></td></tr>";
-    }
-    $bloque_com_a2 = $comentario
-        ? "<tr><td colspan='2' style='padding:8px 10px;font-size:12px;background:#fefce8;border-top:2px solid #facc15'><strong>💬 Comentario:</strong> " . htmlspecialchars($comentario, ENT_QUOTES) . "</td></tr>"
-        : '';
-
-    $cuerpo_a2 = "<!DOCTYPE html><html><head><meta charset='UTF-8'></head><body style='margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif'>
-<table width='100%' cellpadding='0' cellspacing='0' style='background:#f1f5f9;padding:24px 0'>
-<tr><td align='center'>
-<table width='680' cellpadding='0' cellspacing='0' style='background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1);max-width:680px;width:100%'>
-  <tr><td style='background:#1e3a5f;padding:20px 28px'>
-    <table width='100%'><tr>
-      <td><div style='background:#fff;border-radius:8px;padding:6px 12px;display:inline-block'><img src='{$LOGO_URL_A}' alt='Tododrogas' style='height:28px;object-fit:contain'></div></td>
-      <td align='right'><span style='color:#93c5fd;font-size:11px;font-weight:700'>NUEVA ENCUESTA RECIBIDA</span></td>
-    </tr></table>
-  </td></tr>
-  <tr><td style='padding:20px 28px 12px'>
-    <table width='100%'><tr>
-      <td><p style='margin:0 0 4px;font-size:16px;font-weight:700;color:#111827'>Calificación: <span style='color:{$color_cal_admin2}'>{$estrellas_admin2} ({$calificacion}/5)</span></p>
-          <p style='margin:0;font-size:12px;color:#6b7280'>{$badge_cal2}</p></td>
-      <td align='right'><p style='margin:0;font-size:11px;color:#6b7280'>Sede: <strong style='color:#111827'>{$sede_nombre}</strong>" . ($sede_ciudad ? "<br>{$sede_ciudad}" : "") . "</p></td>
-    </tr></table>
-  </td></tr>
-  <tr><td style='padding:4px 28px 16px'>
-    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
-      <tr style='background:#f9fafb'><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DATOS DEL ENCUESTADO</th><th style='padding:8px 10px;font-size:11px;font-weight:700;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb'>DETALLES</th></tr>
-      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Nombre</td><td style='padding:7px 10px;font-size:12px;color:#111827;font-weight:600'>" . htmlspecialchars($nombre, ENT_QUOTES) . "</td></tr>
-      " . ($documento ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Documento</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . htmlspecialchars($documento, ENT_QUOTES) . "</td></tr>" : "") . "
-      " . ($correo ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Correo</td><td style='padding:7px 10px;font-size:12px;color:#2563eb'>" . htmlspecialchars($correo, ENT_QUOTES) . "</td></tr>" : "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Correo</td><td style='padding:7px 10px;font-size:12px;color:#9ca3af'>No proporcionado</td></tr>") . "
-      " . ($telefono ? "<tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Teléfono</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . htmlspecialchars($telefono, ENT_QUOTES) . "</td></tr>" : "") . "
-      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Canal</td><td style='padding:7px 10px;font-size:12px;color:#111827;text-transform:capitalize'>{$canal}</td></tr>
-      <tr><td style='padding:7px 10px;font-size:12px;color:#6b7280'>Fecha</td><td style='padding:7px 10px;font-size:12px;color:#111827'>" . date('d/m/Y H:i', strtotime($now)) . "</td></tr>
-    </table>
-  </td></tr>
-  <tr><td style='padding:0 28px 16px'>
-    <p style='margin:0 0 8px;font-size:12px;font-weight:700;color:#374151'>Calificaciones por categoría:</p>
-    <table width='100%' style='border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden'>
-      {$filas_a2}
-      {$bloque_com_a2}
-    </table>
-  </td></tr>
-  <tr><td style='background:#f8fafc;border-top:1px solid #e5e7eb;padding:14px 28px;text-align:center'>
-    <p style='font-size:11px;color:#9ca3af;margin:0'>Notificación automática · Sistema PQRSFD · Tododrogas CIA SAS</p>
-  </td></tr>
-</table></td></tr></table>
-</body></html>";
-
-    $admin_pay2 = [
-        'subject'      => "⭐ Nueva encuesta [{$calificacion}/5] · {$sede_nombre} · " . htmlspecialchars($nombre, ENT_QUOTES),
+    sendMail($token, $GRAPH_USER_ID, [
+        'subject'      => $subject_interno,
         'importance'   => $calificacion <= 2 ? 'high' : 'normal',
-        'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_a2],
-        'toRecipients' => [['emailAddress' => ['address' => $BUZÓN_PQRS, 'name' => 'PQRSFD Tododrogas']]],
-    ];
-    $ch_a2 = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
-    curl_setopt_array($ch_a2, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode(['message' => $admin_pay2, 'saveToSentItems' => true]),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token_admin", 'Content-Type: application/json'],
-        CURLOPT_TIMEOUT        => 30,
+        'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_interno],
+        'toRecipients' => [['emailAddress' => ['address' => $BUZON_PQRS, 'name' => 'PQRSFD Tododrogas']]],
     ]);
-    curl_exec($ch_a2);
-    curl_close($ch_a2);
 }
 
-// ── PASO 2C: INSERTAR ENCUESTA EN TABLA CORREOS ───────────────────────
-// Así aparece en admin con el mismo estilo HTML que llega a pqrsfd
-$fecha_enc  = date('Ymd');
-$rand_enc   = str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
-$ticket_enc = "ENC-{$fecha_enc}-{$rand_enc}";
-
-$emoji_cal  = [1=>'😞',2=>'😐',3=>'🙂',4=>'😊',5=>'🤩'][$calificacion] ?? '⭐';
-$prio_enc   = $calificacion >= 4 ? 'baja' : ($calificacion >= 3 ? 'media' : 'alta');
-$sent_enc   = $calificacion >= 4 ? 'positivo' : ($calificacion >= 3 ? 'neutro' : 'negativo');
-$subject_enc = "[{$ticket_enc}] ⭐ ENCUESTA | {$emoji_cal} {$calificacion}/5 | 📍 {$sede_nombre}";
-
-// Usar el cuerpo_admin ya construido (HTML bonito) como body del correo en admin
-$body_enc = isset($cuerpo_admin) ? $cuerpo_admin : (isset($cuerpo_a2) ? $cuerpo_a2 : '');
-
-$payload_enc_correo = [
-    'ticket_id'     => $ticket_enc,
-    'from_email'    => $correo ?: ($telefono ? $telefono.'@encuesta' : 'anonimo@encuesta'),
-    'from_name'     => $nombre ?: 'Anónimo',
-    'nombre'        => $nombre ?: 'Anónimo',
-    'correo'        => $correo ?: null,
-    'subject'       => $subject_enc,
-    'body_content'  => $body_enc,
-    'body_preview'  => "Encuesta {$calificacion}/5 — {$sede_nombre}" . ($comentario ? ". Comentario: ".mb_substr($comentario,0,100) : ''),
-    'body_type'     => $body_enc ? 'html' : 'text',
-    'tipo_pqr'      => 'encuesta',
-    'sentimiento'   => $sent_enc,
-    'prioridad'     => $prio_enc,
-    'categoria_ia'  => "Encuesta · {$sede_nombre}",
-    'resumen_corto' => "Encuesta {$calificacion}/5 — {$sede_nombre}",
-    'canal_contacto'=> $canal,
-    'origen'        => 'formulario_encuesta',
-    'estado'        => 'solucionado',
-    'is_read'       => false,
-    'has_attachments'=> false,
-    'received_at'   => $now,
-    'created_at'    => $now,
-    'updated_at'    => $now,
-];
-sbPost($SB_URL, $SB_KEY, 'correos', $payload_enc_correo);
-
-// ── PASO 3: HISTORIAL_EVENTOS ─────────────────────────────────────────
-// Siempre guardar en historial (admin lee encuestas desde aquí)
-if (true) {
-    sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
-        'evento'      => 'encuesta_recibida',
-        'descripcion' => "Encuesta de satisfacción recibida. Sede: {$sede_nombre}. Promedio: {$promedio}. Confirmación: " . ($correo_enviado ? 'OK' : ($correo ? 'error' : 'sin correo')),
-        'from_email'  => $correo ?: $telefono,
-        'subject'     => "Encuesta · {$sede_nombre} · {$nombre}",
-        'datos_extra' => json_encode([
-            'encuesta_id'  => $encuesta_id,
-            'nombre'       => $nombre,
-            'correo'       => $correo,
-            'sede_nombre'  => $sede_nombre,
-            'sede_ciudad'  => $sede_ciudad,
-            'calificacion' => $calificacion,
-            'promedio'     => $promedio,
-            'instalaciones'=> $instalaciones,
-            'atencion'     => $atencion,
-            'tiempos'      => $tiempos,
-            'medicamentos' => $medicamentos,
-            'recomendacion'=> $recomendacion,
-            'canal'        => $canal,
-        ]),
-        'created_at' => $now,
-    ], 'return=minimal');
-}
+// ── PASO 4: HISTORIAL_EVENTOS ─────────────────────────────────────────
+sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
+    'evento'      => 'encuesta_recibida',
+    'descripcion' => "Encuesta registrada. Sede: {$sede_nombre}. Promedio: {$promedio}. Confirmacion: " . ($correo_enviado ? 'OK' : ($correo ? 'error' : 'sin correo')),
+    'from_email'  => $correo ?: $telefono,
+    'subject'     => "Encuesta · {$sede_nombre} · {$nombre}",
+    'datos_extra' => json_encode([
+        'encuesta_id'   => $encuesta_id,
+        'ticket'        => $ticket_enc,
+        'nombre'        => $nombre,
+        'correo'        => $correo,
+        'sede_nombre'   => $sede_nombre,
+        'sede_ciudad'   => $sede_ciudad,
+        'calificacion'  => $calificacion,
+        'promedio'      => $promedio,
+        'instalaciones' => $instalaciones,
+        'atencion'      => $atencion,
+        'tiempos'       => $tiempos,
+        'medicamentos'  => $medicamentos,
+        'recomendacion' => $recomendacion,
+    ]),
+    'created_at' => $now,
+], 'return=minimal');
 
 // ── RESPUESTA ─────────────────────────────────────────────────────────
 http_response_code(200);
 echo json_encode([
-    'ok'              => $saved,
-    'encuesta_id'     => $encuesta_id,
-    'correo_enviado'  => $correo_enviado,
-    'mensaje'         => $saved
-        ? "Encuesta registrada correctamente. ¡Gracias, {$nombre}!"
-        : "No se pudo guardar en BD — se guardó localmente.",
+    'ok'             => $saved,
+    'encuesta_id'    => $encuesta_id,
+    'ticket'         => $ticket_enc,
+    'correo_enviado' => $correo_enviado,
+    'mensaje'        => $saved
+        ? "Encuesta registrada correctamente."
+        : "No se pudo guardar en BD.",
 ]);
