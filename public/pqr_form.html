@@ -1155,14 +1155,14 @@ async function avanzarDesdeDatos(){
   // ── VIP ──────────────────────────────────────────────
   if(val.vip && val.saludo){
     showVipModal(val.saludo, ()=>{
-      currentSlide = 0; updateCarousel(1); updateProgress(1);
+      currentSlide = 0; updateCarousel(0); updateProgress(1);
     });
     return;
   }
 
-  // Avanzar al slide Tipo (índice 1 en el carousel)
-  currentSlide = 1;
-  updateCarousel(1);
+  // Avanzar al slide Tipo (índice 0 del carousel, excluyendo slideDatos)
+  currentSlide = 0;
+  updateCarousel(0);
   updateProgress(1);
 }
 
@@ -1357,14 +1357,25 @@ function goTo(next){
 
 function goBack(){
   if(currentSlide===0){
+    // Desde Tipo → volver a slideDatos
+    const sd = document.getElementById('slideDatos');
+    const allSlides = document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split');
+    allSlides.forEach(s=>{ if(s!==sd) s.style.display='none'; });
+    if(sd) sd.style.display='flex';
+    if(window.innerWidth > 900){
+      const allFull = Array.from(document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split'));
+      document.getElementById('slidesWrap').style.transform=`translateX(-${allFull.indexOf(sd)*100}vw)`;
+    }
+    currentSlide = 'datos';
+    updateProgress(0);
+    return;
+  }
+  if(currentSlide==='datos'){
+    // Desde slideDatos → ir a bienvenida
     document.body.style.opacity='0';
     document.body.style.transition='opacity .35s';
     setTimeout(()=>window.location.href='pqr_bienvenida.html',350);
     return;
-  }
-  // Si estamos en tipo (slide 1 del carousel = index 1), volver a datos (index 0)
-  if(currentSlide===1){
-    currentSlide=0; updateCarousel(0); updateProgress(0); return;
   }
   // Si estamos en slide Varios → volver al slide Tipo
   if(currentSlide==='varios'){
