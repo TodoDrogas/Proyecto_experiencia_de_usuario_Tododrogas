@@ -1,6 +1,6 @@
 <?php
 /**
- * radicar-pqr.php v4 — Sin BD · Solo correos
+ * radicar-pqr.php v5 — Correos + Supabase
  * ─────────────────────────────────────────────────────
  * 1. Recibe PQR del formulario (escrito / audio / canvas)
  * 2. Genera ticket TD-YYYYMMDD-XXXX
@@ -370,8 +370,53 @@ if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
     $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 }
 
-// ── PASO 2: SUPABASE ELIMINADO — esta versión solo envía correos ──────
-$correo_id = null; // No hay ID de BD en esta versión
+// ── PASO 2: INSERT EN SUPABASE tabla correos ────────────────────────
+$correo_id = null;
+if (!empty($SB_URL) && $SB_URL !== '__SB_URL__' && !empty($SB_KEY)) {
+    $sb_data = [
+        'ticket_id'        => $ticket_id,
+        'subject'          => $subject,
+        'from_email'       => $correo   ?: null,
+        'nombre'           => $nombre   ?: null,
+        'telefono'         => $telefono ?: null,
+        'documento'        => $documento?: null,
+        'body_text'        => $texto_pqr?: null,
+        'tipo_pqr'         => $tipo_pqr,
+        'canal'            => $canal,
+        'origen'           => $origen,
+        'sentimiento'      => $sentimiento,
+        'prioridad'        => $prioridad,
+        'estado'           => 'pendiente',
+        'horas_sla'        => $horas_sla,
+        'fecha_limite_sla' => $fecha_limite_sla,
+        'received_at'      => $now,
+        'is_read'          => false,
+    ];
+    if (!empty($audio_url) && strpos($audio_url,'data:')!==0)  $sb_data['audio_url']  = $audio_url;
+    if (!empty($canvas_url)&& strpos($canvas_url,'data:')!==0) $sb_data['canvas_url'] = $canvas_url;
+    if (!empty($resumen_corto)) $sb_data['resumen_ia'] = $resumen_corto;
+
+    $ch_sb = curl_init("$SB_URL/rest/v1/correos");
+    curl_setopt_array($ch_sb, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($sb_data),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => [
+            "apikey: $SB_KEY",
+            "Authorization: Bearer $SB_KEY",
+            'Content-Type: application/json',
+            'Prefer: return=representation',
+        ],
+        CURLOPT_TIMEOUT => 10,
+    ]);
+    $sb_resp = curl_exec($ch_sb);
+    $sb_code = curl_getinfo($ch_sb, CURLINFO_HTTP_CODE);
+    curl_close($ch_sb);
+    if ($sb_code === 201) {
+        $inserted  = json_decode($sb_resp, true);
+        $correo_id = $inserted[0]['id'] ?? null;
+    }
+}
 
 // ── PASO 3: ENVIAR CORREO A pqrsfd via Graph API ─────────────────────
 date_default_timezone_set('America/Bogota'); // Hora Colombia UTC-5
@@ -918,7 +963,32 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     $acuse_enviado = ($acuse_code === 202);
 }
 
-// ── PASO 4: HISTORIAL ELIMINADO en esta versión ─────────────────────
+// ── PASO 4: HISTORIAL_EVENTOS pqr_recibida ──────────────────────────
+if (!empty($SB_URL) && $SB_URL !== '__SB_URL__' && $correo_id) {
+    $ev = [
+        'correo_id'   => $correo_id,
+        'evento'      => 'pqr_recibida',
+        'descripcion' => "PQR recibida via {$canal} ({$canal_contacto}). Clasificada: {$sentimiento} / {$prioridad}. Correo PQRSFD: ".($correo_enviado?'OK':'ERROR').". Acuse: ".(isset($acuse_enviado)&&$acuse_enviado?'OK':($correo?'ERROR':'sin correo')),
+        'datos_extra' => json_encode([
+            'ticket_id'    => $ticket_id,
+            'canal'        => $canal,
+            'origen'       => $origen,
+            'sentimiento'  => $sentimiento,
+            'prioridad'    => $prioridad,
+            'categoria_ia' => $categoria_ia,
+            'horas_sla'    => $horas_sla,
+        ]),
+    ];
+    $ch_ev = curl_init("$SB_URL/rest/v1/historial_eventos");
+    curl_setopt_array($ch_ev, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($ev),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Content-Type: application/json'],
+        CURLOPT_TIMEOUT        => 8,
+    ]);
+    curl_exec($ch_ev); curl_close($ch_ev);
+}
 
 // ── RESPUESTA FINAL ──────────────────────────────────────────────────
 http_response_code(200);
