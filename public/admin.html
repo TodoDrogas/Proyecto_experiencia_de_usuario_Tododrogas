@@ -551,6 +551,7 @@ table.agents-tbl tr:hover td{background:var(--bg)}
           <button class="mtab" onclick="showMTab('agentes',this)">👥 Agentes</button>
           <button class="mtab" onclick="showMTab('sla',this)">⚖️ SLA & Riesgo</button>
           <button class="mtab" onclick="showMTab('encuestas',this)">⭐ Encuestas</button>
+          <button class="mtab" onclick="showMTab('nova',this)">🤖 Nova TD</button>
         </div>
       </div>
 
@@ -770,6 +771,84 @@ table.agents-tbl tr:hover td{background:var(--bg)}
             </div>
           </div>
         </div><!-- /mtab-encuestas -->
+
+        <!-- ══ TAB NOVA TD ══ -->
+        <div class="mtab-page" id="mtab-nova">
+
+          <!-- Selector de rango de fechas -->
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:12px;font-weight:600;color:#4a5568">Desde:</label>
+              <input type="date" id="novaDesde" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 10px;font-size:13px;font-family:inherit">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label style="font-size:12px;font-weight:600;color:#4a5568">Hasta:</label>
+              <input type="date" id="novaHasta" style="border:1px solid #d1d5db;border-radius:6px;padding:5px 10px;font-size:13px;font-family:inherit">
+            </div>
+            <button onclick="loadNovaMetrics()" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">🔍 Filtrar</button>
+            <button onclick="exportNovaExcel()" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">⬇️ Descargar Excel</button>
+          </div>
+
+          <!-- KPIs Nova TD -->
+          <div class="kpi-row" style="margin-bottom:20px">
+            <div class="kpi"><div class="kpi-label">Conversaciones</div><div class="kpi-val" id="novaKpiSesiones">—</div><div class="kpi-sub">Total sesiones Nova TD</div><div class="kpi-accent" style="background:#7c3aed"></div></div>
+            <div class="kpi"><div class="kpi-label">Radicados vía Nova</div><div class="kpi-val" id="novaKpiRad">—</div><div class="kpi-sub">nova_web + nova_directo</div><div class="kpi-accent" style="background:#1d4ed8"></div></div>
+            <div class="kpi"><div class="kpi-label">Encuestas vía Nova</div><div class="kpi-val" id="novaKpiEnc">—</div><div class="kpi-sub">nova_web + nova_directo</div><div class="kpi-accent" style="background:#f59e0b"></div></div>
+            <div class="kpi"><div class="kpi-label">Autogestión</div><div class="kpi-val" id="novaKpiAuto">—</div><div class="kpi-sub">Cerró sin escalar a asesor</div><div class="kpi-accent" style="background:#16a34a"></div></div>
+          </div>
+          <div class="kpi-row" style="margin-bottom:16px">
+            <div class="kpi"><div class="kpi-label">Tasa autogestión</div><div class="kpi-val" id="novaKpiTasa">—</div><div class="kpi-sub">Sin escalar a asesor</div><div class="kpi-accent" style="background:#0891b2"></div></div>
+            <div class="kpi"><div class="kpi-label">Turnos promedio</div><div class="kpi-val" id="novaKpiTurnos">—</div><div class="kpi-sub">Mensajes por conversación</div><div class="kpi-accent" style="background:#0891b2"></div></div>
+            <div class="kpi"><div class="kpi-label">EPS más frecuente</div><div class="kpi-val" id="novaKpiEps" style="font-size:15px">—</div><div class="kpi-sub">Entre usuarios de Nova</div><div class="kpi-accent" style="background:#7c3aed"></div></div>
+            <div class="kpi"><div class="kpi-label">Radicados web</div><div class="kpi-val" id="novaKpiForm">—</div><div class="kpi-sub">origen = web / formulario_web</div><div class="kpi-accent" style="background:#64748b"></div></div>
+          </div>
+
+          <!-- Desglose por canal -->
+          <div class="kpi-row" style="margin-bottom:24px">
+            <div class="kpi"><div class="kpi-label">🖥️ Nova Web</div><div class="kpi-val" id="novaKpiWeb">—</div><div class="kpi-sub">Desde pqr_bienvenida.html</div><div class="kpi-accent" style="background:#1d4ed8"></div></div>
+            <div class="kpi"><div class="kpi-label">📱 Nova Directo</div><div class="kpi-val" id="novaKpiDirecto">—</div><div class="kpi-sub">Desde nova.html independiente</div><div class="kpi-accent" style="background:#7c3aed"></div></div>
+            <div class="kpi"><div class="kpi-label">📷 QR Radicar</div><div class="kpi-val" id="novaKpiQrRad">—</div><div class="kpi-sub">Escaneo QR → formulario</div><div class="kpi-accent" style="background:#f59e0b"></div></div>
+            <div class="kpi"><div class="kpi-label">📷 QR Encuesta</div><div class="kpi-val" id="novaKpiQrEnc">—</div><div class="kpi-sub">Escaneo QR → encuesta</div><div class="kpi-accent" style="background:#16a34a"></div></div>
+          </div>
+
+          <!-- Gráficos -->
+          <div class="chart-row" style="margin-bottom:24px">
+            <div class="chart-card" style="flex:1.5">
+              <div class="chart-title">📈 Tendencia diaria — Conversaciones Nova TD</div>
+              <div class="chart-sub">Últimos 30 días o rango seleccionado</div>
+              <div style="position:relative;height:200px"><canvas id="chartNovaTend"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-title">📊 Nova TD vs Formulario web</div>
+              <div class="chart-sub">Radicados por origen</div>
+              <div style="position:relative;height:200px"><canvas id="chartNovaOrigen"></canvas></div>
+            </div>
+          </div>
+
+          <!-- Tabla motivos de cierre -->
+          <div class="chart-card" style="margin-bottom:24px">
+            <div class="chart-title">📋 Conversaciones Nova TD — Detalle</div>
+            <div class="chart-sub" id="novaTablaInfo">Cargando...</div>
+            <div style="overflow-x:auto;margin-top:12px">
+              <table style="width:100%;border-collapse:collapse;font-size:12px" id="novaTabla">
+                <thead>
+                  <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0">
+                    <th style="padding:8px 12px;text-align:left;font-weight:600;color:#475569">Fecha</th>
+                    <th style="padding:8px 12px;text-align:left;font-weight:600;color:#475569">Usuario</th>
+                    <th style="padding:8px 12px;text-align:left;font-weight:600;color:#475569">EPS</th>
+                    <th style="padding:8px 12px;text-align:left;font-weight:600;color:#475569">Turnos</th>
+                    <th style="padding:8px 12px;text-align:left;font-weight:600;color:#475569">Motivo cierre</th>
+                    <th style="padding:8px 12px;text-align:left;font-weight:600;color:#475569">Resumen</th>
+                  </tr>
+                </thead>
+                <tbody id="novaTablaBody">
+                  <tr><td colspan="6" style="padding:20px;text-align:center;color:#94a3b8">Selecciona un rango y toca Filtrar</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- /mtab-nova -->
 
       </div><!-- /metrics-content -->
     </div>
@@ -1078,6 +1157,7 @@ function renderMTab(tab){
   if(tab==='agentes')     renderAgentes();
   if(tab==='sla')         renderSLA();
   if(tab==='encuestas')   renderEncuestasTab();
+  if(tab==='nova')        loadNovaMetrics();
 }
 
 // ── Entry point ─────────────────────────────
@@ -1465,7 +1545,7 @@ function showPage(page, btn) {
   document.querySelectorAll('.topbar-nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
   btn.classList.add('active');
-  if(page==='metricas') updateMetrics();
+  if(page==='metricas') { updateMetrics(); initNovaFechas(); }
   if(page==='config') renderConfig();
 }
 
@@ -4000,6 +4080,161 @@ function _rrRC(){const cats=['todas',...new Set(_rrData.map(p=>p.categoria).filt
 function _rrSC(c){_rrCat=c;_rrRC();renderRR();}
 function renderRR(){const q=(document.getElementById('rrSearch')?.value||'').toLowerCase();let l=_rrData;if(_rrCat!=='todas')l=l.filter(p=>p.categoria===_rrCat);if(q)l=l.filter(p=>(p.situacion||'').toLowerCase().includes(q)||(p.categoria||'').toLowerCase().includes(q));const el=document.getElementById('rrLista');if(!el)return;if(!l.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">Sin resultados</div>';return;}el.innerHTML=l.map(p=>`<div class="rr-item" onclick="insertarRR(${p.id})"><div class="rr-cat">${esc(p.categoria||'')}${p.veces_usado?` · <span style='color:#2563eb'>${p.veces_usado}x</span>`:''}</div><div class="rr-sit">${esc(p.situacion||'')}</div><div class="rr-prev">${esc((p.respuesta_modelo||'').substring(0,100))}…</div></div>`).join('');}
 async function insertarRR(id){const p=_rrData.find(x=>x.id===id);if(!p)return;if(typeof toggleReply==='function')toggleReply('reply');await new Promise(r=>setTimeout(r,300));const ed=document.querySelector('#replyBoxArea [contenteditable]');if(!ed){cerrarPanelRR();return;}const html=(p.respuesta_modelo||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>').replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');ed.innerHTML=html;ed.focus();const v=ed.querySelector('span[style*="fef08a"]');if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}try{await sb(`knowledge_base?id=eq.${id}`,'PATCH',{veces_usado:(p.veces_usado||0)+1});p.veces_usado=(p.veces_usado||0)+1;renderRR();}catch(e){}cerrarPanelRR();}
+
+// ═══════════════════════════════════════════════════
+// NOVA TD — MÉTRICAS
+// ═══════════════════════════════════════════════════
+let chartNovaTend = null, chartNovaOrigen = null;
+let novaDatos = { sesiones:[], radicados:[], encuestas:[], formWeb:[] };
+
+function initNovaFechas(){
+  const hoy=new Date(), hace30=new Date(hoy);
+  hace30.setDate(hoy.getDate()-30);
+  const fmt=d=>d.toISOString().split('T')[0];
+  const dEl=document.getElementById('novaDesde');
+  const hEl=document.getElementById('novaHasta');
+  if(dEl&&!dEl.value) dEl.value=fmt(hace30);
+  if(hEl&&!hEl.value) hEl.value=fmt(hoy);
+}
+
+async function loadNovaMetrics(){
+  const desde=document.getElementById('novaDesde')?.value||'';
+  const hasta=document.getElementById('novaHasta')?.value||'';
+  const dISO=desde?desde+'T00:00:00-05:00':'';
+  const hISO=hasta?hasta+'T23:59:59-05:00':'';
+  const enc=s=>encodeURIComponent(s);
+  document.getElementById('novaTablaInfo').textContent='Cargando...';
+  ['novaKpiSesiones','novaKpiRad','novaKpiEnc','novaKpiAuto','novaKpiTasa','novaKpiTurnos','novaKpiEps','novaKpiForm'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='...';});
+
+  let qS='nova_sesiones?order=created_at.desc&limit=2000';
+  if(dISO) qS+='&created_at=gte.'+enc(dISO);
+  if(hISO) qS+='&created_at=lte.'+enc(hISO);
+
+  // Radicados: nova_web + nova_directo (correos tabla)
+  let qRweb='correos?origen=eq.nova_web&select=id,received_at,tipo_pqr,estado,sentimiento,prioridad,nombre,ticket_id&limit=2000';
+  if(dISO) qRweb+='&received_at=gte.'+enc(dISO);
+  if(hISO) qRweb+='&received_at=lte.'+enc(hISO);
+
+  let qRdir='correos?origen=eq.nova_directo&select=id,received_at,tipo_pqr,estado,sentimiento,prioridad,nombre,ticket_id&limit=2000';
+  if(dISO) qRdir+='&received_at=gte.'+enc(dISO);
+  if(hISO) qRdir+='&received_at=lte.'+enc(hISO);
+
+  // Encuestas: nova_web + nova_directo
+  let qEweb='encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion,nombre,eps&limit=2000';
+  if(dISO) qEweb+='&created_at=gte.'+enc(dISO);
+  if(hISO) qEweb+='&created_at=lte.'+enc(hISO);
+
+  let qEdir='encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion,nombre,eps&limit=2000';
+  if(dISO) qEdir+='&created_at=gte.'+enc(dISO);
+  if(hISO) qEdir+='&created_at=lte.'+enc(hISO);
+
+  // QR: origen=qr en correos y encuestas
+  let qQrRad='correos?origen=eq.qr&select=id,received_at&limit=2000';
+  if(dISO) qQrRad+='&received_at=gte.'+enc(dISO);
+  if(hISO) qQrRad+='&received_at=lte.'+enc(hISO);
+
+  let qQrEnc='encuestas_satisfaccion?origen=eq.qr&select=id,created_at&limit=2000';
+  if(dISO) qQrEnc+='&created_at=gte.'+enc(dISO);
+  if(hISO) qQrEnc+='&created_at=lte.'+enc(hISO);
+
+  // Formulario web clásico
+  let qF='correos?origen=eq.web&select=id,received_at&limit=2000';
+  if(dISO) qF+='&received_at=gte.'+enc(dISO);
+  if(hISO) qF+='&received_at=lte.'+enc(hISO);
+  let qF2='correos?origen=eq.formulario_web&select=id,received_at&limit=2000';
+  if(dISO) qF2+='&received_at=gte.'+enc(dISO);
+  if(hISO) qF2+='&received_at=lte.'+enc(hISO);
+
+  const [sesiones,radWeb,radDir,encWeb,encDir,qrRad,qrEnc,formWeb,formWeb2]=await Promise.all([
+    sb(qS).catch(()=>[]),
+    sb(qRweb).catch(()=>[]), sb(qRdir).catch(()=>[]),
+    sb(qEweb).catch(()=>[]), sb(qEdir).catch(()=>[]),
+    sb(qQrRad).catch(()=>[]), sb(qQrEnc).catch(()=>[]),
+    sb(qF).catch(()=>[]),    sb(qF2).catch(()=>[]),
+  ]);
+  const radicados=[...(radWeb||[]),...(radDir||[])];
+  const encuestas=[...(encWeb||[]),...(encDir||[])];
+  const formWebAll=[...(formWeb||[]),...(formWeb2||[])];
+  novaDatos={
+    sesiones:sesiones||[], radicados, encuestas,
+    formWeb:formWebAll,
+    radWeb:radWeb||[], radDir:radDir||[],
+    encWeb:encWeb||[], encDir:encDir||[],
+    qrRad:qrRad||[], qrEnc:qrEnc||[],
+  };
+  renderNovaMetrics();
+}
+
+function renderNovaMetrics(){
+  const {sesiones,radicados,encuestas,formWeb,radWeb=[],radDir=[],qrRad=[],qrEnc=[]}=novaDatos;
+  const totalSes=sesiones.length, totalRad=radicados.length, totalEnc=encuestas.length;
+  const autogest=sesiones.filter(s=>!s.motivo_cierre||s.motivo_cierre==='inactividad').length;
+  const tasaAuto=totalSes>0?Math.round(autogest/totalSes*100):0;
+  const avgTurnos=totalSes>0?(sesiones.reduce((a,s)=>a+(s.turnos||0),0)/totalSes).toFixed(1):'0';
+  const epsMap={};
+  sesiones.forEach(s=>{if(s.eps) epsMap[s.eps]=(epsMap[s.eps]||0)+1;});
+  const topEps=Object.entries(epsMap).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';
+
+  document.getElementById('novaKpiSesiones').textContent=totalSes;
+  document.getElementById('novaKpiRad').textContent=totalRad;
+  document.getElementById('novaKpiEnc').textContent=totalEnc;
+  document.getElementById('novaKpiAuto').textContent=autogest;
+  document.getElementById('novaKpiTasa').textContent=tasaAuto+'%';
+  document.getElementById('novaKpiTurnos').textContent=avgTurnos;
+  document.getElementById('novaKpiEps').textContent=topEps;
+  document.getElementById('novaKpiForm').textContent=formWeb.length;
+  // Desglose por canal
+  const elW=document.getElementById('novaKpiWeb');    if(elW) elW.textContent=radWeb.length;
+  const elD=document.getElementById('novaKpiDirecto');if(elD) elD.textContent=radDir.length;
+  const elQR=document.getElementById('novaKpiQrRad'); if(elQR) elQR.textContent=qrRad.length;
+  const elQE=document.getElementById('novaKpiQrEnc'); if(elQE) elQE.textContent=qrEnc.length;
+
+  const dias=30, labels=[], dataSes=[];
+  for(let i=dias-1;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const dk=d.toISOString().split('T')[0];
+    labels.push(d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'}));
+    dataSes.push(sesiones.filter(s=>s.created_at?.startsWith(dk)).length);
+  }
+  if(chartNovaTend) chartNovaTend.destroy();
+  const ctxT=document.getElementById('chartNovaTend');
+  if(ctxT) chartNovaTend=new Chart(ctxT.getContext('2d'),{type:'line',data:{labels,datasets:[{label:'Conversaciones',data:dataSes,borderColor:'#7c3aed',backgroundColor:'rgba(124,58,237,.08)',borderWidth:2,pointRadius:3,tension:.4,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:10}}},x:{ticks:{font:{size:9}}}}}});
+
+  if(chartNovaOrigen) chartNovaOrigen.destroy();
+  const ctxO=document.getElementById('chartNovaOrigen');
+  if(ctxO) chartNovaOrigen=new Chart(ctxO.getContext('2d'),{type:'doughnut',data:{labels:['Nova TD','Formulario Web'],datasets:[{data:[totalRad,formWeb.length],backgroundColor:['#ede9fe','#dbeafe'],borderColor:['#7c3aed','#1d4ed8'],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:10}}}}});
+
+  const tbody=document.getElementById('novaTablaBody');
+  document.getElementById('novaTablaInfo').textContent=totalSes+' conversaciones en el rango seleccionado';
+  if(!sesiones.length){tbody.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center;color:#94a3b8">Sin datos en el rango seleccionado</td></tr>';return;}
+  tbody.innerHTML=sesiones.slice(0,200).map(s=>{
+    const fecha=s.created_at?new Date(s.created_at).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'—';
+    const motivo=s.motivo_cierre||'inactividad';
+    const bc=motivo==='inactividad'?'#f1f5f9':'#dcfce7', bt=motivo==='inactividad'?'#64748b':'#15803d';
+    return `<tr style="border-bottom:1px solid #f1f5f9">
+      <td style="padding:7px 12px;font-size:11px;color:#64748b">${fecha}</td>
+      <td style="padding:7px 12px;font-size:12px;font-weight:500">${s.nombre||'—'}</td>
+      <td style="padding:7px 12px;font-size:12px">${s.eps||'—'}</td>
+      <td style="padding:7px 12px;font-size:12px;text-align:center">${s.turnos??'—'}</td>
+      <td style="padding:7px 12px"><span style="background:${bc};color:${bt};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600">${motivo}</span></td>
+      <td style="padding:7px 12px;font-size:11px;color:#64748b">${(s.resumen||'').slice(0,80)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportNovaExcel(){
+  const {sesiones,radicados,encuestas}=novaDatos;
+  const wb=XLSX.utils.book_new();
+  const h1=sesiones.map(s=>({Fecha:s.created_at?new Date(s.created_at).toLocaleString('es-CO'):'',Nombre:s.nombre||'',Cedula:s.cedula||'',EPS:s.eps||'',Turnos:s.turnos||0,Motivo_cierre:s.motivo_cierre||'inactividad',Resumen:s.resumen||''}));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'No hay sesiones'}]),'Sesiones Nova TD');
+  const h2=radicados.map(r=>({Fecha:r.received_at?new Date(r.received_at).toLocaleString('es-CO'):'',Ticket:r.ticket_id||'',Nombre:r.nombre||'',Tipo:r.tipo_pqr||'',Estado:r.estado||'',Sentimiento:r.sentimiento||'',Prioridad:r.prioridad||''}));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'Sin radicados'}]),'Radicados Nova TD');
+  const h3=encuestas.map(e=>({Fecha:e.created_at?new Date(e.created_at).toLocaleString('es-CO'):'',Nombre:e.nombre||'',EPS:e.eps||'',Calificacion:e.calificacion||'',Comentario:e.comentario||''}));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin encuestas'}]),'Encuestas Nova TD');
+  const desde=document.getElementById('novaDesde')?.value||'inicio';
+  const hasta=document.getElementById('novaHasta')?.value||'hoy';
+  XLSX.writeFile(wb,`NovaTD_${desde}_${hasta}.xlsx`);
+}
 
 </script>
 <!-- ⚡ Panel Respuestas Rápidas -->
