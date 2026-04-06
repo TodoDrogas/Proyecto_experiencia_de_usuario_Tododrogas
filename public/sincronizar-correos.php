@@ -304,7 +304,21 @@ foreach ($todos_correos as $c) {
         'categories'           => json_encode($c['categories']         ?? []),
         'flag_status'          => $c['flag']['flagStatus']             ?? 'notFlagged',
         'raw_payload'          => json_encode($c),
-        'origen'               => 'graph_sync',
+        'origen'               => (function() use ($c) {
+            $subj = $c['subject'] ?? '';
+            // Inferir canal desde el asunto del correo
+            if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subj))          return 'nova_directo';
+            if (preg_match('/NOVA\s+TD/ui', $subj))                     return 'nova_web';
+            if (preg_match('/📷\s*QR|\bQR\b/u', $subj))              return 'qr';
+            if (preg_match('/\[TD-\d{8}-\d{4}\]/u', $subj))         return 'web';
+            return 'graph_sync';
+        })(),
+        // ticket_id inferido del asunto para correos PQRSFD
+        'ticket_id'            => (function() use ($c) {
+            $subj = $c['subject'] ?? '';
+            if (preg_match('/\[?(TD-\d{8}-\d{4})\]?/u', $subj, $m)) return $m[1];
+            return null;
+        })(),
         'canal_contacto'       => 'correo',
         'updated_at'           => date('c'),
     ];
@@ -387,6 +401,31 @@ foreach ($correos_db_map as $msg_id => $row) {
 }
 
 log_msg("Upsert completo — insertados: {$stats['insertados']}, actualizados: {$stats['actualizados']}, errores: {$stats['errores']}");
+
+// ── FIX ORIGEN: corregir registros con ticket_id pero origen=graph_sync ──
+// Sucede cuando radicar-pqr.php ya insertó con origen correcto pero
+// el sync lo pisó con 'graph_sync'. Restauramos el origen desde el asunto.
+$origen_fixes = [
+    'nova_directo' => 'NOVA+TD+DIRECTO',
+    'nova_web'     => 'NOVA+TD',
+    'qr'           => 'QR',
+    'web'          => 'TD-',
+];
+foreach ($correos_db_map as $msg_id => $row) {
+    $subj = $row['subject'] ?? '';
+    $id   = $row['id']      ?? null;
+    if (!$id) continue;
+    // Solo si el origen quedó como graph_sync y el asunto tiene ticket
+    if (($row['origen'] ?? '') !== 'graph_sync') continue;
+    $nuevo_origen = null;
+    if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subj))       $nuevo_origen = 'nova_directo';
+    elseif (preg_match('/NOVA\s+TD/ui', $subj))              $nuevo_origen = 'nova_web';
+    elseif (preg_match('/📷\s*QR|QR/u', $subj))         $nuevo_origen = 'qr';
+    elseif (preg_match('/\[TD-\d{8}-\d{4}\]/u', $subj))     $nuevo_origen = 'web';
+    if ($nuevo_origen) {
+        sbPatch($SB_URL, $SB_KEY, "correos?id=eq.$id", ['origen' => $nuevo_origen]);
+    }
+}
 
 // ── 6. ADJUNTOS ───────────────────────────────────────────────────────
 // Procesar adjuntos con pausa entre correos para no saturar Storage.
