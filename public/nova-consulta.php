@@ -329,6 +329,50 @@ switch ($accion) {
         ]);
         break;
 
+
+    // ══════════════════════════════════════════════════════════
+    // 7. GUARDAR SESIÓN NOVA TD — para análisis y mejora
+    // ══════════════════════════════════════════════════════════
+    case 'guardar_sesion_nova':
+        $sesion_id    = trim($body['sesion_id']    ?? '');
+        $cedula       = trim($body['cedula']       ?? '');
+        $nombre       = trim($body['nombre']       ?? '');
+        $eps          = trim($body['eps']          ?? '');
+        $turnos       = (int)($body['turnos']      ?? 0);
+        $resumen      = trim($body['resumen']      ?? '');
+        $motivo       = trim($body['motivo_cierre'] ?? 'manual');
+        $fecha        = trim($body['fecha']        ?? date('c'));
+
+        // Insertar en tabla nova_sesiones (créala si no existe)
+        $ch = curl_init("$SB_URL/rest/v1/nova_sesiones");
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode([
+                'sesion_id'     => $sesion_id,
+                'cedula'        => $cedula,
+                'nombre'        => $nombre,
+                'eps'           => $eps,
+                'turnos'        => $turnos,
+                'resumen'       => $resumen,
+                'motivo_cierre' => $motivo,
+                'created_at'    => $fecha,
+            ]),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_HTTPHEADER     => [
+                "apikey: $SB_KEY",
+                "Authorization: Bearer $SB_KEY",
+                'Content-Type: application/json',
+                'Prefer: return=minimal',
+            ],
+        ]);
+        $r2 = curl_exec($ch);
+        $c2 = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        echo json_encode(['ok' => ($c2 >= 200 && $c2 < 300), 'code' => $c2]);
+        break;
+
     default:
         http_response_code(400);
         echo json_encode(['error' => "Acción '{$accion}' no reconocida"]);
