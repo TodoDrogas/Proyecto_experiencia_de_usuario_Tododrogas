@@ -1352,6 +1352,8 @@ function ntdReset(){
   NTD._ced      = null;
   NTD._nom      = null;
   NTD._tel      = null;
+  NTD._tipoDoc  = 'CÉDULA DE CIUDADANÍA';
+  NTD._enMenu   = false;
   NTD.hist      = [];
   NTD.busy      = false;
   NTD.vipCb     = null;
@@ -1409,15 +1411,15 @@ const NTD_C = {
 const NTD_EPS=['COOSALUD','SAVIA SALUD','SALUD TOTAL','NUEVA EPS'];
 const NTD={
   fase:'politica', usuario:null, eps:null,
-  _ced:null,_nom:null,_tel:null,
-  hist:[], busy:false, vipCb:null, _valT:null, arrancado:false,
+  _ced:null,_nom:null,_tel:null,_tipoDoc:'CÉDULA DE CIUDADANÍA',
+  hist:[], busy:false, vipCb:null, _valT:null, arrancado:false, _enMenu:false,
 };
 
 function ntdSys(){
   return `Eres Nova TD, asistente virtual de Tododrogas CIA SAS (Colombia).
 Tododrogas distribuye medicamentos en droguerías de Antioquia y otras regiones, atendiendo usuarios de EPS.
 USUARIO: Nombre: ${NTD.usuario?.nombre||'—'} | Primer nombre: ${NTD.usuario?.primerNombre||'—'} | Cédula: ${NTD.usuario?.cedula||'—'} | EPS: ${NTD.eps||'—'} | VIP: ${NTD.usuario?.vip?'SÍ':'No'}
-CAPACIDADES: Responder CUALQUIER pregunta sobre PQRSFD, consultar radicados [CONSULTAR:valor], informar sedes [SEDES:municipio], explicar leyes (Ley 1755/2015 → 15 días), autorizaciones, medicamentos, EPS, escalar agente [ESCALAR], formulario [FORMULARIO], encuesta [ENCUESTA], menú [MENU], cambiar EPS [CAMBIAR_EPS].
+CAPACIDADES: Responder CUALQUIER pregunta sobre PQRSFD, consultar radicados [CONSULTAR:valor], informar sedes [SEDES:municipio], explicar leyes (Ley 1755/2015 → 15 días), autorizaciones, medicamentos, EPS, escalar agente [ESCALAR], formulario [FORMULARIO], encuesta [ENCUESTA], menú [MENU], cambiar EPS [CAMBIAR_EPS], medicamentos [MEDICAMENTOS].
 CONTACTO: PBX 604 322 2432 (Lun-Vie 7-5:30pm) · WhatsApp 304 341 2431 · pqrsfd@tododrogas.com.co · Nova 24/7.
 REGLAS: Español colombiano cálido. Primer nombre. Máx 130 palabras. Máx 2 emojis. URGENCIA→PBX inmediato. No inventar radicados. Tags solo al FINAL: [FORMULARIO][ESCALAR][ENCUESTA][MENU][CAMBIAR_EPS][CONSULTAR:val][SEDES:mun].`;
 }
@@ -1521,50 +1523,82 @@ async function ntdDispatch(txt){
   if(NTD.fase==='ident_nom')   return ntdFNombre(txt);
   if(NTD.fase==='ident_tel')   return ntdFTelefono(txt);
   if(NTD.fase==='eps')         return ntdFEps(txt);
+  // Atajo numérico — funciona siempre en fase libre
+  if(NTD.fase==='libre'){
+    const n=txt.trim().replace(/\D/g,'');
+    const opc={
+      '1':()=>ntdMedicamentos(),
+      '2':()=>ntdMedicamentosPendientes(),
+      '3':()=>ntdSU('SEDES DONDE PUEDO RECLAMAR MIS MEDICAMENTOS'),
+      '4':()=>ntdRequisitosReclamar(),
+      '5':()=>ntdSU('PROCESO DE AUTORIZACIÓN DE MEDICAMENTOS'),
+      '6':()=>ntdIrARadicar(),
+      '7':()=>ntdSU('CONSULTAR ESTADO DE MI RADICADO'),
+      '8':()=>ntdSU('HORARIOS Y CANALES DE ATENCIÓN'),
+    };
+    if(opc[n]){opc[n]();return;}
+  }
   return ntdFLibre(txt);
 }
 
 function ntdStart(){
   ntdSep();
   ntdAddMsg('nova',
-    `<p>¡Hola! 👋 Soy <strong>Nova TD</strong>, la asistente de <strong>Tododrogas CIA SAS</strong>.</p>
-     <p>Antes de continuar acepta nuestras políticas de tratamiento de datos.</p>
-     <p>Conócelas aquí: <a href="${NTD_C.polUrl}" target="_blank" style="color:#93c5fd;text-decoration:underline">📄 Ver política</a></p>
-     <p style="margin-top:4px">Para continuar elige:</p>`,
+    `<p>¡Hola! 👋 Bienvenido/a a la línea de atención virtual de <strong>Tododrogas CIA SAS</strong>.</p>
+     <p>Soy <strong>Nova TD</strong>, tu asistente. Gracias por ponerte en contacto con nosotros.</p>
+     <p>Antes de iniciar, es necesario que aceptes nuestras políticas de tratamiento de datos. Si deseas conocerlas, ingresa aquí: <a href="${NTD_C.polUrl}" target="_blank" style="color:#93c5fd;text-decoration:underline">📄 Ver política</a></p>
+     <p style="margin-top:6px"><strong>Para continuar elige:</strong></p>`,
     `<div class="ntd-chips">
-       <button class="ntd-ch g" onclick="ntdSU('Acepto')">✅ Acepto</button>
-       <button class="ntd-ch r" onclick="ntdSU('No acepto')">✗ No acepto</button>
+       <button class="ntd-ch g" onclick="ntdSU('ACEPTO')">✅ Acepto</button>
+       <button class="ntd-ch r" onclick="ntdSU('NO ACEPTO')">✗ No acepto</button>
      </div>`);
-  ntdProg(6,'Política');
-  setTimeout(()=>ntdEna('Acepto / No acepto'),300);
+  ntdProg(6,'Bienvenida');
+  setTimeout(()=>ntdEna('Escribe Acepto o No acepto...'),300);
 }
 
 async function ntdFPolitica(txt){
-  const t=txt.toLowerCase();
+  const t=txt.toLowerCase().trim();
   if(t.includes('acepto')||t==='si'||t==='sí'||t==='1'||t.includes('ok')){
-    ntdAddMsg('nova',ntdR2H('¡Gracias! ✅'));
-    await ntdDelay(450);
-    NTD.fase='ident_ced';ntdProg(16,'Identificación');
-    ntdAddMsg('nova',ntdR2H('Ahora verificaré tu identidad.\n\n¿Cuál es tu **número de cédula**? (solo dígitos)'));
-    ntdEna('Ej: 1234567890');
-  }else if(t.includes('no')){
-    ntdAddMsg('nova',ntdR2H('Entiendo. Sin aceptar no podemos continuar. Contáctanos:'),
+    ntdAddMsg('nova',ntdR2H('¡Gracias por aceptar! ✅'));
+    await ntdDelay(500);
+    NTD.fase='ident_ced';ntdProg(16,'Verificación');
+    ntdAddMsg('nova',
+      `<p>Selecciona el tipo de documento del usuario que necesita el servicio:</p>`,
       `<div class="ntd-chips">
-         <a href="https://wa.me/573043412431" target="_blank" class="ntd-ch g">💬 WhatsApp</a>
-         <a href="tel:6043222432" class="ntd-ch b">📞 PBX</a>
+         <button class="ntd-ch b" onclick="ntdSetTipoDoc('CÉDULA DE CIUDADANÍA')">🪪 Cédula de ciudadanía</button>
+         <button class="ntd-ch b" onclick="ntdSetTipoDoc('TARJETA DE IDENTIDAD')">📋 Tarjeta de identidad</button>
+         <button class="ntd-ch b" onclick="ntdSetTipoDoc('CÉDULA DE EXTRANJERÍA')">🌐 Cédula de extranjería</button>
+         <button class="ntd-ch b" onclick="ntdSetTipoDoc('PASAPORTE')">📕 Pasaporte</button>
+       </div>`);
+    ntdDis(); // espera que toque un chip
+  }else if(t.includes('no')){
+    ntdAddMsg('nova',ntdR2H('Entendido. Sin aceptar no puedo continuar. Comunícate con nosotros:'),
+      `<div class="ntd-chips">
+         <a href="https://wa.me/573043412431" target="_blank" class="ntd-ch g">💬 WhatsApp 304 341 2431</a>
+         <a href="tel:6043222432" class="ntd-ch b">📞 PBX 604 322 2432</a>
        </div>`);ntdDis();
   }else{
-    ntdAddMsg('nova',ntdR2H('Por favor responde **"Acepto"** o **"No acepto"**.'));
+    ntdAddMsg('nova',ntdR2H('Por favor responde **"Acepto"** o **"No acepto"** para continuar.'));
     ntdEna('Acepto / No acepto');
   }
 }
 
+function ntdSetTipoDoc(tipo){
+  NTD._tipoDoc = tipo;
+  ntdAddMsg('user', ntdR2H(tipo));
+  ntdAddMsg('nova', ntdR2H(`Escribe el número de documento de identificación sin puntos, comas o cualquier otro carácter:`));
+  ntdEna('Solo números');
+}
+
 async function ntdFCedula(txt){
   const n=txt.replace(/\D/g,'');
-  if(n.length<5){ntdAddMsg('nova',ntdR2H('La cédula debe tener al menos 5 dígitos.'));ntdEna('Solo números');return;}
+  if(n.length<5){
+    ntdAddMsg('nova',ntdR2H('Valor incorrecto, por favor intente de nuevo.\n\nEscribe el número de documento sin puntos ni comas:'));
+    ntdEna('Solo números');return;
+  }
   NTD._ced=n;NTD.fase='ident_nom';
-  ntdAddMsg('nova',ntdR2H('Escribe tu **nombre completo**:'));
-  ntdEna('Ej: María García');
+  ntdAddMsg('nova',ntdR2H('Escribe tu **nombre completo** (tal como aparece en el documento):'));
+  ntdEna('Nombre y apellido');
 }
 async function ntdFNombre(txt){
   if(txt.trim().length<3){ntdAddMsg('nova',ntdR2H('Por favor escribe tu nombre completo.'));ntdEna('Nombre y apellido');return;}
@@ -1594,10 +1628,24 @@ async function ntdFTelefono(txt){
     ntdAddMsg('nova',ntdR2H('Intentemos de nuevo. ¿Cuál es tu **cédula**?'));
     ntdEna('Número de cédula');return;
   }
-  const pn=(res.nombre||NTD._nom).split(' ')[0];
+  const pn=(res.nombre||NTD._nom).trim().split(/\s+/)[0];
   NTD.usuario={nombre:res.nombre||NTD._nom,primerNombre:pn,cedula:NTD._ced,telefono:NTD._tel,vip:!!res.vip,saludo:res.saludo||null};
-  if(res.vip&&res.saludo){NTD.vipCb=()=>ntdIrAEps();ntdShowVip(res.saludo);}
-  else{ntdAddMsg('nova',ntdR2H(`✅ ¡Buen día, **${pn}**! Me alegra atenderte.`));await ntdDelay(400);ntdIrAEps();}
+  if(res.vip&&res.saludo){NTD.vipCb=()=>ntdBienvenidaYEps();ntdShowVip(res.saludo);}
+  else{ ntdBienvenidaYEps(); }
+}
+
+async function ntdBienvenidaYEps(){
+  // Saludo personalizado con nombre — igual que el video
+  ntdAddMsg('nova', ntdR2H(
+    `✅ Verificado. ¡Hola, **${NTD.usuario.primerNombre}**! Bienvenido/a a Tododrogas CIA SAS.`
+  ));
+  await ntdDelay(600);
+  // Aviso de inactividad — igual que en el video de EPS SURA
+  ntdAddMsg('nova',
+    `<p>⏱ <strong>Aviso:</strong> Ten presente que si hay más de <strong>2 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
+  );
+  await ntdDelay(700);
+  ntdIrAEps();
 }
 
 function ntdIrAEps(){
@@ -1617,26 +1665,123 @@ async function ntdFEps(txt){
 function ntdMostrarMenu(){
   NTD.fase='libre';ntdProg(65,'En atención');
   const n=NTD.usuario?.primerNombre||'';
-  ntdAddMsg('nova',ntdR2H(`${n}, ¿en qué te puedo ayudar hoy?`),
-    `<div class="ntd-chips">
-       <button class="ntd-ch b" onclick="ntdSU('Quiero radicar una PQRSFD')">📋 Radicar PQR</button>
-       <button class="ntd-ch b" onclick="ntdSU('Consultar estado de mi radicado')">🔍 Radicado</button>
-       <button class="ntd-ch b" onclick="ntdSU('Sedes y medicamentos')">🏥 Sedes</button>
-       <button class="ntd-ch b" onclick="ntdSU('Información sobre autorizaciones')">💊 Autorizaciones</button>
-       <button class="ntd-ch b" onclick="ntdSU('Plazos y leyes de respuesta PQR')">⚖️ Leyes</button>
-       <button class="ntd-ch b" onclick="ntdSU('Cómo reclamar mis medicamentos')">💊 Medicamentos</button>
-       <button class="ntd-ch g" onclick="ntdSU('Hablar con un agente humano')">👤 Agente</button>
-       <button class="ntd-ch go" onclick="ntdSU('Hacer encuesta de satisfacción')">⭐ Encuesta</button>
-       <button class="ntd-ch r"  onclick="ntdCambiarEps()">🔄 Cambiar EPS</button>
+  ntdAddMsg('nova',
+    `<p><strong>${n}</strong>, digita el <strong>número</strong> de la opción que necesitas:</p>
+     <div style="margin-top:8px;font-size:13px;line-height:2">
+       <div>1️⃣ &nbsp;Estado o entrega de medicamentos</div>
+       <div>2️⃣ &nbsp;Medicamentos pendientes</div>
+       <div>3️⃣ &nbsp;Puntos de dispensación</div>
+       <div>4️⃣ &nbsp;Requisitos para reclamar medicamentos</div>
+       <div>5️⃣ &nbsp;Autorización médica</div>
+       <div>6️⃣ &nbsp;Radicar PQRSFD</div>
+       <div>7️⃣ &nbsp;Estado de mi radicado</div>
+       <div>8️⃣ &nbsp;Horarios y canales de contacto</div>
      </div>`);
   ntdSetQbar([
-    {e:'📋',l:'Radicar',t:'Quiero radicar una PQRSFD'},
-    {e:'🔍',l:'Radicado',t:'Consultar estado de mi radicado'},
-    {e:'🏥',l:'Sedes',t:'Sedes y medicamentos'},
-    {e:'👤',l:'Agente',t:'Hablar con un agente humano'},
-    {e:'🔄',l:'Menú',t:'Ver menú principal'},
+    {e:'1️⃣',l:'Medicamentos',t:'1'},
+    {e:'2️⃣',l:'Pendientes',t:'2'},
+    {e:'3️⃣',l:'Sedes',t:'3'},
+    {e:'6️⃣',l:'Radicar',t:'6'},
+    {e:'7️⃣',l:'Radicado',t:'7'},
   ]);
-  ntdEna('Escribe o elige una opción...');
+  ntdEna('Escribe el número de la opción...');
+  ntdResetInact();
+}
+// ── MEDICAMENTOS — consulta más frecuente ─────────────
+const MANTIS_URL = 'https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb';
+const QR_MEDS    = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/QR%20MEDICAMENTOS.jpeg';
+
+function ntdMedicamentos(){
+  const n = NTD.usuario?.primerNombre||'';
+  ntdAddMsg('nova',
+    `<p><strong>${n}</strong>, para consultar el estado de tus medicamentos, entregas pendientes o historial de dispensación, ingresa a nuestra plataforma <strong>App Solicitudes Web</strong>:</p>
+     <div style="text-align:center;margin:10px 0">
+       <img src="${QR_MEDS}"
+         style="width:160px;height:160px;border-radius:10px;border:1px solid rgba(37,99,235,.3)"
+         alt="QR Medicamentos" onerror="this.style.display='none'">
+       <p style="font-size:11px;color:var(--ntd-t2,rgba(190,215,255,.6));margin-top:6px">
+         📱 Escanea con tu cámara o toca el botón
+       </p>
+     </div>`,
+    `<div class="ntd-chips">
+       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b">🔗 Consultar mis medicamentos →</a>
+       <button class="ntd-ch b" onclick="ntdMedicamentosPendientes()">⏳ Medicamentos pendientes</button>
+       <button class="ntd-ch b" onclick="ntdRequisitosReclamar()">📄 Requisitos para reclamar</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button>
+     </div>`);
+}
+
+function ntdMedicamentosPendientes(){
+  ntdAddMsg('nova',
+    ntdR2H(`Para registrar un medicamento pendiente o incompleto necesito los siguientes datos:\n\n• **Nombre del medicamento** o tecnología de salud\n• **Fecha de solicitud** o entrega anterior\n• **Punto de dispensación** donde lo solicitas\n\nPor favor escríbelos y un asesor verificará el estado en el sistema.`),
+    `<div class="ntd-chips">
+       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b">🔗 Ver en App Solicitudes →</a>
+       <button class="ntd-ch g" onclick="ntdEscalarAgente()">👤 Hablar con un asesor</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button>
+     </div>`);
+}
+
+function ntdRequisitosReclamar(){
+  ntdAddMsg('nova',
+    `<p>Para reclamar tus medicamentos debes presentar:</p>
+     <ul>
+       <li>📄 Documento de identidad original</li>
+       <li>📑 Fórmula médica vigente</li>
+       <li>📦 Orden de entrega o autorización de la EPS</li>
+     </ul>
+     <p style="margin-top:6px"><strong>Si reclama otra persona:</strong></p>
+     <ul>
+       <li>Documento del paciente (copia)</li>
+       <li>Documento del autorizado (original)</li>
+       <li>Carta de autorización firmada por el paciente</li>
+     </ul>`,
+    `<div class="ntd-chips">
+       <button class="ntd-ch b" onclick="ntdSU('SEDES DONDE PUEDO RECLAMAR MIS MEDICAMENTOS')">🏥 Ver puntos de dispensación</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button>
+     </div>`);
+}
+
+// Radicar — lleva al formulario QR o botón directo
+function ntdIrARadicar(){
+  ntdAddMsg('nova',
+    `<p>Para radicar tu solicitud PQRSFD tienes dos opciones:</p>`,
+    `<div class="ntd-chips">
+       <button class="ntd-ch b" onclick="window.location.href='${NTD_C.pqrForm}'">
+         📋 Radicar desde aquí →
+       </button>
+       <button class="ntd-ch b" onclick="ntdMostrarQR()">
+         📱 Escanear código QR
+       </button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Volver al menú</button>
+     </div>`);
+}
+
+function ntdMostrarQR(){
+  const url = window.location.origin + '/' + NTD_C.pqrForm;
+  ntdAddMsg('nova',
+    `<p>Escanea este código QR con tu celular para radicar tu solicitud desde cualquier punto de atención:</p>
+     <div style="text-align:center;margin-top:10px">
+       <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(url)}&bgcolor=141e30&color=93c5fd&qzone=1"
+         style="border-radius:10px;width:160px;height:160px" alt="QR Radicar">
+       <p style="font-size:11px;color:var(--ntd-t3);margin-top:6px">O toca el botón para ir directamente</p>
+     </div>`,
+    `<div class="ntd-chips">
+       <button class="ntd-ch b" onclick="window.location.href='${NTD_C.pqrForm}'">📋 Radicar ahora →</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button>
+     </div>`);
+}
+
+// Escalar a asesor — siempre de último
+function ntdEscalarAgente(){
+  ntdAddMsg('nova',
+    ntdR2H(`${NTD.usuario?.primerNombre||''}, con gusto te conecto con uno de nuestros asesores.
+
+Nuestro horario de atención es **Lun-Vie 7:00 a.m. - 5:30 p.m.**`),
+    `<div class="ntd-chips">
+       <a href="https://wa.me/573043412431" target="_blank" class="ntd-ch g">💬 WhatsApp 304 341 2431</a>
+       <a href="tel:6043222432" class="ntd-ch b">📞 PBX 604 322 2432</a>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button>
+     </div>`);
 }
 
 async function ntdFLibre(txt){
@@ -1664,14 +1809,9 @@ async function ntdFLibre(txt){
   const html=ntdR2H(text);
   switch(act){
     case 'FORMULARIO':
-      ntdAddMsg('nova',html,`<div class="ntd-chips">
-        <button class="ntd-ch b" onclick="window.location.href='${NTD_C.pqrForm}'">📋 Ir al formulario →</button>
-        <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button></div>`);break;
+      ntdAddMsg('nova',html);await ntdDelay(200);ntdIrARadicar();break;
     case 'ESCALAR':
-      ntdAddMsg('nova',html,`<div class="ntd-chips">
-        <a href="https://wa.me/573043412431" target="_blank" class="ntd-ch g">💬 WhatsApp 304 341 2431</a>
-        <a href="tel:6043222432" class="ntd-ch b">📞 PBX 604 322 2432</a>
-        <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button></div>`);break;
+      ntdAddMsg('nova',html);ntdEscalarAgente();break;
     case 'ENCUESTA':
       ntdAddMsg('nova',html,`<div class="ntd-chips">
         <button class="ntd-ch go" onclick="window.location.href='${NTD_C.encuesta}'">⭐ Ir a la encuesta →</button>
@@ -1684,6 +1824,8 @@ async function ntdFLibre(txt){
       ntdAddMsg('nova',html);await ntdDelay(150);await ntdFetchRadicado(dat);break;
     case 'SEDES':
       ntdAddMsg('nova',html);await ntdDelay(150);await ntdFetchSedes(dat);break;
+    case 'MEDICAMENTOS':
+      ntdAddMsg('nova',html);await ntdDelay(200);ntdMedicamentos();break;
     default:
       ntdAddMsg('nova',html);
   }
@@ -1694,7 +1836,7 @@ async function ntdFLibre(txt){
 function ntdParseAct(raw){
   let text=raw,act=null,dat=null;
   const pp=[[/\[FORMULARIO\]/,'FORMULARIO'],[/\[ESCALAR\]/,'ESCALAR'],[/\[ENCUESTA\]/,'ENCUESTA'],
-    [/\[MENU\]/,'MENU'],[/\[CAMBIAR_EPS\]/,'CAMBIAR_EPS'],
+    [/\[MENU\]/,'MENU'],[/\[CAMBIAR_EPS\]/,'CAMBIAR_EPS'],[/\[MEDICAMENTOS\]/,'MEDICAMENTOS'],
     [/\[CONSULTAR:([^\]]+)\]/,'CONSULTAR'],[/\[SEDES:([^\]]+)\]/,'SEDES']];
   for(const[re,a]of pp){const m=text.match(re);if(m){text=text.replace(m[0],'').trim();act=a;dat=m[1]||null;break;}}
   return{text,act,dat};
