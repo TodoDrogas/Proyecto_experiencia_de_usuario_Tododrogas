@@ -1534,20 +1534,20 @@ async function ntdDispatch(txt){
   if(NTD.fase==='ident_nom')   return ntdFNombre(txt);
   if(NTD.fase==='ident_tel')   return ntdFTelefono(txt);
   if(NTD.fase==='eps')         return ntdFEps(txt);
-  // Atajo numérico — funciona siempre en fase libre
+  // Atajo numérico — llama funciones DIRECTAMENTE, sin pasar por ntdSend
   if(NTD.fase==='libre'){
     const n=txt.trim().replace(/\D/g,'');
     const opc={
       '1':()=>ntdMedicamentos(),
       '2':()=>ntdMedicamentosPendientes(),
-      '3':()=>ntdSU('SEDES DONDE PUEDO RECLAMAR MIS MEDICAMENTOS'),
+      '3':()=>ntdSedes(),
       '4':()=>ntdRequisitosReclamar(),
-      '5':()=>ntdSU('PROCESO DE AUTORIZACIÓN DE MEDICAMENTOS'),
+      '5':()=>ntdAutorizacion(),
       '6':()=>ntdIrARadicar(),
-      '7':()=>ntdSU('CONSULTAR ESTADO DE MI RADICADO'),
-      '8':()=>ntdSU('HORARIOS Y CANALES DE ATENCIÓN'),
+      '7':()=>ntdConsultarRadicado(),
+      '8':()=>ntdHorarios(),
     };
-    if(opc[n]){opc[n]();return;}
+    if(opc[n]){NTD.busy=false;opc[n]();return;}
   }
   return ntdFLibre(txt);
 }
@@ -1680,24 +1680,23 @@ function ntdMostrarMenu(){
     `<p><strong>${n}</strong>, digita el <strong>número</strong> de la opción que necesitas:</p>
      <div style="margin-top:8px;font-size:13px;line-height:2">
        <div>1️⃣ &nbsp;Estado o entrega de medicamentos</div>
-       <div>2️⃣ &nbsp;Medicamentos pendientes</div>
-       <div>3️⃣ &nbsp;Puntos de dispensación</div>
-       <div>4️⃣ &nbsp;Requisitos para reclamar medicamentos</div>
-       <div>5️⃣ &nbsp;Autorización médica</div>
-       <div>6️⃣ &nbsp;Radicar PQRSFD</div>
-       <div>7️⃣ &nbsp;Estado de mi radicado</div>
-       <div>8️⃣ &nbsp;Horarios y canales de contacto</div>
+       <div>2️⃣ &nbsp;Puntos de dispensación</div>
+       <div>3️⃣ &nbsp;Requisitos para reclamar medicamentos</div>
+       <div>4️⃣ &nbsp;Autorización médica</div>
+       <div>5️⃣ &nbsp;Radicar PQRSFD</div>
+       <div>6️⃣ &nbsp;Estado de mi radicado</div>
+       <div>7️⃣ &nbsp;Horarios y canales de contacto</div>
      </div>`);
   ntdSetQbar([
     {e:'1️⃣',l:'Medicamentos',t:'1'},
-    {e:'2️⃣',l:'Pendientes',t:'2'},
-    {e:'3️⃣',l:'Sedes',t:'3'},
-    {e:'6️⃣',l:'Radicar',t:'6'},
-    {e:'7️⃣',l:'Radicado',t:'7'},
+    {e:'2️⃣',l:'Sedes',t:'2'},
+    {e:'5️⃣',l:'Radicar',t:'5'},
+    {e:'6️⃣',l:'Radicado',t:'6'},
   ]);
   ntdEna('Escribe el número de la opción...');
   ntdResetInact();
 }
+
 // ── MEDICAMENTOS — consulta más frecuente ─────────────
 const MANTIS_URL = 'https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb';
 const QR_MEDS    = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/QR%20MEDICAMENTOS.jpeg';
@@ -1750,6 +1749,62 @@ function ntdRequisitosReclamar(){
        <button class="ntd-ch b" onclick="ntdSU('SEDES DONDE PUEDO RECLAMAR MIS MEDICAMENTOS')">🏥 Ver puntos de dispensación</button>
        <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button>
      </div>`);
+}
+
+// Funciones directas para el menú numerado (sin pasar por ntdSend)
+function ntdSedes(){
+  ntdAddMsg('nova',
+    `<p>¿En qué municipio necesitas consultar el punto de dispensación?</p>
+     <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe el nombre del municipio o tu pregunta.</p>`,
+    `<div class="ntd-chips">
+       <button class="ntd-ch b" onclick="ntdFLibreDirecto('SEDES PARA MI EPS EN MI MUNICIPIO')">📍 Ver sedes para mi EPS</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
+     </div>`);
+  ntdEna('Escribe el municipio...');
+}
+
+function ntdAutorizacion(){
+  ntdFLibreDirecto('PROCESO DE AUTORIZACIÓN DE MEDICAMENTOS CON LA EPS');
+}
+
+function ntdConsultarRadicado(){
+  ntdAddMsg('nova',
+    ntdR2H('Para consultar tu radicado ingresa el **número de radicado** (ej: TD-123456) o tu **correo electrónico**:'),
+    `<div class="ntd-chips">
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
+     </div>`);
+  ntdEna('Número de radicado o correo...');
+}
+
+function ntdHorarios(){
+  ntdAddMsg('nova',
+    `<p>📞 <strong>Canales de contacto Tododrogas:</strong></p>
+     <ul>
+       <li>📱 WhatsApp: <strong>304 341 2431</strong></li>
+       <li>☎️ PBX: <strong>604 322 2432</strong> · Opción #2</li>
+       <li>📧 Correo: <strong>pqrsfd@tododrogas.com.co</strong></li>
+       <li>🤖 Nova TD: <strong>24/7</strong></li>
+     </ul>
+     <p style="margin-top:6px">🕐 <strong>Horario asesores:</strong><br>
+     Lunes a viernes 7:00 a.m. – 5:30 p.m.<br>
+     Sábados 8:00 a.m. – 12:00 m.</p>`,
+    `<div class="ntd-chips">
+       <a href="https://wa.me/573043412431" target="_blank" class="ntd-ch g">💬 Escribir por WhatsApp</a>
+       <a href="tel:6043222432" class="ntd-ch b">📞 Llamar PBX</a>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
+     </div>`);
+}
+
+// Llamar a GPT directamente sin pasar por ntdSend (sin busy check)
+async function ntdFLibreDirecto(txt){
+  NTD.busy=true;
+  ntdDis();
+  try{ await ntdFLibre(txt); }
+  catch(e){
+    ntdRmSk();ntdTyping(false);
+    ntdAddMsg('nova',ntdR2H('No pude conectarme. Llama al **604 322 2432** o WhatsApp **304 341 2431**.'));
+  }
+  NTD.busy=false;ntdUS();
 }
 
 // Radicar — lleva al formulario QR o botón directo
