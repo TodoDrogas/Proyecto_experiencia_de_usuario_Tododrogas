@@ -1,14 +1,14 @@
 <?php
 /**
- * radicar-pqr.php v3 — Experiencia de Servicio al Cliente Tododrogas CIA SAS
+ * radicar-pqr.php v4 — Sin BD · Solo correos
  * ─────────────────────────────────────────────────────
  * 1. Recibe PQR del formulario (escrito / audio / canvas)
  * 2. Genera ticket TD-YYYYMMDD-XXXX
  * 3. Clasifica con GPT-4o-mini (sentimiento, prioridad, categoría, ley)
- * 4. Inserta en Supabase tabla correos
- * 5. Envía correo inteligente a pqrsfd@tododrogas.com.co vía Graph API
- *    con asunto formateado, cuerpo formal y adjunto según canal
- * 6. Registra en historial_eventos
+ * 4. Envía correo a pqrsfd@tododrogas.com.co vía Graph API
+ *    — Si origen=nova_td: asunto incluye 🤖 NOVA TD
+ * 5. Envía acuse al usuario (si tiene correo)
+ * NO inserta en Supabase ni historial_eventos
  */
 
 header('Content-Type: application/json');
@@ -28,39 +28,7 @@ $BUZÓN_PQRS  = 'pqrsfd@tododrogas.com.co';
 $GRAPH_USER_ID = '__GRAPH_USER_ID__';
 
 // ── HELPERS ──────────────────────────────────────────────────────────
-function sbPost($url, $key, $endpoint, $data, $prefer = 'return=representation') {
-    $ch = curl_init("$url/rest/v1/$endpoint");
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode($data),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => [
-            "apikey: $key", "Authorization: Bearer $key",
-            'Content-Type: application/json', "Prefer: $prefer"
-        ],
-        CURLOPT_TIMEOUT => 15,
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    return ['code' => $code, 'body' => $resp];
-}
-
-function sbPatch($url, $key, $endpoint, $filter, $data) {
-    $ch = curl_init("$url/rest/v1/$endpoint?$filter");
-    curl_setopt_array($ch, [
-        CURLOPT_CUSTOMREQUEST  => 'PATCH',
-        CURLOPT_POSTFIELDS     => json_encode($data),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => [
-            "apikey: $key", "Authorization: Bearer $key",
-            'Content-Type: application/json', 'Prefer: return=minimal'
-        ],
-        CURLOPT_TIMEOUT => 10,
-    ]);
-    curl_exec($ch);
-    curl_close($ch);
-}
+// sbPost / sbPatch eliminados — versión sin BD
 
 function getGraphToken($tenant, $client_id, $client_secret) {
     $ch = curl_init("https://login.microsoftonline.com/$tenant/oauth2/v2.0/token");
@@ -175,6 +143,7 @@ elseif  ($canvas_url)                               $canal = 'canvas';
 elseif  ($transcripcion)                            $canal = 'audio';
 
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
+$origen         = $body['origen'] ?? 'formulario_web'; // nova_td | formulario_web
 
 // ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
 $whisper_transcripcion = '';
@@ -390,58 +359,19 @@ $emoji_canal = ['audio'=>'🎤','canvas'=>'✏️','escrito'=>'📝'][$canal] ??
 $tipo_label  = mb_strtoupper($tipo_pqr, 'UTF-8');
 $canal_label = mb_strtoupper($canal, 'UTF-8');
 
-// Asunto formateado completo
-$subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} ".strtoupper($sentimiento)." | {$emoji_prio} ".strtoupper($prioridad);
-
-// ── PASO 2: INSERTAR EN SUPABASE ────────────────────────────────────
-$payload_correo = [
-    'ticket_id'         => $ticket_id,
-    'from_email'        => $correo ?: ($telefono . '@whatsapp'),
-    'from_name'         => $nombre,
-    'nombre'            => $nombre,
-    'correo'            => $correo ?: null,
-    'telefono_contacto' => $telefono,
-    'subject'           => $subject,
-    'descripcion'       => $descripcion,
-    'body_preview'      => mb_substr($texto_pqr ?: ($descripcion ?: ''), 0, 200),
-    'body_content'      => $texto_pqr ?: ($descripcion ?: ''),
-    'body_type'         => 'text',
-    'transcripcion'     => $transcripcion ?: null,
-    'audio_url'         => (strpos($audio_url,'data:')===0 ? null : ($audio_url?:null)),
-    'canvas_url'        => $canvas_url    ?: null,
-    'tipo_pqr'          => $tipo_pqr,
-    'categoria_ia'      => $categoria_ia,
-    'sentimiento'       => $sentimiento,
-    'datos_legales'     => json_encode(['tono' => $tono_ia ?? 'neutro']),
-    'nivel_riesgo'      => $nivel_riesgo,
-    'resumen_corto'     => $resumen_corto,
-    'ley_aplicable'     => $ley_aplicable,
-    'canal_contacto'    => $canal_contacto,
-    'origen'            => 'formulario_web',
-    'estado'            => 'pendiente',
-    'prioridad'         => $prioridad,
-    'es_urgente'        => in_array($sentimiento, ['urgente']) || $prioridad === 'critica',
-    'horas_sla'         => $horas_sla,
-    'fecha_limite_sla'  => $fecha_limite_sla,
-    'has_attachments'   => !empty($audio_url) || !empty($canvas_url),
-    'is_read'           => false,
-    'acuse_enviado'     => null,
-    'received_at'       => $now,
-    'created_at'        => $now,
-    'updated_at'        => $now,
-];
-
-$sb_result = sbPost($SB_URL, $SB_KEY, 'correos', $payload_correo);
-$correo_id = null;
-if ($sb_result['code'] < 400) {
-    $inserted = json_decode($sb_result['body'], true);
-    $correo_id = $inserted[0]['id'] ?? null;
+// Asunto formateado — con indicador NOVA TD si aplica
+// Asunto según canal de origen
+if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
+    $origen_label = $origen === 'nova_directo' ? '🤖 NOVA TD DIRECTO' : '🤖 NOVA TD';
+    $subject = "[{$ticket_id}] {$origen_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
+} elseif ($origen === 'qr') {
+    $subject = "[{$ticket_id}] 📷 QR | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } else {
-    // Error crítico — no se pudo guardar en BD
-    http_response_code(502);
-    echo json_encode(['error' => 'supabase_error', 'code' => $sb_result['code'], 'detalle' => $sb_result['body']]);
-    exit;
+    $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 }
+
+// ── PASO 2: SUPABASE ELIMINADO — esta versión solo envía correos ──────
+$correo_id = null; // No hay ID de BD en esta versión
 
 // ── PASO 3: ENVIAR CORREO A pqrsfd via Graph API ─────────────────────
 date_default_timezone_set('America/Bogota'); // Hora Colombia UTC-5
@@ -450,11 +380,24 @@ $token = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
 if ($token) {
     // Cuerpo del correo HTML
     $fecha_fmt  = date('d/m/Y H:i', strtotime($now));
-    $canal_txt  = ['audio' => 'mensaje de voz', 'canvas' => 'escritura con lápiz inteligente', 'escrito' => 'texto escrito'][$canal] ?? 'formulario web';
+    if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
+        $canal_txt = $origen === 'nova_directo' ? 'Asistente Virtual Nova TD (acceso directo)' : 'Asistente Virtual Nova TD (módulo web)';
+    } elseif ($origen === 'qr') {
+        $canal_txt = 'Código QR';
+    } else {
+        $canal_txt = ['audio' => 'mensaje de voz', 'canvas' => 'escritura con lápiz inteligente', 'escrito' => 'texto escrito'][$canal] ?? 'formulario web';
+    }
 
     $badge_sent  = "<span style='background:" . (['positivo'=>'#dcfce7','neutro'=>'#f3f4f6','negativo'=>'#fee2e2','urgente'=>'#fef3c7'][$sentimiento]??'#f3f4f6') . ";color:" . (['positivo'=>'#166534','neutro'=>'#374151','negativo'=>'#991b1b','urgente'=>'#92400e'][$sentimiento]??'#374151') . ";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_sent} " . mb_strtoupper($sentimiento, "UTF-8") . "</span>";
     $badge_prio  = "<span style='background:" . (['baja'=>'#dcfce7','media'=>'#fef9c3','alta'=>'#fed7aa','critica'=>'#fee2e2'][$prioridad]??'#fef9c3') . ";color:" . (['baja'=>'#166534','media'=>'#854d0e','alta'=>'#9a3412','critica'=>'#991b1b'][$prioridad]??'#854d0e') . ";padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_prio} " . mb_strtoupper($prioridad, "UTF-8") . "</span>";
+    if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
+    $lbl_nova    = $origen === 'nova_directo' ? '🤖 NOVA TD DIRECTO' : '🤖 NOVA TD';
+    $badge_canal = "<span style='background:#ede9fe;color:#5b21b6;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$lbl_nova}</span>";
+} elseif ($origen === 'qr') {
+    $badge_canal = "<span style='background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>📷 QR</span>";
+} else {
     $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} " . mb_strtoupper($canal, "UTF-8") . "</span>";
+}
 
     $cuerpo_html = "
 <!DOCTYPE html><html><head><meta charset='UTF-8'></head>
@@ -679,26 +622,7 @@ if ($token) {
 
     $correo_enviado = ($mail_code === 202);
 
-    // Actualizar BD: guardar HTML completo como body_content para que admin lo muestre igual que el correo a pqrsfd
-    if ($correo_id) {
-        // Reemplazar footer con ID real (el insert inicial tenía correo_id null en el footer)
-        $cuerpo_html_final = str_replace(
-            'ID interno: N/A',
-            'ID interno: ' . $correo_id,
-            $cuerpo_html
-        );
-        $patch_data = [
-            'body_content' => $cuerpo_html_final, // HTML completo con logo, datos ciudadano, clasificación IA
-            'body_type'    => 'html',
-            'updated_at'   => date('c'),
-        ];
-        // Actualizar transcripción y preview si Whisper la obtuvo
-        if ($transcripcion) {
-            $patch_data['transcripcion'] = $transcripcion;
-            $patch_data['body_preview']  = mb_substr($transcripcion, 0, 200);
-        }
-        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", $patch_data);
-    }
+    // (sin actualización BD en esta versión)
 } else {
     $correo_enviado = false;
     $mail_code = 0;
@@ -771,11 +695,7 @@ if ($token) {
   </td></tr>
 </table></td></tr></table>
 </body></html>";
-        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
-            'body_content' => $body_fallback,
-            'body_type'    => 'html',
-            'updated_at'   => date('c'),
-        ]);
+        // (sin actualización BD en esta versión)
     }
 }
 
@@ -996,34 +916,9 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     curl_close($ch_acuse);
 
     $acuse_enviado = ($acuse_code === 202);
-    if ($correo_id && $acuse_enviado) {
-        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
-            'acuse_enviado' => true,
-            'updated_at'    => date('c'),
-        ]);
-    }
 }
 
-// ── PASO 4: HISTORIAL EVENTOS ────────────────────────────────────────
-if ($correo_id) {
-    sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
-        'correo_id'   => $correo_id,
-        'evento'      => 'pqr_recibida',
-        'descripcion' => "PQR recibida via {$canal} ({$canal_contacto}). Clasificada: {$sentimiento} / {$prioridad}. Correo PQRSFD: " . ($correo_enviado ? 'OK' : 'error') . ". Acuse usuario: " . (isset($acuse_enviado) && $acuse_enviado ? 'OK' : ($correo ? 'error' : 'sin correo')),
-        'from_email'  => $correo ?: $telefono,
-        'subject'     => $subject,
-        'datos_extra' => json_encode([
-            'ticket_id'      => $ticket_id,
-            'canal'          => $canal,
-            'sentimiento'    => $sentimiento,
-            'prioridad'      => $prioridad,
-            'categoria_ia'   => $categoria_ia,
-            'correo_enviado' => $correo_enviado,
-            'horas_sla'      => $horas_sla,
-        ]),
-        'created_at' => $now,
-    ], 'return=minimal');
-}
+// ── PASO 4: HISTORIAL ELIMINADO en esta versión ─────────────────────
 
 // ── RESPUESTA FINAL ──────────────────────────────────────────────────
 http_response_code(200);
