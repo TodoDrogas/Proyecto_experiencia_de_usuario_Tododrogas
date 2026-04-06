@@ -260,11 +260,14 @@ jobs:
           SB_KEY="${{ secrets.SUPABASE_KEY_SERVICE }}"
 
           run_sql() {
+            local sql="$1"
+            local json_body
+            json_body=$(printf '{"query":"%s"}' "$(echo "$sql" | sed 's/"/\\"/g')")
             curl -s -o /dev/null -w "%{http_code}" -X POST "${SB_URL}/rest/v1/rpc/exec_sql" \
               -H "apikey: ${SB_KEY}" \
               -H "Authorization: Bearer ${SB_KEY}" \
               -H "Content-Type: application/json" \
-              -d "{"query": "$1"}"
+              -d "$json_body"
           }
 
           # 1. Tabla nova_sesiones (crear si no existe)
@@ -290,6 +293,18 @@ jobs:
           # 6. encuestas_satisfaccion.eps
           CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS eps text;")
           [ "$CODE" = "200" ] && echo "✅ encuestas_satisfaccion.eps OK" || echo "⚠️ encuestas_satisfaccion.eps: $CODE"
+
+          # 7. correos.origen — asegurar que existe (para radicados vía pqr_form)
+          CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS origen text DEFAULT 'web';")
+          [ "$CODE" = "200" ] && echo "✅ correos.origen OK" || echo "⚠️ correos.origen: $CODE"
+
+          # 8. correos.resumen_ia — resumen generado por IA
+          CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS resumen_ia text;")
+          [ "$CODE" = "200" ] && echo "✅ correos.resumen_ia OK" || echo "⚠️ correos.resumen_ia: $CODE"
+
+          # 9. correos.fecha_resolucion — para calcular tiempos de asesor
+          CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS fecha_resolucion timestamptz;")
+          [ "$CODE" = "200" ] && echo "✅ correos.fecha_resolucion OK" || echo "⚠️ correos.fecha_resolucion: $CODE"
 
           echo "✅ Migración Supabase completada"
 
@@ -368,4 +383,3 @@ jobs:
 
             [ $ERRORS -gt 0 ] && exit 1
             echo "✅ Deploy OK — $(date '+%d/%m/%Y %H:%M') hora Colombia"
-          
