@@ -367,7 +367,11 @@ if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
 } elseif ($origen === 'qr') {
     $subject = "[{$ticket_id}] 📷 QR | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } else {
-    $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
+    if (in_array($origen, ['web', 'formulario_web'])) {
+        $subject = "[{$ticket_id}] ð¥ï¸ WEB | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
+    } else {
+        $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
+    }
 }
 
 // ── PASO 2: INSERT EN SUPABASE tabla correos ────────────────────────
