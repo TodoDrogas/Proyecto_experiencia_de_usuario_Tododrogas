@@ -31,6 +31,7 @@ jobs:
           window.NOVA_URL            = '/nova-consulta.php';
           window.PQR_FORM_URL        = '/pqr_form.html';
           window.ENC_URL             = '/pqr_encuesta.html';
+          window.NOVA_HTML_URL       = '/nova.html';
           window.ADMIN_USER          = '${{ secrets.ADMIN_USER }}';
           window.ADMIN_PASS          = '${{ secrets.ADMIN_PASS }}';
           CONFIGEOF
@@ -251,15 +252,46 @@ jobs:
           target:   /var/www/pqr/
           strip_components: 1
 
-      # ── 8B. CREAR TABLA nova_sesiones SI NO EXISTE ─────────────
-      - name: Crear tabla nova_sesiones en Supabase
+      # ── 8B. MIGRAR TABLAS SUPABASE (idempotente — safe en cada deploy) ──
+      - name: Migrar tablas Supabase
+        continue-on-error: true
         run: |
-          curl -s -X POST '${{ secrets.SUPABASE_URL }}/rest/v1/rpc/exec_sql' \
-            -H "apikey: ${{ secrets.SUPABASE_KEY_SERVICE }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY_SERVICE }}" \
-            -H "Content-Type: application/json" \
-            -d '{"query": "CREATE TABLE IF NOT EXISTS nova_sesiones (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, sesion_id text, cedula text, nombre text, eps text, turnos int DEFAULT 0, resumen text, motivo_cierre text, created_at timestamptz DEFAULT now());"}' \
-            && echo "✅ Tabla nova_sesiones lista" || echo "⚠️ Verifica la tabla manualmente en Supabase"
+          SB_URL="${{ secrets.SUPABASE_URL }}"
+          SB_KEY="${{ secrets.SUPABASE_KEY_SERVICE }}"
+
+          run_sql() {
+            curl -s -o /dev/null -w "%{http_code}" -X POST "${SB_URL}/rest/v1/rpc/exec_sql" \
+              -H "apikey: ${SB_KEY}" \
+              -H "Authorization: Bearer ${SB_KEY}" \
+              -H "Content-Type: application/json" \
+              -d "{"query": "$1"}"
+          }
+
+          # 1. Tabla nova_sesiones (crear si no existe)
+          CODE=$(run_sql "CREATE TABLE IF NOT EXISTS nova_sesiones (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, sesion_id text, cedula text, nombre text, eps text, turnos int DEFAULT 0, resumen text, motivo_cierre text, created_at timestamptz DEFAULT now());")
+          [ "$CODE" = "200" ] && echo "✅ nova_sesiones OK" || echo "⚠️ nova_sesiones: $CODE"
+
+          # 2. nova_sesiones.origen — distingue nova_web vs nova_directo
+          CODE=$(run_sql "ALTER TABLE nova_sesiones ADD COLUMN IF NOT EXISTS origen text DEFAULT 'nova_web';")
+          [ "$CODE" = "200" ] && echo "✅ nova_sesiones.origen OK" || echo "⚠️ nova_sesiones.origen: $CODE"
+
+          # 3. encuestas_satisfaccion.origen — distingue web / nova_web / nova_directo / qr
+          CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS origen text DEFAULT 'web';")
+          [ "$CODE" = "200" ] && echo "✅ encuestas_satisfaccion.origen OK" || echo "⚠️ encuestas_satisfaccion.origen: $CODE"
+
+          # 4. encuestas_satisfaccion.nombre — trazabilidad usuario Nova
+          CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS nombre text;")
+          [ "$CODE" = "200" ] && echo "✅ encuestas_satisfaccion.nombre OK" || echo "⚠️ encuestas_satisfaccion.nombre: $CODE"
+
+          # 5. encuestas_satisfaccion.cedula
+          CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS cedula text;")
+          [ "$CODE" = "200" ] && echo "✅ encuestas_satisfaccion.cedula OK" || echo "⚠️ encuestas_satisfaccion.cedula: $CODE"
+
+          # 6. encuestas_satisfaccion.eps
+          CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS eps text;")
+          [ "$CODE" = "200" ] && echo "✅ encuestas_satisfaccion.eps OK" || echo "⚠️ encuestas_satisfaccion.eps: $CODE"
+
+          echo "✅ Migración Supabase completada"
 
       # ── 9. CONFIGURAR CRON — sincronizar correos cada 5 min ────
       - name: Configurar cron sync
@@ -326,6 +358,13 @@ jobs:
             else
               echo "✅ Sin placeholders residuales"
             fi
+
+            # Verificar archivos HTML clave
+            for h in /var/www/pqr/pqr_bienvenida.html \
+                     /var/www/pqr/nova.html \
+                     /var/www/pqr/admin.html; do
+              [ -f "$h" ] && echo "✅ $(basename $h)" || echo "⚠️ $(basename $h) no encontrado"
+            done
 
             [ $ERRORS -gt 0 ] && exit 1
             echo "✅ Deploy OK — $(date '+%d/%m/%Y %H:%M') hora Colombia"
