@@ -1732,17 +1732,21 @@ function ntdMedicamentos(){
          📱 Escanea con tu cámara o toca el botón
        </p>
      </div>`,
-ntdBotonesFinales(`
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMedicamentosPendientes()">3️⃣ &nbsp;Medicamentos pendientes</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdRequisitosReclamar()">4️⃣ &nbsp;Requisitos para reclamar</button>`));
+`<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMedicamentosPendientes()">1️⃣ &nbsp;Medicamentos pendientes</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdRequisitosReclamar()">2️⃣ &nbsp;Requisitos para reclamar</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
+     </div>`);
 }
 
 function ntdMedicamentosPendientes(){
   ntdAddMsg('nova',
     ntdR2H(`Para registrar un medicamento pendiente o incompleto necesito los siguientes datos:\n\n• **Nombre del medicamento** o tecnología de salud\n• **Fecha de solicitud** o entrega anterior\n• **Punto de dispensación** donde lo solicitas\n\nPor favor escríbelos y un asesor verificará el estado en el sistema.`),
-ntdBotonesFinales(`
-       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px">3️⃣ &nbsp;Ver en App Solicitudes →</a>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdEscalarAgente()">4️⃣ &nbsp;Hablar con un asesor</button>`));
+`<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
+       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px">1️⃣ &nbsp;Ver en App Solicitudes →</a>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdEscalarAgente()">2️⃣ &nbsp;Hablar con un asesor</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
+     </div>`);
 }
 
 function ntdRequisitosReclamar(){
@@ -1785,7 +1789,10 @@ ntdBotonesFinales());
 }
 
 function ntdEncuesta(){
-  const encUrl = (typeof ENC_URL !== 'undefined' ? ENC_URL : NTD_C.encuesta);
+  const encBase = (typeof ENC_URL !== 'undefined' ? ENC_URL : NTD_C.encuesta);
+  const encSep  = encBase.includes('?') ? '&' : '?';
+  const encParams = new URLSearchParams({origen:'nova_web',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
+  const encUrl = encBase + encSep + encParams.toString();
   const qrUrl  = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(encUrl)+'&bgcolor=141e30&color=fcd34d&qzone=1';
   ntdAddMsg('nova',
     `<p>Tu opinión es muy importante para nosotros. Puedes realizar la <strong>encuesta de satisfacción</strong> aquí:</p>
@@ -1856,7 +1863,9 @@ ntdBotonesFinales(`
 }
 
 function ntdMostrarQR(){
-  const url = window.location.origin + '/' + NTD_C.pqrForm;
+  const base = window.location.origin + '/' + NTD_C.pqrForm;
+  const params = new URLSearchParams({origen:'nova_web',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
+  const url = base + '?' + params.toString();
   ntdAddMsg('nova',
     `<p>Escanea este código QR con tu celular para radicar tu solicitud desde cualquier punto de atención:</p>
      <div style="text-align:center;margin-top:10px">
@@ -1874,11 +1883,10 @@ function ntdEscalarAgente(){
     ntdR2H(`${NTD.usuario?.primerNombre||''}, con gusto te conecto con uno de nuestros asesores.
 
 Nuestro horario de atención es **Lun-Vie 7:00 a.m. - 5:30 p.m.**`),
-    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
+    `<div class="ntd-chips">
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px">3️⃣ &nbsp;WhatsApp: 304 341 2431</button>
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px">4️⃣ &nbsp;PBX: 604 322 2432</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaLibre()">2️⃣ &nbsp;💬 Realizar otra consulta</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
 }
 
@@ -1911,11 +1919,9 @@ async function ntdFLibre(txt){
     case 'ESCALAR':
       ntdAddMsg('nova',html);ntdEscalarAgente();break;
     case 'ENCUESTA':
-      ntdAddMsg('nova',html,`<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-        <button class="ntd-ch go" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="window.location.href='${NTD_C.encuesta}'">3️⃣ &nbsp;⭐ Ir a la encuesta →</button>
-        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaLibre()">2️⃣ &nbsp;💬 Realizar otra consulta</button>
-      </div>`);break;
+      ntdAddMsg('nova',html,`<div class="ntd-chips">
+        <button class="ntd-ch go" onclick="window.location.href='${NTD_C.encuesta}'">⭐ Ir a la encuesta →</button>
+        <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button></div>`);break;
     case 'MENU':
       ntdAddMsg('nova',html);await ntdDelay(300);ntdMostrarMenu();break;
     case 'CAMBIAR_EPS':
@@ -1954,10 +1960,9 @@ function ntdSetEps(eps){
   NTD.hist.push({role:'user',content:'Mi EPS es '+eps});
   ntdAddMsg('user',ntdR2H(eps));
   ntdAddMsg('nova',ntdR2H(`EPS actualizada a **${eps}** ✅`),
-    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdSU('Consultar sedes')">3️⃣ &nbsp;🏥 Ver sedes</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaLibre()">2️⃣ &nbsp;💬 Realizar otra consulta</button>
+    `<div class="ntd-chips">
+       <button class="ntd-ch b" onclick="ntdSU('Consultar sedes')">🏥 Ver sedes</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
   ntdEna('Escribe tu mensaje...');
 }
@@ -1973,11 +1978,8 @@ async function ntdFetchRadicado(ticket){
   ntdRmSk();ntdTyping(false);
   if(!d.encontrado){
     ntdAddMsg('nova',ntdR2H(`No encontré radicado con **"${ticket}"**. Verifica el número (ej: TD-123456) o tu correo.`),
-      `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdSU('Consultar otro radicado')">3️⃣ &nbsp;🔍 Otro radicado</button>
-         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaLibre()">2️⃣ &nbsp;💬 Realizar otra consulta</button>
-       </div>`);return;
+      `<div class="ntd-chips"><button class="ntd-ch b" onclick="ntdSU('Consultar otro radicado')">🔍 Otro radicado</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button></div>`);return;
   }
   const est=d.estado||'pendiente';
   const bc=est==='cerrado'?'ntd-bg':(est==='urgente'||d.sla_vencido?'ntd-br':'ntd-by');
@@ -2002,11 +2004,10 @@ async function ntdFetchRadicado(ticket){
        ${d.resumen?`<div class="ntd-ir"><span class="ntd-il">Resumen</span><span class="ntd-iv">${d.resumen}</span></div>`:''}
        ${hH}
      </div>`,
-    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdSU('Consultar otro radicado')">3️⃣ &nbsp;🔍 Otro radicado</button>
-       ${est!=='cerrado'?`<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdSU('Hablar con agente sobre este radicado')">4️⃣ &nbsp;👤 Agente</button>`:''}
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaLibre()">2️⃣ &nbsp;💬 Realizar otra consulta</button>
+    `<div class="ntd-chips">
+       <button class="ntd-ch b" onclick="ntdSU('Consultar otro radicado')">🔍 Otro radicado</button>
+       ${est!=='cerrado'?`<button class="ntd-ch g" onclick="ntdSU('Hablar con agente sobre este radicado')">👤 Agente</button>`:''}
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
 }
 
@@ -2021,11 +2022,8 @@ async function ntdFetchSedes(mun){
   ntdRmSk();ntdTyping(false);
   if(!d.encontrado||!d.sedes?.length){
     ntdAddMsg('nova',ntdR2H(`No encontré sedes en **${mun}** para **${NTD.eps||'tu EPS'}**. Llama al 604 322 2432.`),
-    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Otro municipio</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaLibre()">2️⃣ &nbsp;💬 Realizar otra consulta</button>
-     </div>`);return;
+      `<div class="ntd-chips"><button class="ntd-ch b" onclick="ntdSedes()">🏥 Otro municipio</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button></div>`);return;
   }
   const sH=d.sedes.slice(0,4).map(s=>`
     <div class="ntd-ic" style="margin-top:6px">
@@ -2037,11 +2035,11 @@ async function ntdFetchSedes(mun){
     </div>`).join('');
   ntdAddMsg('nova',
     `<p>Sedes en <strong>${d.municipio}</strong> · <strong>${NTD.eps||'—'}</strong> (${d.total} encontradas):</p>${sH}`,
-    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Otro municipio</button>
-       <button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdCambiarEps()">4️⃣ &nbsp;🔄 Cambiar EPS</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaLibre()">2️⃣ &nbsp;💬 Realizar otra consulta</button>
+    `<div class="ntd-chips">
+       <button class="ntd-ch b" onclick="ntdSedes()">🏥 Otro municipio</button>
+       <button class="ntd-ch b" onclick="ntdFetchSedes('${d.municipio}')">🔄 Actualizar</button>
+       <button class="ntd-ch r"  onclick="ntdCambiarEps()">🔄 Cambiar EPS</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
 }
 
