@@ -414,6 +414,43 @@ body{background:var(--ink);display:flex;min-height:100vh;}
 .ntd-ibtn:hover{background:rgba(37,99,235,.13);border-color:rgba(37,99,235,.22);color:rgba(190,215,255,.6);}
 .ntd-ibtn.rec{background:rgba(239,68,68,.13);border-color:rgba(239,68,68,.3);color:#fca5a5;animation:ntdRp 1s infinite;}
 @keyframes ntdRp{0%,100%{opacity:1}50%{opacity:.45}}
+/* ── AUDIO WHATSAPP STYLE ── */
+.ntd-rec-bar{display:none;flex:1;align-items:center;gap:10px;padding:0 4px}
+.ntd-rec-bar.on{display:flex}
+.ntd-rec-dot{width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0;
+  animation:ntdDot 1s ease-in-out infinite}
+@keyframes ntdDot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+.ntd-rec-time{font-size:12px;font-weight:600;color:var(--t2);
+  font-family:'JetBrains Mono',monospace;min-width:36px}
+.ntd-rec-wave{flex:1;display:flex;align-items:center;gap:2px;height:24px}
+.ntd-rec-wave span{display:inline-block;width:3px;border-radius:99px;
+  background:rgba(37,99,235,.5);animation:ntdWave .8s ease-in-out infinite}
+.ntd-rec-wave span:nth-child(1){animation-delay:0s;height:4px}
+.ntd-rec-wave span:nth-child(2){animation-delay:.1s;height:10px}
+.ntd-rec-wave span:nth-child(3){animation-delay:.2s;height:18px}
+.ntd-rec-wave span:nth-child(4){animation-delay:.1s;height:12px}
+.ntd-rec-wave span:nth-child(5){animation-delay:.3s;height:20px}
+.ntd-rec-wave span:nth-child(6){animation-delay:.15s;height:8px}
+.ntd-rec-wave span:nth-child(7){animation-delay:.25s;height:16px}
+.ntd-rec-wave span:nth-child(8){animation-delay:.05s;height:6px}
+@keyframes ntdWave{0%,100%{transform:scaleY(.3);background:rgba(37,99,235,.4)}
+  50%{transform:scaleY(1);background:var(--blue)}}
+.ntd-rec-cancel{width:28px;height:28px;border-radius:50%;border:none;
+  background:rgba(239,68,68,.15);color:#fca5a5;font-size:13px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .17s;flex-shrink:0}
+.ntd-rec-cancel:hover{background:rgba(239,68,68,.3)}
+.ntd-vbtn-mic{width:36px;height:36px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#1452c8,#1d6ae5);border:none;color:#fff;
+  font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;box-shadow:0 2px 10px rgba(29,106,229,.4)}
+.ntd-vbtn-mic:hover{transform:scale(1.08)}
+.ntd-vbtn-mic:active{transform:scale(.94)}
+.ntd-vbtn-mic.rec{background:linear-gradient(135deg,#b91c1c,#ef4444);
+  box-shadow:0 0 0 6px rgba(239,68,68,.15),0 2px 12px rgba(239,68,68,.4);
+  animation:ntdMicPulse 1.2s ease-in-out infinite}
+@keyframes ntdMicPulse{
+  0%,100%{box-shadow:0 0 0 4px rgba(239,68,68,.2),0 2px 10px rgba(239,68,68,.4)}
+  50%{box-shadow:0 0 0 10px rgba(239,68,68,.08),0 2px 18px rgba(239,68,68,.5)}}
 .ntd-sb{width:34px;height:34px;border-radius:10px;flex-shrink:0;
   background:linear-gradient(135deg,#1a45c4,#2563eb);border:none;color:#fff;font-size:14px;
   cursor:pointer;display:flex;align-items:center;justify-content:center;
@@ -917,11 +954,23 @@ body{background:var(--ink);display:flex;min-height:100vh;}
     <!-- ── INPUT ── -->
     <div class="ntd-ia">
       <div class="ntd-ib">
+        <!-- Modo texto: textarea + enviar -->
         <textarea class="ntd-it" id="ntdTa" rows="1" maxlength="2000"
           placeholder="Escribe tu respuesta..."
           onkeydown="ntdOnKey(event)" oninput="ntdAH(this);ntdUS()" disabled></textarea>
-        <button class="ntd-ibtn" id="ntdVBtn" onclick="ntdToggleVoz()">🎤</button>
-        <button class="ntd-sb" id="ntdSBtn" onclick="ntdSend()" disabled>➤</button>
+        <button class="ntd-sb" id="ntdSBtn" onclick="ntdSend()" disabled style="display:none">➤</button>
+        <!-- Modo grabación: ondas + tiempo + cancelar -->
+        <div class="ntd-rec-bar" id="ntdRecBar">
+          <button class="ntd-rec-cancel" onclick="ntdCancelRec()" title="Cancelar">🗑</button>
+          <div class="ntd-rec-dot"></div>
+          <span class="ntd-rec-time" id="ntdRecTime">0:00</span>
+          <div class="ntd-rec-wave">
+            <span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <!-- Botón micrófono (derecha, siempre visible) -->
+        <button class="ntd-vbtn-mic" id="ntdVBtn" onclick="ntdToggleVoz()" title="Mantén para grabar">🎤</button>
       </div>
     </div>
 
@@ -1289,12 +1338,64 @@ async function guardarSesion(extra){
    NOVA TD — EMBEBIDA
 ══════════════════════════════════════════════════════ */
 /* ── Controles del modal Nova TD ── */
-function openChat(){
-  document.getElementById('overlay').classList.add('open');
-  if(!NTD.arrancado){ NTD.arrancado=true; ntdStart(); }
+
+// Timer de inactividad por cierre del modal (2 min cerrado = nueva conv.)
+let _ntdCierreTimer = null;
+
+function ntdReset(){
+  // Limpia todo el estado de NTD y reinicia desde 0
+  clearTimeout(_ntdCierreTimer);
+  _ntdCierreTimer = null;
+  NTD.fase      = 'politica';
+  NTD.usuario   = null;
+  NTD.eps       = null;
+  NTD._ced      = null;
+  NTD._nom      = null;
+  NTD._tel      = null;
+  NTD.hist      = [];
+  NTD.busy      = false;
+  NTD.vipCb     = null;
+  NTD.arrancado = false;
+  // Limpiar mensajes del DOM
+  const m = ntd$('ntdMsgs');
+  if(m) m.innerHTML = '';
+  // Limpiar qbar
+  const q = ntd$('ntdQbar');
+  if(q){ q.innerHTML=''; q.style.display='none'; }
+  // Resetear progreso y header
+  ntdProg(4, 'Inicio');
+  // Limpiar input
+  const ta = ntd$('ntdTa');
+  if(ta){ ta.value=''; ta.style.height='auto'; ta.disabled=true; }
+  ntd$('ntdSBtn').disabled = true;
 }
+
+function openChat(){
+  clearTimeout(_ntdCierreTimer);
+  _ntdCierreTimer = null;
+  document.getElementById('overlay').classList.add('open');
+  if(!NTD.arrancado){
+    NTD.arrancado = true;
+    ntdStart();
+  }
+  // Resetear timer de inactividad interna si existe
+  if(typeof ntdResetInact === 'function') ntdResetInact();
+}
+
 function openChatVoice(){ openChat(); }
-function closeChat(){ document.getElementById('overlay').classList.remove('open'); }
+
+function closeChat(){
+  document.getElementById('overlay').classList.remove('open');
+  // Si ya hay conversación activa, iniciar timer de 2 min
+  // Al volver a abrir antes de 2 min → retoma. Después → nueva conversación
+  if(NTD.arrancado){
+    clearTimeout(_ntdCierreTimer);
+    _ntdCierreTimer = setTimeout(()=>{
+      ntdReset();
+    }, 2 * 60 * 1000); // 2 minutos
+  }
+}
+
 function onOvClick(e){ if(e.target===document.getElementById('overlay')) closeChat(); }
 
 
@@ -1305,8 +1406,7 @@ const NTD_C = {
   encuesta: (typeof window.ENC_URL!=='undefined'?window.ENC_URL:'pqr_encuesta.html'),
   polUrl  : 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf',
 };
-const NTD_EPS=['SAVIA SALUD','NUEVA EPS','COOMEVA','SANITAS','COMPENSAR','SALUD TOTAL',
-  'COOSALUD','SOS','MEDIMÁS','FAMISANAR','CAPITAL SALUD','MALLAMAS','EMSSANAR','OTRA / NO SÉ'];
+const NTD_EPS=['COOSALUD','SAVIA SALUD','SALUD TOTAL','NUEVA EPS'];
 const NTD={
   fase:'politica', usuario:null, eps:null,
   _ced:null,_nom:null,_tel:null,
@@ -1326,12 +1426,22 @@ const ntdNOW=()=>new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2
 const ntdDelay=ms=>new Promise(r=>setTimeout(r,ms));
 const ntd$=id=>document.getElementById(id);
 function ntdAH(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px';}
-function ntdUS(){ntd$('ntdSBtn').disabled=!ntd$('ntdTa').value.trim()||NTD.busy;}
+function ntdUS(){
+  const hasTxt = !!ntd$('ntdTa').value.trim();
+  const sBtn = ntd$('ntdSBtn');
+  const vBtn = ntd$('ntdVBtn');
+  sBtn.disabled = !hasTxt || NTD.busy;
+  // Mostrar flecha si hay texto, micrófono si está vacío
+  if(!ntdRecActive){
+    sBtn.style.display = hasTxt ? 'flex' : 'none';
+    vBtn.style.display = hasTxt ? 'none' : 'flex';
+  }
+}
 function ntdOnKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ntdSend();}}
 function ntdScroll(){const m=ntd$('ntdMsgs');setTimeout(()=>m.scrollTo({top:m.scrollHeight,behavior:'smooth'}),55);}
 function ntdProg(p,l){ntd$('ntdPFill').style.width=p+'%';ntd$('ntdStep').textContent=l;}
 function ntdTyping(v){ntd$('ntdDots').classList.toggle('on',v);ntd$('ntdTxt').style.display=v?'none':'';}
-function ntdEna(ph='Escribe tu respuesta...'){const t=ntd$('ntdTa');t.disabled=false;t.placeholder=ph;t.focus();ntdUS();}
+function ntdEna(ph='Escribe tu respuesta...'){const t=ntd$('ntdTa');t.disabled=false;t.placeholder=ph;t.style.display='';t.focus();ntdUS();}
 function ntdDis(){ntd$('ntdTa').disabled=true;ntd$('ntdSBtn').disabled=true;}
 
 function ntdR2H(raw){
@@ -1375,13 +1485,32 @@ function ntdSetQbar(items){
 }
 
 function ntdSU(txt){ntd$('ntdTa').value=txt;ntdAH(ntd$('ntdTa'));ntdUS();ntdSend();}
+// Timer inactividad interna (2 min sin escribir = nueva conversación)
+let _ntdInactTimer = null;
+function ntdResetInact(){
+  clearTimeout(_ntdInactTimer);
+  if(NTD.fase !== 'libre') return; // solo cuando ya está en conversación libre
+  _ntdInactTimer = setTimeout(()=>{
+    // Solo actuar si el modal está abierto
+    if(!document.getElementById('overlay').classList.contains('open')) return;
+    // Mostrar mensaje de cierre
+    ntdAddMsg('nova', ntdR2H('Esta conversación se cerró por inactividad. ¡Hasta pronto! 😊'));
+    ntdDis();
+    // Nueva conversación al reabrir
+    setTimeout(()=>{ ntdReset(); }, 500);
+  }, 2 * 60 * 1000); // 2 minutos
+}
+
 async function ntdSend(){
   const ta=ntd$('ntdTa'),txt=ta.value.trim();
   if(!txt||NTD.busy)return;
   ta.value='';ta.style.height='auto';ntdUS();
+  // Mostrar al usuario como escribió, pero procesar siempre en MAYÚSCULAS
   ntdAddMsg('user',ntdR2H(txt));
+  const txtUp=txt.toUpperCase();
+  ntdResetInact();
   NTD.busy=true;ntdDis();
-  try{await ntdDispatch(txt);}
+  try{await ntdDispatch(txtUp);}
   catch(e){ntdRmSk();ntdTyping(false);ntdAddMsg('nova',ntdR2H('Tuve un problema. Llama al **604 322 2432** o WhatsApp **304 341 2431**.'));}
   NTD.busy=false;ntdUS();
 }
@@ -1511,7 +1640,7 @@ function ntdMostrarMenu(){
 }
 
 async function ntdFLibre(txt){
-  NTD.hist.push({role:'user',content:txt});
+  NTD.hist.push({role:'user',content:txt}); // txt ya viene en mayúsculas
   ntdTyping(true);ntdAddSk();
   let raw='';
   try{
@@ -1559,6 +1688,7 @@ async function ntdFLibre(txt){
       ntdAddMsg('nova',html);
   }
   ntdEna('Escribe tu mensaje...');
+  ntdResetInact();
 }
 
 function ntdParseAct(raw){
@@ -1676,17 +1806,108 @@ function ntdShowVal(msg){
 }
 function ntdCloseVal(){clearInterval(NTD._valT);ntd$('ntdValBg').classList.remove('on');}
 
-let ntdRecActive=false,ntdRec=null;
+/* ── AUDIO WHATSAPP STYLE ── */
+let ntdRecActive=false, ntdRec=null, ntdRecSecs=0, ntdRecTimer=null;
+
+function ntdShowRecUI(on){
+  const bar  = ntd$('ntdRecBar');
+  const ta   = ntd$('ntdTa');
+  const sBtn = ntd$('ntdSBtn');
+  const vBtn = ntd$('ntdVBtn');
+  if(on){
+    bar.classList.add('on');
+    ta.style.display   = 'none';
+    sBtn.style.display = 'none';
+    vBtn.classList.add('rec');
+  } else {
+    bar.classList.remove('on');
+    ta.style.display   = '';
+    sBtn.style.display = '';
+    vBtn.classList.remove('rec');
+    ntd$('ntdRecTime').textContent = '0:00';
+  }
+}
+
+function ntdStartRecTimer(){
+  ntdRecSecs = 0;
+  clearInterval(ntdRecTimer);
+  ntdRecTimer = setInterval(()=>{
+    ntdRecSecs++;
+    const m = Math.floor(ntdRecSecs/60);
+    const s = String(ntdRecSecs%60).padStart(2,'0');
+    ntd$('ntdRecTime').textContent = m+':'+s;
+    // Límite 2 minutos
+    if(ntdRecSecs >= 120) ntdStopRec();
+  }, 1000);
+}
+
+function ntdStopRec(){
+  clearInterval(ntdRecTimer);
+  if(ntdRec) ntdRec.stop();
+}
+
+function ntdCancelRec(){
+  clearInterval(ntdRecTimer);
+  ntdRecActive = false;
+  if(ntdRec){ ntdRec.onresult=null; ntdRec.stop(); }
+  ntdShowRecUI(false);
+  ntdAH(ntd$('ntdTa'));
+  ntdUS();
+}
+
 function ntdToggleVoz(){
-  const btn=ntd$('ntdVBtn');
-  if(!('SpeechRecognition'in window)&&!('webkitSpeechRecognition'in window)){return;}
-  if(ntdRecActive){ntdRec?.stop();return;}
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  ntdRec=new SR();ntdRec.lang='es-CO';ntdRec.continuous=false;ntdRec.interimResults=false;
-  ntdRec.onstart=()=>{ntdRecActive=true;btn.classList.add('rec');};
-  ntdRec.onresult=e=>{const t=e.results[0][0].transcript;const ta=ntd$('ntdTa');ta.value=(ta.value+' '+t).trim();ntdAH(ta);ntdUS();};
-  ntdRec.onend=()=>{ntdRecActive=false;btn.classList.remove('rec');};
-  ntdRec.onerror=()=>{ntdRecActive=false;btn.classList.remove('rec');};
+  const hasSR = ('SpeechRecognition' in window)||('webkitSpeechRecognition' in window);
+  if(!hasSR){
+    // Fallback: focus en textarea
+    ntd$('ntdTa').focus();
+    return;
+  }
+  if(ntdRecActive){ ntdStopRec(); return; }
+
+  const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+  ntdRec = new SR();
+  ntdRec.lang = 'es-CO';
+  ntdRec.continuous = false;
+  ntdRec.interimResults = true;
+
+  ntdRec.onstart = ()=>{
+    ntdRecActive = true;
+    ntdShowRecUI(true);
+    ntdStartRecTimer();
+  };
+
+  ntdRec.onresult = e=>{
+    let interim='', final='';
+    for(const r of e.results){
+      if(r.isFinal) final += r[0].transcript;
+      else interim += r[0].transcript;
+    }
+    // Mostrar interim en el tiempo del timer (no en textarea)
+    if(interim) ntd$('ntdRecTime').textContent = interim.slice(0,18)+(interim.length>18?'…':'');
+    if(final){
+      const ta = ntd$('ntdTa');
+      ta.value = (ta.value+' '+final).trim();
+    }
+  };
+
+  ntdRec.onend = ()=>{
+    clearInterval(ntdRecTimer);
+    ntdRecActive = false;
+    ntdShowRecUI(false);
+    const ta = ntd$('ntdTa');
+    ntdAH(ta);
+    ntdUS();
+    // Auto-enviar si hay texto transcrito
+    if(ta.value.trim()) setTimeout(()=>ntdSend(), 200);
+  };
+
+  ntdRec.onerror = ()=>{
+    clearInterval(ntdRecTimer);
+    ntdRecActive = false;
+    ntdShowRecUI(false);
+    ntdUS();
+  };
+
   ntdRec.start();
 }
 /* FIN NOVA TD */
