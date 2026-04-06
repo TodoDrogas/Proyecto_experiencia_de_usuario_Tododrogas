@@ -1533,8 +1533,8 @@ async function ntdSend(){
   if(!txt||NTD.busy)return;
   ta.value='';ta.style.height='auto';ntdUS();
   // Mostrar al usuario como escribió, pero procesar siempre en MAYÚSCULAS
-  ntdAddMsg('user',ntdR2H(txt));
   const txtUp=txt.toUpperCase();
+  ntdAddMsg('user',ntdR2H(txtUp)); // siempre en mayúsculas
   ntdResetInact();
   NTD.busy=true;ntdDis();
   try{await ntdDispatch(txtUp);}
@@ -1560,13 +1560,13 @@ async function ntdDispatch(txt){
     const n=txt.trim().replace(/\D/g,'');
     const opc={
       '1':()=>ntdMedicamentos(),
-      '2':()=>ntdMedicamentosPendientes(),
-      '3':()=>ntdSedes(),
-      '4':()=>ntdRequisitosReclamar(),
-      '5':()=>ntdAutorizacion(),
-      '6':()=>ntdIrARadicar(),
-      '7':()=>ntdConsultarRadicado(),
-      '8':()=>ntdHorarios(),
+      '2':()=>ntdSedes(),
+      '3':()=>ntdRequisitosReclamar(),
+      '4':()=>ntdAutorizacion(),
+      '5':()=>ntdIrARadicar(),
+      '6':()=>ntdConsultarRadicado(),
+      '7':()=>ntdHorarios(),
+      '8':()=>ntdEncuesta(),
     };
     if(opc[n]){NTD.busy=false;opc[n]();return;}
   }
@@ -1577,7 +1577,7 @@ function ntdStart(){
   ntdSep();
   ntdAddMsg('nova',
     `<p>¡Hola! 👋 Bienvenido/a a la línea de atención virtual de <strong>Tododrogas CIA SAS</strong>.</p>
-     <p>Soy <strong>Nova TD</strong>, su asistente virtual. Gracias por ponerte en contacto con nosotros.</p>
+     <p>Soy <strong>Nova TD</strong>, tu asistente. Gracias por ponerte en contacto con nosotros.</p>
      <p>Antes de iniciar, es necesario que aceptes nuestras políticas de tratamiento de datos. Si deseas conocerlas, ingresa aquí: <a href="${NTD_C.polUrl}" target="_blank" style="color:#93c5fd;text-decoration:underline">📄 Ver política</a></p>
      <p style="margin-top:6px"><strong>Para continuar elige:</strong></p>`,
     `<div class="ntd-chips">
@@ -1701,19 +1701,20 @@ function ntdMostrarMenu(){
     `<p><strong>${n}</strong>, digita el <strong>número</strong> de la opción que necesitas:</p>
      <div style="margin-top:8px;font-size:13px;line-height:2.1">
        <div>1️⃣ &nbsp;Estado o entrega de medicamentos</div>
-       <div>2️⃣ &nbsp;Medicamentos pendientes</div>
-       <div>3️⃣ &nbsp;Puntos de dispensación</div>
-       <div>4️⃣ &nbsp;Requisitos para reclamar medicamentos</div>
-       <div>5️⃣ &nbsp;Autorización médica</div>
-       <div>6️⃣ &nbsp;Radicar PQRSFD</div>
-       <div>7️⃣ &nbsp;Estado de mi radicado</div>
-       <div>8️⃣ &nbsp;Horarios y canales de contacto</div>
+       <div>2️⃣ &nbsp;Puntos de dispensación</div>
+       <div>3️⃣ &nbsp;Requisitos para reclamar medicamentos</div>
+       <div>4️⃣ &nbsp;Autorización médica</div>
+       <div>5️⃣ &nbsp;Radicar PQRSFD</div>
+       <div>6️⃣ &nbsp;Estado de mi radicado PQRSFD</div>
+       <div>7️⃣ &nbsp;Horarios y canales de contacto</div>
+       <div>8️⃣ &nbsp;Encuesta de satisfacción</div>
      </div>`);
   ntdSetQbar([
     {e:'1️⃣',l:'Medicamentos',t:'1'},
     {e:'2️⃣',l:'Sedes',t:'2'},
     {e:'5️⃣',l:'Radicar',t:'5'},
     {e:'6️⃣',l:'Radicado',t:'6'},
+    {e:'8️⃣',l:'Encuesta',t:'8'},
   ]);
   ntdEna('Escribe el número de la opción...');
   ntdResetInact();
@@ -1767,8 +1768,8 @@ function ntdRequisitosReclamar(){
        <li>Carta de autorización firmada por el paciente</li>
      </ul>`,
     `<div class="ntd-chips">
-       <button class="ntd-ch b" onclick="ntdSU('SEDES DONDE PUEDO RECLAMAR MIS MEDICAMENTOS')">🏥 Ver puntos de dispensación</button>
-       <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button>
+       <button class="ntd-ch b" onclick="ntdSedes()">🏥 Ver puntos de dispensación</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
 }
 
@@ -1795,6 +1796,25 @@ function ntdConsultarRadicado(){
        <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
   ntdEna('Número de radicado o correo...');
+}
+
+function ntdEncuesta(){
+  const encUrl = (typeof ENC_URL !== 'undefined' ? ENC_URL : NTD_C.encuesta);
+  const qrUrl  = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(encUrl)+'&bgcolor=141e30&color=fcd34d&qzone=1';
+  ntdAddMsg('nova',
+    `<p>Tu opinión es muy importante para nosotros. Puedes realizar la <strong>encuesta de satisfacción</strong> aquí:</p>
+     <div style="text-align:center;margin:10px 0">
+       <img src="${qrUrl}"
+         style="border-radius:10px;width:160px;height:160px;border:1px solid rgba(245,158,11,.3)"
+         alt="QR Encuesta" onerror="this.style.display='none'">
+       <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:6px">
+         📱 Escanea con tu cámara o toca el botón
+       </p>
+     </div>`,
+    `<div class="ntd-chips">
+       <button class="ntd-ch go" onclick="window.location.href='${encUrl}'">⭐ Realizar encuesta ahora →</button>
+       <button class="ntd-ch b"  onclick="ntdMostrarMenu()">🏠 Menú principal</button>
+     </div>`);
 }
 
 function ntdHorarios(){
