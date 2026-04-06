@@ -477,7 +477,14 @@ if ($token) {
 </table></td></tr></table>
 </body></html>";
 
-    $subject_interno = "[{$ticket_enc}] ENCUESTA | {$calificacion}/5 | {$nivel_cal} | {$sede_nombre}";
+    $canal_enc_label = match($origen_enc) {
+    'nova_web'               => '🤖 NOVA TD',
+    'nova_directo'           => '🤖 NOVA TD DIRECTO',
+    'qr'                     => '📷 QR',
+    'web', 'formulario_web'  => '🖥️ WEB',
+    default                  => '📋'
+};
+$subject_interno = "[{$ticket_enc}] {$canal_enc_label} | ENCUESTA | {$calificacion}/5 | {$nivel_cal} | {$sede_nombre}";
 
     sendMail($token, $GRAPH_USER_ID, [
         'subject'      => $subject_interno,
