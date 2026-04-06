@@ -1401,6 +1401,7 @@ function closeChat(){
 function onOvClick(e){ if(e.target===document.getElementById('overlay')) closeChat(); }
 
 
+const NOVA_IMG_URL = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png';
 const NTD_C = {
   validar : (typeof window.VALIDAR_URL!=='undefined'?window.VALIDAR_URL:'/validar-paciente.php'),
   consulta: (typeof window.NOVA_URL!=='undefined'?window.NOVA_URL:'/nova-consulta.php'),
@@ -1477,14 +1478,16 @@ function ntdSep(l='Hoy'){
 function ntdAddMsg(who,html,chips=''){
   const isN=who!=='user';
   const row=document.createElement('div');row.className='ntd-mr'+(isN?'':' u');
-  row.innerHTML=`<div class="ntd-mav ${isN?'n':'us'}">${isN?'🤖':'👤'}</div>
-    <div class="ntd-mb"><div class="ntd-bub ${isN?'n':'u'}">${html}${chips}</div>
+  const avHtml = isN
+    ? `<div class="ntd-mav n"><img src="${NOVA_IMG_URL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="Nova TD" onerror="this.parentNode.innerHTML='🤖'"></div>`
+    : `<div class="ntd-mav us">👤</div>`;
+  row.innerHTML=avHtml+`<div class="ntd-mb"><div class="ntd-bub ${isN?'n':'u'}">${html}${chips}</div>
     <div class="ntd-mt">${ntdNOW()}</div></div>`;
   ntd$('ntdMsgs').appendChild(row);ntdScroll();
 }
 function ntdAddSk(){
   const e=document.createElement('div');e.className='ntd-sk';e.id='ntdSk';
-  e.innerHTML='<div class="ntd-mav n">🤖</div><div class="ntd-mb"><div class="ntd-skb"><div class="ntd-skd"></div><div class="ntd-skd"></div><div class="ntd-skd"></div></div></div>';
+  e.innerHTML=`<div class="ntd-mav n"><img src="${NOVA_IMG_URL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%" alt="" onerror="this.parentNode.innerHTML='🤖'"></div><div class="ntd-mb"><div class="ntd-skb"><div class="ntd-skd"></div><div class="ntd-skd"></div><div class="ntd-skd"></div></div></div>`;
   ntd$('ntdMsgs').appendChild(e);ntdScroll();
 }
 function ntdRmSk(){ntd$('ntdSk')?.remove();}
@@ -1506,12 +1509,23 @@ function ntdResetInact(){
   _ntdInactTimer = setTimeout(()=>{
     // Solo actuar si el modal está abierto
     if(!document.getElementById('overlay').classList.contains('open')) return;
-    // Mostrar mensaje de cierre
-    ntdAddMsg('nova', ntdR2H('Esta conversación se cerró por inactividad. ¡Hasta pronto! 😊'));
+    // Mostrar mensaje de cierre con botón para reiniciar
+    ntdAddMsg('nova',
+      `<p>Esta conversación se cerró por inactividad.</p>
+       <p style="margin-top:4px">Si necesitas algo más, toca el botón para iniciar un nuevo chat. ¡Hasta pronto! 😊</p>`,
+      `<div class="ntd-chips">
+         <button class="ntd-ch g" onclick="ntdNuevoChat()" style="font-weight:700">
+           🔄 Iniciar nuevo chat
+         </button>
+       </div>`);
     ntdDis();
-    // Nueva conversación al reabrir
-    setTimeout(()=>{ ntdReset(); }, 500);
   }, 2 * 60 * 1000); // 2 minutos
+}
+
+function ntdNuevoChat(){
+  ntdReset();
+  // Pequeña pausa para que el reset limpie el DOM
+  setTimeout(()=>{ ntdStart(); }, 150);
 }
 
 async function ntdSend(){
@@ -1534,6 +1548,13 @@ async function ntdDispatch(txt){
   if(NTD.fase==='ident_nom')   return ntdFNombre(txt);
   if(NTD.fase==='ident_tel')   return ntdFTelefono(txt);
   if(NTD.fase==='eps')         return ntdFEps(txt);
+  // Captura municipio para búsqueda de sedes
+  if(NTD.fase==='municipio_sedes'){
+    NTD.fase='libre';
+    ntdAddMsg('nova', ntdR2H(`Buscando sedes en **${txt}** para **${NTD.eps||'tu EPS'}**...`));
+    await ntdFetchSedes(txt);
+    return;
+  }
   // Atajo numérico — llama funciones DIRECTAMENTE, sin pasar por ntdSend
   if(NTD.fase==='libre'){
     const n=txt.trim().replace(/\D/g,'');
@@ -1678,14 +1699,15 @@ function ntdMostrarMenu(){
   const n=NTD.usuario?.primerNombre||'';
   ntdAddMsg('nova',
     `<p><strong>${n}</strong>, digita el <strong>número</strong> de la opción que necesitas:</p>
-     <div style="margin-top:8px;font-size:13px;line-height:2">
+     <div style="margin-top:8px;font-size:13px;line-height:2.1">
        <div>1️⃣ &nbsp;Estado o entrega de medicamentos</div>
-       <div>2️⃣ &nbsp;Puntos de dispensación</div>
-       <div>3️⃣ &nbsp;Requisitos para reclamar medicamentos</div>
-       <div>4️⃣ &nbsp;Autorización médica</div>
-       <div>5️⃣ &nbsp;Radicar PQRSFD</div>
-       <div>6️⃣ &nbsp;Estado de mi radicado</div>
-       <div>7️⃣ &nbsp;Horarios y canales de contacto</div>
+       <div>2️⃣ &nbsp;Medicamentos pendientes</div>
+       <div>3️⃣ &nbsp;Puntos de dispensación</div>
+       <div>4️⃣ &nbsp;Requisitos para reclamar medicamentos</div>
+       <div>5️⃣ &nbsp;Autorización médica</div>
+       <div>6️⃣ &nbsp;Radicar PQRSFD</div>
+       <div>7️⃣ &nbsp;Estado de mi radicado</div>
+       <div>8️⃣ &nbsp;Horarios y canales de contacto</div>
      </div>`);
   ntdSetQbar([
     {e:'1️⃣',l:'Medicamentos',t:'1'},
@@ -1714,10 +1736,9 @@ function ntdMedicamentos(){
        </p>
      </div>`,
     `<div class="ntd-chips">
-       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b">🔗 Consultar mis medicamentos →</a>
        <button class="ntd-ch b" onclick="ntdMedicamentosPendientes()">⏳ Medicamentos pendientes</button>
        <button class="ntd-ch b" onclick="ntdRequisitosReclamar()">📄 Requisitos para reclamar</button>
-       <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button>
+       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
 }
 
@@ -1753,11 +1774,11 @@ function ntdRequisitosReclamar(){
 
 // Funciones directas para el menú numerado (sin pasar por ntdSend)
 function ntdSedes(){
+  NTD.fase = 'municipio_sedes'; // capturar el siguiente mensaje como municipio
   ntdAddMsg('nova',
-    `<p>¿En qué municipio necesitas consultar el punto de dispensación?</p>
-     <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe el nombre del municipio o tu pregunta.</p>`,
+    `<p>¿En qué <strong>municipio</strong> necesitas el punto de dispensación?</p>
+     <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe el nombre del municipio (ej: Caucasia, Turbo, Amalfi...)</p>`,
     `<div class="ntd-chips">
-       <button class="ntd-ch b" onclick="ntdFLibreDirecto('SEDES PARA MI EPS EN MI MUNICIPIO')">📍 Ver sedes para mi EPS</button>
        <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
   ntdEna('Escribe el municipio...');
@@ -1985,7 +2006,7 @@ async function ntdFetchSedes(mun){
   ntdRmSk();ntdTyping(false);
   if(!d.encontrado||!d.sedes?.length){
     ntdAddMsg('nova',ntdR2H(`No encontré sedes en **${mun}** para **${NTD.eps||'tu EPS'}**. Llama al 604 322 2432.`),
-      `<div class="ntd-chips"><button class="ntd-ch b" onclick="ntdSU('Consultar sedes en otro municipio')">🏥 Otro municipio</button>
+      `<div class="ntd-chips"><button class="ntd-ch b" onclick="ntdSedes()">🏥 Otro municipio</button>
        <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button></div>`);return;
   }
   const sH=d.sedes.slice(0,4).map(s=>`
@@ -1999,7 +2020,7 @@ async function ntdFetchSedes(mun){
   ntdAddMsg('nova',
     `<p>Sedes en <strong>${d.municipio}</strong> · <strong>${NTD.eps||'—'}</strong> (${d.total} encontradas):</p>${sH}`,
     `<div class="ntd-chips">
-       <button class="ntd-ch b" onclick="ntdSU('Consultar sedes en otro municipio')">🏥 Otro municipio</button>
+       <button class="ntd-ch b" onclick="ntdSedes()">🏥 Otro municipio</button>
        <button class="ntd-ch b" onclick="ntdFetchSedes('${d.municipio}')">🔄 Actualizar</button>
        <button class="ntd-ch r"  onclick="ntdCambiarEps()">🔄 Cambiar EPS</button>
        <button class="ntd-ch b" onclick="ntdMostrarMenu()">↩ Menú</button>
