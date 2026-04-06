@@ -3984,429 +3984,6 @@ function renderRR(){const q=(document.getElementById('rrSearch')?.value||'').toL
 async function insertarRR(id){const p=_rrData.find(x=>x.id===id);if(!p)return;if(typeof toggleReply==='function')toggleReply('reply');await new Promise(r=>setTimeout(r,300));const ed=document.querySelector('#replyBoxArea [contenteditable]');if(!ed){cerrarPanelRR();return;}const html=(p.respuesta_modelo||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>').replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');ed.innerHTML=html;ed.focus();const v=ed.querySelector('span[style*="fef08a"]');if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}try{await sb(`knowledge_base?id=eq.${id}`,'PATCH',{veces_usado:(p.veces_usado||0)+1});p.veces_usado=(p.veces_usado||0)+1;renderRR();}catch(e){}cerrarPanelRR();}
 
 // ═══════════════════════════════════════════════════
-// NOVA TD — MÉTRICAS
-// ═══════════════════════════════════════════════════
-let chartNovaTend = null, chartNovaOrigen = null;
-let novaDatos = { sesiones:[], radicados:[], encuestas:[], formWeb:[] };
-
-function initNovaFechas(){
-  const hoy=new Date(), hace30=new Date(hoy);
-  hace30.setDate(hoy.getDate()-30);
-  const fmt=d=>d.toISOString().split('T')[0];
-  const desde=fmt(hace30), hasta=fmt(hoy);
-  ['novaDesde','novaDesde2','novaDesde3','novaDesde4'].forEach(id=>{
-    const el=document.getElementById(id); if(el&&!el.value) el.value=desde;
-  });
-  ['novaHasta','novaHasta2','novaHasta3','novaHasta4'].forEach(id=>{
-    const el=document.getElementById(id); if(el&&!el.value) el.value=hasta;
-  });
-}
-
-async function loadNovaMetrics(){
-  const desde=document.getElementById('novaDesde')?.value||'';
-  const hasta=document.getElementById('novaHasta')?.value||'';
-  const dISO=desde?desde+'T00:00:00-05:00':'';
-  const hISO=hasta?hasta+'T23:59:59-05:00':'';
-  const enc=s=>encodeURIComponent(s);
-  document.getElementById('novaTablaInfo').textContent='Cargando...';
-  ['novaKpiSesiones','novaKpiRad','novaKpiEnc','novaKpiAuto','novaKpiTasa','novaKpiTurnos','novaKpiEps','novaKpiForm'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='...';});
-
-  let qS='nova_sesiones?order=created_at.desc&limit=2000';
-  if(dISO) qS+='&created_at=gte.'+enc(dISO);
-  if(hISO) qS+='&created_at=lte.'+enc(hISO);
-
-  // Radicados: nova_web + nova_directo (correos tabla)
-  let qRweb='correos?origen=eq.nova_web&select=id,received_at,tipo_pqr,estado,sentimiento,prioridad,nombre,ticket_id&limit=2000';
-  if(dISO) qRweb+='&received_at=gte.'+enc(dISO);
-  if(hISO) qRweb+='&received_at=lte.'+enc(hISO);
-
-  let qRdir='correos?origen=eq.nova_directo&select=id,received_at,tipo_pqr,estado,sentimiento,prioridad,nombre,ticket_id&limit=2000';
-  if(dISO) qRdir+='&received_at=gte.'+enc(dISO);
-  if(hISO) qRdir+='&received_at=lte.'+enc(hISO);
-
-  // Encuestas: nova_web + nova_directo
-  let qEweb='encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion,nombre,eps&limit=2000';
-  if(dISO) qEweb+='&created_at=gte.'+enc(dISO);
-  if(hISO) qEweb+='&created_at=lte.'+enc(hISO);
-
-  let qEdir='encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion,nombre,eps&limit=2000';
-  if(dISO) qEdir+='&created_at=gte.'+enc(dISO);
-  if(hISO) qEdir+='&created_at=lte.'+enc(hISO);
-
-  // QR: origen=qr en correos y encuestas
-  let qQrRad='correos?origen=eq.qr&select=id,received_at&limit=2000';
-  if(dISO) qQrRad+='&received_at=gte.'+enc(dISO);
-  if(hISO) qQrRad+='&received_at=lte.'+enc(hISO);
-
-  let qQrEnc='encuestas_satisfaccion?origen=eq.qr&select=id,created_at&limit=2000';
-  if(dISO) qQrEnc+='&created_at=gte.'+enc(dISO);
-  if(hISO) qQrEnc+='&created_at=lte.'+enc(hISO);
-
-  // Formulario web clásico
-  let qF='correos?origen=eq.web&select=id,received_at&limit=2000';
-  if(dISO) qF+='&received_at=gte.'+enc(dISO);
-  if(hISO) qF+='&received_at=lte.'+enc(hISO);
-  let qF2='correos?origen=eq.formulario_web&select=id,received_at&limit=2000';
-  if(dISO) qF2+='&received_at=gte.'+enc(dISO);
-  if(hISO) qF2+='&received_at=lte.'+enc(hISO);
-
-  const [sesiones,radWeb,radDir,encWeb,encDir,qrRad,qrEnc,formWeb,formWeb2]=await Promise.all([
-    sb(qS).catch(()=>[]),
-    sb(qRweb).catch(()=>[]), sb(qRdir).catch(()=>[]),
-    sb(qEweb).catch(()=>[]), sb(qEdir).catch(()=>[]),
-    sb(qQrRad).catch(()=>[]), sb(qQrEnc).catch(()=>[]),
-    sb(qF).catch(()=>[]),    sb(qF2).catch(()=>[]),
-  ]);
-  const radicados=[...(radWeb||[]),...(radDir||[])];
-  const encuestas=[...(encWeb||[]),...(encDir||[])];
-  const formWebAll=[...(formWeb||[]),...(formWeb2||[])];
-  novaDatos={
-    sesiones:sesiones||[], radicados, encuestas,
-    formWeb:formWebAll,
-    radWeb:radWeb||[], radDir:radDir||[],
-    encWeb:encWeb||[], encDir:encDir||[],
-    qrRad:qrRad||[], qrEnc:qrEnc||[],
-  };
-  renderNovaMetrics();
-}
-
-function renderNovaMetrics(){
-  const {sesiones,radicados,encuestas,formWeb,radWeb=[],radDir=[],qrRad=[],qrEnc=[]}=novaDatos;
-  const totalSes=sesiones.length, totalRad=radicados.length, totalEnc=encuestas.length;
-  const autogest=sesiones.filter(s=>!s.motivo_cierre||s.motivo_cierre==='inactividad').length;
-  const tasaAuto=totalSes>0?Math.round(autogest/totalSes*100):0;
-  const avgTurnos=totalSes>0?(sesiones.reduce((a,s)=>a+(s.turnos||0),0)/totalSes).toFixed(1):'0';
-  const epsMap={};
-  sesiones.forEach(s=>{if(s.eps) epsMap[s.eps]=(epsMap[s.eps]||0)+1;});
-  const topEps=Object.entries(epsMap).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';
-
-  document.getElementById('novaKpiSesiones').textContent=totalSes;
-  document.getElementById('novaKpiRad').textContent=totalRad;
-  document.getElementById('novaKpiEnc').textContent=totalEnc;
-  document.getElementById('novaKpiAuto').textContent=autogest;
-  document.getElementById('novaKpiTasa').textContent=tasaAuto+'%';
-  document.getElementById('novaKpiTurnos').textContent=avgTurnos;
-  document.getElementById('novaKpiEps').textContent=topEps;
-  document.getElementById('novaKpiForm').textContent=formWeb.length;
-  // Desglose por canal
-  const elW=document.getElementById('novaKpiWeb');    if(elW) elW.textContent=radWeb.length;
-  const elD=document.getElementById('novaKpiDirecto');if(elD) elD.textContent=radDir.length;
-  const elQR=document.getElementById('novaKpiQrRad'); if(elQR) elQR.textContent=qrRad.length;
-  const elQE=document.getElementById('novaKpiQrEnc'); if(elQE) elQE.textContent=qrEnc.length;
-
-  const dias=30, labels=[], dataSes=[];
-  for(let i=dias-1;i>=0;i--){
-    const d=new Date(); d.setDate(d.getDate()-i);
-    const dk=d.toISOString().split('T')[0];
-    labels.push(d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'}));
-    dataSes.push(sesiones.filter(s=>s.created_at?.startsWith(dk)).length);
-  }
-  if(chartNovaTend) chartNovaTend.destroy();
-  const ctxT=document.getElementById('chartNovaTend');
-  if(ctxT) chartNovaTend=new Chart(ctxT.getContext('2d'),{type:'line',data:{labels,datasets:[{label:'Conversaciones',data:dataSes,borderColor:'#7c3aed',backgroundColor:'rgba(124,58,237,.08)',borderWidth:2,pointRadius:3,tension:.4,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:10}}},x:{ticks:{font:{size:9}}}}}});
-
-  if(chartNovaOrigen) chartNovaOrigen.destroy();
-  const ctxO=document.getElementById('chartNovaOrigen');
-  if(ctxO) chartNovaOrigen=new Chart(ctxO.getContext('2d'),{type:'doughnut',data:{labels:['Nova TD','Formulario Web'],datasets:[{data:[totalRad,formWeb.length],backgroundColor:['#ede9fe','#dbeafe'],borderColor:['#7c3aed','#1d4ed8'],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{font:{size:11},padding:10}}}}});
-
-  const tbody=document.getElementById('novaTablaBody');
-  document.getElementById('novaTablaInfo').textContent=totalSes+' conversaciones en el rango seleccionado';
-  if(!sesiones.length){tbody.innerHTML='<tr><td colspan="6" style="padding:20px;text-align:center;color:#94a3b8">Sin datos en el rango seleccionado</td></tr>';return;}
-  tbody.innerHTML=sesiones.slice(0,200).map(s=>{
-    const fecha=s.created_at?new Date(s.created_at).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'—';
-    const motivo=s.motivo_cierre||'inactividad';
-    const bc=motivo==='inactividad'?'#f1f5f9':'#dcfce7', bt=motivo==='inactividad'?'#64748b':'#15803d';
-    return `<tr style="border-bottom:1px solid #f1f5f9">
-      <td style="padding:7px 12px;font-size:11px;color:#64748b">${fecha}</td>
-      <td style="padding:7px 12px;font-size:12px;font-weight:500">${s.nombre||'—'}</td>
-      <td style="padding:7px 12px;font-size:12px">${s.eps||'—'}</td>
-      <td style="padding:7px 12px;font-size:12px;text-align:center">${s.turnos??'—'}</td>
-      <td style="padding:7px 12px"><span style="background:${bc};color:${bt};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600">${motivo}</span></td>
-      <td style="padding:7px 12px;font-size:11px;color:#64748b">${(s.resumen||'').slice(0,80)}</td>
-    </tr>`;
-  }).join('');
-}
-
-function exportNovaExcel(){
-  const {sesiones,radicados,encuestas}=novaDatos;
-  const wb=XLSX.utils.book_new();
-  const h1=sesiones.map(s=>({Fecha:s.created_at?new Date(s.created_at).toLocaleString('es-CO'):'',Nombre:s.nombre||'',Cedula:s.cedula||'',EPS:s.eps||'',Turnos:s.turnos||0,Motivo_cierre:s.motivo_cierre||'inactividad',Resumen:s.resumen||''}));
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'No hay sesiones'}]),'Sesiones Nova TD');
-  const h2=radicados.map(r=>({Fecha:r.received_at?new Date(r.received_at).toLocaleString('es-CO'):'',Ticket:r.ticket_id||'',Nombre:r.nombre||'',Tipo:r.tipo_pqr||'',Estado:r.estado||'',Sentimiento:r.sentimiento||'',Prioridad:r.prioridad||''}));
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'Sin radicados'}]),'Radicados Nova TD');
-  const h3=encuestas.map(e=>({Fecha:e.created_at?new Date(e.created_at).toLocaleString('es-CO'):'',Nombre:e.nombre||'',EPS:e.eps||'',Calificacion:e.calificacion||'',Comentario:e.comentario||''}));
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin encuestas'}]),'Encuestas Nova TD');
-  const desde=document.getElementById('novaDesde')?.value||'inicio';
-  const hasta=document.getElementById('novaHasta')?.value||'hoy';
-  XLSX.writeFile(wb,`NovaTD_${desde}_${hasta}.xlsx`);
-}
-
-</script>
-<!-- ⚡ Panel Respuestas Rápidas -->
-<div id="panelRR" style="visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;right:0;width:380px;height:100vh;background:#fff;border-left:2px solid #e2e8f0;box-shadow:-6px 0 32px rgba(0,0,0,.15);z-index:9999;display:flex;flex-direction:column;transition:opacity .2s">
-  <div style="padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;flex-shrink:0">
-    <span style="font-size:16px">⚡</span>
-    <span style="font-weight:700;font-size:14px;color:#0f172a">Respuestas Rápidas</span>
-    <span id="rrCount" style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;margin-left:4px"></span>
-    <button onclick="cerrarPanelRR()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:20px;color:#94a3b8;padding:2px 6px">✕</button>
-  </div>
-  <div style="padding:10px 12px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
-    <input type="text" id="rrSearch" placeholder="🔍 Buscar plantilla..." oninput="renderRR()" style="width:100%;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:12px;font-family:inherit;outline:none">
-    <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px"></div>
-  </div>
-  <div id="rrLista" style="flex:1;overflow-y:auto;padding:8px"></div>
-</div>
-
-<script>
-// Sync all period inputs to the main novaDesde/novaHasta
-['novaDesde2','novaDesde3','novaDesde4'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el){ el.addEventListener('change',()=>{const m=document.getElementById('novaDesde');if(m)m.value=el.value;});}
-});
-['novaHasta2','novaHasta3','novaHasta4'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el){ el.addEventListener('change',()=>{const m=document.getElementById('novaHasta');if(m)m.value=el.value;});}
-});
-// Also keep secondary inputs in sync when main changes
-['novaDesde'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el){ el.addEventListener('change',()=>{ ['novaDesde2','novaDesde3','novaDesde4'].forEach(s=>{const e=document.getElementById(s);if(e)e.value=el.value;}); }); }
-});
-['novaHasta'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el){ el.addEventListener('change',()=>{ ['novaHasta2','novaHasta3','novaHasta4'].forEach(s=>{const e=document.getElementById(s);if(e)e.value=el.value;}); }); }
-});
-</script>
-</body>
-</html>
-// ═══════════════════════════════════════════════════
-// NOVA TD — MÉTRICAS POR CANAL
-// ═══════════════════════════════════════════════════
-let chartNovaTend=null, chartGlobalRad=null, chartGlobalEnc=null;
-let novaDatos={};
-
-function initNovaFechas(){
-  const hoy=new Date(), hace30=new Date(hoy);
-  hace30.setDate(hoy.getDate()-30);
-  const fmt=d=>d.toISOString().split('T')[0];
-  const dEl=document.getElementById('novaDesde');
-  const hEl=document.getElementById('novaHasta');
-  if(dEl&&!dEl.value) dEl.value=fmt(hace30);
-  if(hEl&&!hEl.value) hEl.value=fmt(hoy);
-}
-
-async function loadNovaMetrics(){
-  const desde=document.getElementById('novaDesde')?.value||'';
-  const hasta=document.getElementById('novaHasta')?.value||'';
-  const dISO=desde?desde+'T00:00:00-05:00':'';
-  const hISO=hasta?hasta+'T23:59:59-05:00':'';
-  const enc=s=>encodeURIComponent(s);
-
-  // Helper rango
-  const rango=(base)=>{
-    let q=base;
-    const field=base.includes('correos')?'received_at':'created_at';
-    if(dISO) q+=`&${field}=gte.`+enc(dISO);
-    if(hISO) q+=`&${field}=lte.`+enc(hISO);
-    return q;
-  };
-
-  document.getElementById('novaLastUpdate').textContent='Cargando...';
-
-  // ── Consultas por canal ────────────────────────────────────
-  const [
-    radWeb, radWebOld,           // web + formulario_web
-    radNovaWeb, radNovaDir,      // nova_web + nova_directo
-    radQr,                       // qr
-    encWeb, encWebOld,           // encuestas web
-    encNovaWeb, encNovaDir,      // encuestas nova
-    encQr,                       // encuestas qr
-    sesNovaWeb, sesNovaDir,      // sesiones nova
-  ] = await Promise.all([
-    sb(rango('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
-    sb(rango('correos?origen=eq.formulario_web&select=id,received_at')).catch(()=>[]),
-    sb(rango('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
-    sb(rango('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
-    sb(rango('correos?origen=eq.qr&select=id,received_at')).catch(()=>[]),
-    sb(rango('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(rango('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
-    sb(rango('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(rango('encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(rango('encuestas_satisfaccion?origen=eq.qr&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(rango('nova_sesiones?origen=eq.nova_web&select=id,created_at,turnos,motivo_cierre&limit=2000')).catch(()=>[]),
-    sb(rango('nova_sesiones?origen=eq.nova_directo&select=id,created_at,turnos,motivo_cierre&limit=2000')).catch(()=>[]),
-  ]);
-
-  // Consolidar
-  const allRadWeb  = [...(radWeb||[]),...(radWebOld||[])];
-  const allEncWeb  = [...(encWeb||[]),...(encWebOld||[])];
-  const allRadNova = [...(radNovaWeb||[]),...(radNovaDir||[])];
-  const allEncNova = [...(encNovaWeb||[]),...(encNovaDir||[])];
-  const allSesNova = [...(sesNovaWeb||[]),...(sesNovaDir||[])];
-
-  novaDatos={
-    radWeb:allRadWeb, radNovaWeb:radNovaWeb||[], radNovaDir:radNovaDir||[],
-    encWeb:allEncWeb, encNovaWeb:encNovaWeb||[], encNovaDir:encNovaDir||[],
-    radQr:radQr||[], encQr:encQr||[],
-    sesNovaWeb:sesNovaWeb||[], sesNovaDir:sesNovaDir||[], allSesNova,
-    allRadNova, allEncNova,
-  };
-
-  document.getElementById('novaLastUpdate').textContent=
-    'Actualizado '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
-
-  renderNovaMetrics();
-}
-
-function renderNovaMetrics(){
-  const {
-    radWeb, radNovaWeb, radNovaDir,
-    encWeb, encNovaWeb, encNovaDir,
-    radQr, encQr,
-    sesNovaWeb, sesNovaDir, allSesNova, allRadNova, allEncNova,
-  } = novaDatos;
-
-  // ── 1. PLATAFORMA WEB ──────────────────────────────────────
-  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  set('wKpiRad',    radWeb.length);
-  set('wKpiEnc',    encWeb.length);
-  set('wKpiNova',   sesNovaWeb.length);
-  set('wKpiNovaRad',radNovaWeb.length);
-  set('wKpiNovaEnc',encNovaWeb.length);
-
-  // ── 2. CANAL QR ────────────────────────────────────────────
-  const qrTotal=(radQr.length)+(encQr.length);
-  const totalGlobalRad=(radWeb.length)+(radNovaWeb.length)+(radNovaDir.length)+(radQr.length);
-  const totalGlobalEnc=(encWeb.length)+(encNovaWeb.length)+(encNovaDir.length)+(encQr.length);
-  const pctQr=totalGlobalRad+totalGlobalEnc>0?Math.round(qrTotal/(totalGlobalRad+totalGlobalEnc)*100):0;
-  set('qrKpiRad',   radQr.length);
-  set('qrKpiEnc',   encQr.length);
-  set('qrKpiTotal', qrTotal);
-  set('qrKpiPct',   pctQr+'%');
-
-  // ── 3. NOVA TD DIRECTO ─────────────────────────────────────
-  const autogest=sesNovaDir.filter(s=>!s.motivo_cierre||s.motivo_cierre==='inactividad').length;
-  const tasaAuto=sesNovaDir.length>0?Math.round(autogest/sesNovaDir.length*100):0;
-  const avgTurnos=sesNovaDir.length>0?(sesNovaDir.reduce((a,s)=>a+(s.turnos||0),0)/sesNovaDir.length).toFixed(1):'0';
-  set('ndKpiSes',    sesNovaDir.length);
-  set('ndKpiRad',    radNovaDir.length);
-  set('ndKpiEnc',    encNovaDir.length);
-  set('ndKpiAuto',   tasaAuto+'%');
-  set('ndKpiTurnos', avgTurnos);
-
-  // ── 4. GLOBAL PLATAFORMAS ──────────────────────────────────
-  set('gKpiRad', totalGlobalRad);
-  set('gKpiEnc', totalGlobalEnc);
-
-  // Canal dominante (por radicados)
-  const canales=[
-    {n:'🖥️ Web',      v:radWeb.length},
-    {n:'🤖 Nova Web', v:radNovaWeb.length},
-    {n:'🤖 Nova Directa',v:radNovaDir.length},
-    {n:'📷 QR',       v:radQr.length},
-  ];
-  const dom=canales.sort((a,b)=>b.v-a.v)[0];
-  set('gKpiDom', dom.v>0?dom.n:'—');
-
-  const pctDigital=totalGlobalRad>0?Math.round((allRadNova.length)/totalGlobalRad*100):0;
-  set('gKpiDigital', pctDigital+'%');
-
-  // ── GRÁFICO TENDENCIA NOVA DIRECTO ─────────────────────────
-  const dias=30, labels=[], dataSes=[];
-  for(let i=dias-1;i>=0;i--){
-    const d=new Date(); d.setDate(d.getDate()-i);
-    const dk=d.toISOString().split('T')[0];
-    labels.push(d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'}));
-    dataSes.push(allSesNova.filter(s=>s.created_at?.startsWith(dk)).length);
-  }
-  if(chartNovaTend) chartNovaTend.destroy();
-  const ctxT=document.getElementById('chartNovaTend');
-  if(ctxT) chartNovaTend=new Chart(ctxT.getContext('2d'),{
-    type:'line',
-    data:{labels,datasets:[
-      {label:'Nova Web',data:sesNovaWeb.map((_,__,arr)=>0).slice(0,0),hidden:true}, // placeholder
-      {label:'Conversaciones',data:dataSes,borderColor:'#7c3aed',backgroundColor:'rgba(124,58,237,.1)',borderWidth:2,pointRadius:2,tension:.4,fill:true}
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},x:{ticks:{font:{size:8},maxTicksLimit:10}}}}
-  });
-
-  // ── GRÁFICOS GLOBAL (doughnut) ─────────────────────────────
-  const colores=['#2563eb','#7c3aed','#6d28d9','#f59e0b'];
-  const borders=['#1d4ed8','#5b21b6','#4c1d95','#d97706'];
-
-  if(chartGlobalRad) chartGlobalRad.destroy();
-  const ctxR=document.getElementById('chartGlobalRad');
-  if(ctxR) chartGlobalRad=new Chart(ctxR.getContext('2d'),{
-    type:'doughnut',
-    data:{
-      labels:['Web','Nova Web','Nova Directa','QR'],
-      datasets:[{data:[radWeb.length,radNovaWeb.length,radNovaDir.length,radQr.length],
-        backgroundColor:colores.map(c=>c+'33'),borderColor:colores,borderWidth:2}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
-      plugins:{legend:{position:'bottom',labels:{color:'#fff',font:{size:9},padding:6,boxWidth:10}}}}
-  });
-
-  if(chartGlobalEnc) chartGlobalEnc.destroy();
-  const ctxE=document.getElementById('chartGlobalEnc');
-  if(ctxE) chartGlobalEnc=new Chart(ctxE.getContext('2d'),{
-    type:'doughnut',
-    data:{
-      labels:['Web','Nova Web','Nova Directa','QR'],
-      datasets:[{data:[encWeb.length,encNovaWeb.length,encNovaDir.length,encQr.length],
-        backgroundColor:colores.map(c=>c+'33'),borderColor:colores,borderWidth:2}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
-      plugins:{legend:{position:'bottom',labels:{color:'#fff',font:{size:9},padding:6,boxWidth:10}}}}
-  });
-}
-
-function exportNovaExcel(){
-  const {radWeb,radNovaWeb,radNovaDir,encWeb,encNovaWeb,encNovaDir,radQr,encQr,sesNovaWeb,sesNovaDir}=novaDatos;
-  const wb=XLSX.utils.book_new();
-
-  const fmtR=arr=>(arr||[]).map(r=>({Fecha:r.received_at?new Date(r.received_at).toLocaleString('es-CO'):'',Ticket:r.ticket_id||'',Nombre:r.nombre||'',Tipo:r.tipo_pqr||''}));
-  const fmtE=arr=>(arr||[]).map(e=>({Fecha:e.created_at?new Date(e.created_at).toLocaleString('es-CO'):'',Calificacion:e.calificacion||''}));
-  const fmtS=arr=>(arr||[]).map(s=>({Fecha:s.created_at?new Date(s.created_at).toLocaleString('es-CO'):'',Turnos:s.turnos||0,Motivo:s.motivo_cierre||'inactividad'}));
-
-  // Hoja 1: Web
-  const h1=[...fmtR(radWeb).map(r=>({...r,Canal:'Web',Accion:'Radicado'})),
-             ...fmtE(encWeb).map(e=>({...e,Canal:'Web',Accion:'Encuesta'}))];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'No hay datos web'}]),'Web');
-
-  // Hoja 2: QR
-  const h2=[...fmtR(radQr).map(r=>({...r,Canal:'QR',Accion:'Radicado'})),
-             ...fmtE(encQr).map(e=>({...e,Canal:'QR',Accion:'Encuesta'}))];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'No hay datos QR'}]),'QR');
-
-  // Hoja 3: Nova TD
-  const h3=[...fmtR(radNovaWeb).map(r=>({...r,Canal:'Nova Web',Accion:'Radicado'})),
-             ...fmtR(radNovaDir).map(r=>({...r,Canal:'Nova Directo',Accion:'Radicado'})),
-             ...fmtE(encNovaWeb).map(e=>({...e,Canal:'Nova Web',Accion:'Encuesta'})),
-             ...fmtE(encNovaDir).map(e=>({...e,Canal:'Nova Directo',Accion:'Encuesta'}))];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'No hay datos Nova'}]),'Nova TD');
-
-  // Hoja 4: Sesiones Nova
-  const h4=[...fmtS(sesNovaWeb).map(s=>({...s,Canal:'Nova Web'})),
-             ...fmtS(sesNovaDir).map(s=>({...s,Canal:'Nova Directo'}))];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h4.length?h4:[{Sin_datos:'Sin sesiones'}]),'Sesiones Nova');
-
-  // Hoja 5: Global
-  const h5=[
-    {Canal:'Web',Radicados:radWeb.length,Encuestas:encWeb.length},
-    {Canal:'QR',Radicados:radQr.length,Encuestas:encQr.length},
-    {Canal:'Nova Web',Radicados:radNovaWeb.length,Encuestas:encNovaWeb.length},
-    {Canal:'Nova Directa',Radicados:radNovaDir.length,Encuestas:encNovaDir.length},
-    {Canal:'TOTAL',Radicados:radWeb.length+radQr.length+radNovaWeb.length+radNovaDir.length,
-     Encuestas:encWeb.length+encQr.length+encNovaWeb.length+encNovaDir.length},
-  ];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h5),'Global');
-
-  const desde=document.getElementById('novaDesde')?.value||'inicio';
-  const hasta=document.getElementById('novaHasta')?.value||'hoy';
-  XLSX.writeFile(wb,`Metricas_Canales_${desde}_${hasta}.xlsx`);
-}
-// ═══════════════════════════════════════════════════
 // NOVA TD — MÉTRICAS POR CANAL (3 + Global)
 // ═══════════════════════════════════════════════════
 let chartNovaTend=null, chartGlobalRad=null, chartGlobalEnc=null,
@@ -4658,3 +4235,42 @@ function exportNovaExcel(){
   const desde=D.desde||'inicio', hasta=D.hasta||'hoy';
   XLSX.writeFile(wb,`Metricas_${desde}_${hasta}.xlsx`);
 }
+
+</script>
+<!-- ⚡ Panel Respuestas Rápidas -->
+<div id="panelRR" style="visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;right:0;width:380px;height:100vh;background:#fff;border-left:2px solid #e2e8f0;box-shadow:-6px 0 32px rgba(0,0,0,.15);z-index:9999;display:flex;flex-direction:column;transition:opacity .2s">
+  <div style="padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;flex-shrink:0">
+    <span style="font-size:16px">⚡</span>
+    <span style="font-weight:700;font-size:14px;color:#0f172a">Respuestas Rápidas</span>
+    <span id="rrCount" style="background:#f1f5f9;color:#64748b;font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;margin-left:4px"></span>
+    <button onclick="cerrarPanelRR()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:20px;color:#94a3b8;padding:2px 6px">✕</button>
+  </div>
+  <div style="padding:10px 12px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
+    <input type="text" id="rrSearch" placeholder="🔍 Buscar plantilla..." oninput="renderRR()" style="width:100%;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:12px;font-family:inherit;outline:none">
+    <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px"></div>
+  </div>
+  <div id="rrLista" style="flex:1;overflow-y:auto;padding:8px"></div>
+</div>
+
+<script>
+// Sync all period inputs to the main novaDesde/novaHasta
+['novaDesde2','novaDesde3','novaDesde4'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el){ el.addEventListener('change',()=>{const m=document.getElementById('novaDesde');if(m)m.value=el.value;});}
+});
+['novaHasta2','novaHasta3','novaHasta4'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el){ el.addEventListener('change',()=>{const m=document.getElementById('novaHasta');if(m)m.value=el.value;});}
+});
+// Also keep secondary inputs in sync when main changes
+['novaDesde'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el){ el.addEventListener('change',()=>{ ['novaDesde2','novaDesde3','novaDesde4'].forEach(s=>{const e=document.getElementById(s);if(e)e.value=el.value;}); }); }
+});
+['novaHasta'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el){ el.addEventListener('change',()=>{ ['novaHasta2','novaHasta3','novaHasta4'].forEach(s=>{const e=document.getElementById(s);if(e)e.value=el.value;}); }); }
+});
+</script>
+</body>
+</html>
