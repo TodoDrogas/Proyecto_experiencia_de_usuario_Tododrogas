@@ -10,13 +10,12 @@ header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(['error'=>'Solo POST']); exit; }
 
-// ── API KEY ────────────────────────────────────────────────
-// Se inyecta en deploy via GitHub Secret → __OPENAI_KEY__
+// ── API KEY (inyectada por deploy.yml desde GitHub Secrets) ──
 $OPENAI_KEY = '__OPENAI_KEY__';
 
-if (!$OPENAI_KEY || $OPENAI_KEY === '__OPENAI_KEY__') {
+if (!$OPENAI_KEY || strlen($OPENAI_KEY) < 20) {
     http_response_code(500);
-    echo json_encode(['error' => 'OpenAI key no configurada']);
+    echo json_encode(['error' => 'OpenAI key no configurada en el servidor']);
     exit;
 }
 
