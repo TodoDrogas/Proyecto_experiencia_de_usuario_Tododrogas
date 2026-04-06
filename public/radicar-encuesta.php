@@ -120,11 +120,18 @@ $bg_cal    = $calificacion >= 3 ? '#dcfce7'  : ($calificacion >= 2 ? '#fef9c3' :
 $nivel_cal = $calificacion >= 3 ? 'SATISFACTORIO' : ($calificacion >= 2 ? 'NEUTRO' : 'INSATISFACTORIO');
 
 // ── PASO 1: INSERTAR EN encuestas_satisfaccion ────────────────────────
+// Leer origen del canal (viene del frontend)
+$origen_enc = trim($body['origen'] ?? $body['canal'] ?? 'web');
+
 $payload = [
     'calificacion'    => $calificacion,
     'comentario'      => $comentario ?: null,
     'sede_id'         => $sede_id    ?: null,
     'canal'           => $canal,
+    'origen'          => $origen_enc,   // web | qr | nova_web | nova_directo
+    'nombre'          => trim($body['nombre'] ?? '') ?: null,
+    'cedula'          => trim($body['cedula'] ?? $body['documento'] ?? '') ?: null,
+    'eps'             => trim($body['eps']    ?? '') ?: null,
     'ip_origen'       => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? 'web',
     'ticket_id'       => $ticket_enc,
     'correo_id'       => null,
