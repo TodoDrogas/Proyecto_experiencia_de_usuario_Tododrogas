@@ -1421,7 +1421,18 @@ Tododrogas distribuye medicamentos en droguerías de Antioquia y otras regiones,
 USUARIO: Nombre: ${NTD.usuario?.nombre||'—'} | Primer nombre: ${NTD.usuario?.primerNombre||'—'} | Cédula: ${NTD.usuario?.cedula||'—'} | EPS: ${NTD.eps||'—'} | VIP: ${NTD.usuario?.vip?'SÍ':'No'}
 CAPACIDADES: Responder CUALQUIER pregunta sobre PQRSFD, consultar radicados [CONSULTAR:valor], informar sedes [SEDES:municipio], explicar leyes (Ley 1755/2015 → 15 días), autorizaciones, medicamentos, EPS, escalar agente [ESCALAR], formulario [FORMULARIO], encuesta [ENCUESTA], menú [MENU], cambiar EPS [CAMBIAR_EPS], medicamentos [MEDICAMENTOS].
 CONTACTO: PBX 604 322 2432 (Lun-Vie 7-5:30pm) · WhatsApp 304 341 2431 · pqrsfd@tododrogas.com.co · Nova 24/7.
-REGLAS: Español colombiano cálido. Primer nombre. Máx 130 palabras. Máx 2 emojis. URGENCIA→PBX inmediato. No inventar radicados. Tags solo al FINAL: [FORMULARIO][ESCALAR][ENCUESTA][MENU][CAMBIAR_EPS][CONSULTAR:val][SEDES:mun].`;
+REGLAS ESTRICTAS:
+- Español colombiano ejecutivo y cálido. Llama al usuario por su PRIMER NOMBRE siempre.
+- Máximo 120 palabras. Máximo 1 emoji.
+- NUNCA escribas un menú en texto. Si el usuario pide el menú, usa SOLO el tag [MENU].
+- NUNCA muestres los tags al usuario. Los tags van al FINAL del mensaje y son invisibles para el usuario.
+- NUNCA incluyas múltiples tags. Solo UNO por respuesta.
+- Si hay urgencia médica → PBX 604 322 2432 inmediatamente.
+- No inventes radicados ni medicamentos.
+- El menú tiene 8 opciones numeradas — NUNCA las escribas, usa [MENU].
+
+TAGS (exactamente uno, solo al final si aplica):
+[MENU] [FORMULARIO] [ESCALAR] [ENCUESTA] [MEDICAMENTOS] [CAMBIAR_EPS] [CONSULTAR:valor] [SEDES:municipio]`;
 }
 
 const ntdNOW=()=>new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
@@ -1827,7 +1838,10 @@ async function ntdFLibre(txt){
     case 'MEDICAMENTOS':
       ntdAddMsg('nova',html);await ntdDelay(200);ntdMedicamentos();break;
     default:
-      ntdAddMsg('nova',html);
+      ntdAddMsg('nova',html,
+        `<div class="ntd-chips" style="margin-top:6px">
+           <button class="ntd-ch b" onclick="ntdMostrarMenu()" style="font-size:11px">🏠 Menú principal</button>
+         </div>`);
   }
   ntdEna('Escribe tu mensaje...');
   ntdResetInact();
@@ -1839,6 +1853,8 @@ function ntdParseAct(raw){
     [/\[MENU\]/,'MENU'],[/\[CAMBIAR_EPS\]/,'CAMBIAR_EPS'],[/\[MEDICAMENTOS\]/,'MEDICAMENTOS'],
     [/\[CONSULTAR:([^\]]+)\]/,'CONSULTAR'],[/\[SEDES:([^\]]+)\]/,'SEDES']];
   for(const[re,a]of pp){const m=text.match(re);if(m){text=text.replace(m[0],'').trim();act=a;dat=m[1]||null;break;}}
+  // Limpiar CUALQUIER tag residual que GPT haya dejado en el texto
+  text=text.replace(/\[[A-Z_]+(?::[^\]]+)?\]/g,'').trim();
   return{text,act,dat};
 }
 
