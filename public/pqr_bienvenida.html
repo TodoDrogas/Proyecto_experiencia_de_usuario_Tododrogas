@@ -1515,14 +1515,15 @@ async function ntdFLibre(txt){
   ntdTyping(true);ntdAddSk();
   let raw='';
   try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+    const ntdProxy=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
+    const resp=await fetch(ntdProxy,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,
-        system:ntdSys(),messages:NTD.hist.slice(-18)})
+      body:JSON.stringify({system:ntdSys(),messages:NTD.hist.slice(-20),max_tokens:1500})
     });
-    if(!resp.ok)throw new Error(resp.status);
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
     const d=await resp.json();
-    raw=d.content?.map(b=>b.text||'').join('')||'';
+    raw=d.choices?.[0]?.message?.content||'';
+    if(!raw)throw new Error('Sin respuesta');
   }catch(e){
     ntdRmSk();ntdTyping(false);
     ntdAddMsg('nova',ntdR2H('No pude conectarme. Llama al **604 322 2432** o WhatsApp **304 341 2431**.'));
