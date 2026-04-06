@@ -26,6 +26,11 @@ jobs:
           window.GRAPH_USER_ID       = '${{ secrets.GRAPH_USER_ID }}';
           window.N8N_WEBHOOK_BASE    = '${{ secrets.N8N_WEBHOOK_BASE }}';
           window.OPENAI_KEY          = '${{ secrets.OPENAI_KEY }}';
+          window.NOVA_PROXY          = '/nova-proxy.php';
+          window.VALIDAR_URL         = '/validar-paciente.php';
+          window.NOVA_URL            = '/nova-consulta.php';
+          window.PQR_FORM_URL        = '/pqr_form.html';
+          window.ENC_URL             = '/pqr_encuesta.html';
           window.ADMIN_USER          = '${{ secrets.ADMIN_USER }}';
           window.ADMIN_PASS          = '${{ secrets.ADMIN_PASS }}';
           CONFIGEOF
@@ -42,6 +47,7 @@ jobs:
             public/nova-td-respuesta.php
             public/chatbot.php
             public/nova-consulta.php
+            public/nova-proxy.php
             public/sincronizar-correos.php
             public/cargar-plantillas.php
             public/validar-paciente.php
@@ -150,7 +156,7 @@ jobs:
 
           # PHP — verificar placeholders residuales solo en archivos existentes
           PLACEHOLDERS='__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_TENANT_ID__\|__AZURE_CLIENT_ID__\|__AZURE_CLIENT_SECRET__\|__GRAPH_USER_ID__'
-          for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php public/sincronizar-correos.php public/nova-td-respuesta.php public/cargar-plantillas.php public/validar-paciente.php; do
+          for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php public/sincronizar-correos.php public/nova-td-respuesta.php public/nova-proxy.php public/nova-consulta.php public/cargar-plantillas.php public/validar-paciente.php; do
             [ -f "$f" ] || continue
             if grep -q "$PLACEHOLDERS" "$f"; then
               echo "❌ Placeholders sin reemplazar en $f"
@@ -245,6 +251,16 @@ jobs:
           target:   /var/www/pqr/
           strip_components: 1
 
+      # ── 8B. CREAR TABLA nova_sesiones SI NO EXISTE ─────────────
+      - name: Crear tabla nova_sesiones en Supabase
+        run: |
+          curl -s -X POST '${{ secrets.SUPABASE_URL }}/rest/v1/rpc/exec_sql' \
+            -H "apikey: ${{ secrets.SUPABASE_KEY_SERVICE }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY_SERVICE }}" \
+            -H "Content-Type: application/json" \
+            -d '{"query": "CREATE TABLE IF NOT EXISTS nova_sesiones (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, sesion_id text, cedula text, nombre text, eps text, turnos int DEFAULT 0, resumen text, motivo_cierre text, created_at timestamptz DEFAULT now());"}' \
+            && echo "✅ Tabla nova_sesiones lista" || echo "⚠️ Verifica la tabla manualmente en Supabase"
+
       # ── 9. CONFIGURAR CRON — sincronizar correos cada 5 min ────
       - name: Configurar cron sync
         uses: appleboy/ssh-action@v1
@@ -285,6 +301,8 @@ jobs:
                      /var/www/pqr/procesar-canvas.php \
                      /var/www/pqr/sincronizar-correos.php \
                      /var/www/pqr/nova-td-respuesta.php \
+                     /var/www/pqr/nova-proxy.php \
+                     /var/www/pqr/nova-consulta.php \
                      /var/www/pqr/cargar-plantillas.php \
                      /var/www/pqr/validar-paciente.php \
                      /var/www/pqr/api-token.php \
