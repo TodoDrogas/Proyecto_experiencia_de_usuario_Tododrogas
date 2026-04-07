@@ -34,6 +34,67 @@ if (!$pqr_id || !$imagen_b64) {
 
 $is_preview = str_starts_with($pqr_id, 'preview_');
 
+// ── MODO PREVIEW: solo transcribir, sin tocar Supabase ───────────────
+// Debe ir ANTES del paso 1 (que busca en BD y hace exit si no encuentra)
+if ($is_preview) {
+    // Extraer mime y base64
+    $img_data_url = $imagen_b64;
+    $mime = 'image/png';
+    if (strpos($imagen_b64, 'data:image/') === 0) {
+        preg_match('/data:(image\/\w+);base64,(.+)/s', $imagen_b64, $m);
+        $mime       = $m[1] ?? 'image/png';
+        $imagen_b64 = $m[2] ?? $imagen_b64;
+    }
+    $img_binary = base64_decode($imagen_b64);
+    if (!$img_binary || strlen($img_binary) < 100) {
+        http_response_code(400);
+        echo json_encode(['error' => 'imagen_base64 inválida']);
+        exit;
+    }
+
+    // GPT-4o Vision — solo transcribir
+    $transcripcion = '';
+    if ($OPENAI_KEY) {
+        $ch = curl_init('https://api.openai.com/v1/chat/completions');
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $OPENAI_KEY", 'Content-Type: application/json'],
+            CURLOPT_POSTFIELDS     => json_encode([
+                'model'      => 'gpt-4o',
+                'max_tokens' => 800,
+                'messages'   => [[
+                    'role'    => 'user',
+                    'content' => [
+                        ['type' => 'text',
+                         'text' => 'Transcribe EXACTAMENTE el texto escrito en esta imagen. Si hay texto escrito a mano, transcríbelo tal como está. Si no hay texto, describe brevemente la imagen. Solo devuelve el texto transcrito, sin explicaciones adicionales.'],
+                        ['type' => 'image_url',
+                         'image_url' => ['url' => "data:{$mime};base64,{$imagen_b64}"]],
+                    ],
+                ]],
+            ]),
+        ]);
+        $vis_resp = curl_exec($ch);
+        $vis_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $vis_data = json_decode($vis_resp, true);
+        if ($vis_code === 200 && !empty($vis_data['choices'][0]['message']['content'])) {
+            $transcripcion = trim($vis_data['choices'][0]['message']['content']);
+        }
+    }
+
+    http_response_code(200);
+    echo json_encode([
+        'ok'           => true,
+        'transcripcion' => $transcripcion,
+        'texto'        => $transcripcion,
+        'storage_ok'   => false,
+        'vision_usado' => !empty($transcripcion),
+    ]);
+    exit; // ← Termina aquí para preview, nunca toca Supabase
+}
+
 $img_data_url = $imagen_b64;
 $mime = 'image/png';
 if (strpos($imagen_b64, 'data:image/') === 0) {
