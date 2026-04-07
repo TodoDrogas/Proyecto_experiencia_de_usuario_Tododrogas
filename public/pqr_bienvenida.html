@@ -1010,8 +1010,14 @@ let FRASES = [
 ];
 
 let CFG = {};
+
+// ── Detectar origen desde la URL de bienvenida ──────────────────────
+// pqr_bienvenida.html?origen=qr  → todo apunta con origen=qr
+// pqr_bienvenida.html (sin param) → todo apunta con origen=web
+const _bvParams = new URLSearchParams(window.location.search);
+const _BV_ORIGEN = _bvParams.get('origen') || 'web';
+
 // FORM_URL: URL absoluta del formulario de radicación
-// El QR radicar siempre apunta a esta URL — se actualiza desde Supabase (configuracion_sistema.data.qrUrl)
 let FORM_URL = window.location.origin + '/pqr_form.html';
 let _lastQrUrl = null;
 
@@ -1086,7 +1092,7 @@ window.addEventListener('resize', ()=>{
 });
 
 // URL global de encuesta (accesible por openEncuesta)
-const ENC_DEFAULT = (window.location.origin || 'https://tododrogas.online') + '/pqr_encuesta.html?origen=web';
+const ENC_DEFAULT = (window.location.origin || 'https://tododrogas.online') + '/pqr_encuesta.html?origen=' + _BV_ORIGEN;
 let ENC_URL = ENC_DEFAULT; // hardcodeado — Supabase puede sobreescribir
 
 // Aplica QRs una vez el DOM esté listo
@@ -1121,10 +1127,10 @@ function applyQRs(){
 // Abre la encuesta en nueva pestaña (toque del botón en móvil)
 function openEncuesta(){
   if(ENC_URL){
-    // Forzar origen=web sin importar lo que traiga ENC_URL desde Supabase
+    // Forzar _BV_ORIGEN (web o qr según cómo llegó el usuario a bienvenida)
     try{
       const u = new URL(ENC_URL, window.location.origin);
-      u.searchParams.set('origen','web');
+      u.searchParams.set('origen', _BV_ORIGEN);
       window.open(u.toString(), '_blank');
     } catch(e){ window.open(ENC_URL, '_blank'); }
   } else {
@@ -1195,7 +1201,7 @@ function startCarousel(){
 function goToForm(){
   document.body.style.transition='opacity .35s ease';
   document.body.style.opacity='0';
-  setTimeout(()=>{ window.location.href='pqr_form.html?origen=web'; },350);
+  setTimeout(()=>{ window.location.href='pqr_form.html?origen='+_BV_ORIGEN; },350);
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
