@@ -140,6 +140,24 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
   color:var(--c2);border-radius:8px;padding:5px 12px;font-size:11px;
   cursor:pointer;font-family:'Poppins',sans-serif;transition:all .15s;}
 .sede-badge-change:hover{border-color:var(--c3);color:var(--c3);}
+@keyframes pulse-geo{0%{opacity:.7;transform:scale(1)}100%{opacity:0;transform:scale(1.8)}}
+@keyframes spin-geo{to{transform:rotate(360deg)}}
+.sede-geo-btn{display:flex;align-items:center;gap:14px;background:rgba(0,176,255,.08);
+  border:1.5px solid rgba(0,176,255,.45);border-radius:14px;padding:14px 20px;
+  color:#00b0ff;font-size:14px;font-family:'Poppins',sans-serif;font-weight:500;
+  cursor:pointer;width:100%;max-width:540px;transition:all .2s;margin-bottom:10px;text-align:left;}
+.sede-geo-btn:hover{background:rgba(0,176,255,.15);border-color:rgba(0,176,255,.85);box-shadow:0 0 20px rgba(0,176,255,.22);}
+.sede-geo-btn:disabled{opacity:.6;cursor:not-allowed;}
+.sede-geo-icon{position:relative;width:44px;height:44px;flex-shrink:0;}
+.sede-geo-ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(0,176,255,.55);animation:pulse-geo 2s ease-out infinite;}
+.sede-geo-ring2{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(0,176,255,.3);animation:pulse-geo 2s ease-out infinite .5s;}
+.sede-geo-circle{position:absolute;inset:0;border-radius:50%;background:rgba(0,176,255,.12);border:1.5px solid rgba(0,176,255,.4);display:flex;align-items:center;justify-content:center;}
+.sede-geo-spin{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(0,176,255,.2);border-top-color:#00b0ff;animation:spin-geo 1s linear infinite;}
+.sede-manual-btn{display:flex;align-items:center;justify-content:center;gap:8px;
+  background:none;border:1px solid rgba(0,176,255,.2);border-radius:10px;padding:8px 14px;
+  color:rgba(0,176,255,.6);font-size:12px;font-family:'Poppins',sans-serif;
+  cursor:pointer;width:100%;max-width:540px;transition:all .15s;margin-bottom:8px;}
+.sede-manual-btn:hover{border-color:rgba(0,176,255,.45);color:#00b0ff;}
 
 /* ── DATA CARD ──────────────────────────────── */
 .data-card{background:rgba(0,176,255,.05);border:1px solid rgba(0,176,255,.18);
@@ -532,9 +550,26 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 
     <div style="width:100%;max-width:520px;margin-bottom:18px;">
       <div class="field-label" style="margin-bottom:8px;">📍 Sede visitada <span class="req">*</span></div>
-      <div class="sede-wrap">
+      <button class="sede-geo-btn" id="btnGeo" onclick="detectarSedePorGeoEnc()" type="button">
+        <div class="sede-geo-icon">
+          <div class="sede-geo-ring"></div>
+          <div class="sede-geo-ring2"></div>
+          <div class="sede-geo-circle" id="geoCircle">
+            <svg width="18" height="18" fill="none" stroke="#00b0ff" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>
+          </div>
+        </div>
+        <div>
+          <div id="geoLabel" style="font-size:14px;font-weight:500;color:#00b0ff;letter-spacing:.2px;">Detectar mi sede automáticamente</div>
+          <div id="geoSub" style="font-size:11px;color:rgba(0,176,255,.55);margin-top:2px;">Permite el acceso a tu ubicación</div>
+        </div>
+      </button>
+      <button class="sede-manual-btn" id="btnManual" onclick="mostrarBuscadorManualEnc()" type="button">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Ingresar manualmente
+      </button>
+      <div class="sede-wrap" id="sedeWrap" style="display:none;">
         <input class="pqr-input" type="text" id="inputSede"
-          placeholder="Escriba el municipio o nombre del servicio…"
+          placeholder="Escribe el municipio o nombre del servicio…"
           oninput="buscarSede(this.value)" autocomplete="off">
         <div class="sede-dd" id="sedeDd" style="display:none;"></div>
       </div>
@@ -854,6 +889,47 @@ function goBack(){
 }
 
 let sedeTimer;
+
+function mostrarBuscadorManualEnc(){
+  document.getElementById('sedeWrap').style.display='block';
+  document.getElementById('btnManual').style.display='none';
+  document.getElementById('inputSede').focus();
+}
+
+function detectarSedePorGeoEnc(){
+  const btn=document.getElementById('btnGeo');
+  const label=document.getElementById('geoLabel');
+  const sub=document.getElementById('geoSub');
+  const circle=document.getElementById('geoCircle');
+  if(!navigator.geolocation){mostrarBuscadorManualEnc();return;}
+  btn.disabled=true;
+  circle.innerHTML='<div class="sede-geo-spin"></div>';
+  label.textContent='Detectando ubicación…';
+  sub.textContent='Buscando la sede más cercana';
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const{latitude:lat,longitude:lng}=pos.coords;
+      function hav(a,b,c,d){const R=6371,dL=(c-a)*Math.PI/180,dl=(d-b)*Math.PI/180;const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
+      const closest=SEDES.filter(s=>s.lat&&s.lng).map(s=>({...s,dist:hav(lat,lng,s.lat,s.lng)})).sort((a,b)=>a.dist-b.dist)[0];
+      circle.innerHTML='<svg width="18" height="18" fill="none" stroke="#00b0ff" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>';
+      btn.disabled=false;
+      if(closest&&closest.dist<50){_ss(closest);}
+      else{label.textContent='Detectar mi sede automáticamente';sub.textContent='Permite el acceso a tu ubicación';mostrarBuscadorManualEnc();}
+    },
+    _=>{
+      circle.innerHTML='<svg width="18" height="18" fill="none" stroke="#00b0ff" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>';
+      btn.disabled=false;
+      label.textContent='Detectar mi sede automáticamente';sub.textContent='Permite el acceso a tu ubicación';
+      mostrarBuscadorManualEnc();
+    },
+    {timeout:8000,maximumAge:60000}
+  );
+}
+
+// Agregar coordenadas al array SEDES existente
+const SEDES_COORDS={abejorral:{lat:5.7917,lng:-75.4267},amaga:{lat:6.0383,lng:-75.6983},andes:{lat:5.6583,lng:-75.8783},apartado:{lat:7.8827,lng:-76.6274},carepa:{lat:7.7586,lng:-76.6564},caucasia:{lat:7.9883,lng:-75.1967},chigorodo:{lat:7.6741,lng:-76.6847},'ciudad-bolivar':{lat:5.8617,lng:-75.9150},'el-bagre':{lat:7.5953,lng:-74.8103},medellin:{lat:6.2518,lng:-75.5636},medellin2:{lat:6.2508,lng:-75.5640},'puerto-berrio':{lat:6.4894,lng:-74.4044},'santa-barbara':{lat:5.8750,lng:-75.5717},'santa-fe-antioquia':{lat:6.5567,lng:-75.8283},segovia:{lat:7.0883,lng:-74.7050},tamesis:{lat:5.6667,lng:-75.7167},turbo:{lat:8.0972,lng:-76.7294},yarumal:{lat:7.0000,lng:-75.4167},yolombo:{lat:6.5983,lng:-75.0150},zaragoza:{lat:7.4917,lng:-74.8667},nechi:{lat:8.0967,lng:-74.7717},rionegro:{lat:6.1550,lng:-75.3767},'la-ceja':{lat:6.0283,lng:-75.4383},sopetran:{lat:6.5033,lng:-75.7517},amalfi:{lat:6.9133,lng:-75.0767},angostura:{lat:6.8833,lng:-75.3333},anori:{lat:7.0733,lng:-75.1417},frontino:{lat:6.7783,lng:-76.1317},mutata:{lat:7.2450,lng:-76.4383},necocli:{lat:8.4233,lng:-76.7817},remedios:{lat:7.0283,lng:-74.6933},giraldo:{lat:6.6783,lng:-75.9483},dabeiba:{lat:7.0033,lng:-76.2700},hispania:{lat:5.8183,lng:-75.9283},jardin:{lat:5.5983,lng:-75.8183},liborina:{lat:6.6933,lng:-75.8567},sabanalarga:{lat:6.8883,lng:-75.7350},caceres:{lat:7.5650,lng:-75.3367},jerico:{lat:5.7883,lng:-75.7817},taraza:{lat:7.5783,lng:-75.4017},barbosa:{lat:6.4383,lng:-75.3317},girardota:{lat:6.3783,lng:-75.4450},rionegro2:{lat:6.1533,lng:-75.3750},concordia:{lat:6.0450,lng:-75.9083},copacabana:{lat:6.3500,lng:-75.5117},sabaneta:{lat:6.1517,lng:-75.6167}};
+SEDES.forEach(s=>{if(SEDES_COORDS[s.id]){s.lat=SEDES_COORDS[s.id].lat;s.lng=SEDES_COORDS[s.id].lng;}});
+
 function buscarSede(val){
   const dd=document.getElementById('sedeDd');
   clearTimeout(sedeTimer);sedeSeleccionada=null;checkBtn0();
@@ -872,8 +948,10 @@ function buscarSede(val){
 
 function _ss(s){
   sedeSeleccionada=s;
-  document.getElementById('sedeDd').style.display='none';
-  document.getElementById('inputSede').style.display='none';
+  document.getElementById('btnGeo').style.display    ='none';
+  document.getElementById('btnManual').style.display ='none';
+  document.getElementById('sedeWrap').style.display  ='none';
+  document.getElementById('sedeDd').style.display    ='none';
   document.getElementById('sbName').textContent=s.nombre;
   document.getElementById('sbSub').textContent='📍 '+s.municipio+(s.direccion?' · '+s.direccion:'');
   document.getElementById('sedeBadge').style.display='flex';
@@ -882,9 +960,12 @@ function _ss(s){
 
 function cambiarSede(){
   sedeSeleccionada=null;
-  document.getElementById('sedeBadge').style.display='none';
-  const i=document.getElementById('inputSede');
-  i.style.display='block';i.value='';i.focus();checkBtn0();
+  document.getElementById('sedeBadge').style.display ='none';
+  document.getElementById('btnGeo').style.display    ='flex';
+  document.getElementById('btnManual').style.display ='flex';
+  document.getElementById('sedeWrap').style.display  ='none';
+  document.getElementById('inputSede').value='';
+  checkBtn0();
 }
 
 function checkBtn0(){
