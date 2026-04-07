@@ -1015,7 +1015,21 @@ let CFG = {};
 // pqr_bienvenida.html?origen=qr  → todo apunta con origen=qr
 // pqr_bienvenida.html (sin param) → todo apunta con origen=web
 const _bvParams = new URLSearchParams(window.location.search);
-const _BV_ORIGEN = _bvParams.get('origen') || 'web';
+// Si la URL trae ?origen=qr → guardar en sessionStorage para persistir en esta sesión
+// Si no trae parámetro → revisar sessionStorage (usuario se devolvió desde el form)
+// Si sessionStorage vacío → web (link copiado en nueva pestaña sin parámetro)
+(function(){
+  const fromUrl = _bvParams.get('origen');
+  if(fromUrl === 'qr'){
+    sessionStorage.setItem('td_origen', 'qr');
+  } else if(!fromUrl){
+    // No limpiar — si vino de QR en esta sesión, conservar
+  } else {
+    // origen=web u otro explícito → limpiar sesión
+    sessionStorage.removeItem('td_origen');
+  }
+})();
+const _BV_ORIGEN = _bvParams.get('origen') || sessionStorage.getItem('td_origen') || 'web';
 
 // FORM_URL: URL absoluta del formulario de radicación
 let FORM_URL = window.location.origin + '/pqr_form.html';
