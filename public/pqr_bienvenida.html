@@ -1086,7 +1086,7 @@ window.addEventListener('resize', ()=>{
 });
 
 // URL global de encuesta (accesible por openEncuesta)
-const ENC_DEFAULT = (window.location.origin || 'https://tododrogas.online') + '/pqr_encuesta.html?origen=qr';
+const ENC_DEFAULT = (window.location.origin || 'https://tododrogas.online') + '/pqr_encuesta.html?origen=web';
 let ENC_URL = ENC_DEFAULT; // hardcodeado — Supabase puede sobreescribir
 
 // Aplica QRs una vez el DOM esté listo
@@ -1789,10 +1789,12 @@ ntdBotonesFinales());
 }
 
 function ntdEncuesta(){
-  const encBase = (typeof ENC_URL !== 'undefined' ? ENC_URL : NTD_C.encuesta);
+  // Usar ENC_URL como base pero forzar origen=nova_web (sobreescribe ?origen=qr del config)
+  let encBase = (typeof ENC_URL !== 'undefined' ? ENC_URL : NTD_C.encuesta);
+  try { const u=new URL(encBase,window.location.origin); u.searchParams.set('origen','nova_web'); encBase=u.toString(); } catch(e){}
   const encSep  = encBase.includes('?') ? '&' : '?';
-  const encParams = new URLSearchParams({origen:'nova_web',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
-  const encUrl = encBase + encSep + encParams.toString();
+  const encParams = new URLSearchParams({nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
+  const encUrl = encBase + (encParams.toString() ? encSep + encParams.toString() : '');
   const qrUrl  = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(encUrl)+'&bgcolor=141e30&color=fcd34d&qzone=1';
   ntdAddMsg('nova',
     `<p>Tu opinión es muy importante para nosotros. Puedes realizar la <strong>encuesta de satisfacción</strong> aquí:</p>
