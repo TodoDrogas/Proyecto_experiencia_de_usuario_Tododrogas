@@ -38,12 +38,13 @@ $is_preview = str_starts_with($pqr_id, 'preview_');
 // Debe ir ANTES del paso 1 (que busca en BD y hace exit si no encuentra)
 if ($is_preview) {
     // Extraer mime y base64
+    // FIX: strpos/substr — preg_match falla con base64 grande (PCRE backtracking limit)
     $img_data_url = $imagen_b64;
     $mime = 'image/png';
     if (strpos($imagen_b64, 'data:image/') === 0) {
-        preg_match('/data:(image\/\w+);base64,(.+)/s', $imagen_b64, $m);
-        $mime       = $m[1] ?? 'image/png';
-        $imagen_b64 = $m[2] ?? $imagen_b64;
+        $b64sep     = strpos($imagen_b64, ';base64,');
+        $mime       = $b64sep ? substr($imagen_b64, 5, $b64sep - 5) : 'image/png';
+        $imagen_b64 = $b64sep ? substr($imagen_b64, $b64sep + 8)    : $imagen_b64;
     }
     $img_binary = base64_decode($imagen_b64);
     if (!$img_binary || strlen($img_binary) < 100) {
@@ -98,9 +99,10 @@ if ($is_preview) {
 $img_data_url = $imagen_b64;
 $mime = 'image/png';
 if (strpos($imagen_b64, 'data:image/') === 0) {
-    preg_match('/data:(image\/\w+);base64,(.+)/s', $imagen_b64, $m);
-    $mime      = $m[1] ?? 'image/png';
-    $imagen_b64 = $m[2] ?? $imagen_b64;
+    // FIX: strpos/substr — preg_match falla con base64 grande (PCRE backtracking limit)
+    $b64sep     = strpos($imagen_b64, ';base64,');
+    $mime       = $b64sep ? substr($imagen_b64, 5, $b64sep - 5) : 'image/png';
+    $imagen_b64 = $b64sep ? substr($imagen_b64, $b64sep + 8)    : $imagen_b64;
 }
 $img_binary = base64_decode($imagen_b64);
 if (!$img_binary || strlen($img_binary) < 100) {
