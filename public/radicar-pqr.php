@@ -288,44 +288,60 @@ if (!$texto_pqr && $canal === 'audio') {
 
 if ($OPENAI_KEY && $texto_pqr) {
     $prompt = <<<PROMPT
-Analiza esta solicitud de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
+Analiza esta solicitud de la droguería Tododrogas (Colombia). Responde SOLO JSON válido sin markdown.
 
-CANAL: {$canal}
-TIPO DECLARADO: $tipo_pqr_raw
-TEXTO: $texto_pqr
+CANAL DE ENTRADA: {$canal}
+TIPO DECLARADO POR EL USUARIO: $tipo_pqr_raw
+TEXTO DE LA SOLICITUD:
+---
+$texto_pqr
+---
 {$audio_tono_contexto}
 
-JSON requerido:
+PASO 1 — LEE el texto completo con atención a sarcasmo, ironía y emociones implícitas.
+PASO 2 — DETERMINA la emoción real (no el tipo declarado).
+PASO 3 — Responde este JSON exacto:
 {
   "sentimiento": "positivo|neutro|negativo|urgente",
-  "tono": "enojado|frustrado|triste|ansioso|neutro|satisfecho|agradecido",
+  "tono": "enojado|frustrado|triste|ansioso|neutro|satisfecho|agradecido|ironico",
   "prioridad": "baja|media|alta|critica",
   "nivel_riesgo": "bajo|medio|alto|critico",
-  "resumen": "maximo 100 caracteres",
-  "ley": "ley colombiana aplicable",
-  "horas_sla": numero entero
+  "resumen": "máximo 120 caracteres describiendo el caso real",
+  "ley": "ley colombiana aplicable (Ley 1122/2007, Ley 1751/2015, Ley 1755/2015, Res 1552/2013, etc.)",
+  "horas_sla": número entero,
+  "detectado_sarcasmo": true|false
 }
 
-REGLAS:
-1. El contenido del texto MANDA sobre el tipo declarado.
-2. FELICITACIÓN/AGRADECIMIENTO → sentimiento=positivo, tono=agradecido, prioridad=baja, horas_sla=360. Palabras clave: "gracias", "muchas gracias", "excelente", "felicito", "maravilloso", "buen servicio", "muy bien atendido", "contento", "satisfecho", "perfecto", "genial", "los amo", "me ayudaron mucho".
-3. Si CONTEXTO AUDIO indica señales_positivas=SÍ → sentimiento=positivo+tono=agradecido OBLIGATORIO.
-4. URGENTE → riesgo de salud, error medicamento. prioridad=critica, horas_sla=4.
-5. ENOJO → "horrible", "pésimo", "ladrones", "abusivos", "el colmo". tono=enojado.
-6. FRUSTRACIÓN → queja sin ira, "llevo días", "no me atienden". tono=frustrado.
-7. NEUTRO → petición informativa sin emoción.
-8. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4.
+REGLAS DE CLASIFICACIÓN:
+1. TEXTO MANDA sobre tipo declarado. Un "Felicitación" con texto negativo = negativo.
+2. SARCASMO → tono=ironico, sentimiento=negativo. Ej: "Qué excelente servicio, solo llevo 4 días sin medicamento".
+3. URGENTE: riesgo vital, error en medicamento crítico, paciente oncológico/renal/HIV sin medicamento → urgente+critica+horas_sla=4.
+4. ENOJADO: "pésimo", "ladrones", "abusivos", "el colmo", "qué vergüenza", "no sirven", "me tienen loco" → negativo+enojado.
+5. FRUSTRADO: queja sin ira extrema, "llevo días", "nadie me atiende", "ya no sé qué hacer" → negativo+frustrado.
+6. POSITIVO REAL: "gracias", "excelente servicio", "muy amables", "bacano", "los mejores" sin queja posterior → positivo+agradecido+baja.
+7. NEUTRO: preguntas informativas, solicitudes sin carga emocional → neutro+neutro+media.
+8. horas_sla por defecto: urgente=4, denuncia=24, queja/reclamo=72, peticion/solicitud=120, informacion/sugerencia/felicitacion=360.
 PROMPT;
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => json_encode([
-            'model'       => 'gpt-4o-mini',
-            'max_tokens'  => 300,
+            'model'       => 'gpt-4o',
+            'max_tokens'  => 500,
             'temperature' => 0.1,
             'messages'    => [
-                ['role' => 'system', 'content' => 'Eres clasificador de solicitudes colombianas de drogueria. Responde SOLO JSON valido con los campos exactos solicitados. CRITICO: el contenido del texto SIEMPRE prevalece sobre el tipo que el usuario declaró en el formulario. Si el texto es positivo/agradecido (felicitaciones, gracias, buen servicio) clasificar como sentimiento=positivo+tono=agradecido+prioridad=baja+horas_sla=360 SIN IMPORTAR el tipo declarado. Si el texto muestra ira/frustración real, clasificar como negativo aunque el tipo diga petición.'],
+                ['role' => 'system', 'content' => 'Eres un clasificador experto en análisis emocional de solicitudes de una droguería colombiana (Tododrogas). Respondes SOLO JSON válido sin markdown ni explicaciones.
+
+REGLAS CRÍTICAS DE CLASIFICACIÓN EMOCIONAL:
+1. El contenido real del texto SIEMPRE manda sobre el tipo declarado en el formulario.
+2. SARCASMO: Detecta frases positivas con contexto negativo. "Qué maravilloso servicio, llevo 3 horas esperando" → negativo/frustrado. "Excelente atención, me dejaron sin medicamento" → negativo/irónico.
+3. EMOCIÓN MIXTA: Si el texto tiene gratitud Y queja, clasifica según la emoción DOMINANTE y la que requiere acción.
+4. COLOMBIANISMOS NEGATIVOS: "el colmo", "no hay derecho", "una vergüenza", "qué desorden", "me tienen loco/a", "no sirven", "pésimo", "malísimo", "ladrones", "abusivos", "me robaron", "qué rabia", "esto no puede ser", "increíble" (en contexto negativo), "de mal en peor" → negativo.
+5. COLOMBIANISMOS POSITIVOS: "bacano", "qué chimba de servicio", "muy pilos", "gracias a Dios", "que Dios los bendiga", "muy amables", "los mejores", "siempre nos colaboran" → positivo.
+6. URGENCIA REAL: Mención de riesgo de salud, error en medicamento, paciente grave, sin medicamento crítico → urgente+critica.
+7. FELICITACIÓN DECLARADA + TEXTO NEGATIVO: Si tipo=felicitación pero el texto muestra queja, el sentimiento es negativo. Ejemplo: "Felicitación: llevan 2 semanas sin entregarme el medicamento" → negativo.
+8. QUEJA DECLARADA + TEXTO POSITIVO: Si tipo=queja pero el texto solo agradece o reporta algo resuelto → positivo.'],
                 ['role' => 'user',   'content' => $prompt],
             ],
         ]),
@@ -342,14 +358,21 @@ PROMPT;
     $ia = json_decode(trim($ai_text), true);
 
     if ($ia) {
-        $sentimiento   = $ia['sentimiento']  ?? $sentimiento;
-        $tono_ia       = $ia['tono']          ?? 'neutro';
-        $prioridad     = $ia['prioridad']    ?? $prioridad;
-        $categoria_ia  = $ia['categoria']    ?? $categoria_ia;
-        $nivel_riesgo  = $ia['nivel_riesgo'] ?? $nivel_riesgo;
-        $resumen_corto = mb_substr($ia['resumen'] ?? $resumen_corto, 0, 150);
-        $ley_aplicable = $ia['ley']          ?? $ley_aplicable;
-        $horas_sla     = intval($ia['horas_sla'] ?? $horas_sla);
+        $sentimiento        = $ia['sentimiento']        ?? $sentimiento;
+        $tono_ia            = $ia['tono']               ?? 'neutro';
+        $prioridad          = $ia['prioridad']          ?? $prioridad;
+        $categoria_ia       = $ia['categoria']          ?? $categoria_ia;
+        $nivel_riesgo       = $ia['nivel_riesgo']       ?? $nivel_riesgo;
+        $resumen_corto      = mb_substr($ia['resumen']  ?? $resumen_corto, 0, 150);
+        $ley_aplicable      = $ia['ley']                ?? $ley_aplicable;
+        $horas_sla          = intval($ia['horas_sla']   ?? $horas_sla);
+        $detectado_sarcasmo = !empty($ia['detectado_sarcasmo']);
+        // Si detectó sarcasmo y el sentimiento sigue positivo → forzar negativo
+        if ($detectado_sarcasmo && $sentimiento === 'positivo') {
+            $sentimiento = 'negativo';
+            $tono_ia     = 'ironico';
+            if ($prioridad === 'baja') $prioridad = 'media';
+        }
     }
 }
 
