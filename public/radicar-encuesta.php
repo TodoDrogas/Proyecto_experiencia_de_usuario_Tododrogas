@@ -171,7 +171,7 @@ foreach ($labels as $i => $label) {
     <tr>
       <td style='padding:11px 0;font-size:12px;color:#2a3a4a;width:42%;{$bb}'>{$label}</td>
       <td style='padding:11px 14px 11px 0;width:38%;{$bb}'>{$barras}</td>
-      <td style='padding:11px 0;font-size:12px;font-weight:500;text-align:right;color:{$vc};{$bb}'>{$v} / 5</td>
+      <td style='padding:11px 0;font-size:12px;font-weight:500;text-align:right;color:{$vc};{$bb}'>{$v} / 3</td>
     </tr>";
 }
 
@@ -190,7 +190,7 @@ foreach ($labels as $i => $label) {
       <tr>
         <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:200px;{$bb}'>{$label}</td>
         <td style='padding:9px 14px;{$bb}'>{$barras}</td>
-        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:{$vc};text-align:right;{$bb}'>{$v} / 5</td>
+        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:{$vc};text-align:right;{$bb}'>{$v} / 3</td>
       </tr>";
 }
 
@@ -484,7 +484,7 @@ if ($token) {
     'web', 'formulario_web'  => '🖥️ WEB',
     default                  => '📋'
 };
-$subject_interno = "[{$ticket_enc}] {$canal_enc_label} | ENCUESTA | {$calificacion}/5 | {$nivel_cal} | {$sede_nombre}";
+$subject_interno = "[{$ticket_enc}] {$canal_enc_label} | ENCUESTA | {$calificacion}/3 | {$nivel_cal} | {$sede_nombre}";
 
     sendMail($token, $GRAPH_USER_ID, [
         'subject'      => $subject_interno,
