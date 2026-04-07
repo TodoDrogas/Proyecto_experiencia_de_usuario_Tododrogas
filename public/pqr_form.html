@@ -1061,32 +1061,43 @@ input[type="email"].pqr-input{text-transform:none;letter-spacing:normal;}
 
       <!-- LÁPIZ: cuaderno con páginas y renglones -->
       <div id="modo-lapiz" style="display:none;flex-direction:column;gap:0;flex:1;">
-        <!-- Instrucción lápiz -->
-        <div id="lapiz-instruccion" style="background:rgba(0,176,255,.08);border:1px solid rgba(0,176,255,.25);border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:12px;color:var(--text2);line-height:1.7;">
-          <div style="font-weight:700;margin-bottom:3px;font-size:13px;">✏️ ¿Cómo usar el lápiz?</div>
-          <div>① Usa el <strong>lápiz de la tablet</strong> o tu dedo para escribir en el cuaderno</div>
-          <div>② Puedes cambiar el grosor y color en la barra de arriba</div>
-          <div>③ Si necesitas más espacio, pasa a la siguiente página con <strong>→</strong></div>
-          <div>④ Cuando termines, toca <strong>✨ Convertir todo</strong> para que la IA lea tu texto</div>
+        <!-- Instrucción lápiz — colapsable -->
+        <div id="lapiz-instruccion" style="margin-bottom:6px;">
+          <button onclick="toggleLapizHelp()" id="lapizHelpBtn"
+            style="display:flex;align-items:center;gap:6px;background:rgba(0,176,255,.07);border:1px solid rgba(0,176,255,.2);border-radius:8px;padding:5px 11px;cursor:pointer;font-family:'Poppins',sans-serif;font-size:11px;font-weight:600;color:var(--text3);transition:all .15s;width:100%;">
+            <span style="font-size:13px;">✏️</span>
+            <span>¿Cómo usar el lápiz?</span>
+            <svg id="lapizHelpChevron" style="margin-left:auto;transition:transform .2s;" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="lapizHelpBody" style="display:none;background:rgba(0,176,255,.06);border:1px solid rgba(0,176,255,.18);border-radius:0 0 8px 8px;padding:9px 13px;font-size:11px;color:var(--text2);line-height:1.8;border-top:none;">
+            ① Escribe con el <strong>lápiz</strong> o tu dedo &nbsp;·&nbsp; ② Cambia grosor y color arriba &nbsp;·&nbsp; ③ Usa <strong>◀ ▶</strong> para más páginas &nbsp;·&nbsp; ④ El texto aparece <strong>automáticamente</strong> mientras escribes
+          </div>
         </div>
 
         <!-- TOOLBAR -->
         <div class="canvas-toolbar">
+          <!-- Grosores -->
           <div style="display:flex;gap:5px;">
-            <div class="stroke-btn active" onclick="setStroke(1.5,this)" title="Fino"><div class="stroke-dot" style="width:3px;height:3px;"></div></div>
-            <div class="stroke-btn" onclick="setStroke(3,this)" title="Medio"><div class="stroke-dot" style="width:6px;height:6px;"></div></div>
-            <div class="stroke-btn" onclick="setStroke(6,this)" title="Grueso"><div class="stroke-dot" style="width:10px;height:10px;"></div></div>
+            <div class="stroke-btn active" id="sbFino" onclick="setToolMode('pen');setStroke(1.5,this)" title="Fino"><div class="stroke-dot" style="width:3px;height:3px;"></div></div>
+            <div class="stroke-btn" id="sbMedio" onclick="setToolMode('pen');setStroke(3,this)" title="Medio"><div class="stroke-dot" style="width:6px;height:6px;"></div></div>
+            <div class="stroke-btn" id="sbGrueso" onclick="setToolMode('pen');setStroke(6,this)" title="Grueso"><div class="stroke-dot" style="width:10px;height:10px;"></div></div>
           </div>
           <div class="tb-div"></div>
+          <!-- Colores -->
           <div style="display:flex;gap:5px;">
-            <div class="color-btn active" style="background:#1a1a2e;" onclick="setPenColor('#1a1a2e',this)"></div>
-            <div class="color-btn" style="background:#2563eb;" onclick="setPenColor('#2563eb',this)"></div>
-            <div class="color-btn" style="background:#7c3aed;" onclick="setPenColor('#7c3aed',this)"></div>
-            <div class="color-btn" style="background:#dc2626;" onclick="setPenColor('#dc2626',this)"></div>
+            <div class="color-btn active" style="background:#1a1a2e;" onclick="setToolMode('pen');setPenColor('#1a1a2e',this)"></div>
+            <div class="color-btn" style="background:#2563eb;" onclick="setToolMode('pen');setPenColor('#2563eb',this)"></div>
+            <div class="color-btn" style="background:#7c3aed;" onclick="setToolMode('pen');setPenColor('#7c3aed',this)"></div>
+            <div class="color-btn" style="background:#dc2626;" onclick="setToolMode('pen');setPenColor('#dc2626',this)"></div>
+          </div>
+          <div class="tb-div"></div>
+          <!-- Borrador -->
+          <div class="stroke-btn" id="btnEraser" onclick="setToolMode('eraser')" title="Borrador" style="width:32px;height:26px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16l10-10 7 7-2.5 2.5"/><path d="M6.0001 17.9999l3-3"/></svg>
           </div>
           <div class="tb-div"></div>
           <button class="canvas-act" onclick="clearCurrentPage()">🗑 Borrar página</button>
-          <button class="canvas-act pri" onclick="convertToText()">✨ Convertir todo</button>
+          <button class="canvas-act pri" onclick="convertToText()" id="btnConvertir" style="margin-left:auto;">✨ Convertir</button>
         </div>
 
         <!-- CUADERNO -->
@@ -1106,7 +1117,7 @@ input[type="email"].pqr-input{text-transform:none;letter-spacing:normal;}
           <div class="canvas-hint-inner" id="canvasHint">
             <div class="hi">✏️</div>
             <span style="font-size:14px;font-weight:600;color:rgba(0,0,0,.35);">Escribe aquí con el lápiz o tu dedo</span>
-            <span style="font-size:11px;color:rgba(0,0,0,.2);">Cuando termines, toca <strong>✨ Convertir todo</strong></span>
+            <span style="font-size:11px;color:rgba(0,0,0,.2);">El texto aparece automáticamente al escribir</span>
           </div>
         </div>
 
@@ -1123,9 +1134,13 @@ input[type="email"].pqr-input{text-transform:none;letter-spacing:normal;}
 
         <!-- RESULTADO IA -->
         <div style="margin-top:8px;">
-          <div class="ai-box-label">✨ Texto reconocido</div>
+          <div class="ai-box-label" style="display:flex;align-items:center;gap:6px;">
+            ✨ Texto reconocido
+            <span id="aiLiveIndicator" style="display:none;width:6px;height:6px;border-radius:50%;background:#00e676;box-shadow:0 0 6px #00e676;animation:blink 1s infinite;"></span>
+            <span id="aiLiveLabel" style="display:none;font-size:9px;color:#00e676;font-weight:700;letter-spacing:.5px;">EN VIVO</span>
+          </div>
           <div class="ai-box" id="aiBox">
-            <span style="color:var(--ink3);font-size:12px;">Toca "Convertir todo" para extraer el texto de todas las páginas…</span>
+            <span style="color:var(--ink3);font-size:12px;">Empieza a escribir para ver el texto aquí…</span>
           </div>
         </div>
       </div>
@@ -1766,31 +1781,117 @@ async function toggleRecord(){
 // CUADERNO — multi-página con renglones
 // ══════════════════════════════════════════
 const NOTEBOOK_PAGES = 3;
-const LINE_SPACING   = 32;   // px entre renglones
+const LINE_SPACING   = 32;
 const LINE_COLOR     = 'rgba(180,200,230,.55)';
 const MARGIN_COLOR   = 'rgba(255,100,100,.22)';
-const MARGIN_X       = 62;   // margen rojo relativo al canvas (ya excluye espiral)
+const MARGIN_X       = 62;
 
-let pages      = [];   // Array de {canvas, ctx, strokes[]}
+let pages       = [];
 let currentPage = 0;
-let drawing    = false;
-let penColor   = '#1a1a2e';
-let penSize    = 1.5;
+let drawing     = false;
+let penColor    = '#1a1a2e';
+let penSize     = 1.5;
+let toolMode    = 'pen';   // 'pen' | 'eraser'
+const ERASER_SIZE = 22;
+
+// ── Auto-reconocimiento: debounce 1.2s tras el último trazo ──
+let _autoRecTimer = null;
+let _lastAutoText = '';
+
+function scheduleAutoRecognize(){
+  clearTimeout(_autoRecTimer);
+  // Mostrar indicador EN VIVO
+  const li = document.getElementById('aiLiveIndicator');
+  const ll = document.getElementById('aiLiveLabel');
+  if(li) li.style.display = 'inline-block';
+  if(ll) ll.style.display = 'inline';
+  _autoRecTimer = setTimeout(()=>{ autoRecognize(); }, 1200);
+}
+
+async function autoRecognize(){
+  const hasContent = pages.some(p=>p.strokes.length>0);
+  if(!hasContent) return;
+
+  try {
+    const pagesWithContent = pages.filter(p=>p.strokes.length>0);
+    const combined = document.createElement('canvas');
+    combined.width  = pages[0].cvs.width;
+    combined.height = pages[0].cvs.height * pagesWithContent.length;
+    const cctx = combined.getContext('2d');
+    cctx.fillStyle = '#ffffff';
+    cctx.fillRect(0,0,combined.width,combined.height);
+    pagesWithContent.forEach((p,i)=>{ cctx.drawImage(p.cvs, 0, i * p.cvs.height); });
+    const imgB64 = combined.toDataURL('image/png');
+
+    const resp = await fetch('/procesar-canvas.php',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ imagen_base64: imgB64, pqr_id: 'preview_' + Date.now() })
+    });
+    const data = await resp.json();
+    const txt = data.transcripcion || data.texto || '';
+
+    const box = document.getElementById('aiBox');
+    const li  = document.getElementById('aiLiveIndicator');
+    const ll  = document.getElementById('aiLiveLabel');
+    if(li) li.style.display = 'none';
+    if(ll) ll.style.display = 'none';
+
+    if(!txt){
+      if(!_lastAutoText) box.innerHTML = '<span style="color:var(--ink3);font-size:12px;">Sigue escribiendo…</span>';
+      return;
+    }
+    _lastAutoText = txt;
+    S._canvasTranscripcion = txt;
+
+    // Animar solo si el texto cambió
+    box.innerHTML = '';
+    let i=0; clearInterval(twT);
+    twT = setInterval(()=>{
+      if(i>=txt.length){ clearInterval(twT); box.innerHTML=txt+'<span class="rec-cursor"></span>'; return; }
+      box.innerHTML = txt.slice(0,i+1)+'<span class="rec-cursor"></span>';
+      i++;
+    }, 12);
+  } catch(e) {
+    const li = document.getElementById('aiLiveIndicator');
+    const ll = document.getElementById('aiLiveLabel');
+    if(li) li.style.display = 'none';
+    if(ll) ll.style.display = 'none';
+  }
+}
+
+// ── Toggle instrucciones ──
+function toggleLapizHelp(){
+  const body = document.getElementById('lapizHelpBody');
+  const chev = document.getElementById('lapizHelpChevron');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if(chev) chev.style.transform = open ? '' : 'rotate(180deg)';
+}
+
+// ── Modo herramienta (pluma / borrador) ──
+function setToolMode(mode){
+  toolMode = mode;
+  const erBtn = document.getElementById('btnEraser');
+  if(erBtn) erBtn.classList.toggle('active', mode === 'eraser');
+  // Desactivar los stroke-btns si borrador
+  ['sbFino','sbMedio','sbGrueso'].forEach(id=>{
+    const b = document.getElementById(id);
+    if(b) b.style.opacity = mode==='eraser' ? '.4' : '1';
+  });
+}
 
 function initCanvas(){
   if(pages.length) return;
 
-  const wrap    = document.getElementById('notebookPages');
-  const slider  = document.getElementById('pagesSlider');
-  const spiral  = document.getElementById('notebookSpiral');
-  const nbWrap  = document.getElementById('notebookWrap');
+  const wrap   = document.getElementById('notebookPages');
+  const slider = document.getElementById('pagesSlider');
+  const spiral = document.getElementById('notebookSpiral');
+  const nbWrap = document.getElementById('notebookWrap');
 
-  // Calcular altura del cuaderno = altura disponible del panel izquierdo menos lo demás
-  const panelH = document.getElementById('splitLeft').clientHeight;
-  const CANVAS_H = Math.max(320, panelH - 220); // deja espacio para toolbar, nav, aibox
-  nbWrap.style.height = (CANVAS_H + 40) + 'px'; // +40 para nav
+  const panelH   = document.getElementById('splitLeft').clientHeight;
+  const CANVAS_H = Math.max(300, panelH - 210);
+  nbWrap.style.height = (CANVAS_H + 40) + 'px';
 
-  // Generar espirales
   const ringCount = Math.floor(CANVAS_H / 32);
   spiral.innerHTML = '';
   for(let i=0;i<ringCount;i++){
@@ -1799,7 +1900,6 @@ function initCanvas(){
 
   const canvasW = wrap.clientWidth;
 
-  // Crear páginas
   for(let p=0;p<NOTEBOOK_PAGES;p++){
     const pageDiv = document.createElement('div');
     pageDiv.className = 'notebook-page';
@@ -1818,15 +1918,13 @@ function initCanvas(){
     cvs.addEventListener('pointerup',   e => onPU(e));
     cvs.addEventListener('pointerleave',e => onPU(e));
 
-    // Fecha en esquina
     const dateEl = document.createElement('div');
     dateEl.className = 'page-date-line';
     dateEl.textContent = new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'});
 
-    // Número de página
     const numEl = document.createElement('div');
     numEl.className = 'page-num';
-    numEl.textContent = (p+1) + ' / ' + NOTEBOOK_PAGES;
+    numEl.textContent = (p+1)+' / '+NOTEBOOK_PAGES;
 
     pageDiv.appendChild(cvs);
     pageDiv.appendChild(dateEl);
@@ -1835,53 +1933,55 @@ function initCanvas(){
 
     pages.push({ cvs, ctx, strokes:[] });
   }
-
   updatePageNav();
 }
 
 function drawPageLines(ctx, w, h){
   ctx.clearRect(0,0,w,h);
-
-  // Fondo crema suave
   ctx.fillStyle = '#fffef9';
   ctx.fillRect(0,0,w,h);
-
-  // Renglones horizontales
   ctx.strokeStyle = LINE_COLOR;
-  ctx.lineWidth   = 1;
-  const firstLine = 40; // primera línea baja para dejar espacio al encabezado
-  for(let y = firstLine; y < h - 16; y += LINE_SPACING){
-    ctx.beginPath();
-    ctx.moveTo(4, y);
-    ctx.lineTo(w-4, y);
-    ctx.stroke();
+  ctx.lineWidth = 1;
+  const firstLine = 40;
+  for(let y=firstLine; y<h-16; y+=LINE_SPACING){
+    ctx.beginPath(); ctx.moveTo(4,y); ctx.lineTo(w-4,y); ctx.stroke();
   }
-
-  // Línea margen vertical (rojo tenue)
   ctx.strokeStyle = MARGIN_COLOR;
-  ctx.lineWidth   = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(MARGIN_X, 8);
-  ctx.lineTo(MARGIN_X, h-8);
-  ctx.stroke();
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(MARGIN_X,8); ctx.lineTo(MARGIN_X,h-8); ctx.stroke();
 }
 
 function redrawPage(p){
   const {cvs,ctx,strokes} = pages[p];
   drawPageLines(ctx, cvs.width, cvs.height);
-  // Re-dibujar todos los trazos guardados
   strokes.forEach(seg => {
-    if(seg.length < 2) return;
-    ctx.beginPath();
-    ctx.strokeStyle = seg[0].color;
-    ctx.lineWidth   = seg[0].size;
-    ctx.lineCap     = 'round';
-    ctx.lineJoin    = 'round';
-    ctx.globalAlpha = .93;
-    ctx.moveTo(seg[0].x, seg[0].y);
-    seg.forEach(pt => ctx.lineTo(pt.x, pt.y));
-    ctx.stroke();
+    if(!seg || seg.length < 2) return;
+    if(seg[0].eraser){
+      ctx.save();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.lineWidth = ERASER_SIZE;
+      ctx.lineCap   = 'round';
+      ctx.lineJoin  = 'round';
+      ctx.beginPath();
+      ctx.moveTo(seg[0].x, seg[0].y);
+      seg.forEach(pt => ctx.lineTo(pt.x, pt.y));
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      ctx.beginPath();
+      ctx.strokeStyle = seg[0].color;
+      ctx.lineWidth   = seg[0].size;
+      ctx.lineCap     = 'round';
+      ctx.lineJoin    = 'round';
+      ctx.globalAlpha = .93;
+      ctx.moveTo(seg[0].x, seg[0].y);
+      seg.forEach(pt => ctx.lineTo(pt.x, pt.y));
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
   });
+  // Re-pintar fondo de renglones encima (el borrador usa destination-out sobre canvas transparente)
+  // Solucion: redrawPage redibuja todo desde strokes, el fondo ya está
 }
 
 let currentStroke = [];
@@ -1890,11 +1990,7 @@ function getXY(e, cvs){
   const r = cvs.getBoundingClientRect();
   const scaleX = cvs.width  / r.width;
   const scaleY = cvs.height / r.height;
-  return {
-    x: (e.clientX - r.left) * scaleX,
-    y: (e.clientY - r.top)  * scaleY,
-    p: e.pressure || .5,
-  };
+  return { x:(e.clientX-r.left)*scaleX, y:(e.clientY-r.top)*scaleY, p:e.pressure||.5 };
 }
 
 function onPD(e, pageIdx){
@@ -1904,26 +2000,56 @@ function onPD(e, pageIdx){
   const {cvs,ctx} = pages[pageIdx];
   cvs.setPointerCapture(e.pointerId);
   const pt = getXY(e, cvs);
-  currentStroke = [{...pt, color:penColor, size:penSize}];
-  ctx.beginPath();
-  ctx.moveTo(pt.x, pt.y);
-  ctx.strokeStyle = penColor;
-  ctx.lineWidth   = penSize;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  ctx.globalAlpha = .93;
+  currentStroke = [{...pt, color:penColor, size:penSize, eraser: toolMode==='eraser'}];
+
+  if(toolMode === 'eraser'){
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = ERASER_SIZE;
+    ctx.lineCap   = 'round';
+    ctx.lineJoin  = 'round';
+    ctx.beginPath();
+    ctx.moveTo(pt.x, pt.y);
+    ctx.restore();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(pt.x, pt.y);
+    ctx.strokeStyle = penColor;
+    ctx.lineWidth   = penSize;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.globalAlpha = .93;
+  }
 }
 
 function onPM(e, pageIdx){
   if(!drawing || pageIdx !== currentPage) return;
-  const {cvs,ctx} = pages[pageIdx];
+  const {cvs, ctx} = pages[pageIdx];
   const pt = getXY(e, cvs);
-  ctx.lineWidth = penSize * (0.7 + pt.p * 0.8);
-  ctx.lineTo(pt.x, pt.y);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(pt.x, pt.y);
-  currentStroke.push({...pt, color:penColor, size:penSize});
+
+  if(toolMode === 'eraser'){
+    // Borrar con compositing
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.lineWidth = ERASER_SIZE;
+    ctx.lineCap   = 'round';
+    ctx.lineJoin  = 'round';
+    ctx.beginPath();
+    const prev = currentStroke[currentStroke.length-1] || pt;
+    ctx.moveTo(prev.x, prev.y);
+    ctx.lineTo(pt.x, pt.y);
+    ctx.stroke();
+    ctx.restore();
+    // Después de borrar, redibujar los renglones encima para que no desaparezcan
+    _repaintLines(ctx, cvs.width, cvs.height);
+  } else {
+    ctx.lineWidth = penSize * (0.7 + pt.p * 0.8);
+    ctx.lineTo(pt.x, pt.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(pt.x, pt.y);
+  }
+  currentStroke.push({...pt, color:penColor, size:penSize, eraser: toolMode==='eraser'});
 }
 
 function onPU(e){
@@ -1931,24 +2057,41 @@ function onPU(e){
   drawing = false;
   if(currentStroke.length > 1){
     pages[currentPage].strokes.push([...currentStroke]);
+    // Si fue borrador: redibujar página completa para resultado limpio
+    if(toolMode === 'eraser') redrawPage(currentPage);
+    // Auto-reconocer tras trazo
+    scheduleAutoRecognize();
   }
   currentStroke = [];
-  pages[currentPage].ctx.beginPath();
+  if(toolMode !== 'eraser') pages[currentPage].ctx.beginPath();
 }
 
-// Pasar página
+// Repinta solo las líneas del cuaderno (sin borrar el dibujo) — usado mientras se borra
+function _repaintLines(ctx, w, h){
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.strokeStyle = LINE_COLOR;
+  ctx.lineWidth = 1;
+  const firstLine = 40;
+  for(let y=firstLine; y<h-16; y+=LINE_SPACING){
+    ctx.beginPath(); ctx.moveTo(4,y); ctx.lineTo(w-4,y); ctx.stroke();
+  }
+  ctx.strokeStyle = MARGIN_COLOR;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(MARGIN_X,8); ctx.lineTo(MARGIN_X,h-8); ctx.stroke();
+  ctx.restore();
+}
+
 function goPage(dir){
   const next = currentPage + dir;
   if(next < 0 || next >= NOTEBOOK_PAGES) return;
   currentPage = next;
-  document.getElementById('pagesSlider').style.transform =
-    `translateX(-${currentPage * 100}%)`;
+  document.getElementById('pagesSlider').style.transform = `translateX(-${currentPage*100}%)`;
   updatePageNav();
 }
 
 function updatePageNav(){
-  document.getElementById('pageNavInfo').textContent =
-    `Página ${currentPage+1} de ${NOTEBOOK_PAGES}`;
+  document.getElementById('pageNavInfo').textContent = `Página ${currentPage+1} de ${NOTEBOOK_PAGES}`;
   document.getElementById('btnPrevPage').disabled = currentPage === 0;
   document.getElementById('btnNextPage').disabled = currentPage === NOTEBOOK_PAGES-1;
 }
@@ -1969,15 +2112,21 @@ function clearCurrentPage(){
   pages[currentPage].strokes = [];
   drawPageLines(pages[currentPage].ctx, pages[currentPage].cvs.width, pages[currentPage].cvs.height);
   document.getElementById('canvasHint').style.display = 'flex';
+  // Si había texto reconocido en otras páginas, re-ejecutar
+  const hasOther = pages.some((p,i)=>i!==currentPage && p.strokes.length>0);
+  if(!hasOther){
+    _lastAutoText = '';
+    S._canvasTranscripcion = null;
+    document.getElementById('aiBox').innerHTML = '<span style="color:var(--ink3);font-size:12px;">Empieza a escribir para ver el texto aquí…</span>';
+  } else {
+    scheduleAutoRecognize();
+  }
 }
 
 function clearCanvas(){
-  pages.forEach((_,i) => {
-    pages[i].strokes = [];
-    drawPageLines(pages[i].ctx, pages[i].cvs.width, pages[i].cvs.height);
-  });
-  document.getElementById('aiBox').innerHTML =
-    '<span style="color:var(--ink3);font-size:12px;">Toca "Convertir todo" para extraer el texto de todas las páginas…</span>';
+  pages.forEach((_,i)=>{ pages[i].strokes=[]; drawPageLines(pages[i].ctx,pages[i].cvs.width,pages[i].cvs.height); });
+  _lastAutoText = ''; S._canvasTranscripcion = null;
+  document.getElementById('aiBox').innerHTML = '<span style="color:var(--ink3);font-size:12px;">Empieza a escribir para ver el texto aquí…</span>';
   document.getElementById('canvasHint').style.display = 'flex';
 }
 
@@ -1992,54 +2141,41 @@ let twT=null;
 async function convertToText(){
   const hasContent = pages.some(p=>p.strokes.length>0);
   if(!hasContent){ showToast('Escribe algo primero en el cuaderno','error'); return; }
-  const box=document.getElementById('aiBox');
-  box.innerHTML='<span style="color:var(--blue);font-size:12px;">✨ Leyendo tu escritura con IA…</span>';
+  const box = document.getElementById('aiBox');
+  box.innerHTML = '<span style="color:var(--blue);font-size:12px;">✨ Leyendo tu escritura con IA…</span>';
 
   try {
-    // Combinar todas las páginas con contenido en un solo canvas
     const pagesWithContent = pages.filter(p=>p.strokes.length>0);
     const combined = document.createElement('canvas');
     combined.width  = pages[0].cvs.width;
     combined.height = pages[0].cvs.height * pagesWithContent.length;
     const cctx = combined.getContext('2d');
-    // FIX: fondo blanco explícito para que GPT-4o Vision vea el texto
     cctx.fillStyle = '#ffffff';
-    cctx.fillRect(0, 0, combined.width, combined.height);
-    pagesWithContent.forEach((p,i)=>{ cctx.drawImage(p.cvs, 0, i * p.cvs.height); });
+    cctx.fillRect(0,0,combined.width,combined.height);
+    pagesWithContent.forEach((p,i)=>{ cctx.drawImage(p.cvs, 0, i*p.cvs.height); });
     const imgB64 = combined.toDataURL('image/png');
 
-    // Llamar a /procesar-canvas.php con un pqr_id temporal para obtener transcripción
-    // Usamos un endpoint temporal que solo transcribe sin guardar
-    const resp = await fetch('/procesar-canvas.php', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ imagen_base64: imgB64, pqr_id: 'preview_' + Date.now() })
+    const resp = await fetch('/procesar-canvas.php',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ imagen_base64: imgB64, pqr_id: 'preview_'+Date.now() })
     });
     const data = await resp.json();
     const txt = data.transcripcion || data.texto || '';
 
-    if (!txt) {
-      box.innerHTML='<span style="color:#ca8a04;font-size:12px;">⚠️ No se detectó texto claro. Intenta escribir más grande.</span>';
+    if(!txt){
+      box.innerHTML = '<span style="color:#ca8a04;font-size:12px;">⚠️ No se detectó texto claro. Intenta escribir más grande.</span>';
       return;
     }
-
-    // Animación typewriter con el texto real
-    box.innerHTML='';
+    _lastAutoText = txt;
+    box.innerHTML = '';
     let i=0; clearInterval(twT);
-    twT=setInterval(()=>{
-      if(i>=txt.length){
-        clearInterval(twT);
-        box.innerHTML=txt+'<span class="rec-cursor"></span>';
-        // Guardar transcripción para usar al radicar
-        S._canvasTranscripcion = txt;
-        return;
-      }
-      box.innerHTML=txt.slice(0,i+1)+'<span class="rec-cursor"></span>';
+    twT = setInterval(()=>{
+      if(i>=txt.length){ clearInterval(twT); box.innerHTML=txt+'<span class="rec-cursor"></span>'; S._canvasTranscripcion=txt; return; }
+      box.innerHTML = txt.slice(0,i+1)+'<span class="rec-cursor"></span>';
       i++;
-    },18);
-
+    }, 18);
   } catch(err) {
-    box.innerHTML='<span style="color:#dc2626;font-size:12px;">❌ Error al procesar: ' + err.message + '</span>';
+    box.innerHTML = '<span style="color:#dc2626;font-size:12px;">❌ Error al procesar: '+err.message+'</span>';
   }
 }
 
@@ -2208,6 +2344,8 @@ function resetAll(){
   document.getElementById('recBarFill').style.width='0%';
   document.getElementById('recLimit').textContent='0:00 / 2:00';
   if(pages.length){pages.forEach((_,i)=>{pages[i].strokes=[];drawPageLines(pages[i].ctx,pages[i].cvs.width,pages[i].cvs.height);});pages=[];currentPage=0;}
+  toolMode='pen'; _lastAutoText=''; clearTimeout(_autoRecTimer);
+  const erBtn=document.getElementById('btnEraser'); if(erBtn) erBtn.classList.remove('active');
   mediaRecorder=null; audioChunks=[]; recSecs=0;
   const sb=document.getElementById('btnSubmit');
   sb.disabled=false;
