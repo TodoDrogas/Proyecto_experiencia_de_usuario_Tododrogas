@@ -144,6 +144,10 @@ elseif  ($transcripcion)                            $canal = 'audio';
 
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 $origen         = $body['origen'] ?? 'formulario_web'; // nova_td | formulario_web
+$sede_nombre    = trim($body['sede_nombre']    ?? '');
+$sede_ciudad    = trim($body['sede_ciudad']    ?? '');
+$sede_direccion = trim($body['sede_direccion'] ?? '');
+$sede_id        = trim($body['sede_id']        ?? '');
 
 // ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
 $whisper_transcripcion = '';
@@ -368,7 +372,7 @@ if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
     $subject = "[{$ticket_id}] 📷 QR | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } else {
     if (in_array($origen, ['web', 'formulario_web'])) {
-        $subject = "[{$ticket_id}] 🖥️ WEB | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
+        $subject = "[{$ticket_id}] ð¥ï¸ WEB | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
     } else {
         $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
     }
@@ -388,6 +392,10 @@ if (!empty($SB_URL) && $SB_URL !== '__SB_URL__' && !empty($SB_KEY)) {
         'tipo_pqr'         => $tipo_pqr,
         'canal'            => $canal,
         'origen'           => $origen,
+        'sede_id'          => $sede_id       ?: null,
+        'sede_nombre'      => $sede_nombre   ?: null,
+        'sede_ciudad'      => $sede_ciudad   ?: null,
+        'sede_direccion'   => $sede_direccion?: null,
         'sentimiento'      => $sentimiento,
         'prioridad'        => $prioridad,
         'estado'           => 'pendiente',
@@ -513,10 +521,11 @@ if ($token) {
         <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$horas_sla}h &middot; Límite: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "</td>
       </tr>
       <tr>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Ley aplicable</td>
-        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a'>{$ley_aplicable}</td>
-      </tr>
-    </table>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Ley aplicable</td>
+        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$ley_aplicable}</td>
+      </tr>" .
+      ($sede_nombre ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Sede atendida</td><td style='padding:9px 14px;font-size:12px;font-weight:500;color:#0c2d5e'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . ($sede_direccion ? "<br><span style='font-size:11px;color:#7a90a8;font-weight:400'>{$sede_direccion}</span>" : "") . "</td></tr>" : "") .
+      "</table>
 
     <!-- DIVIDER CIUDADANO -->
     <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
