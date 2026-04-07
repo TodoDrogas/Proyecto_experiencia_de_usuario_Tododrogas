@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Radicar PQRSFD · Tododrogas</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -528,7 +528,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 @media(max-width:900px){
   html,body{overflow:hidden;height:100%;}
   .slides-wrap{position:fixed;top:55px;left:0;right:0;bottom:0;display:flex;overflow:hidden;transform:none!important;}
-  .slide,.slide-split{min-width:100vw;width:100vw;height:100%;overflow-y:auto;padding:70px 20px 80px;}
+  .slide,.slide-split{min-width:100vw;width:100vw;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:70px 20px 80px;}
   .slide-split{flex-direction:column;}
   .split-left,.split-right{width:100%;border-right:none;border-bottom:1px solid var(--border);
     overflow:visible;padding:20px 16px 24px;}
@@ -544,7 +544,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 @media(max-width:600px){
   html,body{overflow:hidden;height:100%;}
   .slides-wrap{position:fixed;top:52px;left:0;right:0;bottom:0;display:flex;overflow:hidden;transform:none!important;}
-  .slide,.slide-split{min-width:100vw;width:100vw;height:100%;overflow-y:auto;
+  .slide,.slide-split{min-width:100vw;width:100vw;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
     padding:64px 14px 72px;justify-content:flex-start;padding-top:72px;}
   .slide-title{font-size:clamp(20px,6vw,28px);}
   .slide-sub{font-size:12px;margin-bottom:18px;}
@@ -571,7 +571,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
   .field-row{grid-template-columns:1fr;}
   .data-card{padding:14px;}
   .data-card-title{font-size:11px;}
-  .pqr-input,.pqr-textarea{font-size:14px;} /* evitar zoom en iOS */
+  .pqr-input,.pqr-textarea{font-size:16px;} /* 16px evita zoom automático en iOS */
 
   /* Botones */
   .btn-next{padding:14px;font-size:14px;border-radius:12px;}
@@ -1642,8 +1642,8 @@ function launchSlide4(medio){
   if(waTelHint) waTelHint.style.display = S.canal==='WhatsApp' ? 'block' : 'none';
 
   currentSlide=3;
-  updateCarousel(4);
   updateProgress(3);
+  updateCarousel(4);
 
   // Inicializar según medio
   if(medio==='lapiz') setTimeout(initCanvas,120);
@@ -2478,7 +2478,13 @@ setTimeout(()=>{document.body.style.opacity='1';},50);
 
 // Init responsive slides on load
 window.addEventListener('load', ()=>updateCarousel(0));
-window.addEventListener('resize', ()=>updateCarousel(currentSlide));
+let _lastW = window.innerWidth;
+window.addEventListener('resize', ()=>{
+  // Ignorar resize causado solo por teclado virtual (solo cambia el alto, no el ancho)
+  if(window.innerWidth === _lastW) return;
+  _lastW = window.innerWidth;
+  updateCarousel(currentSlide === 3 ? 4 : currentSlide + (currentSlide < 3 ? 1 : 0));
+});
 
 // ── Helper: URL firmada Supabase para buckets privados ──────────────
 async function getSignedUrl(path, bucket) {
