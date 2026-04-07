@@ -1794,9 +1794,10 @@ let penSize     = 1.5;
 let toolMode    = 'pen';   // 'pen' | 'eraser'
 const ERASER_SIZE = 22;
 
-// ── Auto-reconocimiento: debounce 1.2s tras el último trazo ──
+// ── Auto-reconocimiento: debounce 800ms tras el último trazo ──
 let _autoRecTimer = null;
 let _lastAutoText = '';
+let _isRecognizing = false;
 
 function scheduleAutoRecognize(){
   clearTimeout(_autoRecTimer);
@@ -1805,12 +1806,14 @@ function scheduleAutoRecognize(){
   const ll = document.getElementById('aiLiveLabel');
   if(li) li.style.display = 'inline-block';
   if(ll) ll.style.display = 'inline';
-  _autoRecTimer = setTimeout(()=>{ autoRecognize(); }, 1200);
+  _autoRecTimer = setTimeout(()=>{ autoRecognize(); }, 800);
 }
 
 async function autoRecognize(){
+  if(_isRecognizing) return; // evitar llamadas simultáneas
   const hasContent = pages.some(p=>p.strokes.length>0);
   if(!hasContent) return;
+  _isRecognizing = true;
 
   try {
     const pagesWithContent = pages.filter(p=>p.strokes.length>0);
@@ -1838,16 +1841,26 @@ async function autoRecognize(){
 
     if(!txt){
       if(!_lastAutoText) box.innerHTML = '<span style="color:var(--ink3);font-size:12px;">Sigue escribiendo…</span>';
+      _isRecognizing = false;
       return;
     }
     _lastAutoText = txt;
     S._canvasTranscripcion = txt;
 
+    // Contar palabras y mostrar
+    const wordCount = txt.trim().split(/\s+/).filter(Boolean).length;
+    const wordLabel = wordCount === 1 ? '1 palabra' : `${wordCount} palabras`;
+
     // Animar solo si el texto cambió
     box.innerHTML = '';
     let i=0; clearInterval(twT);
     twT = setInterval(()=>{
-      if(i>=txt.length){ clearInterval(twT); box.innerHTML=txt+'<span class="rec-cursor"></span>'; return; }
+      if(i>=txt.length){
+        clearInterval(twT);
+        box.innerHTML = txt + '<span class="rec-cursor"></span>' +
+          `<span style="display:block;margin-top:6px;font-size:10px;color:var(--ink3);letter-spacing:.5px">${wordLabel} reconocidas</span>`;
+        return;
+      }
       box.innerHTML = txt.slice(0,i+1)+'<span class="rec-cursor"></span>';
       i++;
     }, 12);
@@ -1856,6 +1869,8 @@ async function autoRecognize(){
     const ll = document.getElementById('aiLiveLabel');
     if(li) li.style.display = 'none';
     if(ll) ll.style.display = 'none';
+  } finally {
+    _isRecognizing = false;
   }
 }
 
