@@ -1121,7 +1121,12 @@ function applyQRs(){
 // Abre la encuesta en nueva pestaña (toque del botón en móvil)
 function openEncuesta(){
   if(ENC_URL){
-    window.open(ENC_URL, '_blank');
+    // Forzar origen=web sin importar lo que traiga ENC_URL desde Supabase
+    try{
+      const u = new URL(ENC_URL, window.location.origin);
+      u.searchParams.set('origen','web');
+      window.open(u.toString(), '_blank');
+    } catch(e){ window.open(ENC_URL, '_blank'); }
   } else {
     const lbl = document.getElementById('qr-encuesta-url');
     if(lbl){
@@ -1789,12 +1794,10 @@ ntdBotonesFinales());
 }
 
 function ntdEncuesta(){
-  // Usar ENC_URL como base pero forzar origen=nova_web (sobreescribe ?origen=qr del config)
-  let encBase = (typeof ENC_URL !== 'undefined' ? ENC_URL : NTD_C.encuesta);
-  try { const u=new URL(encBase,window.location.origin); u.searchParams.set('origen','nova_web'); encBase=u.toString(); } catch(e){}
+  const encBase = (typeof ENC_URL !== 'undefined' ? ENC_URL : NTD_C.encuesta);
   const encSep  = encBase.includes('?') ? '&' : '?';
-  const encParams = new URLSearchParams({nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
-  const encUrl = encBase + (encParams.toString() ? encSep + encParams.toString() : '');
+  const encParams = new URLSearchParams({origen:'nova_web',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
+  const encUrl = encBase + encSep + encParams.toString();
   const qrUrl  = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(encUrl)+'&bgcolor=141e30&color=fcd34d&qzone=1';
   ntdAddMsg('nova',
     `<p>Tu opinión es muy importante para nosotros. Puedes realizar la <strong>encuesta de satisfacción</strong> aquí:</p>
