@@ -510,12 +510,8 @@ if ($token) {
         <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$emoji_prio} " . mb_strtoupper($prioridad, "UTF-8") . "</td>
       </tr>
       <tr style='background:#f6f9fd'>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>SLA</td>
-        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$horas_sla}h &middot; Límite: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "</td>
-      </tr>
-      <tr>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Ley aplicable</td>
-        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a'>{$ley_aplicable}</td>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Fecha Límite de respuesta</td>
+        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$horas_sla}h &middot; Fecha: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "</td>
       </tr>
     </table>
 
