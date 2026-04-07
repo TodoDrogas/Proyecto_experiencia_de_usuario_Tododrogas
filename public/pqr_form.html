@@ -70,7 +70,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 .slide{
   min-width:100vw;width:100vw;height:100%;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:20px 20px 50px;position:relative;overflow:hidden;
+  padding:20px 20px 50px;position:relative;overflow:hidden auto;
 }
 .slide-dark{
   background:
@@ -524,28 +524,55 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 
 /* ════ RESPONSIVE ════ */
 
-/* Tablet (≤900px): split → stacked, contenido más compacto */
+/* Tablet (<=900px): slide a pantalla completa con scroll */
 @media(max-width:900px){
-  html,body{overflow:hidden;height:100%;}
-  .slides-wrap{position:fixed;top:55px;left:0;right:0;bottom:0;display:flex;overflow:hidden;transform:none!important;}
-  .slide,.slide-split{min-width:100vw;width:100vw;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:70px 20px 80px;}
+  html,body{overflow:hidden;height:100%;height:100dvh;}
+
+  .slides-wrap{
+    position:fixed;top:55px;left:0;right:0;bottom:0;
+    display:block;
+    overflow:hidden;
+    transform:none!important;
+  }
+
+  .slide,.slide-split{
+    position:absolute;top:0;left:0;right:0;bottom:0;
+    width:100%;min-width:unset;
+    height:100%;
+    overflow-y:auto;overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    padding:24px 20px 80px;
+    justify-content:flex-start;
+    display:none;
+  }
+
   .slide-split{flex-direction:column;}
-  .split-left,.split-right{width:100%;border-right:none;border-bottom:1px solid var(--border);
-    overflow:visible;padding:20px 16px 24px;}
-  .tipo-grid{grid-template-columns:repeat(4,1fr);gap:10px;}
-  .canal-grid,.medio-grid{grid-template-columns:repeat(3,1fr);}
-  .field-row{grid-template-columns:1fr;}
-  .btn-next{max-width:100%;}
+  .split-left,.split-right{
+    width:100%;border-right:none;
+    border-bottom:1px solid var(--border);
+    overflow:visible;padding:20px 16px 24px;
+    flex:none;
+  }
+  .split-right{border-bottom:none;border-top:1px solid var(--border);}
+
+  .tipo-grid{grid-template-columns:repeat(4,1fr);gap:10px;max-width:100%;}
+  .canal-grid,.medio-grid{grid-template-columns:repeat(3,1fr);max-width:100%;}
+  .field-row{grid-template-columns:1fr 1fr;}
+  .btn-next,.btn-submit{max-width:100%;}
   .step-dots{bottom:8px;}
   .topbar{padding:0 16px;}
+  .pqr-input,.pqr-textarea{font-size:16px;}
 }
 
-/* Móvil (≤600px): diseño columna, tipografía reducida */
+/* Móvil (<=600px): diseño columna, tipografía reducida */
 @media(max-width:600px){
-  html,body{overflow:hidden;height:100%;}
-  .slides-wrap{position:fixed;top:52px;left:0;right:0;bottom:0;display:flex;overflow:hidden;transform:none!important;}
-  .slide,.slide-split{min-width:100vw;width:100vw;height:100%;overflow-y:auto;-webkit-overflow-scrolling:touch;
-    padding:64px 14px 72px;justify-content:flex-start;padding-top:72px;}
+  html,body{overflow:hidden;height:100%;height:100dvh;}
+  .slides-wrap{position:fixed;top:47px;left:0;right:0;bottom:0;display:block;overflow:hidden;transform:none!important;}
+  .slide,.slide-split{
+    position:absolute;top:0;left:0;right:0;bottom:0;
+    width:100%;min-width:unset;height:100%;
+    overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;
+    padding:16px 14px 72px;justify-content:flex-start;display:none;}
   .slide-title{font-size:clamp(20px,6vw,28px);}
   .slide-sub{font-size:12px;margin-bottom:18px;}
   .eyebrow{font-size:9px;}
@@ -1569,7 +1596,12 @@ function updateCarousel(idx){
   if(isMobile){
     document.querySelectorAll('.slide,.slide-split').forEach(s=>{ s.style.display='none'; });
     const allSlides = Array.from(document.querySelectorAll('#slidesWrap > .slide, #slidesWrap > .slide-split'));
-    if(allSlides[idx]) allSlides[idx].style.display = 'flex';
+    if(allSlides[idx]){
+      allSlides[idx].style.display = 'flex';
+      allSlides[idx].style.justifyContent = 'flex-start';
+      allSlides[idx].style.overflowY = 'auto';
+      allSlides[idx].scrollTop = 0;
+    }
     window.scrollTo(0,0);
     document.getElementById('slidesWrap').style.transform='';
   } else {
