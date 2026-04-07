@@ -246,9 +246,10 @@ $canvas_vision_error  = '';
 
 if ($canal === 'canvas' && !empty($canvas_url) && strpos($canvas_url, 'data:image') === 0 && $OPENAI_KEY) {
     // Extraer base64 y mime del data URL
-    preg_match('/data:(image\/\w+);base64,(.+)/s', $canvas_url, $mc);
-    $canvas_mime  = $mc[1] ?? 'image/png';
-    $canvas_b64   = $mc[2] ?? '';
+    // FIX: usar strpos/substr — preg_match falla con base64 grande (PCRE backtracking)
+    $b64sep_vis  = strpos($canvas_url, ';base64,');
+    $canvas_mime = $b64sep_vis ? substr($canvas_url, 5, $b64sep_vis - 5) : 'image/png';
+    $canvas_b64  = $b64sep_vis ? substr($canvas_url, $b64sep_vis + 8) : '';
 
     if ($canvas_b64) {
         $ch_vis = curl_init('https://api.openai.com/v1/chat/completions');
@@ -548,11 +549,31 @@ if ($token) {
 
     <!-- BLOQUE MENSAJE -->
     <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:24px'>" .
-      ($canal === 'audio' && $transcripcion
-        ? "<p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Transcripción Whisper AI</p>
-           <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . nl2br(htmlspecialchars($transcripcion)) . "</p>"
-        : "<p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7'>" . nl2br(htmlspecialchars($texto_pqr ?: '[Audio adjunto — escuchar archivo adjunto]')) . "</p>") .
-      ($resumen_corto && !str_starts_with($resumen_corto, '[Audio') ? "<p style='margin:12px 0 0;font-size:10px;color:#7a90a8;font-style:normal;letter-spacing:.3px'><span style='font-weight:500;color:#0c2d5e'>Resumen IA:</span> " . htmlspecialchars($resumen_corto) . "</p>" : "") .
+
+      // ── Canvas: transcripción GPT-4o Vision ──────────────────────────
+      ($canal === 'canvas'
+        ? ($canvas_transcripcion
+            ? "<p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>✏️ Transcripción Lápiz Inteligente — GPT-4o Vision</p>
+               <p style='margin:0;font-size:13px;color:#0c2d5e;line-height:1.8;font-weight:500'>" . nl2br(htmlspecialchars($canvas_transcripcion)) . "</p>"
+            : "<p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#c0392b;text-transform:uppercase;letter-spacing:2px'>✏️ Transcripción no disponible</p>
+               <p style='margin:0;font-size:12px;color:#7a90a8;line-height:1.7;font-style:italic'>La IA no pudo transcribir la escritura. Ver imagen adjunta en este correo.</p>" .
+               ($canvas_vision_error ? "<p style='margin:6px 0 0;font-size:10px;color:#c0392b'>Error: " . htmlspecialchars($canvas_vision_error) . "</p>" : ""))
+
+        // ── Audio: transcripción Whisper ─────────────────────────────
+        : ($canal === 'audio' && $transcripcion
+            ? "<p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>🎤 Transcripción Whisper AI</p>
+               <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . nl2br(htmlspecialchars($transcripcion)) . "</p>"
+
+        // ── Escrito: texto directo ───────────────────────────────────
+        : "<p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7'>" . nl2br(htmlspecialchars($texto_pqr ?: '[Sin contenido de texto]')) . "</p>")) .
+
+      // ── Resumen IA (no mostrar el placeholder) ──────────────────────
+      ($resumen_corto
+        && !str_starts_with($resumen_corto, '[Lápiz')
+        && !str_starts_with($resumen_corto, '[Audio')
+        && !str_starts_with($resumen_corto, '[Sin')
+        ? "<p style='margin:12px 0 0;font-size:10px;color:#7a90a8;font-style:normal;letter-spacing:.3px'><span style='font-weight:500;color:#0c2d5e'>Resumen IA:</span> " . htmlspecialchars($resumen_corto) . "</p>"
+        : "") .
       "
     </div>" .
 
@@ -733,7 +754,11 @@ if ($token) {
     </table>
 
     <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:0'>
-      <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7'>" . nl2br(htmlspecialchars($texto_pqr)) . "</p>
+      <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7'>" .
+      ($canal === 'canvas' && $canvas_transcripcion
+        ? "<span style='font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px;display:block;margin-bottom:8px'>✏️ Transcripción Lápiz Inteligente — GPT-4o Vision</span>" . nl2br(htmlspecialchars($canvas_transcripcion))
+        : nl2br(htmlspecialchars($texto_pqr))) .
+      "</p>
     </div>
 
   </td></tr>
