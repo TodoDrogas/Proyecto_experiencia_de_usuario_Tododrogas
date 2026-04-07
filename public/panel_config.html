@@ -288,6 +288,7 @@ html,body{height:100%;font-family:'Space Grotesk',sans-serif;background:var(--bg
       <div class="topbar-right">
         <button class="btn btn-ghost btn-sm" onclick="exportConfig()">⬇ Exportar JSON</button>
         <button class="btn btn-primary btn-sm" onclick="saveAll()">💾 Guardar cambios</button>
+          <span id="autoSaveIndicator" style="font-size:11px;font-family:'Poppins',sans-serif;margin-left:8px;color:#16a34a;"></span>
       </div>
     </div>
 
@@ -1103,6 +1104,20 @@ function showToast(msg,type='success'){
 // INIT
 renderFrases(); renderFrasesLogin(); renderFrasesConsulta(); renderFaq(); startPreview();
 
+// Auto-save: escuchar cambios en todos los inputs del panel
+document.addEventListener('input', function(e){
+  const el = e.target;
+  if(el.closest('#panel-content') && (el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.tagName==='SELECT')){
+    if(el.id !== 'qr-url-input') markDirty(); // QR tiene su propio save
+  }
+});
+document.addEventListener('change', function(e){
+  const el = e.target;
+  if(el.closest('#panel-content') && (el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.tagName==='SELECT')){
+    markDirty();
+  }
+});
+
 // ── Carga config SOLO desde Supabase (fuente de verdad única) ──────
 (async()=>{
   if(!SB_URL||!SB_KEY){
@@ -1131,9 +1146,97 @@ renderFrases(); renderFrasesLogin(); renderFrasesConsulta(); renderFaq(); startP
   const sa=document.getElementById('sb-anon'); if(sa) sa.value='[inyectado por deploy.yml]';
   // Sincronizar sedes
   syncSedes();
+  // Arrancar polling para detectar cambios externos en Supabase
+  startConfigPolling();
 })();
 
 // ── Aplicar config desde Supabase ──────────────────────────
+// ══════════════════════════════════════════════
+// POLLING — detecta cambios en Supabase c/20s
+// ══════════════════════════════════════════════
+let _lastConfigHash = '';
+let _lastSedesHash  = '';
+let _configPollInterval = null;
+let _saveDebounceTimer  = null;
+let _isDirty = false;
+
+function _hashObj(obj){ return JSON.stringify(obj); }
+
+function startConfigPolling(){
+  if(_configPollInterval) return;
+  _configPollInterval = setInterval(pollChanges, 20000);
+}
+
+async function pollChanges(){
+  if(!SB_URL||!SB_KEY) return;
+  try{
+    // Poll configuracion_sistema
+    const r = await fetch(
+      `${SB_URL}/rest/v1/configuracion_sistema?id=eq.main&select=data`,
+      {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}}
+    );
+    if(!r.ok) return;
+    const rows = await r.json();
+    const cfg = rows?.[0]?.data;
+    if(!cfg) return;
+    const hash = _hashObj(cfg);
+    if(hash !== _lastConfigHash && _lastConfigHash !== ''){
+      // Config cambió externamente — aplicar sin sobrescribir
+      applyFullConfig(cfg);
+      showToast('↻ Config actualizada desde Supabase');
+    }
+    _lastConfigHash = hash;
+
+    // Poll sedes
+    const rs = await fetch(
+      `${SB_URL}/rest/v1/sedes?select=id,nombre,ciudad,direccion,lat,lng,radio_m,activa,municipio_norm&order=nombre.asc`,
+      {headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}}
+    );
+    if(rs.ok){
+      const sedes = await rs.json();
+      const sedesHash = _hashObj(sedes);
+      if(sedesHash !== _lastSedesHash && _lastSedesHash !== ''){
+        SEDES = sedes;
+        renderSedes();
+        showToast('↻ Sedes actualizadas ('+sedes.length+')');
+      }
+      _lastSedesHash = sedesHash;
+    }
+  }catch(e){ /* silencioso en poll */ }
+}
+
+// ══════════════════════════════════════════════
+// AUTO-SAVE — guarda 2s después del último cambio
+// ══════════════════════════════════════════════
+function markDirty(){
+  _isDirty = true;
+  clearTimeout(_saveDebounceTimer);
+  _saveDebounceTimer = setTimeout(autoSave, 2000);
+  // Indicador visual
+  const ind = document.getElementById('autoSaveIndicator');
+  if(ind){ ind.textContent = '● sin guardar'; ind.style.color = '#f59e0b'; }
+}
+
+async function autoSave(){
+  if(!_isDirty || !SB_URL || !SB_KEY) return;
+  saveCanales();
+  const cfg = buildConfig();
+  try{
+    const r = await fetch(`${SB_URL}/rest/v1/configuracion_sistema`,{
+      method:'POST',
+      headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
+      body:JSON.stringify({id:'main',data:cfg,updated_at:new Date().toISOString()})
+    });
+    if(r.ok||r.status===201||r.status===204){
+      _isDirty = false;
+      _lastConfigHash = _hashObj(cfg);
+      const ind = document.getElementById('autoSaveIndicator');
+      if(ind){ ind.textContent = '✓ guardado'; ind.style.color = '#16a34a'; }
+      setTimeout(()=>{ const i=document.getElementById('autoSaveIndicator'); if(i) i.textContent=''; },3000);
+    }
+  }catch(e){ /* sin toast para no molestar */ }
+}
+
 function applyFullConfig(cfg){
   if(!cfg) return;
   if(cfg.frases){STATE.frases=cfg.frases;renderFrases();}
