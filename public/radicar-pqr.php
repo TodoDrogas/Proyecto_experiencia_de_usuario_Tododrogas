@@ -1,6 +1,6 @@
 <?php
 /**
- * radicar-pqr.php v5 — Correos + Supabase
+ * radicar-pqr.php v4 — Sin BD · Solo correos
  * ─────────────────────────────────────────────────────
  * 1. Recibe PQR del formulario (escrito / audio / canvas)
  * 2. Genera ticket TD-YYYYMMDD-XXXX
@@ -144,10 +144,6 @@ elseif  ($transcripcion)                            $canal = 'audio';
 
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 $origen         = $body['origen'] ?? 'formulario_web'; // nova_td | formulario_web
-$sede_nombre    = trim($body['sede_nombre']    ?? '');
-$sede_ciudad    = trim($body['sede_ciudad']    ?? '');
-$sede_direccion = trim($body['sede_direccion'] ?? '');
-$sede_id        = trim($body['sede_id']        ?? '');
 
 // ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
 $whisper_transcripcion = '';
@@ -244,6 +240,55 @@ if ($whisper_transcripcion) {
     $transcripcion = $whisper_transcripcion;
 }
 
+// ── CANVAS: Transcribir con GPT-4o Vision si el medio es lápiz ───────
+$canvas_transcripcion = '';
+$canvas_vision_error  = '';
+
+if ($canal === 'canvas' && !empty($canvas_url) && strpos($canvas_url, 'data:image') === 0 && $OPENAI_KEY) {
+    // Extraer base64 y mime del data URL
+    preg_match('/data:(image\/\w+);base64,(.+)/s', $canvas_url, $mc);
+    $canvas_mime  = $mc[1] ?? 'image/png';
+    $canvas_b64   = $mc[2] ?? '';
+
+    if ($canvas_b64) {
+        $ch_vis = curl_init('https://api.openai.com/v1/chat/completions');
+        curl_setopt_array($ch_vis, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 30,
+            CURLOPT_HTTPHEADER     => ["Authorization: Bearer $OPENAI_KEY", 'Content-Type: application/json'],
+            CURLOPT_POSTFIELDS     => json_encode([
+                'model'      => 'gpt-4o',
+                'max_tokens' => 800,
+                'messages'   => [[
+                    'role'    => 'user',
+                    'content' => [
+                        ['type' => 'text',
+                         'text' => 'Transcribe EXACTAMENTE el texto escrito en esta imagen. Si hay texto escrito a mano, transcríbelo tal como está. Solo devuelve el texto transcrito, sin explicaciones adicionales.'],
+                        ['type' => 'image_url',
+                         'image_url' => ['url' => "data:{$canvas_mime};base64,{$canvas_b64}"]],
+                    ],
+                ]],
+            ]),
+        ]);
+        $vis_resp = curl_exec($ch_vis);
+        $vis_code = curl_getinfo($ch_vis, CURLINFO_HTTP_CODE);
+        curl_close($ch_vis);
+
+        $vis_data = json_decode($vis_resp, true);
+        if ($vis_code === 200 && !empty($vis_data['choices'][0]['message']['content'])) {
+            $canvas_transcripcion = trim($vis_data['choices'][0]['message']['content']);
+        } else {
+            $canvas_vision_error = $vis_data['error']['message'] ?? "HTTP $vis_code";
+        }
+    }
+}
+
+// Si canvas generó transcripción — usarla como texto principal
+if ($canvas_transcripcion) {
+    $transcripcion = $canvas_transcripcion;
+}
+
 // Texto final para clasificar
 $texto_pqr = $transcripcion ?: $descripcion;
 
@@ -288,60 +333,44 @@ if (!$texto_pqr && $canal === 'audio') {
 
 if ($OPENAI_KEY && $texto_pqr) {
     $prompt = <<<PROMPT
-Analiza esta solicitud de la droguería Tododrogas (Colombia). Responde SOLO JSON válido sin markdown.
+Analiza esta solicitud de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
 
-CANAL DE ENTRADA: {$canal}
-TIPO DECLARADO POR EL USUARIO: $tipo_pqr_raw
-TEXTO DE LA SOLICITUD:
----
-$texto_pqr
----
+CANAL: {$canal}
+TIPO DECLARADO: $tipo_pqr_raw
+TEXTO: $texto_pqr
 {$audio_tono_contexto}
 
-PASO 1 — LEE el texto completo con atención a sarcasmo, ironía y emociones implícitas.
-PASO 2 — DETERMINA la emoción real (no el tipo declarado).
-PASO 3 — Responde este JSON exacto:
+JSON requerido:
 {
   "sentimiento": "positivo|neutro|negativo|urgente",
-  "tono": "enojado|frustrado|triste|ansioso|neutro|satisfecho|agradecido|ironico",
+  "tono": "enojado|frustrado|triste|ansioso|neutro|satisfecho|agradecido",
   "prioridad": "baja|media|alta|critica",
   "nivel_riesgo": "bajo|medio|alto|critico",
-  "resumen": "máximo 120 caracteres describiendo el caso real",
-  "ley": "ley colombiana aplicable (Ley 1122/2007, Ley 1751/2015, Ley 1755/2015, Res 1552/2013, etc.)",
-  "horas_sla": número entero,
-  "detectado_sarcasmo": true|false
+  "resumen": "maximo 100 caracteres",
+  "ley": "ley colombiana aplicable",
+  "horas_sla": numero entero
 }
 
-REGLAS DE CLASIFICACIÓN:
-1. TEXTO MANDA sobre tipo declarado. Un "Felicitación" con texto negativo = negativo.
-2. SARCASMO → tono=ironico, sentimiento=negativo. Ej: "Qué excelente servicio, solo llevo 4 días sin medicamento".
-3. URGENTE: riesgo vital, error en medicamento crítico, paciente oncológico/renal/HIV sin medicamento → urgente+critica+horas_sla=4.
-4. ENOJADO: "pésimo", "ladrones", "abusivos", "el colmo", "qué vergüenza", "no sirven", "me tienen loco" → negativo+enojado.
-5. FRUSTRADO: queja sin ira extrema, "llevo días", "nadie me atiende", "ya no sé qué hacer" → negativo+frustrado.
-6. POSITIVO REAL: "gracias", "excelente servicio", "muy amables", "bacano", "los mejores" sin queja posterior → positivo+agradecido+baja.
-7. NEUTRO: preguntas informativas, solicitudes sin carga emocional → neutro+neutro+media.
-8. horas_sla por defecto: urgente=4, denuncia=24, queja/reclamo=72, peticion/solicitud=120, informacion/sugerencia/felicitacion=360.
+REGLAS:
+1. El contenido del texto MANDA sobre el tipo declarado.
+2. FELICITACIÓN/AGRADECIMIENTO → sentimiento=positivo, tono=agradecido, prioridad=baja, horas_sla=360. Palabras clave: "gracias", "muchas gracias", "excelente", "felicito", "maravilloso", "buen servicio", "muy bien atendido", "contento", "satisfecho", "perfecto", "genial", "los amo", "me ayudaron mucho".
+3. Si CONTEXTO AUDIO indica señales_positivas=SÍ → sentimiento=positivo+tono=agradecido OBLIGATORIO.
+4. URGENTE → riesgo de salud, error medicamento. prioridad=critica, horas_sla=4.
+5. ENOJO → "horrible", "pésimo", "ladrones", "abusivos", "el colmo". tono=enojado.
+6. FRUSTRACIÓN → queja sin ira, "llevo días", "no me atienden". tono=frustrado.
+7. NEUTRO → petición informativa sin emoción.
+8. horas_sla: felicitacion=360, sugerencia=360, peticion=120, queja=72, reclamo=72, denuncia=24, urgente=4.
 PROMPT;
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => json_encode([
-            'model'       => 'gpt-4o',
-            'max_tokens'  => 500,
+            'model'       => 'gpt-4o-mini',
+            'max_tokens'  => 300,
             'temperature' => 0.1,
             'messages'    => [
-                ['role' => 'system', 'content' => 'Eres un clasificador experto en análisis emocional de solicitudes de una droguería colombiana (Tododrogas). Respondes SOLO JSON válido sin markdown ni explicaciones.
-
-REGLAS CRÍTICAS DE CLASIFICACIÓN EMOCIONAL:
-1. El contenido real del texto SIEMPRE manda sobre el tipo declarado en el formulario.
-2. SARCASMO: Detecta frases positivas con contexto negativo. "Qué maravilloso servicio, llevo 3 horas esperando" → negativo/frustrado. "Excelente atención, me dejaron sin medicamento" → negativo/irónico.
-3. EMOCIÓN MIXTA: Si el texto tiene gratitud Y queja, clasifica según la emoción DOMINANTE y la que requiere acción.
-4. COLOMBIANISMOS NEGATIVOS: "el colmo", "no hay derecho", "una vergüenza", "qué desorden", "me tienen loco/a", "no sirven", "pésimo", "malísimo", "ladrones", "abusivos", "me robaron", "qué rabia", "esto no puede ser", "increíble" (en contexto negativo), "de mal en peor" → negativo.
-5. COLOMBIANISMOS POSITIVOS: "bacano", "qué chimba de servicio", "muy pilos", "gracias a Dios", "que Dios los bendiga", "muy amables", "los mejores", "siempre nos colaboran" → positivo.
-6. URGENCIA REAL: Mención de riesgo de salud, error en medicamento, paciente grave, sin medicamento crítico → urgente+critica.
-7. FELICITACIÓN DECLARADA + TEXTO NEGATIVO: Si tipo=felicitación pero el texto muestra queja, el sentimiento es negativo. Ejemplo: "Felicitación: llevan 2 semanas sin entregarme el medicamento" → negativo.
-8. QUEJA DECLARADA + TEXTO POSITIVO: Si tipo=queja pero el texto solo agradece o reporta algo resuelto → positivo.'],
+                ['role' => 'system', 'content' => 'Eres clasificador de solicitudes colombianas de drogueria. Responde SOLO JSON valido con los campos exactos solicitados. CRITICO: el contenido del texto SIEMPRE prevalece sobre el tipo que el usuario declaró en el formulario. Si el texto es positivo/agradecido (felicitaciones, gracias, buen servicio) clasificar como sentimiento=positivo+tono=agradecido+prioridad=baja+horas_sla=360 SIN IMPORTAR el tipo declarado. Si el texto muestra ira/frustración real, clasificar como negativo aunque el tipo diga petición.'],
                 ['role' => 'user',   'content' => $prompt],
             ],
         ]),
@@ -358,21 +387,14 @@ REGLAS CRÍTICAS DE CLASIFICACIÓN EMOCIONAL:
     $ia = json_decode(trim($ai_text), true);
 
     if ($ia) {
-        $sentimiento        = $ia['sentimiento']        ?? $sentimiento;
-        $tono_ia            = $ia['tono']               ?? 'neutro';
-        $prioridad          = $ia['prioridad']          ?? $prioridad;
-        $categoria_ia       = $ia['categoria']          ?? $categoria_ia;
-        $nivel_riesgo       = $ia['nivel_riesgo']       ?? $nivel_riesgo;
-        $resumen_corto      = mb_substr($ia['resumen']  ?? $resumen_corto, 0, 150);
-        $ley_aplicable      = $ia['ley']                ?? $ley_aplicable;
-        $horas_sla          = intval($ia['horas_sla']   ?? $horas_sla);
-        $detectado_sarcasmo = !empty($ia['detectado_sarcasmo']);
-        // Si detectó sarcasmo y el sentimiento sigue positivo → forzar negativo
-        if ($detectado_sarcasmo && $sentimiento === 'positivo') {
-            $sentimiento = 'negativo';
-            $tono_ia     = 'ironico';
-            if ($prioridad === 'baja') $prioridad = 'media';
-        }
+        $sentimiento   = $ia['sentimiento']  ?? $sentimiento;
+        $tono_ia       = $ia['tono']          ?? 'neutro';
+        $prioridad     = $ia['prioridad']    ?? $prioridad;
+        $categoria_ia  = $ia['categoria']    ?? $categoria_ia;
+        $nivel_riesgo  = $ia['nivel_riesgo'] ?? $nivel_riesgo;
+        $resumen_corto = mb_substr($ia['resumen'] ?? $resumen_corto, 0, 150);
+        $ley_aplicable = $ia['ley']          ?? $ley_aplicable;
+        $horas_sla     = intval($ia['horas_sla'] ?? $horas_sla);
     }
 }
 
@@ -394,64 +416,11 @@ if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
 } elseif ($origen === 'qr') {
     $subject = "[{$ticket_id}] 📷 QR | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } else {
-    if (in_array($origen, ['web', 'formulario_web'])) {
-        $subject = "[{$ticket_id}]  🖥️ WEB | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
-    } else {
-        $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
-    }
+    $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 }
 
-// ── PASO 2: INSERT EN SUPABASE tabla correos ────────────────────────
-$correo_id = null;
-if (!empty($SB_URL) && $SB_URL !== '__SB_URL__' && !empty($SB_KEY)) {
-    $sb_data = [
-        'ticket_id'        => $ticket_id,
-        'subject'          => $subject,
-        'from_email'       => $correo   ?: null,
-        'nombre'           => $nombre   ?: null,
-        'telefono'         => $telefono ?: null,
-        'documento'        => $documento?: null,
-        'body_text'        => $texto_pqr?: null,
-        'tipo_pqr'         => $tipo_pqr,
-        'canal'            => $canal,
-        'origen'           => $origen,
-        'sede_id'          => $sede_id       ?: null,
-        'sede_nombre'      => $sede_nombre   ?: null,
-        'sede_ciudad'      => $sede_ciudad   ?: null,
-        'sede_direccion'   => $sede_direccion?: null,
-        'sentimiento'      => $sentimiento,
-        'prioridad'        => $prioridad,
-        'estado'           => 'pendiente',
-        'horas_sla'        => $horas_sla,
-        'fecha_limite_sla' => $fecha_limite_sla,
-        'received_at'      => $now,
-        'is_read'          => false,
-    ];
-    if (!empty($audio_url) && strpos($audio_url,'data:')!==0)  $sb_data['audio_url']  = $audio_url;
-    if (!empty($canvas_url)&& strpos($canvas_url,'data:')!==0) $sb_data['canvas_url'] = $canvas_url;
-    if (!empty($resumen_corto)) $sb_data['resumen_ia'] = $resumen_corto;
-
-    $ch_sb = curl_init("$SB_URL/rest/v1/correos");
-    curl_setopt_array($ch_sb, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode($sb_data),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => [
-            "apikey: $SB_KEY",
-            "Authorization: Bearer $SB_KEY",
-            'Content-Type: application/json',
-            'Prefer: return=representation',
-        ],
-        CURLOPT_TIMEOUT => 10,
-    ]);
-    $sb_resp = curl_exec($ch_sb);
-    $sb_code = curl_getinfo($ch_sb, CURLINFO_HTTP_CODE);
-    curl_close($ch_sb);
-    if ($sb_code === 201) {
-        $inserted  = json_decode($sb_resp, true);
-        $correo_id = $inserted[0]['id'] ?? null;
-    }
-}
+// ── PASO 2: SUPABASE ELIMINADO — esta versión solo envía correos ──────
+$correo_id = null; // No hay ID de BD en esta versión
 
 // ── PASO 3: ENVIAR CORREO A pqrsfd via Graph API ─────────────────────
 date_default_timezone_set('America/Bogota'); // Hora Colombia UTC-5
@@ -544,11 +513,10 @@ if ($token) {
         <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$horas_sla}h &middot; Límite: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "</td>
       </tr>
       <tr>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Ley aplicable</td>
-        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$ley_aplicable}</td>
-      </tr>" .
-      ($sede_nombre ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Sede atendida</td><td style='padding:9px 14px;font-size:12px;font-weight:500;color:#0c2d5e'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . ($sede_direccion ? "<br><span style='font-size:11px;color:#7a90a8;font-weight:400'>{$sede_direccion}</span>" : "") . "</td></tr>" : "") .
-      "</table>
+        <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Ley aplicable</td>
+        <td style='padding:9px 14px;font-size:12px;color:#2a3a4a'>{$ley_aplicable}</td>
+      </tr>
+    </table>
 
     <!-- DIVIDER CIUDADANO -->
     <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
@@ -665,13 +633,16 @@ if ($token) {
     if ($canvas_url) {
         // Si es base64 data URL
         if (strpos($canvas_url, 'data:image') === 0) {
-            preg_match('/data:image\/(\w+);base64,(.+)/', $canvas_url, $m);
-            if ($m) {
+            $b64sep_att = strpos($canvas_url, ';base64,');
+            $mime_att   = $b64sep_att ? substr($canvas_url, 5, $b64sep_att - 5) : 'image/png';
+            $ext_att    = substr($mime_att, strrpos($mime_att, '/') + 1);
+            $b64_att    = $b64sep_att ? substr($canvas_url, $b64sep_att + 8) : '';
+            if ($b64_att) {
                 $mail_payload['attachments'][] = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
-                    'name'         => "canvas_{$ticket_id}.{$m[1]}",
-                    'contentType'  => "image/{$m[1]}",
-                    'contentBytes' => $m[2],
+                    'name'         => "canvas_{$ticket_id}.{$ext_att}",
+                    'contentType'  => $mime_att,
+                    'contentBytes' => $b64_att,
                 ];
             }
         } else {
@@ -963,13 +934,18 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         }
     }
     if ($canvas_url && strpos($canvas_url, 'data:image') === 0) {
-        preg_match('/data:image\/(\w+);base64,(.+)/', $canvas_url, $mc);
+        // FIX: usar strpos/substr — preg_match falla con base64 grande
+        $b64sep_ac = strpos($canvas_url, ';base64,');
+        $mime_ac   = $b64sep_ac ? substr($canvas_url, 5, $b64sep_ac - 5) : 'image/png';
+        $ext_ac    = substr($mime_ac, strrpos($mime_ac, '/') + 1);
+        $b64_ac    = $b64sep_ac ? substr($canvas_url, $b64sep_ac + 8) : '';
+        $mc        = $b64_ac ? [$canvas_url, $ext_ac, $b64_ac] : [];
         if ($mc) {
             $acuse_payload['attachments'][] = [
                 '@odata.type'  => '#microsoft.graph.fileAttachment',
-                'name'         => "su_escrito_{$ticket_id}.{$mc[1]}",
+                'name'         => "su_escrito_{$ticket_id}.{$ext_ac}",
                 'contentType'  => "image/{$mc[1]}",
-                'contentBytes' => $mc[2],
+                'contentBytes' => $b64_ac,
             ];
         }
     } elseif ($canvas_url) {
@@ -999,32 +975,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     $acuse_enviado = ($acuse_code === 202);
 }
 
-// ── PASO 4: HISTORIAL_EVENTOS pqr_recibida ──────────────────────────
-if (!empty($SB_URL) && $SB_URL !== '__SB_URL__' && $correo_id) {
-    $ev = [
-        'correo_id'   => $correo_id,
-        'evento'      => 'pqr_recibida',
-        'descripcion' => "PQR recibida via {$canal} ({$canal_contacto}). Clasificada: {$sentimiento} / {$prioridad}. Correo PQRSFD: ".($correo_enviado?'OK':'ERROR').". Acuse: ".(isset($acuse_enviado)&&$acuse_enviado?'OK':($correo?'ERROR':'sin correo')),
-        'datos_extra' => json_encode([
-            'ticket_id'    => $ticket_id,
-            'canal'        => $canal,
-            'origen'       => $origen,
-            'sentimiento'  => $sentimiento,
-            'prioridad'    => $prioridad,
-            'categoria_ia' => $categoria_ia,
-            'horas_sla'    => $horas_sla,
-        ]),
-    ];
-    $ch_ev = curl_init("$SB_URL/rest/v1/historial_eventos");
-    curl_setopt_array($ch_ev, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode($ev),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => ["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Content-Type: application/json'],
-        CURLOPT_TIMEOUT        => 8,
-    ]);
-    curl_exec($ch_ev); curl_close($ch_ev);
-}
+// ── PASO 4: HISTORIAL ELIMINADO en esta versión ─────────────────────
 
 // ── RESPUESTA FINAL ──────────────────────────────────────────────────
 http_response_code(200);
