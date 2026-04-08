@@ -629,7 +629,7 @@ function closeChat(){
     clearTimeout(_ntdCierreTimer);
     _ntdCierreTimer = setTimeout(()=>{
       ntdReset();
-    }, 4 * 60 * 1000); // 4 minutos // 2 minutos
+    }, 2 * 60 * 1000); // 2 minutos
   }
 }
 
@@ -644,90 +644,101 @@ const NTD_C = {
   encuesta: (typeof window.ENC_URL!=='undefined'?window.ENC_URL:'pqr_encuesta.html'),
   polUrl  : 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf',
 };
-const NTD_EPS=['COOSALUD','SAVIA','SALUD TOTAL','NUEVA EPS','CEM','ANGIOSUR'];
+const NTD_EPS=['COOSALUD','SAVIA SALUD','SALUD TOTAL','NUEVA EPS'];
 const NTD={
   fase:'politica', usuario:null, eps:null,
   _ced:null,_nom:null,_tel:null,_tipoDoc:'CÉDULA DE CIUDADANÍA',
   hist:[], busy:false, vipCb:null, _valT:null, arrancado:false, _enMenu:false,
+  geo:null,
 };
 
+// Geolocalización inversa (Nominatim/OpenStreetMap)
+async function ntdGeolocate(){
+  if(!navigator.geolocation) return null;
+  return new Promise(resolve=>{
+    navigator.geolocation.getCurrentPosition(async pos=>{
+      try{
+        const url='https://nominatim.openstreetmap.org/reverse?lat='+pos.coords.latitude+'&lon='+pos.coords.longitude+'&format=json&accept-language=es';
+        const r=await fetch(url);
+        const d=await r.json();
+        const ciudad=d.address?.city||d.address?.town||d.address?.village||d.address?.county||null;
+        NTD.geo=ciudad;
+        resolve(ciudad);
+      }catch(e){resolve(null);}
+    },()=>resolve(null),{timeout:6000});
+  });
+}
+
 function ntdSys(){
-  const hora = new Date().getHours();
-  const saludo = hora<12?'Buenos días':hora<18?'Buenas tardes':'Buenas noches';
-  const fechaHoy = new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});
-  return `Eres Nova TD — asistente virtual oficial de TODODROGAS CIA SAS, operador logístico de dispensación de medicamentos y tecnologías en salud para EPS en Antioquia y Colombia.
+  const geo = NTD.geo ? `Municipio detectado por GPS: ${NTD.geo}` : 'Ubicación: no disponible';
+  return `Eres Nova TD, asistente virtual de Tododrogas CIA SAS (Colombia). Eres empática, cálida y profesional.
+Tododrogas es un operador logístico de medicamentos con cobertura en Antioquia y otras regiones de Colombia. Distribuye medicamentos a través de puntos de dispensación (droguerías aliadas) para usuarios afiliados a EPS como COOSALUD, SAVIA SALUD, SALUD TOTAL y NUEVA EPS.
 
-══ IDENTIDAD Y CONTEXTO ══
-Hoy es ${fechaHoy}. Saludo apropiado: "${saludo}".
-USUARIO AUTENTICADO: Nombre completo: ${NTD.usuario?.nombre||'—'} | Llámalo SIEMPRE como: ${NTD.usuario?.primerNombre||'—'} | Cédula: ${NTD.usuario?.cedula||'—'} | EPS: ${NTD.eps||'—'} | Usuario VIP: ${NTD.usuario?.vip?'SÍ ⭐':'No'}
-${NTD._geoMunicipio?`Ubicación detectada: ${NTD._geoMunicipio}`:''}
+═══════════ PERFIL DEL USUARIO ═══════════
+Nombre completo: ${NTD.usuario?.nombre||'—'}
+Primer nombre: ${NTD.usuario?.primerNombre||'—'}
+Cédula: ${NTD.usuario?.cedula||'—'}
+EPS: ${NTD.eps||'—'}
+VIP: ${NTD.usuario?.vip?'SÍ — usuario preferencial':'No'}
+${geo}
 
-══ CONTEXTO SISTEMA DE SALUD COLOMBIANO ══
-• EPS que atendemos: COOSALUD, SAVIA SALUD, SALUD TOTAL, NUEVA EPS
-• PBS (Plan de Beneficios en Salud): medicamentos incluidos en la lista oficial del MINSALUD
-• MIPRES: plataforma ministerial para prescripción de medicamentos NO PBS (alto costo, huérfanos)
-• Autorización médica: documento que la EPS emite para aprobar entrega de medicamentos
-• Plazos legales según Res. 1604/2013: entrega inmediata si hay stock, máx 48h si no hay, domicilio autorizado
-• Ley 1755/2015 (Derecho de Petición): respuesta máx 15 días hábiles para peticiones
-• Ley Estatutaria 1751/2015: derecho fundamental a la salud, prestación continua sin interrupciones
-• Glosa: objeción de la EPS a la factura del operador — puede retrasar entregas
-• Dispensación: entrega formal de medicamentos con registro farmacéutico
-• Tecnologías en salud: dispositivos médicos, insumos, procedimientos cubiertos por PBS
-• Fórmula médica vigente: debe tener fecha, firma del médico, nombre genérico del medicamento
-• Carta de autorización para terceros: documento firmado por el paciente para que otra persona reclame
+═══════════ SISTEMA DE SALUD COLOMBIANO ═══════════
+- EPS (Entidades Promotoras de Salud): intermedian entre usuarios y prestadores. Principales: COOSALUD, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, EPS SURA, COMPENSAR, FAMISANAR, SANITAS.
+- IPS: prestadores de salud (clínicas, hospitales). Tododrogas actúa como IPS farmacéutica.
+- PQRSFD: Petición, Queja, Reclamo, Sugerencia, Felicitación, Denuncia. Ley 1755/2015 → plazo legal máximo 15 días hábiles para respuesta.
+- Medicamentos POS (Plan de Beneficios en Salud — antes POS): cubiertos por la EPS sin costo adicional para el usuario.
+- NO POS: medicamentos no incluidos en el plan básico; requieren autorización del Comité Técnico Científico (CTC) o tutela.
+- Autorización de medicamentos: el médico formula, la EPS autoriza, Tododrogas dispensa. Si la EPS demora, el usuario puede exigir respuesta en 5 días (urgencia) o 10 días (tratamiento regular) según Resolución 3047/2008.
+- Superintendencia Nacional de Salud: ente de control. El usuario puede radicar quejas en www.supersalud.gov.co o línea gratuita 01 8000 513 700.
+- Defensoría del Pueblo Colombia: mecanismos de tutela para acceso a salud.
+- ADRES: Administradora de los Recursos del Sistema General de Seguridad Social en Salud. Maneja el flujo de recursos entre EPS e IPS.
+- Ley 100 de 1993: marco general del sistema de seguridad social en Colombia.
+- Ley Estatutaria 1751 de 2015: la salud es un derecho fundamental. Ninguna barrera administrativa puede negar servicios de salud urgentes.
+- Medicamentos controlados (psicotrópicos, estupefacientes): requieren fórmula especial en papel de seguridad; no se dispensan sin este documento.
+- Cadena de frío: algunos medicamentos (biológicos, insulinas, oncológicos) requieren refrigeración y manejo especializado.
+- Copago y cuota moderadora: aplican según nivel de ingresos del usuario (nivel 1, 2, 3 de SISBEN); los usuarios del nivel 1 están exentos en la mayoría de servicios.
 
-══ INTELIGENCIA EMOCIONAL — CRÍTICO ══
-DETECTA el estado emocional del usuario y RESPONDE según el contexto:
-• FURIA/FRUSTRACIÓN ("CONCHUDOS","QUE DESASTRE","HARTO","LLEVO HORAS","NO HAY NADA","SIEMPRE LO MISMO"):
-  → Primero: valida la emoción con empatía real ("Entiendo tu frustración, ${NTD.usuario?.primerNombre||''}. Eso no debería pasar.")
-  → Luego: ofrece solución concreta (radicar queja, escalar, contacto directo)
-  → NO respondas con información genérica cuando hay emoción negativa intensa
-• URGENCIA MÉDICA ("urgente","emergencia","reacción","dolor","grave","hospital"):
-  → Responde inmediatamente con PBX 604 322 2432 y escala [ESCALAR]
-• CONFUSIÓN ("no entiendo","cómo","qué debo hacer"):
-  → Explica paso a paso en lenguaje simple
-• SATISFACCIÓN ("gracias","excelente","muy bien","los amo"):
-  → Agradece calurosamente y ofrece encuesta [ENCUESTA]
+═══════════ INTELIGENCIA EMOCIONAL ═══════════
+Detecta el estado emocional del usuario por su tono y responde adecuadamente:
+- FRUSTRACIÓN / IRA (escriben en mayúsculas, dicen "LLEVO ESPERANDO", "CONCHUDO", "NUNCA HAY NADA"): Primero valida la emoción con empatía real ("Entiendo que esto es desesperante, ${NTD.usuario?.primerNombre||''}. Tienes toda la razón en sentirte así."). Luego ofrece solución concreta. NUNCA seas genérica ni defensiva.
+- ANGUSTIA / URGENCIA MÉDICA ("me muero sin el medicamento", "es urgente", "estoy grave"): Actúa inmediatamente → PBX 604 322 2432. Indica que puede exigir dispensación urgente a la EPS bajo Ley 1751.
+- CONFUSIÓN ("no entiendo", "cómo es eso", "qué hago"): Explica paso a paso, en lenguaje simple, sin tecnicismos.
+- ALEGRÍA / SATISFACCIÓN: Celebra con el usuario, refuerza positivamente.
+- DESÁNIMO ("ya me cansé", "esto no sirve"): Reconoce el cansancio, ofrece ayuda directa y camino más corto.
+- LENGUAJE INFORMAL / COLOQUIAL: Adapta el tono. Si el usuario habla relajado, responde más cercano (sin perder profesionalismo).
 
-══ SEDES — REGLAS CRÍTICAS ══
-• NUNCA inventes sedes, direcciones ni horarios que no estén en la base de datos
-• Si el usuario pregunta "en qué municipios atienden" o "dónde están" o "qué ciudades" → usa [SEDES:TODAS] y aclara que consultarás
-• Si menciona un municipio específico → [SEDES:municipio]
-• Si no hay sede en el municipio → dilo claramente: "No tenemos sede en [municipio]. La más cercana puede ser en [no inventes — sugiere llamar al PBX]"
-• Si el usuario ya tiene ubicación GPS → usa NTD._geoMunicipio si está disponible
+═══════════ CAPACIDADES ═══════════
+- Consultar radicados: [CONSULTAR:valor]
+- Buscar sedes por municipio: [SEDES:municipio] — si el usuario da municipio, úsalo directamente
+- Escalar a asesor humano: [ESCALAR]
+- Mostrar formulario PQRSFD: [FORMULARIO]
+- Mostrar encuesta: [ENCUESTA]
+- Mostrar menú: [MENU]
+- Cambiar EPS: [CAMBIAR_EPS]
+- Sección medicamentos: [MEDICAMENTOS]
+- Explicar leyes, procesos, derechos del paciente: responde directamente con [MENU] al final
+- Atender cualquier pregunta libre sobre salud, medicamentos, EPS, trámites: responde con tu conocimiento
 
-══ MEDICAMENTOS PENDIENTES ══
-Cuando el usuario dice "me dieron ficho","me toca esperar","no hay nada","medicamento pendiente","llevo esperando":
-→ Reconoce la situación: "Entiendo, ${NTD.usuario?.primerNombre||''}. Si tu medicamento está pendiente tienes derecho a recibirlo en máx 48 horas según la Res. 1604/2013."
-→ Ofrece: 1) Consultar estado en App Solicitudes [MEDICAMENTOS] 2) Radicar queja [FORMULARIO] 3) Hablar con asesor [ESCALAR]
-
-══ CAPACIDADES Y TAGS ══
-[MENU] → mostrar menú numerado (NUNCA escribas el menú en texto)
-[MEDICAMENTOS] → consultar estado/entrega medicamentos via App Solicitudes Web
-[SEDES:municipio] → buscar sede en ese municipio para la EPS del usuario
-[CONSULTAR:valor] → consultar estado de radicado por número o correo
-[FORMULARIO] → ir a radicar PQRSFD
-[ENCUESTA] → ir a encuesta de satisfacción
-[ESCALAR] → conectar con asesor humano
-[CAMBIAR_EPS] → cambiar EPS del usuario
-
-══ REGLAS DE RESPUESTA ══
-• Español colombiano cálido, directo, nunca robótico
-• SIEMPRE usa el primer nombre: ${NTD.usuario?.primerNombre||''}
-• Máximo 100 palabras por respuesta (excepto cuando hay lista de requisitos)
-• Máximo 1 emoji por mensaje
-• NUNCA escribas el menú en texto — usa [MENU]
-• NUNCA muestres tags al usuario
-• UN solo tag al final, solo si aplica
-• Si no sabes algo → di "No tengo esa información. Llama al PBX 604 322 2432" — nunca inventes
-• Si el usuario escribe en MAYÚSCULAS → probablemente está frustrado, sé más empático
-
-══ CONTACTO TODODROGAS ══
-PBX: 604 322 2432 · Lun-Vie 7am-5:30pm · Sáb 8am-12m
+═══════════ CONTACTO TODODROGAS ═══════════
+PBX: 604 322 2432 · Opción #2 (Lun-Vie 7:00 a.m. - 5:30 p.m.)
 WhatsApp: 304 341 2431
-Correo: pqrsfd@tododrogas.com.co
-Nova TD: 24/7
-App medicamentos: https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb`;
+Correo PQRSFD: pqrsfd@tododrogas.com.co
+Nova TD: disponible 24/7
+
+═══════════ REGLAS ESTRICTAS ═══════════
+1. Español colombiano ejecutivo y cálido. SIEMPRE llama al usuario por su PRIMER NOMBRE.
+2. Máximo 130 palabras por respuesta. Máximo 1 emoji (úsalo con intención).
+3. NUNCA escribas listas de menú en texto plano. Para mostrar el menú usa SOLO [MENU].
+4. Los TAGS van SIEMPRE al final del mensaje y son invisibles para el usuario. NUNCA los menciones.
+5. SOLO UN tag por respuesta.
+6. Si hay urgencia médica o el usuario dice que su vida está en riesgo → da el PBX inmediatamente.
+7. NUNCA inventes radicados, medicamentos, fechas ni datos de sedes.
+8. Si el usuario pregunta por una sede y menciona un municipio → usa [SEDES:NombreMunicipio].
+9. Si detectas frustración fuerte, valida primero y después informa — nunca al revés.
+10. Cuando el usuario use lenguaje soez por frustración (no por agresión), mantén la empatía sin juzgar.
+
+TAGS DISPONIBLES (exactamente uno, solo cuando aplica):
+[MENU] [FORMULARIO] [ESCALAR] [ENCUESTA] [MEDICAMENTOS] [CAMBIAR_EPS] [CONSULTAR:valor] [SEDES:municipio]`;
 }
 
 const ntdNOW=()=>new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
@@ -802,7 +813,7 @@ function ntdResetInact(){
   if(NTD.fase !== 'libre') return; // solo cuando ya está en conversación libre
   _ntdInactTimer = setTimeout(()=>{
     // Solo actuar si el modal está abierto
-    if(!document.getElementById('overlay').classList.contains('open')) return;
+    // (página independiente — siempre visible)
     // Mostrar mensaje de cierre con botón para reiniciar
     ntdAddMsg('nova',
       `<p>Esta conversación se cerró por inactividad.</p>
@@ -813,7 +824,7 @@ function ntdResetInact(){
          </button>
        </div>`);
     ntdDis();
-  }, 4 * 60 * 1000); // 4 minutos // 2 minutos
+  }, 2 * 60 * 1000); // 2 minutos
 }
 
 function ntdNuevoChat(){
@@ -1007,7 +1018,7 @@ function ntdMostrarMenu(){
     {e:'6️⃣',l:'Radicado',t:'6'},
     {e:'8️⃣',l:'Encuesta',t:'8'},
   ]);
-  ntdEna('Escriba el número de la opción...');
+  ntdEna('Escribe el número de la opción...');
   ntdResetInact();
 }
 
@@ -1020,11 +1031,13 @@ function ntdMedicamentos(){
   ntdAddMsg('nova',
     `<p><strong>${n}</strong>, para consultar el estado de tus medicamentos, entregas pendientes o historial de dispensación, ingresa a nuestra plataforma <strong>App Solicitudes Web</strong>:</p>
      <div style="text-align:center;margin:10px 0">
-       <img src="${QR_MEDS}"
-         style="width:160px;height:160px;border-radius:10px;border:1px solid rgba(37,99,235,.3)"
-         alt="QR Medicamentos" onerror="this.style.display='none'">
+       <a href="${MANTIS_URL}" target="_blank" style="display:inline-block">
+         <img src="${QR_MEDS}"
+           style="width:160px;height:160px;border-radius:10px;border:1px solid rgba(37,99,235,.3);cursor:pointer"
+           alt="QR Medicamentos" onerror="this.style.display='none'">
+       </a>
        <p style="font-size:11px;color:var(--ntd-t2,rgba(190,215,255,.6));margin-top:6px">
-         📱 Escanea con tu cámara o toca el botón
+         📱 Toca la imagen o el botón para abrir
        </p>
      </div>`,
 `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
@@ -1064,12 +1077,27 @@ ntdBotonesFinales(`
 
 // Funciones directas para el menú numerado (sin pasar por ntdSend)
 function ntdSedes(){
-  NTD.fase = 'municipio_sedes'; // capturar el siguiente mensaje como municipio
+  NTD.fase = 'municipio_sedes';
+  const geoBtn = `<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdUsarGeo()">📍 Usar mi ubicación actual</button>`;
   ntdAddMsg('nova',
     `<p>¿En qué <strong>municipio</strong> necesitas el punto de dispensación?</p>
-     <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe el nombre del municipio (ej: Caucasia, Turbo, Amalfi...)</p>`,
-ntdBotonesFinales());
-  ntdEna('Escriba el municipio...');
+     <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe el nombre del municipio o toca tu ubicación para detectarlo automáticamente.</p>`,
+    ntdBotonesFinales(geoBtn));
+  ntdEna('Escribe el municipio...');
+}
+
+async function ntdUsarGeo(){
+  ntdAddMsg('nova','<p>📍 Detectando tu ubicación…</p>');
+  const ciudad = await ntdGeolocate();
+  if(ciudad){
+    NTD.fase='libre';
+    ntdAddMsg('nova', `<p>Ubicación detectada: <strong>${ciudad}</strong>. Buscando sedes…</p>`);
+    await ntdFetchSedes(ciudad);
+  }else{
+    ntdAddMsg('nova',ntdR2H('No pude detectar tu ubicación. Por favor **escribe el municipio** directamente.'));
+    NTD.fase='municipio_sedes';
+    ntdEna('Escribe el municipio...');
+  }
 }
 
 function ntdAutorizacion(){
@@ -1092,11 +1120,13 @@ function ntdEncuesta(){
   ntdAddMsg('nova',
     `<p>Tu opinión es muy importante para nosotros. Puedes realizar la <strong>encuesta de satisfacción</strong> aquí:</p>
      <div style="text-align:center;margin:10px 0">
-       <img src="${qrUrl}"
-         style="border-radius:10px;width:160px;height:160px;border:1px solid rgba(245,158,11,.3)"
-         alt="QR Encuesta" onerror="this.style.display='none'">
+       <a href="${encUrl}" target="_blank" style="display:inline-block">
+         <img src="${qrUrl}"
+           style="border-radius:10px;width:160px;height:160px;border:1px solid rgba(245,158,11,.3);cursor:pointer"
+           alt="QR Encuesta" onerror="this.style.display='none'">
+       </a>
        <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:6px">
-         📱 Escanea con tu cámara o toca el botón
+         📱 Toca la imagen o el botón para ir a la encuesta
        </p>
      </div>`,
 ntdBotonesFinales(`
@@ -1164,8 +1194,10 @@ function ntdMostrarQR(){
   ntdAddMsg('nova',
     `<p>Escanea este código QR con tu celular para radicar tu solicitud desde cualquier punto de atención:</p>
      <div style="text-align:center;margin-top:10px">
-       <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(url)}&bgcolor=141e30&color=93c5fd&qzone=1"
-         style="border-radius:10px;width:160px;height:160px" alt="QR Radicar">
+       <a href="${url}" target="_blank" style="display:inline-block">
+         <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(url)}&bgcolor=141e30&color=93c5fd&qzone=1"
+           style="border-radius:10px;width:160px;height:160px;cursor:pointer" alt="QR Radicar">
+       </a>
        <p style="font-size:11px;color:var(--ntd-t3);margin-top:6px">O toca el botón para ir directamente</p>
      </div>`,
 ntdBotonesFinales(`
@@ -1230,7 +1262,7 @@ async function ntdFLibre(txt){
     default:
       ntdAddMsg('nova',html, ntdBotonesFinales());
   }
-  ntdEna('Escriba su mensaje...');
+  ntdEna('Escribe tu mensaje...');
   ntdResetInact();
 }
 
@@ -1259,7 +1291,7 @@ function ntdSetEps(eps){
        <button class="ntd-ch b" onclick="ntdSU('Consultar sedes')">🏥 Ver sedes</button>
        <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
-  ntdEna('Escriba su mensaje...');
+  ntdEna('Escribe tu mensaje...');
 }
 
 async function ntdFetchRadicado(ticket){
@@ -1324,9 +1356,7 @@ async function ntdFetchSedes(mun){
     <div class="ntd-ic" style="margin-top:6px">
       <div class="ntd-ict">${s.nombre||'Sede'} · ${s.ciudad||mun}</div>
       <div class="ntd-ir"><span class="ntd-il">Dirección</span><span class="ntd-iv">${s.direccion||'—'}</span></div>
-      <div class="ntd-ir"><span class="ntd-il">Teléfono</span><span class="ntd-iv">${s.telefono||'—'}</span></div>
       <div class="ntd-ir"><span class="ntd-il">Horario</span><span class="ntd-iv">${s.horario||'—'}</span></div>
-      ${s.encargado?`<div class="ntd-ir"><span class="ntd-il">Encargado</span><span class="ntd-iv">${s.encargado}</span></div>`:''}
     </div>`).join('');
   ntdAddMsg('nova',
     `<p>Sedes en <strong>${d.municipio}</strong> · <strong>${NTD.eps||'—'}</strong> (${d.total} encontradas):</p>${sH}`,
@@ -1352,8 +1382,14 @@ function ntdShowVal(msg){
 function ntdCloseVal(){clearInterval(NTD._valT);ntd$('ntdValBg').classList.remove('on');}
 
 /* ── AUDIO WHATSAPP STYLE ── */
-let ntdRecActive=false, ntdRec=null, ntdRecSecs=0, ntdRecTimer=null;
+// ══════════════════════════════════════════════════════
+// AUDIO — Voz con Web Speech API (igual de fácil que WA)
+// Un toque → graba   |   segundo toque → detiene y envía
+// ══════════════════════════════════════════════════════
+let ntdRecActive = false, ntdRec = null, ntdRecSecs = 0, ntdRecTimer = null;
+let _ntdInterim  = '';   // texto parcial en tiempo real
 
+// ── Estado visual del botón de voz ──────────────────
 function ntdShowRecUI(on){
   const bar  = ntd$('ntdRecBar');
   const ta   = ntd$('ntdTa');
@@ -1364,15 +1400,21 @@ function ntdShowRecUI(on){
     ta.style.display   = 'none';
     sBtn.style.display = 'none';
     vBtn.classList.add('rec');
+    vBtn.title = 'Toca para detener y enviar';
+    vBtn.innerHTML = '⏹';
   } else {
     bar.classList.remove('on');
     ta.style.display   = '';
     sBtn.style.display = '';
     vBtn.classList.remove('rec');
+    vBtn.title = 'Habla con Nova';
+    vBtn.innerHTML = '🎤';
     ntd$('ntdRecTime').textContent = '0:00';
+    _ntdInterim = '';
   }
 }
 
+// ── Cronómetro ──────────────────────────────────────
 function ntdStartRecTimer(){
   ntdRecSecs = 0;
   clearInterval(ntdRecTimer);
@@ -1380,59 +1422,92 @@ function ntdStartRecTimer(){
     ntdRecSecs++;
     const m = Math.floor(ntdRecSecs/60);
     const s = String(ntdRecSecs%60).padStart(2,'0');
-    ntd$('ntdRecTime').textContent = m+':'+s;
-    // Límite 2 minutos
-    if(ntdRecSecs >= 120) ntdStopRec();
+    // Si hay texto parcial, mostrarlo; si no, el tiempo
+    const show = _ntdInterim ? _ntdInterim.slice(0,22)+(_ntdInterim.length>22?'…':'') : m+':'+s;
+    ntd$('ntdRecTime').textContent = show;
+    if(ntdRecSecs >= 90) ntdStopRec(); // máx 90s
   }, 1000);
 }
 
+// ── Detener grabación ────────────────────────────────
 function ntdStopRec(){
   clearInterval(ntdRecTimer);
-  if(ntdRec) ntdRec.stop();
+  if(ntdRec){ try{ ntdRec.stop(); }catch(e){} }
 }
 
+// ── Cancelar sin enviar ──────────────────────────────
 function ntdCancelRec(){
   clearInterval(ntdRecTimer);
   ntdRecActive = false;
-  if(ntdRec){ ntdRec.onresult=null; ntdRec.stop(); }
+  if(ntdRec){ ntdRec.onresult=null; try{ ntdRec.stop(); }catch(e){} }
+  ntd$('ntdTa').value = '';
   ntdShowRecUI(false);
   ntdAH(ntd$('ntdTa'));
   ntdUS();
 }
 
+// ── Toggle principal — idéntico al botón de WA ───────
 function ntdToggleVoz(){
-  const hasSR = ('SpeechRecognition' in window)||('webkitSpeechRecognition' in window);
-  if(!hasSR){
-    // Fallback: focus en textarea
+  // Si ya está grabando → detener (y onend auto-envía)
+  if(ntdRecActive){ ntdStopRec(); return; }
+
+  // Comprobar soporte
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    // Sin soporte nativo → aviso amigable y foco en textarea
+    ntdAddMsg('nova',
+      '<p>🎤 Tu navegador no soporta voz. Escribe tu mensaje o usa <strong>Chrome / Edge</strong> para hablar.</p>');
     ntd$('ntdTa').focus();
     return;
   }
-  if(ntdRecActive){ ntdStopRec(); return; }
 
-  const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+  // Solicitar permiso de micrófono de forma explícita primero
+  navigator.mediaDevices?.getUserMedia({audio:true})
+    .then(stream=>{ stream.getTracks().forEach(t=>t.stop()); _ntdIniciarSR(SR); })
+    .catch(err=>{
+      // Permiso denegado o no disponible
+      if(err.name==='NotAllowedError'||err.name==='PermissionDeniedError'){
+        ntdAddMsg('nova',
+          '<p>🎤 Para usar voz <strong>acepta el permiso de micrófono</strong> cuando el navegador lo solicite y vuelve a tocar el botón.</p>');
+      } else {
+        // getUserMedia no disponible (iOS Safari sin HTTPS, etc.) — intentar SR directo
+        _ntdIniciarSR(SR);
+      }
+    });
+}
+
+function _ntdIniciarSR(SR){
   ntdRec = new SR();
-  ntdRec.lang = 'es-CO';
-  ntdRec.continuous = false;
-  ntdRec.interimResults = true;
+  ntdRec.lang            = 'es-CO';
+  ntdRec.continuous      = true;   // continúa hasta que el usuario toque detener
+  ntdRec.interimResults  = true;   // muestra texto mientras habla
+  ntdRec.maxAlternatives = 1;
 
   ntdRec.onstart = ()=>{
     ntdRecActive = true;
+    _ntdInterim  = '';
     ntdShowRecUI(true);
     ntdStartRecTimer();
   };
 
   ntdRec.onresult = e=>{
-    let interim='', final='';
+    let interim = '', final = '';
     for(const r of e.results){
-      if(r.isFinal) final += r[0].transcript;
-      else interim += r[0].transcript;
+      if(r.isFinal) final += r[0].transcript + ' ';
+      else          interim += r[0].transcript;
     }
-    // Mostrar interim en el tiempo del timer (no en textarea)
-    if(interim) ntd$('ntdRecTime').textContent = interim.slice(0,18)+(interim.length>18?'…':'');
+    _ntdInterim = interim;
     if(final){
       const ta = ntd$('ntdTa');
-      ta.value = (ta.value+' '+final).trim();
+      ta.value = (ta.value + ' ' + final).trim();
+      ntdAH(ta);
+      _ntdInterim = '';
     }
+  };
+
+  ntdRec.onspeechend = ()=>{
+    // Silencio prolongado → detener automáticamente
+    ntdStopRec();
   };
 
   ntdRec.onend = ()=>{
@@ -1442,25 +1517,104 @@ function ntdToggleVoz(){
     const ta = ntd$('ntdTa');
     ntdAH(ta);
     ntdUS();
-    // Auto-enviar si hay texto transcrito
-    if(ta.value.trim()) setTimeout(()=>ntdSend(), 200);
+    // ✅ Auto-enviar si hay texto — igual que WA
+    if(ta.value.trim()) setTimeout(()=>ntdSend(), 180);
   };
 
-  ntdRec.onerror = ()=>{
+  ntdRec.onerror = e=>{
     clearInterval(ntdRecTimer);
     ntdRecActive = false;
     ntdShowRecUI(false);
     ntdUS();
+    // Solo mostrar error si no es el caso "no-speech" (silencio normal)
+    if(e.error !== 'no-speech' && e.error !== 'aborted'){
+      ntdAddMsg('nova',
+        `<p>🎤 Error de voz (<em>${e.error}</em>). Verifica que el micrófono esté habilitado y vuelve a intentar.</p>`);
+    }
   };
 
-  ntdRec.start();
+  try{
+    ntdRec.start();
+  }catch(ex){
+    ntdRecActive = false;
+    ntdShowRecUI(false);
+    ntdUS();
+  }
 }
 /* FIN NOVA TD */
 
+/* ── Detección de origen QR / URL ── */
+function ntdDetectOrigen(){
+  const p = new URLSearchParams(window.location.search);
+  const origen = p.get('origen')||p.get('utm_source')||p.get('src')||'';
+  const esQR = origen.toLowerCase().includes('qr') || p.has('qr');
+  NTD._origenQR = esQR;
+  NTD._origenParams = {
+    nombre : p.get('nombre')||'',
+    cedula : p.get('cedula')||'',
+    eps    : p.get('eps')||'',
+    accion : p.get('accion')||'',   // 'radicar','encuesta','radicado','sedes'
+    ticket : p.get('ticket')||'',
+    mun    : p.get('mun')||'',
+  };
+}
+
+/* Cuando viene por QR ya validado (origen=qr&cedula=...) saltamos directo a la acción */
+async function ntdQRFlow(){
+  const op = NTD._origenParams;
+  if(!op.cedula && !op.nombre) return false; // sin datos, flujo normal
+
+  // Pre-llenar datos si vienen en la URL
+  if(op.cedula) NTD._ced = op.cedula.replace(/\D/g,'');
+  if(op.nombre) NTD._nom = op.nombre.toUpperCase();
+  if(op.eps && NTD_EPS.includes(op.eps.toUpperCase())) NTD.eps = op.eps.toUpperCase();
+
+  // Si no hay EPS todavía pedirla primero
+  if(!NTD.eps && op.eps) NTD.eps = op.eps;
+
+  // Simular usuario validado (el QR ya acredita identidad)
+  const pn = (NTD._nom||op.nombre).trim().split(/\s+/)[0];
+  NTD.usuario = {nombre:NTD._nom||op.nombre, primerNombre:pn, cedula:NTD._ced, telefono:'', vip:false, saludo:null};
+  NTD.fase = 'libre';
+  ntdProg(65,'En atención');
+
+  ntdAddMsg('nova', `<p>✅ Bienvenido/a, <strong>${pn}</strong>. Acceso por QR detectado — tus datos ya están cargados.</p>`);
+  await ntdDelay(400);
+
+  // Ir directo a la acción indicada
+  switch((op.accion||'').toLowerCase()){
+    case 'radicar':  await ntdDelay(200); ntdIrARadicar(); return true;
+    case 'encuesta': await ntdDelay(200); ntdEncuesta();   return true;
+    case 'radicado': await ntdDelay(200);
+      if(op.ticket){ await ntdFetchRadicado(op.ticket); } else { ntdConsultarRadicado(); }
+      return true;
+    case 'sedes':    await ntdDelay(200);
+      if(op.mun){ await ntdFetchSedes(op.mun); } else { ntdSedes(); }
+      return true;
+    default:
+      ntdMostrarMenu(); return true;
+  }
+}
+
 /* Arranque automático */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  ntdDetectOrigen();
   NTD.arrancado = true;
-  ntdStart();
+
+  if(NTD._origenQR && NTD._origenParams.cedula){
+    // Política aceptada implícitamente (el QR ya implica consentimiento)
+    ntdSep();
+    ntdAddMsg('nova',
+      `<p>¡Hola! 👋 Bienvenido/a a <strong>Tododrogas CIA SAS</strong> vía QR.</p>
+       <p>Al usar este código aceptas nuestras <a href="${NTD_C.polUrl}" target="_blank" style="color:#93c5fd">políticas de tratamiento de datos</a>.</p>`);
+    NTD.fase = 'politica'; // necesario para que ntdFPolitica acepte
+    await ntdDelay(300);
+    // Flujo QR directo
+    const handled = await ntdQRFlow();
+    if(!handled) ntdStart(); // fallback
+  } else {
+    ntdStart();
+  }
 });
 </script>
 </body>
