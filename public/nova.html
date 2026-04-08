@@ -1036,6 +1036,24 @@ const MUNICIPIOS_MAP = {
   'samana':'SAMANA','samaná':'SAMANA','abejorral':'ABEJORRAL',
   'la union':'LA UNION','la unión':'LA UNION','marinilla':'MARINILLA',
   'caceres':'CACERES','cáceres':'CACERES','el retiro':'EL RETIRO',
+  'barbosa':'BARBOSA','girardota':'GIRARDOTA','copacabana':'COPACABANA',
+  'bello':'BELLO','envigado':'ENVIGADO','itagui':'ITAGUI','itagüi':'ITAGUI',
+};
+
+// Coordenadas de municipios que no tienen sede propia (para calcular distancias)
+const NTD_MUN_COORDS = {
+  'BARBOSA':{lat:6.4394,lng:-75.3322},
+  'GIRARDOTA':{lat:6.3783,lng:-75.4447},
+  'COPACABANA':{lat:6.3503,lng:-75.5103},
+  'BELLO':{lat:6.3367,lng:-75.5572},
+  'ENVIGADO':{lat:6.1697,lng:-75.5914},
+  'ITAGUI':{lat:6.1847,lng:-75.6044},
+  'EL RETIRO':{lat:6.0611,lng:-75.5025},
+  'LA CEJA':{lat:6.0225,lng:-75.4303},
+  'LA UNION':{lat:5.9783,lng:-75.3572},
+  'SABANETA':{lat:6.1511,lng:-75.6158},
+  'MARINILLA':{lat:6.1753,lng:-75.3378},
+  'PUEBLORRICO':{lat:5.7839,lng:-75.9314},
 };
 
 function ntdNormMun(txt){
@@ -1076,7 +1094,14 @@ async function ntdFetchSedes(mun){
   // Filtrar por EPS en el cliente (campo eps es array JSON en Supabase)
   const sedesPorEps=eps?todasSedes.filter(s=>{
     try{
-      const arr=Array.isArray(s.eps)?s.eps:JSON.parse(s.eps||'[]');
+      let arr=[];
+      if(Array.isArray(s.eps)) arr=s.eps;
+      else if(typeof s.eps==='string'){
+        // Formato PostgreSQL text[]: {COOSALUD,SAVIA} o JSON: ["COOSALUD","SAVIA"]
+        const t=s.eps.trim();
+        if(t.startsWith('{')) arr=t.slice(1,-1).split(',').map(e=>e.trim().replace(/"/g,''));
+        else try{arr=JSON.parse(t);}catch(e){arr=[];}
+      }
       return arr.some(e=>(e||'').toUpperCase()===eps);
     }catch(e){return false;}
   }):todasSedes;
@@ -1084,9 +1109,14 @@ async function ntdFetchSedes(mun){
   // Obtener coordenadas de referencia: GPS del usuario o coordenadas del municipio consultado
   let refLat=NTD._geoLat, refLng=NTD._geoLng;
   if(!refLat||!refLng){
-    // Buscar coords del municipio en las sedes mismas
-    const ref=todasSedes.find(s=>(s.municipio_norm||'').toUpperCase()===munNorm && parseFloat(s.lat||0)!==0);
-    if(ref){refLat=parseFloat(ref.lat);refLng=parseFloat(ref.lng);}
+    // 1. Buscar en mapa de coords de municipios conocidos
+    const munCoords=NTD_MUN_COORDS[munNorm];
+    if(munCoords){refLat=munCoords.lat;refLng=munCoords.lng;}
+    else{
+      // 2. Buscar coords del municipio en las sedes mismas
+      const ref=todasSedes.find(s=>(s.municipio_norm||'').toUpperCase()===munNorm && parseFloat(s.lat||0)!==0);
+      if(ref){refLat=parseFloat(ref.lat);refLng=parseFloat(ref.lng);}
+    }
   }
 
   // Sedes en el municipio consultado (con la EPS)
@@ -1130,14 +1160,20 @@ async function ntdFetchSedes(mun){
   // Usar coords del municipio consultado como referencia para ordenar
   let latRef=refLat, lngRef=refLng;
   if(!latRef||!lngRef){
-    // Si no hay ref, usar coords del municipio buscado desde cualquier sede con ese nombre
-    const munSede=todasSedes.find(s=>(s.municipio_norm||'').toUpperCase()===munNorm&&parseFloat(s.lat||0)!==0);
-    if(munSede){latRef=parseFloat(munSede.lat);lngRef=parseFloat(munSede.lng);}
+    const munCoords2=NTD_MUN_COORDS[munNorm];
+    if(munCoords2){latRef=munCoords2.lat;lngRef=munCoords2.lng;}
+    else{
+      const munSede=todasSedes.find(s=>(s.municipio_norm||'').toUpperCase()===munNorm&&parseFloat(s.lat||0)!==0);
+      if(munSede){latRef=parseFloat(munSede.lat);lngRef=parseFloat(munSede.lng);}
+    }
   }
 
   let cercanas=conCoords;
   if(latRef&&lngRef){
-    cercanas=conCoords.map(s=>({...s,_dist:ntdHav2(latRef,lngRef,parseFloat(s.lat),parseFloat(s.lng))})).sort((a,b)=>a._dist-b._dist).slice(0,3);
+    // Ordenar por distancia y deduplicar por municipio
+    const ordenadas=conCoords.map(s=>({...s,_dist:ntdHav2(latRef,lngRef,parseFloat(s.lat),parseFloat(s.lng))})).sort((a,b)=>a._dist-b._dist);
+    // Deduplicar por municipio pero mostrar hasta 2 del mismo municipio si es el más cercano
+    const munCount={}; cercanas=ordenadas.filter(s=>{const m=(s.municipio_norm||s.ciudad||'').toUpperCase();munCount[m]=(munCount[m]||0)+1;return munCount[m]<=1;}).slice(0,3);
   }else{
     // Sin referencia geográfica → pedir a GPT
     ntdTyping(true);ntdAddSk();
