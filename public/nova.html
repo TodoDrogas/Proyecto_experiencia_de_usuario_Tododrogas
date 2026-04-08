@@ -647,6 +647,7 @@ const NTD_C = {
   proxy   : (typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php'),
   pqrForm : (typeof window.PQR_FORM_URL!=='undefined'?window.PQR_FORM_URL:'pqr_form.html'),
   encuesta: (typeof window.ENC_URL!=='undefined'?window.ENC_URL:'pqr_encuesta.html'),
+  consultaUrl: (typeof window.CONSULTA_URL!=='undefined'?window.CONSULTA_URL:'consulta.html'),
   polUrl  : 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf',
 };
 const NTD_EPS=['COOSALUD','SAVIA','SALUD TOTAL','NUEVA EPS','CEM','ANGIOSUR'];
@@ -1316,9 +1317,12 @@ function ntdAutorizacion(){
 
 function ntdConsultarRadicado(){
   ntdAddMsg('nova',
-    ntdR2H('Para consultar tu radicado ingresa el **número de radicado** (ej: TD-123456) o tu **correo electrónico**:'),
-ntdBotonesFinales());
-  ntdEna('Por favor escriba su radicado o correo...');
+    `<p>Para consultar el estado de tu solicitud PQRSFD ingresa el <strong>número de radicado</strong> (ej: TD-20260401-1234) o tu <strong>correo electrónico</strong>:</p>`,
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+       <a href="${NTD_C.consultaUrl}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">1️⃣ &nbsp;🔍 Consultar en plataforma →</a>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
+     </div>`);
+  ntdEna('Por favor escriba su número de radicado...');
 }
 
 function ntdEncuesta(){
@@ -1536,8 +1540,14 @@ async function ntdFetchRadicado(ticket){
   }catch(e){d={encontrado:false};}
   ntdRmSk();ntdTyping(false);
   if(!d.encontrado){
-    ntdAddMsg('nova',ntdR2H(`No encontré radicado con **"${ticket}"**. Verifica el número (ej: TD-123456) o tu correo.`),
-      `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">3️⃣ &nbsp;🔍 Consultar otro radicado</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button></div>`);return;
+    ntdAddMsg('nova',
+      `<p>No encontré el radicado <strong>${ticket}</strong>.</p>
+       <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.6)">Verifica que el número sea correcto (ej: TD-20260401-1234) o consulta directamente en nuestra plataforma.</p>`,
+      `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+         <a href="${NTD_C.consultaUrl}?ticket=${encodeURIComponent(ticket)}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">1️⃣ &nbsp;🔍 Consultar en plataforma →</a>
+         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">2️⃣ &nbsp;Intentar con otro número</button>
+         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">3️⃣ &nbsp;🏠 Menú principal</button>
+       </div>`);return;
   }
   const est=d.estado||'pendiente';
   const bc=est==='cerrado'?'ntd-bg':(est==='urgente'||d.sla_vencido?'ntd-br':'ntd-by');
