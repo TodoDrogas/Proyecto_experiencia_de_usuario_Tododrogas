@@ -669,7 +669,7 @@ function ntdSys(){
   if(muns)s+='EPS '+eps+' cubre: '+muns+'. Municipio fuera=sin cobertura.\n';
   s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
   s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
-  s+='REGLA SEDES: Si confirmas cobertura en un municipio usa OBLIGATORIAMENTE [SEDES:municipio] al final.\n';
+  s+='REGLA SEDES: Cuando el usuario pregunte por sedes o cobertura en cualquier municipio, usa SIEMPRE [SEDES:municipio] al final — tanto si hay cobertura como si no la hay. NUNCA respondas sobre sedes sin usar este tag.\n';
   s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
   return s;
 }
@@ -1103,12 +1103,13 @@ async function ntdFetchSedes(mun){
     const sH=top.map((s,i)=>{
       const distTxt=hayGeo&&s._dist&&s._dist<9999?`<span style="font-size:10px;color:rgba(190,215,255,.45);margin-left:6px">📏 ${s._dist.toFixed(1)} km</span>`:'';
       const orden=i===0&&hayGeo?'<span style="font-size:10px;background:#16a34a;color:#fff;padding:1px 6px;border-radius:99px;margin-left:6px">Más cercana</span>':'';
-      const mu=parseFloat(s.lat||0)!==0?`https://maps.google.com/?q=${s.lat},${s.lng}`:`https://maps.google.com/?q=${encodeURIComponent((s.nombre||'')+' '+(s.municipio_norm||s.ciudad||'')+' Colombia')}`;
-      return `<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:5px">${s.nombre||'Sede'}${orden}${distTxt}</div>
-        <div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:2px">📍 ${s.direccion||'—'}</div>
-        ${s.horario?`<div style="font-size:12px;color:rgba(190,215,255,.8)">🕐 ${s.horario}</div>`:''}
-        <a href="${mu}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">📍 Ver en Google Maps →</a>
+      const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
+      return `<div class="ntd-ic" style="margin-top:6px">
+        <div class="ntd-ict">${s.nombre||'Sede'}${orden}${distTxt}</div>
+        <div class="ntd-ir"><span class="ntd-il">Municipio</span><span class="ntd-iv">${s.municipio_norm||s.ciudad||'—'}</span></div>
+        <div class="ntd-ir"><span class="ntd-il">Dirección</span><span class="ntd-iv">${s.direccion||'—'}</span></div>
+        <div class="ntd-ir"><span class="ntd-il">Horario</span><span class="ntd-iv">${s.horario||'—'}</span></div>
+        <div class="ntd-ir" style="border:none"><span class="ntd-il"></span><a href="${mu}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">📍 Ver en Google Maps →</a></div>
       </div>`;
     }).join('');
     ntdAddMsg('nova',
@@ -1122,7 +1123,7 @@ async function ntdFetchSedes(mun){
   // No hay sedes en ese municipio → mostrar las más cercanas usando coordenadas
   const conCoords=sedesPorEps.filter(s=>parseFloat(s.lat||0)!==0&&parseFloat(s.lng||0)!==0);
   if(!conCoords.length){
-    ntdAddMsg('nova',`<p>Confirmamos que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>. Por favor comuníquese al WhatsApp <strong>304 341 2431</strong> o PBX <strong>604 322 2432</strong>.</p>`,ntdBotonesFinales());
+    ntdAddMsg('nova',`<p>Confirmo que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>.</p>`+ntdCanalesContacto(),ntdBotonesFinales());
     ntdEna('Por favor escriba su respuesta...');return;
   }
 
@@ -1162,19 +1163,19 @@ async function ntdFetchSedes(mun){
   }
 
   const sH2=cercanas.slice(0,3).map(s=>{
-    const mu=parseFloat(s.lat||0)!==0?`https://maps.google.com/?q=${s.lat},${s.lng}`:`https://maps.google.com/?q=${encodeURIComponent((s.nombre||'')+' '+(s.municipio_norm||s.ciudad||'')+' Colombia')}`;
+    const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
     const distLabel=s._dist?`<span style="font-size:10px;color:rgba(190,215,255,.45);margin-left:4px">📏 ${s._dist.toFixed(1)} km</span>`:s._distGPT?`<span style="font-size:10px;color:rgba(190,215,255,.45);margin-left:4px">📏 ~${s._distGPT}</span>`:'';
-    return `<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.15)">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${s.nombre||'Sede'}${distLabel}</div>
-      <div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:2px">📍 ${s.direccion||'—'} · ${s.municipio_norm||s.ciudad||''}</div>
-      ${s.horario?`<div style="font-size:12px;color:rgba(190,215,255,.8)">🕐 ${s.horario}</div>`:''}
-      <a href="${mu}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">📍 Ver en Google Maps →</a>
+    return `<div class="ntd-ic" style="margin-top:6px">
+      <div class="ntd-ict">${s.nombre||'Sede'}${distLabel}</div>
+      <div class="ntd-ir"><span class="ntd-il">Municipio</span><span class="ntd-iv">${s.municipio_norm||s.ciudad||'—'}</span></div>
+      <div class="ntd-ir"><span class="ntd-il">Dirección</span><span class="ntd-iv">${s.direccion||'—'}</span></div>
+      <div class="ntd-ir"><span class="ntd-il">Horario</span><span class="ntd-iv">${s.horario||'—'}</span></div>
+      <div class="ntd-ir" style="border:none"><span class="ntd-il"></span><a href="${mu}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">📍 Ver en Google Maps →</a></div>
     </div>`;
   }).join('');
 
   ntdAddMsg('nova',
-    `<p>Confirmamos que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>.</p>
-     <p style="margin-top:4px">Nova TD le presenta las sedes de <strong>${eps}</strong> más cercanas a usted:</p>${sH2}`,
+    `<p>Confirmo que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>. Sin embargo, Nova TD le presenta las sedes de <strong>${eps}</strong> más cercanas a usted:</p>${sH2}`+ntdCanalesContacto(),
     ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button>'));
   ntdEna('Por favor escriba su respuesta...');
 }
@@ -1191,14 +1192,14 @@ function ntdMostrarSedesLocales(sedes,titulo,mun){
     var _refLng=NTD._geoLng||(_munRef?_munRef.lng:null);
     var mas=(_refLat&&_refLng?todas.map(function(s){return Object.assign({},s,{_d:(s.lat&&s.lat!==0)?ntdHaversine(_refLat,_refLng,s.lat,s.lng):9999});}).sort(function(a,b){return a._d-b._d;}).slice(0,3):todas.slice(0,3));
     var sH2=mas.map(function(s,i){
-      var mu=s.lat&&s.lat!==0?'https://maps.google.com/?q='+s.lat+','+s.lng:'https://maps.google.com/?q='+encodeURIComponent((s.nombre||'')+' '+(s.municipio||'')+' Colombia');
+      var mu='https://maps.google.com/?q='+encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio||'')+', Antioquia, Colombia');
       var dt=s._d&&s._d<9999?' ('+s._d.toFixed(1)+' km)':'';
       return '<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.15)">'
         +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">'+(s.nombre||'Sede')+dt+'</div>'
         +'<div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:4px">'+(s.direccion||'-')+' - '+(s.municipio||'')+'</div>'
         +'<a href="'+mu+'" target="_blank" style="font-size:11px;color:#93c5fd">Ver en Maps</a></div>';
     }).join('');
-    ntdAddMsg('nova','<p>Confirmamos que <strong>'+eps+'</strong> no presta servicio en <strong>'+munNombre+'</strong>. Sin embargo, Nova TD le presenta las sedes de <strong>'+eps+'</strong> más cercanas a usted:</p>'+sH2,
+    ntdAddMsg('nova','<p>Confirmo que <strong>'+eps+'</strong> no presta servicio en <strong>'+munNombre+'</strong>. Sin embargo, Nova TD le presenta las sedes de <strong>'+eps+'</strong> más cercanas a usted:</p>'+sH2+ntdCanalesContacto(),
       ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdVerMasSedes()">3️⃣ &nbsp;Ver mas sedes</button>'));
     return;
   }
@@ -1207,7 +1208,7 @@ function ntdMostrarSedesLocales(sedes,titulo,mun){
   var sH=top.map(function(s,i){
     var dt=hayGeo&&s._d&&s._d<9999?' ('+s._d.toFixed(1)+' km)':'';
     var bg=i===0&&hayGeo?' [Mas cercana]':'';
-    var mu=s.lat&&s.lat!==0?'https://maps.google.com/?q='+s.lat+','+s.lng:'https://maps.google.com/?q='+encodeURIComponent((s.nombre||'')+' '+(s.municipio||'')+' Colombia');
+    var mu='https://maps.google.com/?q='+encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio||'')+', Antioquia, Colombia');
     return '<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.15)">'
       +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">'+(s.nombre||'Sede')+bg+dt+'</div>'
       +'<div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:4px">'+(s.direccion||'-')+' - '+(s.municipio||'')+'</div>'
@@ -1318,6 +1319,19 @@ function ntdFinalizarChat(){
     `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
        <button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()">🔄 &nbsp;Iniciar nuevo chat</button>
      </div>`);
+}
+
+
+// ── Canales de contacto inline ─────────────────────────
+function ntdCanalesContacto(){
+  return '<div style="margin-top:10px;padding:10px 13px;border-radius:10px;background:rgba(37,99,235,.07);border:1px solid rgba(37,99,235,.13)">'
+    +'<div style="font-size:11px;font-weight:700;color:rgba(130,165,220,.6);margin-bottom:6px">📞 CANALES DE CONTACTO</div>'
+    +'<div style="font-size:12px;color:rgba(190,215,255,.85);line-height:1.8">'
+    +'💬 WhatsApp: <a href="https://wa.me/573043412431" target="_blank" style="color:#93c5fd;font-weight:600">304 341 2431</a><br>'
+    +'📞 PBX: <a href="tel:6043222432" style="color:#93c5fd;font-weight:600">604 322 2432</a> · Opción #2<br>'
+    +'📧 pqrsfd@tododrogas.com.co<br>'
+    +'🕐 Lun-Vie 7:00am–5:30pm · Sáb 8:00am–12:00m'
+    +'</div></div>';
 }
 
 
