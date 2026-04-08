@@ -675,7 +675,7 @@ function ntdSys(){
   s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
   s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
   s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, mal concentración, deteriorado o equivocado — di SIEMPRE: No lo consuma. Por su seguridad NO utilice ese medicamento. Acérquese al punto más cercano o llame al PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] o [ESCALAR].\n';
-  s+='REGLA SEDES: Cuando el usuario pregunte por sedes o cobertura en cualquier municipio, usa SIEMPRE [SEDES:municipio] al final — tanto si hay cobertura como si no la hay. NUNCA respondas sobre sedes sin usar este tag.\n';
+  s+='REGLA SEDES: Cuando el usuario pregunte por sedes o cobertura usa SIEMPRE [SEDES:municipio] al final. Si el usuario menciona una EPS DIFERENTE a la suya (ej: "si soy SALUD TOTAL", "para COOSALUD"), usa [SEDES:municipio:EPSMENCIONADA] con la EPS que mencionó. NUNCA uses la EPS del perfil si el usuario especificó otra.\n';
   s+='REGLA CONSULTAR: Si el usuario escribe un número de radicado (ej: TD-xxxxx) o correo para consultar estado, usa SIEMPRE [CONSULTAR:valor] al final con el valor exacto que escribió.\n';
   s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
   return s;
@@ -1119,12 +1119,13 @@ async function ntdFetchSedes(mun){
       let arr=[];
       if(Array.isArray(s.eps)) arr=s.eps;
       else if(typeof s.eps==='string'){
-        // Formato PostgreSQL text[]: {COOSALUD,SAVIA} o JSON: ["COOSALUD","SAVIA"]
         const t=s.eps.trim();
         if(t.startsWith('{')) arr=t.slice(1,-1).split(',').map(e=>e.trim().replace(/"/g,''));
         else try{arr=JSON.parse(t);}catch(e){arr=[];}
       }
-      return arr.some(e=>(e||'').toUpperCase()===eps);
+      // Normalizar: SAVIA SALUD == SAVIA, SAVIA == SAVIA SALUD
+      const epsNorm=eps.replace('SAVIA SALUD','SAVIA');
+      return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA');return en===epsNorm||en===eps;});
     }catch(e){return false;}
   }):todasSedes;
 
@@ -1482,8 +1483,16 @@ async function ntdFLibre(txt){
       ntdAddMsg('nova',html);await ntdDelay(300);ntdCambiarEps();break;
     case 'CONSULTAR':
       await ntdFetchRadicado(dat);break;
-    case 'SEDES':
-      await ntdFetchSedes(dat);break;
+    case 'SEDES':{
+      // dat puede ser "municipio" o "municipio:EPS"
+      const _partes=(dat||'').split(':');
+      const _mun=_partes[0].trim();
+      const _epsOverride=_partes[1]?_partes[1].trim().toUpperCase():null;
+      const _epsOriginal=NTD.eps;
+      if(_epsOverride) NTD.eps=_epsOverride;
+      await ntdFetchSedes(_mun);
+      if(_epsOverride) NTD.eps=_epsOriginal;
+      break;}
     case 'MEDICAMENTOS':
       ntdAddMsg('nova',html);await ntdDelay(200);ntdMedicamentos();break;
     default:
