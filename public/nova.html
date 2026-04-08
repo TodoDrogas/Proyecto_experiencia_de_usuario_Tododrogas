@@ -787,7 +787,7 @@ async function ntdDispatch(txt){
     NTD.fase='libre';
     ntdAddMsg('nova', ntdR2H(`Buscando sedes en **${txt}** para **${NTD.eps||'tu EPS'}**...`));
     var _sf=ntdSedesFiltradas(txt);
-    ntdMostrarSedesLocales(_sf,'Sedes de <strong>'+(NTD.eps||'su EPS')+'</strong> en <strong>'+txt+'</strong>');
+    ntdMostrarSedesLocales(_sf,'Sedes de <strong>'+(NTD.eps||'su EPS')+'</strong> en <strong>'+txt+'</strong>',txt);
     return;
   }
   // Atajo numérico — llama funciones DIRECTAMENTE, sin pasar por ntdSend
@@ -1013,8 +1013,9 @@ function ntdNorm(s){return(s||'').toUpperCase().trim().replace(/[ÁÀÂÄ]/g,'A'
 function ntdHaversine(a,b,c,d){var R=6371,dA=(c-a)*Math.PI/180,dB=(d-b)*Math.PI/180;var x=Math.sin(dA/2)*Math.sin(dA/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dB/2)*Math.sin(dB/2);return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
 function ntdSedesPorEps(){var eps=ntdNorm(NTD.eps||'');if(!eps)return NTD_SEDES_LOCAL;return NTD_SEDES_LOCAL.filter(function(s){return s.eps.some(function(e){var en=ntdNorm(e);return en.includes(eps)||eps.includes(en);});});}
 function ntdSedesFiltradas(mun){var munN=ntdNorm(mun||'');var porEps=ntdSedesPorEps();if(!munN)return porEps;return porEps.filter(function(s){var m=ntdNorm(s.municipio||'');return m.includes(munN)||munN.includes(m);});}
-function ntdMostrarSedesLocales(sedes,titulo){
+function ntdMostrarSedesLocales(sedes,titulo,mun){
   var contacto='<a href="https://wa.me/573043412431" target="_blank" style="color:#93c5fd">WA 304 341 2431</a>';
+  var eps=NTD.eps||'su EPS';var munNombre=(mun||'').toUpperCase()||'ese municipio';
   if(!sedes.length){
     var todas=ntdSedesPorEps();
     if(!todas.length){ntdAddMsg('nova','<p>No encontramos sedes. Llame al '+contacto+' o PBX 604 322 2432.</p>',ntdBotonesFinales());return;}
@@ -1027,7 +1028,7 @@ function ntdMostrarSedesLocales(sedes,titulo){
         +'<div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:4px">'+(s.direccion||'-')+' - '+(s.municipio||'')+'</div>'
         +'<a href="'+mu+'" target="_blank" style="font-size:11px;color:#93c5fd">Ver en Maps</a></div>';
     }).join('');
-    ntdAddMsg('nova','<p>Para '+(NTD.eps||'su EPS')+' no atendemos en ese municipio. Sedes mas cercanas:</p>'+sH2,
+    ntdAddMsg('nova','<p>Confirmamos que <strong>'+eps+'</strong> no presta servicio en <strong>'+munNombre+'</strong>. Sin embargo, Nova TD le presenta las sedes de <strong>'+eps+'</strong> más cercanas a usted:</p>'+sH2,
       ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdVerMasSedes()">3️⃣ &nbsp;Ver mas sedes</button>'));
     return;
   }
@@ -1088,7 +1089,7 @@ function ntdBuscarSedeConGeo(){
   var sedes=ntdSedesPorEps();
   if(!sedes.length){ntdAddMsg('nova',ntdR2H('No encontramos sedes para su EPS.'));return;}
   var ord=sedes.map(function(s){return Object.assign({},s,{_d:(s.lat&&s.lat!==0)?ntdHaversine(NTD._geoLat,NTD._geoLng,s.lat,s.lng):9999});}).sort(function(a,b){return a._d-b._d;});
-  ntdMostrarSedesLocales(ord,'Sedes de <strong>'+(NTD.eps||'su EPS')+'</strong> cerca a su ubicacion');
+  ntdMostrarSedesLocales(ord,'Sedes de <strong>'+(NTD.eps||'su EPS')+'</strong> cerca a su ubicacion',NTD._geoMunicipio||'');
 }
 function ntdPreguntarMunicipioSede(){
   NTD.fase='municipio_sedes';
