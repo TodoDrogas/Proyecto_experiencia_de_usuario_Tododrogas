@@ -633,7 +633,7 @@ const NTD_C = {
   consultaUrl: (typeof window.CONSULTA_URL!=='undefined'?window.CONSULTA_URL:'consulta.html'),
   polUrl  : 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf',
 };
-const NTD_EPS=['COOSALUD','SAVIA SALUD','SALUD TOTAL','NUEVA EPS'];
+const NTD_EPS=['COOSALUD','SAVIA SALUD','SALUD TOTAL','NUEVA EPS','CEM','ANGIOSUR'];
 const NTD={
   fase:'politica', usuario:null, eps:null,
   _ced:null,_nom:null,_tel:null,_tipoDoc:'CÉDULA DE CIUDADANÍA',
@@ -649,6 +649,7 @@ function ntdSys(){
 ═══════════ IDENTIDAD Y EMPRESA ═══════════
 Tododrogas CIA SAS es un operador logístico de medicamentos con cobertura en Antioquia y otras regiones de Colombia. Actúa como IPS farmacéutica, distribuyendo medicamentos a través de puntos de dispensación (Servicios Farmacéuticos propios y droguerías aliadas) para usuarios afiliados a EPS del régimen subsidiado y contributivo: COOSALUD, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, CEM, ANGIOSUR.
 PBX: 604 322 2432 · Opción #2 (Lun-Vie 7:00 a.m. – 5:30 p.m. | Sáb 8:00 a.m. – 12:00 m.)
+SEDES ESPECIALES: Edificio BIC Piso 6 (Medellín, Carrera 48 # 49-57) → SALUD TOTAL y CEM. Tododrogas Medellín Piso 1 (misma dirección) → COOSALUD, SAVIA SALUD, ANGIOSUR. Si preguntan por el Edificio BIC o qué EPS atienden ahí, usar estos datos.
 WhatsApp: 304 341 2431 | Correo PQRSFD: pqrsfd@tododrogas.com.co | Nova TD: 24/7
 
 ═══════════ PERFIL DEL USUARIO ═══════════
@@ -746,6 +747,9 @@ Responde libremente a preguntas sobre derechos del paciente, leyes, procesos, EP
 8. Si el usuario menciona un municipio para sedes → usa [SEDES:NombreMunicipio].
 9. VALIDA primero la emoción, INFORMA después. Nunca al revés.
 10. Consulta libre sobre salud → responde con tu conocimiento y añade [MENU].
+REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, mal concentración, deteriorado, equivocado o que no debe consumir — responde SIEMPRE: "No lo consuma. Por su seguridad, NO utilice ese medicamento. Acérquese al punto de dispensación más cercano o comuníquese al PBX 604 322 2432 / WhatsApp 304 341 2431 para orientación inmediata." Luego usa [SEDES:municipio] si mencionó municipio, o [ESCALAR] para conectar con asesor.
+REGLA SEDES: Cuando el usuario pregunte por sedes o cobertura en cualquier municipio, usa SIEMPRE [SEDES:municipio] al final. NUNCA respondas sobre sedes sin usar este tag.
+REGLA CONSULTAR: Si el usuario escribe un número de radicado (ej: TD-xxxxx) o correo para consultar estado, usa SIEMPRE [CONSULTAR:valor].
 TAGS (uno solo, solo cuando aplica): [MENU] [FORMULARIO] [ESCALAR] [ENCUESTA] [MEDICAMENTOS] [CAMBIAR_EPS] [CONSULTAR:valor] [SEDES:municipio]`;
 }
 
@@ -984,31 +988,49 @@ async function ntdFEps(txt){
 }
 
 /* ══ MENÚ PRINCIPAL (siempre numerado) ══ */
+function ntdOpc(n){
+  NTD.busy=false;
+  ntdEna('Por favor escriba su respuesta...');
+  var opc={1:ntdMedicamentos,2:ntdSedes,3:ntdRequisitosReclamar,
+    4:ntdAutorizacion,5:ntdIrARadicar,6:ntdConsultarRadicado,
+    7:ntdHorarios,8:ntdEncuesta};
+  if(opc[n]) opc[n]();
+}
+
+
 function ntdMostrarMenu(){
-  NTD.fase='libre';ntdProg(65,'En atención');
+  NTD.busy=false;NTD.fase='libre';ntdProg(65,'En atención');
   const n=NTD.usuario?.primerNombre||'';
-  ntdAddMsg('nova',
-    `<p><strong>${n}</strong>, digita el <strong>número</strong> de la opción que necesitas:</p>
-     <div style="margin-top:8px;font-size:13px;line-height:2.2">
-       <div>1️⃣ &nbsp;Estado o entrega de medicamentos</div>
-       <div>2️⃣ &nbsp;Puntos de dispensación / Sedes</div>
-       <div>3️⃣ &nbsp;Requisitos para reclamar medicamentos</div>
-       <div>4️⃣ &nbsp;Proceso de autorización con la EPS</div>
-       <div>5️⃣ &nbsp;Radicar solicitud PQRSFD</div>
-       <div>6️⃣ &nbsp;Consultar estado de mi radicado</div>
-       <div>7️⃣ &nbsp;Horarios y canales de contacto</div>
-       <div>8️⃣ &nbsp;Encuesta de satisfacción</div>
-     </div>`);
+  const c='<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(1)">1️⃣ &nbsp;Estado o entrega de medicamentos</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(2)">2️⃣ &nbsp;Puntos de dispensación / Sedes</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(3)">3️⃣ &nbsp;Requisitos para reclamar medicamentos</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(4)">4️⃣ &nbsp;Proceso de autorización con la EPS</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(5)">5️⃣ &nbsp;Radicar solicitud PQRSFD</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(6)">6️⃣ &nbsp;Consultar estado de mi radicado</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(7)">7️⃣ &nbsp;Horarios y canales de contacto</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(8)">8️⃣ &nbsp;Encuesta de satisfacción</button>'
+    +'<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdFinalizarChat()">9️⃣ &nbsp;✖ Finalizar chat</button>'
+    +'</div>';
+  ntdAddMsg('nova','<p>¿En qué le puedo ayudar, <strong>'+n+'</strong>?</p>',c);
   ntdSetQbar([
-    {e:'1️⃣',l:'Medicamentos',t:'1'},
-    {e:'2️⃣',l:'Sedes',t:'2'},
-    {e:'5️⃣',l:'Radicar',t:'5'},
-    {e:'6️⃣',l:'Radicado',t:'6'},
-    {e:'8️⃣',l:'Encuesta',t:'8'},
+    {e:'1️⃣',l:'Medicamentos',t:'1'},{e:'2️⃣',l:'Sedes',t:'2'},
+    {e:'5️⃣',l:'Radicar',t:'5'},{e:'6️⃣',l:'Radicado',t:'6'},{e:'8️⃣',l:'Encuesta',t:'8'},
   ]);
   ntdEna('Por favor escriba el número de la opción...');
   ntdResetInact();
 }
+
+function ntdFinalizarChat(){
+  ntdDis();
+  ntdAddMsg('nova',
+    `<p>¡Gracias por contactarnos, <strong>${NTD.usuario?.primerNombre||''}</strong>! 😊</p>
+     <p style="margin-top:4px">Fue un placer atenderte. Si necesitas algo más, estaremos aquí.</p>`,
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+       <button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()">🔄 &nbsp;Iniciar nuevo chat</button>
+     </div>`);
+}
+
 
 // ── Canales de contacto inline ─────────────────────────
 function ntdCanalesContacto(){
@@ -1295,6 +1317,15 @@ const NTD_MUN_COORDS = {
   'SABANETA':{lat:6.1511,lng:-75.6158},
   'MARINILLA':{lat:6.1753,lng:-75.3378},
   'PUEBLORRICO':{lat:5.7839,lng:-75.9314},
+  'SAN MARCOS':{lat:8.6667,lng:-75.1333},
+  'NECOCLI':{lat:8.4281,lng:-76.7833},
+  'TURBO':{lat:8.0972,lng:-76.7294},
+  'APARTADO':{lat:7.88,lng:-76.6258},
+  'CAREPA':{lat:7.7586,lng:-76.6542},
+  'CHIGORODO':{lat:7.6728,lng:-76.6836},
+  'CAUCASIA':{lat:7.9839,lng:-75.1953},
+  'YARUMAL':{lat:7.0,lng:-75.4194},
+  'RIONEGRO':{lat:6.155,lng:-75.3736},
 };
 
 function normalizarMunicipio(txt){
@@ -1398,7 +1429,7 @@ async function ntdFetchSedes(mun){
   let cercanas=conCoords.slice(0,3);
   if(latRef&&lngRef){
     const ordenadas=conCoords.map(s=>({...s,_dist:haversine(latRef,lngRef,parseFloat(s.lat),parseFloat(s.lng))})).sort((a,b)=>a._dist-b._dist);
-    const munCount={}; cercanas=ordenadas.filter(s=>{const m=(s.municipio_norm||s.ciudad||'').toUpperCase();munCount[m]=(munCount[m]||0)+1;return munCount[m]<=1;}).slice(0,3);
+    const munVisto=new Set(); cercanas=ordenadas.filter(s=>{const m=(s.municipio_norm||s.ciudad||'').toUpperCase();if(munVisto.has(m))return false;munVisto.add(m);return true;}).slice(0,3);
   }
 
   const sH2=cercanas.map(s=>{
