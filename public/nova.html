@@ -670,6 +670,7 @@ function ntdSys(){
   s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
   s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
   s+='REGLA SEDES: Cuando el usuario pregunte por sedes o cobertura en cualquier municipio, usa SIEMPRE [SEDES:municipio] al final — tanto si hay cobertura como si no la hay. NUNCA respondas sobre sedes sin usar este tag.\n';
+  s+='REGLA CONSULTAR: Si el usuario escribe un número de radicado (ej: TD-xxxxx) o correo para consultar estado, usa SIEMPRE [CONSULTAR:valor] al final con el valor exacto que escribió.\n';
   s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
   return s;
 }
@@ -802,6 +803,12 @@ async function ntdDispatch(txt){
       '8':()=>ntdEncuesta(),
     };
     if(opc[n]){NTD.busy=false;opc[n]();return;}
+  }
+  // Si parece radicado (TD-xxxxxx o correo), consultar directo sin pasar por GPT
+  if(/^TD-[\d\-]+$/i.test(txt.trim())||/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(txt.trim())){
+    ntdAddMsg('nova',ntdR2H('Consultando tu radicado...'));
+    await ntdFetchRadicado(txt.trim());
+    return;
   }
   return ntdFLibre(txt);
 }
@@ -1406,10 +1413,11 @@ async function ntdFLibreDirecto(txt){
 // Radicar — lleva al formulario QR o botón directo
 function ntdIrARadicar(){
   ntdAddMsg('nova',
-    `<p>Para radicar tu solicitud PQRSFD tienes dos opciones:</p>`,
-ntdBotonesFinales(`
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">3️⃣ &nbsp;Radicar desde aquí →</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarQR()">4️⃣ &nbsp;Escanear código QR</button>`));
+    `<p>Para radicar tu solicitud PQRSFD toca el botón:</p>`,
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">1️⃣ &nbsp;📋 Radicar mi solicitud →</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
+     </div>`);
 }
 
 function ntdMostrarQR(){
@@ -1474,7 +1482,7 @@ async function ntdFLibre(txt){
     case 'CAMBIAR_EPS':
       ntdAddMsg('nova',html);await ntdDelay(300);ntdCambiarEps();break;
     case 'CONSULTAR':
-      ntdAddMsg('nova',html);await ntdDelay(150);await ntdFetchRadicado(dat);break;
+      await ntdFetchRadicado(dat);break;
     case 'SEDES':
       await ntdFetchSedes(dat);break;
     case 'MEDICAMENTOS':
