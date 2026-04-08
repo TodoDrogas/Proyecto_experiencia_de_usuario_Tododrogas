@@ -748,7 +748,7 @@ Responde libremente a preguntas sobre derechos del paciente, leyes, procesos, EP
 9. VALIDA primero la emoción, INFORMA después. Nunca al revés.
 10. Consulta libre sobre salud → responde con tu conocimiento y añade [MENU].
 REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, mal concentración, deteriorado, equivocado o que no debe consumir — responde SIEMPRE: "No lo consuma. Por su seguridad, NO utilice ese medicamento. Acérquese al punto de dispensación más cercano o comuníquese al PBX 604 322 2432 / WhatsApp 304 341 2431 para orientación inmediata." Luego usa [SEDES:municipio] si mencionó municipio, o [ESCALAR] para conectar con asesor.
-REGLA SEDES: Cuando el usuario pregunte por sedes o cobertura en cualquier municipio, usa SIEMPRE [SEDES:municipio] al final. NUNCA respondas sobre sedes sin usar este tag.
+REGLA SEDES: Cuando el usuario pregunte por sedes o cobertura usa SIEMPRE [SEDES:municipio] al final. Si el usuario menciona una EPS DIFERENTE a la suya (ej: "si soy SALUD TOTAL", "para COOSALUD"), usa [SEDES:municipio:EPSMENCIONADA] con la EPS que mencionó. NUNCA uses la EPS del perfil si el usuario especificó otra.
 REGLA CONSULTAR: Si el usuario escribe un número de radicado (ej: TD-xxxxx) o correo para consultar estado, usa SIEMPRE [CONSULTAR:valor].
 TAGS (uno solo, solo cuando aplica): [MENU] [FORMULARIO] [ESCALAR] [ENCUESTA] [MEDICAMENTOS] [CAMBIAR_EPS] [CONSULTAR:valor] [SEDES:municipio]`;
 }
@@ -1367,12 +1367,13 @@ async function ntdFetchSedes(mun){
       let arr=[];
       if(Array.isArray(s.eps)) arr=s.eps;
       else if(typeof s.eps==='string'){
-        // Formato PostgreSQL text[]: {COOSALUD,SAVIA} o JSON: ["COOSALUD","SAVIA"]
         const t=s.eps.trim();
         if(t.startsWith('{')) arr=t.slice(1,-1).split(',').map(e=>e.trim().replace(/"/g,''));
         else try{arr=JSON.parse(t);}catch(e){arr=[];}
       }
-      return arr.some(e=>(e||'').toUpperCase()===eps);
+      // Normalizar: SAVIA SALUD == SAVIA, SAVIA == SAVIA SALUD
+      const epsNorm=eps.replace('SAVIA SALUD','SAVIA');
+      return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA');return en===epsNorm||en===eps;});
     }catch(e){return false;}
   }):todasSedes;
 
@@ -1493,7 +1494,15 @@ async function ntdFLibre(txt){
     case 'MENU':       ntdAddMsg('nova',html);await ntdDelay(300);ntdMostrarMenu();break;
     case 'CAMBIAR_EPS':ntdAddMsg('nova',html);await ntdDelay(300);ntdCambiarEps();break;
     case 'CONSULTAR':  await ntdFetchRadicado(dat);break;
-    case 'SEDES':      await ntdFetchSedes(dat);break;
+    case 'SEDES':{
+      const _partes=(dat||'').split(':');
+      const _mun=_partes[0].trim();
+      const _epsOverride=_partes[1]?_partes[1].trim().toUpperCase():null;
+      const _epsOriginal=NTD.eps;
+      if(_epsOverride) NTD.eps=_epsOverride;
+      await ntdFetchSedes(_mun);
+      if(_epsOverride) NTD.eps=_epsOriginal;
+      break;}
     case 'MEDICAMENTOS':ntdAddMsg('nova',html);await ntdDelay(200);ntdMedicamentos();break;
     default:           ntdAddMsg('nova',html, ntdBotonesFinales());
   }
