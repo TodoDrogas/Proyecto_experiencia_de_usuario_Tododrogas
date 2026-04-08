@@ -1507,31 +1507,7 @@ async function ntdFetchRadicado(ticket){
     `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">3️⃣ &nbsp;🔍 Consultar otro radicado</button>${est!=='cerrado'?`<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdEscalarAgente()">4️⃣ &nbsp;👤 Hablar con asesor</button>`:''} <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button></div>`);
 }
 
-async function ntdFetchSedes(mun){
-  ntdTyping(true);ntdAddSk();
-  let d;
-  try{
-    const r=await fetch(NTD_C.consulta,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accion:'sede',municipio:mun,eps:NTD.eps||'TODAS'})});
-    d=await r.json();
-  }catch(e){d={encontrado:false};}
-  ntdRmSk();ntdTyping(false);
-  if(!d.encontrado||!d.sedes?.length){
-    ntdAddMsg('nova',ntdR2H(`No encontré sedes en **${mun}** para **${NTD.eps||'tu EPS'}**. Llama al 604 322 2432.`),
-      `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button></div>`);return;
-  }
-  const sH=d.sedes.slice(0,4).map(s=>`
-    <div class="ntd-ic" style="margin-top:6px">
-      <div class="ntd-ict">${s.nombre||'Sede'} · ${s.ciudad||mun}</div>
-      <div class="ntd-ir"><span class="ntd-il">Dirección</span><span class="ntd-iv">${s.direccion||'—'}</span></div>
-      <div class="ntd-ir"><span class="ntd-il">Teléfono</span><span class="ntd-iv">${s.telefono||'—'}</span></div>
-      <div class="ntd-ir"><span class="ntd-il">Horario</span><span class="ntd-iv">${s.horario||'—'}</span></div>
-      ${s.encargado?`<div class="ntd-ir"><span class="ntd-il">Encargado</span><span class="ntd-iv">${s.encargado}</span></div>`:''}
-    </div>`).join('');
-  ntdAddMsg('nova',
-    `<p>Sedes en <strong>${d.municipio}</strong> · <strong>${NTD.eps||'—'}</strong> (${d.total} encontradas):</p>${sH}`,
-    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdCambiarEps()">4️⃣ &nbsp;🔄 Cambiar EPS</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button></div>`);
-}
+
 
 function ntdShowVip(msg){ntd$('ntdVipMsg').textContent=msg;ntd$('ntdVipBg').classList.add('on');}
 function ntdCloseVip(){ntd$('ntdVipBg').classList.remove('on');if(NTD.vipCb){NTD.vipCb();NTD.vipCb=null;}}
