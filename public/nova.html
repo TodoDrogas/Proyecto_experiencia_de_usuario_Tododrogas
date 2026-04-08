@@ -196,10 +196,10 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
   background:rgba(239,68,68,.15);color:#fca5a5;font-size:13px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;transition:all .17s;flex-shrink:0}
 .ntd-rec-cancel:hover{background:rgba(239,68,68,.3)}
-.ntd-vbtn-mic{width:36px;height:36px;border-radius:50%;flex-shrink:0;
-  background:linear-gradient(135deg,#1452c8,#1d6ae5);border:none;color:#fff;
-  font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;
-  transition:all .2s;box-shadow:0 2px 10px rgba(29,106,229,.4)}
+.ntd-vbtn-mic{width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  background:rgba(37,99,235,.18);border:1px solid rgba(37,99,235,.3);color:rgba(147,197,253,.6);
+  font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .2s;box-shadow:none}
 .ntd-vbtn-mic:hover{transform:scale(1.08)}
 .ntd-vbtn-mic:active{transform:scale(.94)}
 .ntd-vbtn-mic.rec{background:linear-gradient(135deg,#b91c1c,#ef4444);
@@ -522,7 +522,7 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
       <div class="ntd-ib">
         <!-- Modo texto: textarea + enviar -->
         <textarea class="ntd-it" id="ntdTa" rows="1" maxlength="2000"
-          placeholder="Escribe tu respuesta..."
+          placeholder="Por favor escriba su respuesta..."
           onkeydown="ntdOnKey(event)" oninput="ntdAH(this);ntdUS()" disabled></textarea>
         <button class="ntd-sb" id="ntdSBtn" onclick="ntdSend()" disabled style="display:none">➤</button>
         <!-- Modo grabación: ondas + tiempo + cancelar -->
@@ -693,7 +693,7 @@ function ntdOnKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ntdSend
 function ntdScroll(){const m=ntd$('ntdMsgs');setTimeout(()=>m.scrollTo({top:m.scrollHeight,behavior:'smooth'}),55);}
 function ntdProg(p,l){ntd$('ntdPFill').style.width=p+'%';ntd$('ntdStep').textContent=l;}
 function ntdTyping(v){ntd$('ntdDots').classList.toggle('on',v);ntd$('ntdTxt').style.display=v?'none':'';}
-function ntdEna(ph='Escribe tu respuesta...'){const t=ntd$('ntdTa');t.disabled=false;t.placeholder=ph;t.style.display='';t.focus();ntdUS();}
+function ntdEna(ph='Por favor escriba su respuesta...'){const t=ntd$('ntdTa');t.disabled=false;t.placeholder=ph;t.style.display='';t.focus();ntdUS();}
 function ntdDis(){ntd$('ntdTa').disabled=true;ntd$('ntdSBtn').disabled=true;}
 
 function ntdR2H(raw){
@@ -817,7 +817,7 @@ function ntdStart(){
      <p style="margin-top:6px"><strong>Para continuar elige:</strong></p>`,
     `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSU('ACEPTO')">1️⃣ &nbsp;✅ Acepto la política</button><button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSU('NO ACEPTO')">2️⃣ &nbsp;✗ No acepto</button></div>`);
   ntdProg(6,'Bienvenida');
-  setTimeout(()=>ntdEna('Escribe Acepto o No acepto...'),300);
+  setTimeout(()=>ntdEna('Por favor escriba Acepto o No acepto...'),300);
 }
 
 async function ntdFPolitica(txt){
@@ -835,7 +835,7 @@ async function ntdFPolitica(txt){
       ntdBotonesFinales());ntdDis();
   }else{
     ntdAddMsg('nova',ntdR2H('Por favor responde **"Acepto"** o **"No acepto"** para continuar.'));
-    ntdEna('Acepto / No acepto');
+    ntdEna('Por favor escriba Acepto o No acepto...');
   }
 }
 
@@ -843,28 +843,28 @@ function ntdSetTipoDoc(tipo){
   NTD._tipoDoc = tipo;
   ntdAddMsg('user', ntdR2H(tipo));
   ntdAddMsg('nova', ntdR2H(`Escribe el número de documento de identificación sin puntos, comas o cualquier otro carácter:`));
-  ntdEna('Solo números');
+  ntdEna('Por favor escriba su respuesta...');
 }
 
 async function ntdFCedula(txt){
   const n=txt.replace(/\D/g,'');
   if(n.length<5){
     ntdAddMsg('nova',ntdR2H('Valor incorrecto, por favor intente de nuevo.\n\nEscribe el número de documento sin puntos ni comas:'));
-    ntdEna('Solo números');return;
+    ntdEna('Por favor escriba su respuesta...');return;
   }
   NTD._ced=n;NTD.fase='ident_nom';
   ntdAddMsg('nova',ntdR2H('Escribe tu **nombre completo** (tal como aparece en el documento):'));
-  ntdEna('Nombre y apellido');
+  ntdEna('Por favor escriba su nombre completo...');
 }
 async function ntdFNombre(txt){
-  if(txt.trim().length<3){ntdAddMsg('nova',ntdR2H('Por favor escribe tu nombre completo.'));ntdEna('Nombre y apellido');return;}
+  if(txt.trim().length<3){ntdAddMsg('nova',ntdR2H('Por favor escribe tu nombre completo.'));ntdEna('Por favor escriba su nombre completo...');return;}
   NTD._nom=txt.trim().toUpperCase();NTD.fase='ident_tel';
   ntdAddMsg('nova',ntdR2H('¿Cuál es tu **número de celular**?'));
-  ntdEna('Ej: 3001234567');
+  ntdEna('Por favor escriba su número de celular...');
 }
 async function ntdFTelefono(txt){
   const n=txt.replace(/\D/g,'');
-  if(n.length<7){ntdAddMsg('nova',ntdR2H('El número debe tener al menos 7 dígitos.'));ntdEna('Solo números');return;}
+  if(n.length<7){ntdAddMsg('nova',ntdR2H('El número debe tener al menos 7 dígitos.'));ntdEna('Por favor escriba su respuesta...');return;}
   NTD._tel=n;
   ntdTyping(true);ntdAddSk();
   let res;
@@ -882,7 +882,7 @@ async function ntdFTelefono(txt){
     ntdShowVal(msg);
     NTD.fase='ident_ced';NTD._ced=null;NTD._nom=null;NTD._tel=null;
     ntdAddMsg('nova',ntdR2H('Intentemos de nuevo. ¿Cuál es tu **cédula**?'));
-    ntdEna('Número de cédula');return;
+    ntdEna('Por favor escriba su número de documento...');return;
   }
   const pn=(res.nombre||NTD._nom).trim().split(/\s+/)[0];
   NTD.usuario={nombre:res.nombre||NTD._nom,primerNombre:pn,cedula:NTD._ced,telefono:NTD._tel,vip:!!res.vip,saludo:res.saludo||null};
@@ -916,7 +916,7 @@ function ntdIrAEps(){
   });
   epsButtons+='</div>';
   ntdAddMsg('nova',ntdR2H(pn+', con que **EPS** esta afiliado/a?'),epsButtons);
-  ntdEna('Escriba su EPS...');
+  ntdEna('Por favor escriba o toque su EPS...');
 }
 async function ntdFEps(txt){
   const t=txt.trim().toUpperCase();
@@ -928,7 +928,7 @@ async function ntdFEps(txt){
 
 function ntdOpc(n){
   NTD.busy=false;
-  ntdEna('Escriba su respuesta...');
+  ntdEna('Por favor escriba su respuesta...');
   var opc={1:ntdMedicamentos,2:ntdSedes,3:ntdRequisitosReclamar,
     4:ntdIrARadicar,5:ntdConsultarRadicado,6:ntdHorarios,
     7:ntdEncuesta,8:ntdConsultaPersonalizada};
@@ -952,7 +952,7 @@ function ntdMostrarMenu(){
   ntdAddMsg('nova','<p>En que le puedo ayudar, <strong>'+n+'</strong>?</p>',c);
   ntdSetQbar([{e:'1️⃣',l:'Medicamentos',t:'1'},{e:'2️⃣',l:'Sedes',t:'2'},
     {e:'4️⃣',l:'Radicar',t:'4'},{e:'5️⃣',l:'Radicado',t:'5'},{e:'7️⃣',l:'Encuesta',t:'7'}]);
-  ntdEna('Escriba el numero de la opcion...');
+  ntdEna('Por favor escriba el número de la opción...');
   ntdResetInact();
 }
 
@@ -1054,12 +1054,12 @@ function ntdConfirmarSede(){
 function ntdOtrasSedes(){
   NTD.fase='municipio_sedes';
   ntdAddMsg('nova','<p>Nova TD no encontró su ubicación. Por favor dígite el municipio que desea consultar:</p>',ntdBotonesFinales());
-  ntdEna('Escriba el municipio...');
+  ntdEna('Por favor escriba el municipio...');
 }
 function ntdVerMasSedes(){
   NTD.fase='municipio_sedes';
   ntdAddMsg('nova','<p>Nova TD no encontró su ubicación. Por favor dígite el municipio que desea consultar:</p>',ntdBotonesFinales());
-  ntdEna('Escriba el municipio...');
+  ntdEna('Por favor escriba el municipio...');
 }
 function ntdSedes(){
   var eps=NTD.eps||'su EPS';
@@ -1094,7 +1094,7 @@ function ntdBuscarSedeConGeo(){
 function ntdPreguntarMunicipioSede(){
   NTD.fase='municipio_sedes';
   ntdAddMsg('nova','<p>Nova TD no encontró su ubicación. Por favor dígite el municipio que desea consultar:</p>',ntdBotonesFinales());
-  ntdEna('Escriba el municipio...');
+  ntdEna('Por favor escriba el municipio...');
 }
 
 function ntdAutorizacion(){
@@ -1105,7 +1105,7 @@ function ntdConsultarRadicado(){
   ntdAddMsg('nova',
     ntdR2H('Para consultar tu radicado ingresa el **número de radicado** (ej: TD-123456) o tu **correo electrónico**:'),
 ntdBotonesFinales());
-  ntdEna('Número de radicado o correo...');
+  ntdEna('Por favor escriba su radicado o correo...');
 }
 
 function ntdEncuesta(){
@@ -1169,7 +1169,7 @@ function ntdConsultaPersonalizada(){
   ntdAddMsg('nova',
     `<p>¿Sobre qué quieres consultar, <strong>${NTD.usuario?.primerNombre||''}</strong>?</p>
      <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe tu pregunta y te respondo de inmediato.</p>`);
-  ntdEna('Escribe tu pregunta...');
+  ntdEna('Por favor escriba su pregunta...');
 }
 
 // Llamar a GPT directamente sin pasar por ntdSend (sin busy check)
@@ -1288,7 +1288,7 @@ function ntdCambiarEps(){
   });
   epsButtons+='</div>';
   ntdAddMsg('nova',ntdR2H('Con cual EPS desea actualizar, '+pn+'?'),epsButtons);
-  ntdEna('Escriba su EPS...');
+  ntdEna('Por favor escriba o toque su EPS...');
 }
 function ntdSetEps(eps){
   NTD.eps=eps;
