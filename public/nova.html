@@ -4,7 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <title>Nova TD · Tododrogas</title>
-<script src="config.js" onerror="console.warn('config.js no cargó')"></script>
+<script>
+// config.js es opcional — se inyecta en deploy con credenciales Supabase.
+// En uso local/standalone funciona sin él.
+(function(){
+  var s=document.createElement('script');
+  s.src='config.js';
+  // Sin onerror ruidoso: si no carga, las variables quedan undefined y el
+  // código las maneja con fallback (SB_URL || '', SB_ANON || '')
+  document.head.appendChild(s);
+})();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -567,14 +577,375 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
 <div id="toasts" style="position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:600;display:flex;flex-direction:column;gap:6px;pointer-events:none"></div>
 
 <script>
-/* ══ NOVA TD — PÁGINA INDEPENDIENTE ══════════════════
-   Canal: nova_directo
-   Arranque automático al cargar la página
-════════════════════════════════════════════════════ */
 
-/* ── Nova TD independiente — arranque directo ── */
+// ══════════════════════════════
+// CARRUSEL — carga desde config o defaults
+// ══════════════════════════════
+let FRASES = [
+  { text:'Tu voz importa', hl:true },
+  { text:'¿Tienes una queja o sugerencia? Estamos para escucharte', hl:false },
+  { text:'Confidencial · Tu información está protegida', hl:false },
+  { text:'Respuesta garantizada en máximo 15 días hábiles', hl:false },
+  { text:'Elige el canal que más te convenga: correo, chat, audio o escritura', hl:false },
+];
 
-// Sin modal — el chat es la página completa
+let CFG = {};
+
+// ── Detectar origen desde la URL de bienvenida ──────────────────────
+// pqr_bienvenida.html?origen=qr  → todo apunta con origen=qr
+// pqr_bienvenida.html (sin param) → todo apunta con origen=web
+const _bvParams = new URLSearchParams(window.location.search);
+// Si la URL trae ?origen=qr → guardar en sessionStorage para persistir en esta sesión
+// Si no trae parámetro → revisar sessionStorage (usuario se devolvió desde el form)
+// Si sessionStorage vacío → web (link copiado en nueva pestaña sin parámetro)
+(function(){
+  const fromUrl = _bvParams.get('origen');
+  if(fromUrl === 'qr'){
+    sessionStorage.setItem('td_origen', 'qr');
+  } else if(!fromUrl){
+    // No limpiar — si vino de QR en esta sesión, conservar
+  } else {
+    // origen=web u otro explícito → limpiar sesión
+    sessionStorage.removeItem('td_origen');
+  }
+})();
+const _BV_ORIGEN = 'nova_directo'; // Página independiente Nova TD
+
+// FORM_URL: URL absoluta del formulario de radicación
+let FORM_URL = window.location.origin + '/pqr_form.html';
+let _lastQrUrl = null;
+
+function applyConfig(cfg){
+  if(!cfg) return;
+  CFG = cfg;
+  // Frases carrusel bienvenida
+  if(cfg.frases && cfg.frases.length)
+    FRASES = cfg.frases.map((f,i) => ({text: f.text, hl: i===0}));
+  if(cfg.qrUrl) FORM_URL = cfg.qrUrl;
+}
+
+// Credenciales SOLO desde config.js — inyectadas por deploy.yml
+// NUNCA hardcodeadas, NUNCA desde localStorage
+const SB_URL  = window.SUPABASE_URL  || '';
+const SB_ANON = window.SUPABASE_KEY  || '';
+
+// Polling a Supabase: revisa la config cada 30 s y actualiza todo
+async function pollSupabaseConfig(){
+  if(!SB_URL || !SB_ANON) return;
+  try {
+    // TABLA CORRECTA: configuracion_sistema (con "cion")
+    const r = await fetch(`${SB_URL}/rest/v1/configuracion_sistema?id=eq.main&select=data`, {
+      headers:{ apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON }
+    });
+    if(!r.ok) return;
+    const rows = await r.json();
+    if(!rows || !rows.length || !rows[0].data) return;
+    const remoteCfg = rows[0].data;
+    const newQrUrl  = remoteCfg.qrUrl || '';
+    const newEncUrl = remoteCfg.canales?.encuesta || '';
+    const oldEncUrl = CFG.canales?.encuesta || '';
+    const qrChanged  = newQrUrl  && newQrUrl  !== _lastQrUrl;
+    const encChanged = newEncUrl !== oldEncUrl;
+    const firstLoad  = !CFG.updatedAt;
+    if(firstLoad || qrChanged || encChanged){
+      // Aplicar frases si cambiaron
+      if(remoteCfg.frases && remoteCfg.frases.length){
+        FRASES = remoteCfg.frases.map((f,i) => ({text: f.text, hl: i===0}));
+      }
+      CFG = remoteCfg;
+      if(newQrUrl){ _lastQrUrl = newQrUrl; FORM_URL = newQrUrl; }
+      applyQRs();
+    }
+  } catch(e){}
+}
+
+// Genera QR midiendo el contenedor real para adaptarse a cualquier pantalla
+function makeQR(elId, url, fallbackSize){
+  const el = document.getElementById(elId);
+  if(!el) return;
+  el.innerHTML = '';
+  if(!url){
+    el.innerHTML='<span style="color:#6b748a;font-size:10px;text-align:center;display:block;padding:20px 4px;">Sin URL<br>configurada</span>';
+    return;
+  }
+  // Medir el contenedor padre para saber cuánto espacio hay disponible
+  const parent = el.closest('.qr-frame') || el.parentElement;
+  const available = parent ? Math.floor(parent.getBoundingClientRect().width) - 32 : 0;
+  // Usar el tamaño disponible, mínimo 90px, máximo 200px
+  const s = Math.max(90, Math.min(200, available > 60 ? available : (fallbackSize || 130)));
+  el.style.minWidth = s+'px';
+  el.style.minHeight = s+'px';
+  el.innerHTML='<img src="https://api.qrserver.com/v1/create-qr-code/?size='+s+'x'+s+'&data='+encodeURIComponent(url)+'&bgcolor=0a0e1a&color=ffffff&qzone=1" width="'+s+'" height="'+s+'" style="display:block;border-radius:4px;width:100%;height:auto;">';
+}
+
+// Regenera QRs al cambiar tamaño de ventana (orientación, resize)
+let _qrResizeTimer = null;
+window.addEventListener('resize', ()=>{
+  clearTimeout(_qrResizeTimer);
+  _qrResizeTimer = setTimeout(applyQRs, 250);
+});
+
+// URL global de encuesta (accesible por openEncuesta)
+const ENC_DEFAULT = (window.location.origin || 'https://tododrogas.online') + '/pqr_encuesta.html?origen=' + _BV_ORIGEN;
+let ENC_URL = ENC_DEFAULT; // hardcodeado — Supabase puede sobreescribir
+
+// Aplica QRs una vez el DOM esté listo
+function applyQRs(){
+  // QR Radicar
+  makeQR('qr-radicar', FORM_URL, 130);
+  const radLbl = document.getElementById('qr-radicar-url');
+  if(radLbl){
+    try{ radLbl.textContent = new URL(FORM_URL).hostname + new URL(FORM_URL).pathname; }
+    catch(e){ radLbl.textContent = FORM_URL; }
+  }
+  // QR Encuesta
+  ENC_URL = (CFG.canales && CFG.canales.encuesta) ? CFG.canales.encuesta : ENC_DEFAULT;
+  makeQR('qr-encuesta', ENC_URL, 130);
+  const encLbl = document.getElementById('qr-encuesta-url');
+  if(encLbl) encLbl.textContent = ENC_URL ? 'Encuesta · Escanea con tu cámara' : 'Encuesta · configura la URL en el panel';
+  // Estilo del botón encuesta según tenga URL o no
+  const btnWrap = document.getElementById('btn-encuesta-wrap');
+  if(btnWrap){
+    if(ENC_URL){
+      btnWrap.style.opacity = '1';
+      btnWrap.style.borderColor = 'rgba(37,99,235,.7)';
+      btnWrap.title = 'Abrir encuesta de satisfacción';
+    } else {
+      btnWrap.style.opacity = '0.65';
+      btnWrap.style.cursor = 'default';
+      btnWrap.title = 'URL no configurada — panel de administración';
+    }
+  }
+}
+
+// Abre la encuesta en nueva pestaña (toque del botón en móvil)
+function openEncuesta(){
+  if(ENC_URL){
+    // Forzar _BV_ORIGEN (web o qr según cómo llegó el usuario a bienvenida)
+    try{
+      const u = new URL(ENC_URL, window.location.origin);
+      u.searchParams.set('origen', _BV_ORIGEN);
+      window.open(u.toString(), '_blank');
+    } catch(e){ window.open(ENC_URL, '_blank'); }
+  } else {
+    const lbl = document.getElementById('qr-encuesta-url');
+    if(lbl){
+      lbl.style.color = '#f87171';
+      lbl.textContent = '⚠ Configura la URL en el panel de administración';
+      setTimeout(()=>{ lbl.style.color=''; lbl.textContent='Encuesta · configura la URL en el panel'; }, 3000);
+    }
+  }
+}
+
+let cIdx = 0;
+let cTimer = null;
+
+function renderCarousel(){
+  const textEl = document.getElementById('carouselText');
+  const dotsEl = document.getElementById('carouselDots');
+  const f = FRASES[cIdx];
+
+  // Animate out
+  textEl.style.animation='none';
+  textEl.offsetHeight;
+
+  // Set content
+  if(f.hl){
+    const words = f.text.split(' ');
+    const mid = Math.ceil(words.length/2);
+    const first = words.slice(0,mid).join(' ');
+    const second = words.slice(mid).join(' ');
+    textEl.innerHTML = second
+      ? `${esc(first)} <span class="hl">${esc(second)}</span>`
+      : `<span class="hl">${esc(f.text)}</span>`;
+  } else {
+    textEl.textContent = f.text;
+  }
+
+  textEl.style.animation='slideIn .55s cubic-bezier(.22,1,.36,1) both';
+
+  // Dots
+  dotsEl.innerHTML = FRASES.map((_,i)=>`<div class="cdot ${i===cIdx?'active':''}"></div>`).join('');
+}
+
+function nextSlide(){
+  cIdx = (cIdx+1) % FRASES.length;
+  renderCarousel();
+}
+
+function startCarousel(){
+  renderCarousel();
+  cTimer = setInterval(nextSlide, 3500);
+}
+
+// Partículas
+window.addEventListener('DOMContentLoaded',function(){
+  (function(){
+  const c=document.getElementById('particles');
+  for(let i=0;i<12;i++){
+    const p=document.createElement('div');
+    const size=Math.random()*3+2;
+    p.style.cssText=`position:absolute;border-radius:50%;pointer-events:none;animation:floatP linear infinite;opacity:0;width:${size}px;height:${size}px;left:${Math.random()*100}%;top:${40+Math.random()*60}%;background:rgba(37,99,235,${Math.random()*.35+.1});animation-duration:${Math.random()*10+7}s;animation-delay:${Math.random()*8}s;`;
+    c.appendChild(p);
+  }
+  const style=document.createElement('style');
+  style.textContent='@keyframes floatP{0%{transform:translateY(0) scale(1);opacity:0}10%{opacity:.4}90%{opacity:.1}100%{transform:translateY(-110px) scale(.5);opacity:0}}';
+  document.head.appendChild(style);
+})();
+});
+
+function goToForm(){
+  document.body.style.transition='opacity .35s ease';
+  document.body.style.opacity='0';
+  setTimeout(()=>{ window.location.href='pqr_form.html?origen='+_BV_ORIGEN; },350);
+}
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ══════════════════════════════════════════════
+// CHAT — Nova TD · Agente Virtual Inteligente
+// ══════════════════════════════════════════════
+
+// ── Estado de sesión ──
+const novaSession = {
+  estado: 'inicio',
+  eps: null, municipio: null, sede: null,
+  sessionId: 'nova_' + Date.now() + '_' + Math.random().toString(36).slice(2,7),
+};
+
+const EPS_OPTS = ['Savia Salud','Coosalud','Salud Total','Nueva EPS','Todas / No sé mi EPS'];
+const EPS_MAP  = {'savia salud':'SAVIA','savia':'SAVIA','coosalud':'COOSALUD',
+  'salud total':'SALUD TOTAL','nueva eps':'NUEVA EPS',
+  'todas':'TODAS','no se':'TODAS','no sé':'TODAS','todas / no sé mi eps':'TODAS'};
+
+function normTxt(s){
+  return (s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+}
+
+async function novaConsulta(accion, params){
+  try{
+    const r=await fetch('/nova-consulta.php',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({accion,...params})});
+    return r.ok?await r.json():null;
+  }catch(e){return null;}
+}
+
+// Municipios conocidos de Antioquia con variantes de escritura
+const MUNICIPIOS_MAP = {
+  'medellin':'MEDELLIN','medellín':'MEDELLIN','medelln':'MEDELLIN',
+  'envigado':'ENVIGADO','bello':'BELLO','itagui':'ITAGUI','itagüi':'ITAGUI',
+  'apartado':'APARTADO','apartadó':'APARTADO',
+  'turbo':'TURBO','caucasia':'CAUCASIA','carepa':'CAREPA',
+  'chigorodo':'CHIGORODO','chigorodó':'CHIGORODO',
+  'rionegro':'RIONEGRO','la ceja':'LA CEJA','laceja':'LA CEJA',
+  'el bagre':'EL BAGRE','elbagre':'EL BAGRE',
+  'puerto berrio':'PUERTO BERRIO','puertoberrio':'PUERTO BERRIO',
+  'santa barbara':'SANTA BARBARA','santabarbara':'SANTA BARBARA',
+  'santa barbara antioquia':'SANTA BARBARA',
+  'santa fe de antioquia':'SANTA FE DE ANTIOQUIA',
+  'santafe':'SANTA FE DE ANTIOQUIA','santafe de antioquia':'SANTA FE DE ANTIOQUIA',
+  'ciudad bolivar':'CIUDAD BOLIVAR','ciudadbolivar':'CIUDAD BOLIVAR',
+  'segovia':'SEGOVIA','yarumal':'YARUMAL','tamesis':'TAMESIS','támesis':'TAMESIS',
+  'andes':'ANDES','amaga':'AMAGA','amagá':'AMAGA',
+  'sopetran':'SOPETRAN','sopetrán':'SOPETRAN',
+  'yolombo':'YOLOMBO','yolombó':'YOLOMBO',
+  'zaragoza':'ZARAGOZA','nechi':'NECHI','nechí':'NECHI',
+  'caceres':'CACERES','cáceres':'CACERES',
+  'taraza':'TARAZA','tarazá':'TARAZA',
+  'necocli':'NECOCLI','necoclí':'NECOCLI',
+  'mutata':'MUTATA','mutatá':'MUTATA',
+  'frontino':'FRONTINO','dabeiba':'DABEIBA',
+  'remedios':'REMEDIOS','amalfi':'AMALFI',
+  'angostura':'ANGOSTURA','anori':'ANORI','anorí':'ANORI',
+  'jerico':'JERICO','jericó':'JERICO',
+  'betulia':'BETULIA','anza':'ANZA','anzá':'ANZA',
+  'buritica':'BURITICA','buriticá':'BURITICA',
+  'caicedo':'CAICEDO','liborina':'LIBORINA',
+  'jardin':'JARDIN','jardín':'JARDIN',
+  'sabanalarga':'SABANALARGA','san jeronimo':'SAN JERONIMO',
+  'pueblorrico':'PUEBLORRICO','hispania':'HISPANIA',
+  'valdivia':'VALDIVIA','uramita':'URAMITA',
+  'barbosa':'BARBOSA','girardota':'GIRARDOTA',
+  'concordia':'CONCORDIA','copacabana':'COPACABANA',
+  'sabaneta':'SABANETA','giraldo':'GIRALDO',
+  'yali':'YALI','briceño':'BRICEÑO','briceno':'BRICEÑO',
+  'armenia':'ARMENIA','peque':'PEQUE','pequeño':'PEQUE',
+  'olaya':'OLAYA','olaya llanadas':'OLAYA - LLANADAS',
+  'puerto nare':'PUERTO NARE','samana':'SAMANA','samaná':'SAMANA',
+};
+
+function normalizarMunicipio(txt){
+  const t = txt.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  return MUNICIPIOS_MAP[t] || MUNICIPIOS_MAP[txt.toLowerCase().trim()] || t.toUpperCase();
+}
+
+async function buscarSede(eps,municipio){
+  const munNorm = normalizarMunicipio(municipio);
+  const res=await novaConsulta('sede',{eps,municipio:munNorm});
+  return(res&&res.encontrado)?res.sedes:null;
+}
+
+function detectarRadicado(txt){
+  const m=txt.match(/TD[-\s]?\d{8}[-\s]?[A-Z0-9]{4}/i);
+  return m?m[0].replace(/\s/g,'').toUpperCase():null;
+}
+
+function detectarCorreo(txt){
+  const m=txt.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+  return m?m[0]:null;
+}
+
+function buildSYS(){
+  let ctx='';
+  if(novaSession.sede){
+    const s=Array.isArray(novaSession.sede)?novaSession.sede[0]:novaSession.sede;
+    const otros=Array.isArray(novaSession.sede)&&novaSession.sede.length>1
+      ?' Otras sedes: '+novaSession.sede.slice(1).map(x=>x.nombre).join(', ')+'.':'';
+    ctx='\n\nCONTEXTO DEL USUARIO:'
+      +'\n- EPS: '+(novaSession.eps||'No informada')
+      +'\n- Municipio: '+novaSession.municipio
+      +'\n- Sede: '+s.nombre
+      +'\n- Dirección: '+s.direccion
+      +'\n- Horario: '+(s.horario||'Lun-Vie 7:00-3:30, Sáb 8:00-11:00')
+      +'\n- Teléfono: '+s.telefono
+      +'\n- Modelo: '+s.modelo+otros;
+  }
+  return 'Eres Nova TD, agente virtual especializado de Tododrogas (operador logístico de medicamentos en Antioquia).'
+    +' Amable, empática y precisa. Responde SIEMPRE en español. Máximo 3 oraciones. Haces UNA sola pregunta a la vez.'
+    +'\n\nRESUELVE SIN ESCALAR:'
+    +'\n1. MEDICAMENTOS: https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb — con número de documento.'
+    +'\n2. RADICADO PQRSFD: pide número TD-YYYYMMDD-XXXX y envía a https://tododrogas.online/consulta.html'
+    +'\n3. HORARIO: usa el del CONTEXTO. General: Lun-Vie 7:00-3:30, Sáb 8:00-11:00.'
+    +'\n4. RECLAMAR OTRA SEDE: El medicamento se reclama en la sede asignada por la EPS. Si necesitas cambiarlo, escribe al WhatsApp 304 341 2431 y un asesor te ayudará.'
+    +'\n5. DIRECCIÓN: usa el CONTEXTO. Sin contexto: pide EPS y municipio.'
+    +'\n6. DOMICILIOS: no hacemos. Solicitar a la EPS.'
+    +'\n7. RADICAR: pide nombre, documento, teléfono, correo, descripción. Indica botón Radicar.'
+    +'\nCANALES: WhatsApp 304 341 2431 · pqrsfd@tododrogas.com.co · PBX 604 322 2432 Op.2'
+    +'\nSLA: 15 días hábiles. Nova 24/7. ESCALA solo si urgencia médica o usuario lo pide. Escribe ESCALAR al inicio.'
+    +ctx;
+}
+
+async function guardarSesion(extra){
+  extra=extra||{};
+  if(!SB_URL||!SB_ANON) return;
+  try{
+    await fetch(SB_URL+'/rest/v1/chatbot_sesiones',{method:'POST',
+      headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON,
+        'Content-Type':'application/json',Prefer:'resolution=merge-duplicates'},
+      body:JSON.stringify({session_id:novaSession.sessionId,
+        eps_usuario:novaSession.eps,municipio_usuario:novaSession.municipio,
+        mensajes:msgs.slice(-20),estado:'activa',estado_flujo:novaSession.estado,
+        escalado:extra.escalado||false,contexto_asesor:extra.contexto_asesor||null,
+        updated_at:new Date().toISOString()})});
+  }catch(e){}
+}
+
+/* ══════════════════════════════════════════════════════
+   NOVA TD — EMBEBIDA
+══════════════════════════════════════════════════════ */
+/* ── Controles del modal Nova TD ── */
+
+// Timer de inactividad por cierre del modal (2 min cerrado = nueva conv.)
 let _ntdCierreTimer = null;
 
 function ntdReset(){
@@ -610,7 +981,7 @@ function ntdReset(){
 function openChat(){
   clearTimeout(_ntdCierreTimer);
   _ntdCierreTimer = null;
-  /* no-op en página independiente */
+  /* no-op */
   if(!NTD.arrancado){
     NTD.arrancado = true;
     ntdStart();
@@ -622,18 +993,18 @@ function openChat(){
 function openChatVoice(){ openChat(); }
 
 function closeChat(){
-  /* no-op en página independiente */
+  /* no-op */
   // Si ya hay conversación activa, iniciar timer de 2 min
   // Al volver a abrir antes de 2 min → retoma. Después → nueva conversación
   if(NTD.arrancado){
     clearTimeout(_ntdCierreTimer);
     _ntdCierreTimer = setTimeout(()=>{
       ntdReset();
-    }, 2 * 60 * 1000); // 2 minutos
+    }, 4 * 60 * 1000); // 4 minutos
   }
 }
 
-function onOvClick(){ /* no-op en página independiente */ }
+function onOvClick(e){ if(e.target===document.getElementById('overlay')) closeChat(); }
 
 
 const NOVA_IMG_URL = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png';
@@ -644,101 +1015,251 @@ const NTD_C = {
   encuesta: (typeof window.ENC_URL!=='undefined'?window.ENC_URL:'pqr_encuesta.html'),
   polUrl  : 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf',
 };
-const NTD_EPS=['COOSALUD','SAVIA SALUD','SALUD TOTAL','NUEVA EPS'];
+// ── SEDES EMBEBIDAS (61 sedes · solo nombre + dirección) ────────
+const NTD_SEDES_LOCAL = [{"id": "040f8ff0-e1f7-4397-b7a1-98866dfd734b", "nombre": "DROGUERIA BIENESTAR CACERES - COOSALUD", "municipio": "CACERES", "direccion": "Calle 49 N 51-36 Barrio Centro", "lat": 7.5742, "lng": -75.3464, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "0627805d-b095-41b1-8579-65071bc05e1b", "nombre": "Servicio Farmaceutico Tododrogas Girardota", "municipio": "GIRARDOTA", "direccion": "Calle 9 #14-62 Local Comercial Primer Piso Edificio Los Angeles P.H- Del Municipio De Girardota", "lat": 0.0, "lng": 0.0, "eps": ["SALUD TOTAL", "NUEVA EPS"]}, {"id": "083d9388-7eec-412a-8bf8-69961d7ec976", "nombre": "E.S.E. Hospital San Juan De Dios De Marinilla", "municipio": "MARINILLA", "direccion": "Carrera 36 # 28-85 Marinilla (Antioquia-Colombia)", "lat": 0.0, "lng": 0.0, "eps": ["SALUD TOTAL", "ANGIOSUR"]}, {"id": "0877800a-1c68-4806-aac6-7c29aa6c573c", "nombre": "DROGUERIA SAN RAFAEL ANORI", "municipio": "ANORI", "direccion": "Carrera 30 # 30-27 Nucleo Zonal 01-Zona Urbana", "lat": 7.0714, "lng": -75.1403, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "11dbbaaf-0e57-414a-bf17-221020d3a881", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS YARUMAL", "municipio": "YARUMAL", "direccion": "Carrera 21 # 17-17- Local 102-Mall Comercial Cubox", "lat": 7.0, "lng": -75.4194, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "12b9d713-6d35-4cf0-ac1b-03a069d08de6", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CHIGORODO", "municipio": "CHIGORODO", "direccion": "Calle 95 # 97 - 04 Apto 202 Municipio de Chigorodó.", "lat": 7.6728, "lng": -76.6836, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "1372f7fc-50d5-428a-b39f-57875c745449", "nombre": "SERVICIO FARMACEUTICO TODO DROGAS SOPETRAN", "municipio": "SOPETRAN", "direccion": "Carrera 10 número 11- 65 –Primer Piso-Local Comercial- Municipio de Sopetrán-Antioquia", "lat": 6.5036, "lng": -75.7403, "eps": ["SAVIA"]}, {"id": "1542377d-96fb-4992-9c34-b609ab594d2d", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CAUCASIA", "municipio": "CAUCASIA", "direccion": "Carrera 20 # 3-76 CC Cauca Centro A1-locales 122-123", "lat": 7.9839, "lng": -75.1953, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM"]}, {"id": "18a91581-16d8-4933-8805-5afb3ff7b896", "nombre": "DROGUERIA COOPRIACHON ANGOSTURA", "municipio": "ANGOSTURA", "direccion": "CARRERA 10 # 9-20", "lat": 6.8722, "lng": -75.3406, "eps": ["COOSALUD", "SAVIA"]}, {"id": "1f2c4a77-3817-4ef5-8306-c4dfd4276d5c", "nombre": "Servicio Farmaceutico Tododrogas La Union", "municipio": "LA UNION", "direccion": "Calle 7 A # 4ª – 05 Lote 8 # 102 (Urbanizacion Villa Carmelo)-La Union De Antioquia", "lat": 0.0, "lng": 0.0, "eps": ["NUEVA EPS"]}, {"id": "217d2472-3688-4e69-a553-04c5971f5527", "nombre": "EMPRESA SOCIAL DEL ESTADO HOSPITAL SAN MIGUEL", "municipio": "OLAYA - LLANADAS", "direccion": "Carrera 10 #10-34 Corregimiento Llanadas (Antioquia-Colombia)", "lat": 6.6317, "lng": -75.8583, "eps": ["SAVIA"]}, {"id": "2f7e4a20-86ca-4296-b018-9cadbcab5c52", "nombre": "EMPRESA SOCIAL DEL ESTAFO SAN MARTIN DE PORRES", "municipio": "ARMENIA", "direccion": "CALLE 11 # 6-69", "lat": 5.7447, "lng": -75.6822, "eps": ["COOSALUD", "SAVIA"]}, {"id": "38794671-72a4-46e8-936b-53cf1ac37c04", "nombre": "HOSPITAL OCTAVIO ALVAREZ", "municipio": "PUERTO NARE", "direccion": "CARRERA 5 # 45-103", "lat": 6.2064, "lng": -74.5906, "eps": ["COOSALUD"]}, {"id": "3a4215b3-ccae-4a38-b548-d0f46ce99499", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS SANTA BARBARA", "municipio": "SANTA BARBARA", "direccion": "Carrera 50 numero 48 – 17 Municipio de Santa Bárbara-Antioquia", "lat": 5.875, "lng": -75.5714, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "3d05fd19-cb95-4c8b-9da2-dfe228d8e63f", "nombre": "DROGUERIA FARMAVIDA", "municipio": "AMALFI", "direccion": "Calle 23 # 29-054 Local 101-Barrio Pueblo Nuevo-Amalfi", "lat": 6.9122, "lng": -75.0758, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "434b7cab-0a09-4bbf-acf7-83a8aa3e12bc", "nombre": "DROGUERIA LA AMISTAD", "municipio": "SABANALARGA", "direccion": "Calle 17# 18-06 Sabanalarga (Antioquia-Colombia)", "lat": 6.8856, "lng": -75.7128, "eps": ["COOSALUD", "SAVIA"]}, {"id": "4536d699-068d-43a9-a54d-7e792777d067", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CAREPA", "municipio": "CAREPA", "direccion": "Calle 81 con carrera 74-12/14 Apartamento 101, Barrio Pueblo Nuevo-Carepa", "lat": 7.7586, "lng": -76.6542, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM"]}, {"id": "4599e0aa-252d-4721-a5c2-c4b20337d0d6", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS TURBO", "municipio": "TURBO", "direccion": "Calle 101 con carrera 15-Barrio Baltazar -Municipio de Turbo-Antioquia", "lat": 8.0972, "lng": -76.7294, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "48655827-b8db-4e95-a059-c64ebc959df9", "nombre": "DROGUERIA LA NUESTRA", "municipio": "CONCORDIA", "direccion": "Carrera 19 # 19 30/32 Concordia(Antioquia-Colombia)", "lat": 6.0469, "lng": -75.9058, "eps": ["SALUD TOTAL"]}, {"id": "48d8bd2b-3f87-47f5-bd2d-1c68763fb81b", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS APARTADO", "municipio": "APARTADO", "direccion": "Carrera 102 # 92 - 16/18 (esquina) Del Municipio de Apartadó", "lat": 7.88, "lng": -76.6258, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "4f6cb17a-4046-4327-b5b9-90a1e5aa5107", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS YOLOMBO", "municipio": "YOLOMBO", "direccion": "Carrera 24 Calle 18 - 04 - Local # 4- Edificio S Y S -Municipio de Yolombo.", "lat": 6.5975, "lng": -75.0153, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "4fc76e07-27bd-482b-98f5-8a21e4d42a13", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CIUDAD BOLIVAR", "municipio": "CIUDAD BOLIVAR", "direccion": "Direccion Calle 49 # 50-57 local # 104", "lat": 5.8597, "lng": -76.0186, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "52664ce5-682d-4745-826e-fa2f1b11a609", "nombre": "Servicio Farmaceutico Tododrogas Sabaneta", "municipio": "SABANETA", "direccion": "Carrera 45 A Calle 79 SUR 146, Sector Prados De Sabaneta -Municipio De Sabaneta", "lat": 0.0, "lng": 0.0, "eps": ["NUEVA EPS"]}, {"id": "53fb5e51-b0fd-4032-9dbd-895a0fc47a58", "nombre": "DROGUERIA FRONTIFARMA", "municipio": "FRONTINO", "direccion": "Calle 28 # 30-50", "lat": 6.7747, "lng": -76.1344, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "5566d0b6-174b-46ad-89a2-cdb883276005", "nombre": "EMPRESA SOCIAL DEL ESTADO HOSPITAL SAN ISIDRO", "municipio": "GIRALDO", "direccion": "CARRERA 10 # 11-05", "lat": 6.4747, "lng": -75.9164, "eps": ["COOSALUD", "SAVIA"]}, {"id": "560c5a8f-c9c9-4e24-8b55-82bd518baf1b", "nombre": "DROGURIA SANTA TERESITA DE SAN JERONIMO", "municipio": "SAN JERONIMO", "direccion": "Carrera 11# 21-73 –Sector La Carreterita -San Jerónimo (Antioquia-Colombia)", "lat": 6.4933, "lng": -75.7136, "eps": ["SAVIA"]}, {"id": "567ccf71-f8d7-4d7b-85d2-9235311227a1", "nombre": "DROGUERIA LA PILDORA", "municipio": "NECOCLI", "direccion": "Calle 51 # 48-38-Centro", "lat": 8.4281, "lng": -76.7833, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "56ffda4c-3573-4d53-9dad-0c5682a25394", "nombre": "E.S.E HOSPITAL EL SAGRADO CORAZON", "municipio": "BRICEÑO", "direccion": "CALLE 11 # 8-31", "lat": 7.2861, "lng": -75.5233, "eps": ["COOSALUD", "SAVIA"]}, {"id": "6ab4e5eb-1113-4ec3-8133-e270c31c8424", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS PUERTO BERRIO", "municipio": "PUERTO BERRIO", "direccion": "Direccion Barrio el Hoyo, Calle 48 con Carrera quinta # 4-56", "lat": 6.4914, "lng": -74.4083, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "77ebf770-1a3a-4a72-8747-2344f60f0677", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS TAMESIS", "municipio": "TAMESIS", "direccion": "Carrera 10 # 9-47-Primer Piso-Local # 1- Edificio Embera", "lat": 5.67, "lng": -75.7133, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM", "ANGIOSUR"]}, {"id": "7d633e9e-1c2a-450f-b34f-a846417eb1a1", "nombre": "E.S.E Hospital Guillermo Gaviria Correa", "municipio": "CAICEDO", "direccion": "Carrera 5 # 3 - 23 Caicedo (Antioquia-Colombia)", "lat": 6.3933, "lng": -76.0433, "eps": ["SAVIA"]}, {"id": "849d4112-f173-4ea6-950a-02728e740f95", "nombre": "DROGUERIA SAN GABRIEL", "municipio": "LIBORINA", "direccion": "Carrera 9 #8-4 Parque Principal Liborina (Antioquia-Colombia)", "lat": 6.6897, "lng": -75.8606, "eps": ["SAVIA"]}, {"id": "9003074a-9813-40c6-85ab-234eb7d727a1", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS AMAGA", "municipio": "AMAGA", "direccion": "Calle 52 con la 51 # 50-Municipio de Amagá -Antioquia", "lat": 6.0386, "lng": -75.7022, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "a1a36e36-5c99-454e-9b47-ff663202567c", "nombre": "GALLEGO SMV S.A.S. (Drogueria Familiar S.G.)", "municipio": "PUEBLORRICO", "direccion": "Carrera 30 # 30-56 Local 101", "lat": 0.0, "lng": 0.0, "eps": ["COOSALUD", "SAVIA"]}, {"id": "a338f2ea-a3b8-4464-852e-75260110a433", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS NECHI", "municipio": "NECHI", "direccion": "Barrio San Nicolás, manzana 24, lote 02, con dirección catastral Calle 25 N° 31 A – 16", "lat": 8.1017, "lng": -74.77, "eps": ["COOSALUD", "SAVIA"]}, {"id": "abd75112-521b-4fc5-a730-4fb093edf818", "nombre": "FARMACIA D´ANDREÉ", "municipio": "PEQUE", "direccion": "Carrera Bolivar 11-19", "lat": 6.9233, "lng": -76.0, "eps": ["COOSALUD", "SAVIA"]}, {"id": "b60c5e55-2ceb-41d5-9b18-c8c40b71d69c", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN 2", "municipio": "MEDELLIN", "direccion": "Carrera 48 # 49-57", "lat": 6.2518, "lng": -75.5636, "eps": ["SALUD TOTAL", "CEM"]}, {"id": "bca6c6c3-3bb3-4f1c-af4f-87e5c34206d4", "nombre": "DROGUERIA DONDE NATALIA", "municipio": "DABEIBA", "direccion": "Carrera 10 # 06-70-Dabeiba (Antioquia-Colombia)", "lat": 7.005, "lng": -76.2644, "eps": ["COOSALUD", "SAVIA"]}, {"id": "be495057-03e1-442e-bfea-5aad172e9c95", "nombre": "DROGUERIA SAN ANTONIO", "municipio": "JERICO", "direccion": "CARRERA 5 #6 -09", "lat": 5.7897, "lng": -75.7792, "eps": ["COOSALUD"]}, {"id": "c6d1f89f-d9d3-4278-805a-733d038075e0", "nombre": "DROGUERIA SAN MARTIN 712", "municipio": "ANZA", "direccion": "Carrera 8 # 7-51 Anzá (Antioquia-Colombia)", "lat": 6.3136, "lng": -75.9444, "eps": ["SAVIA"]}, {"id": "c6d97b63-c2dd-4e6c-8a5b-58ca39ab5ff7", "nombre": "DROGUERIA FAMIDROGAS", "municipio": "BETULIA", "direccion": "Calle 21 # 21-42 Betulia (Antioquia-Colombia)", "lat": 6.1097, "lng": -75.9792, "eps": ["SAVIA"]}, {"id": "ce1f6da2-6623-4b8d-a6ee-be541fe8c5fc", "nombre": "DROGUERIA KIRIUS LA BOMBA TARAZA - COOSALUD", "municipio": "TARAZA", "direccion": "Carrera 28 #27-26.15/25", "lat": 7.5833, "lng": -75.4, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "d09e52ab-c27c-44a9-b305-39c2ce40e4ae", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS SEGOVIA", "municipio": "SEGOVIA", "direccion": "Calle El Bolsillo O El Palo - Primer piso -Municipio de Segovia", "lat": 7.0819, "lng": -74.7039, "eps": ["COOSALUD", "SAVIA"]}, {"id": "d53c27c4-1660-40d1-9f93-ef110bbab77e", "nombre": "DROGUERIA MACEFARMA DROGUERIA", "municipio": "VALDIVIA", "direccion": "Calle Libertador # 9-92– Valdivia", "lat": 7.1656, "lng": -75.4411, "eps": ["COOSALUD", "SAVIA"]}, {"id": "d5ef42fa-6b9f-41ef-8e0a-040c24458be6", "nombre": "DROGUERIA BIOMEDIC", "municipio": "HISPANIA", "direccion": "CALLE 50 TOLEDO # 50-12", "lat": 5.8294, "lng": -75.9169, "eps": ["COOSALUD", "SAVIA"]}, {"id": "dba9884e-d564-4d7a-a7ef-d6feaf736765", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS ANDES", "municipio": "ANDES", "direccion": "Carrera 50 # 49-68 Local 102 Edificio El Tesoro-Municipio De Andes", "lat": 5.6558, "lng": -75.8786, "eps": ["SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "dddb5ccc-dad8-4beb-83a6-6a353284303c", "nombre": "DROGUERIA EL REGALO DE DIOS", "municipio": "YALI", "direccion": "Calle 20 # 19-71 -Barrio La Plaza –-Yali", "lat": 6.8914, "lng": -74.8672, "eps": ["COOSALUD", "SAVIA"]}, {"id": "df0e1703-3288-46b3-acc9-7c175cff2584", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS SANTA FE ANTIOQUIA", "municipio": "SANTA FE DE ANTIOQUIA", "direccion": "Calle 10 # 7-49- Primer piso -Municipio de Santa Fe De Antioquia", "lat": 6.5558, "lng": -75.8258, "eps": ["COOSALUD", "SAVIA", "NUEVA EPS", "CEM"]}, {"id": "e274f42a-ae58-4445-8c4b-fbcb35ec11eb", "nombre": "DROGUERIA MACRODESCUENTOS # 9", "municipio": "JARDIN", "direccion": "Calle 9 # 2-59 Jardín (Antioquia-Colombia)", "lat": 5.5975, "lng": -75.8181, "eps": ["SAVIA"]}, {"id": "e4b15856-796a-4f9b-b7ee-18645f90765b", "nombre": "FARMAX LA DROGUERIA S.A.S", "municipio": "REMEDIOS", "direccion": "CALLE 11 # 8-12 CALLE SAN ANTONIO", "lat": 7.0275, "lng": -74.6906, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "e6396be6-ba87-454c-a73e-1421ad40f51c", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS ZARAGOZA", "municipio": "ZARAGOZA", "direccion": "Calle 35 # 36-17-Barrio San Gregorio-Municipio de Zaragoza-Antioquia", "lat": 7.495, "lng": -74.8656, "eps": ["COOSALUD", "SAVIA", "CEM"]}, {"id": "e9604883-b834-42ff-b796-809822479206", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CEJA", "municipio": "LA CEJA", "direccion": "Carrera 24 # 19-40, sector Fátima – Municipio La Ceja", "lat": 6.0225, "lng": -75.4303, "eps": ["NUEVA EPS"]}, {"id": "eb2529ee-046d-4821-ad5b-b9a95e1f9218", "nombre": "EMPRESA SOCIAL DEL ESTADO SAN JOSE SAMANÁ", "municipio": "SAMANA", "direccion": "Carrera 9 # 4-79 Calle De La Vida", "lat": 5.9008, "lng": -74.9956, "eps": ["COOSALUD"]}, {"id": "eeacee92-88cc-4130-82dd-bebf8fcd69b8", "nombre": "Servicio Farmaceutico Tododrogas Barbosa", "municipio": "BARBOSA", "direccion": "Calle 17 N° 9-44, local 103 -Barbosa, Antioquia", "lat": 0.0, "lng": 0.0, "eps": ["NUEVA EPS"]}, {"id": "ef87ed82-4fc4-427d-b670-5e02ed61e881", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS EL BAGRE", "municipio": "EL BAGRE", "direccion": "Calle 50 número 47 A 31 -Barrio Bijao -Municipio de el Bagre-Antioquia", "lat": 7.5917, "lng": -74.8097, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "efc2ab91-2fc1-4097-8b16-1d3e3b86140b", "nombre": "DROGUERIA H. RAMIREZ", "municipio": "URAMITA", "direccion": "CARRERA 20 #20-67", "lat": 6.8669, "lng": -76.1747, "eps": ["COOSALUD"]}, {"id": "f41611f5-75c2-49ab-a771-5b5f1d53cf3f", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS RIONEGRO", "municipio": "RIONEGRO", "direccion": "Calle 52 #45-70 LC 2006-Centro Comercial Rionegro Plaza", "lat": 6.155, "lng": -75.3736, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM", "ANGIOSUR"]}, {"id": "f5e75097-821a-4a65-bb1c-637687335152", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS ABEJORRAL", "municipio": "ABEJORRAL", "direccion": "Carrera 50 Nro. 48-71 -Municipio de Abejorral-Antioquia", "lat": 5.7917, "lng": -75.4328, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "faecda99-e997-4013-93fa-be0beebc3938", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN", "municipio": "MEDELLIN", "direccion": "Carrera 48 # 49-57", "lat": 6.2518, "lng": -75.5636, "eps": ["COOSALUD", "SAVIA", "ANGIOSUR"]}, {"id": "fc26678b-5b99-446d-947d-9633995a2577", "nombre": "DROGUERIA ALMA SALUD 1", "municipio": "COPACABANA", "direccion": "Calle 40  Carrera # 84 -18 Copacabana (Antioquia-Colombia)", "lat": 6.3503, "lng": -75.5103, "eps": ["SALUD TOTAL"]}, {"id": "ff3ae196-a1ad-477d-aacf-6277d07ddeaf", "nombre": "DROGUERIA FAMILIAR EDDY", "municipio": "MUTATA", "direccion": "Carrera 10 # 10-41-43 –Mutatá (Antioquia-Colombia)", "lat": 7.245, "lng": -76.435, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}];
+
+function ntdHaversine(lat1,lng1,lat2,lng2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function ntdNorm(s){
+  return (s||'').toUpperCase().trim()
+    .replace(/[ÁÀÂÄ]/g,'A').replace(/[ÉÈÊË]/g,'E')
+    .replace(/[ÍÌÎÏ]/g,'I').replace(/[ÓÒÔÖ]/g,'O')
+    .replace(/[ÚÙÛÜ]/g,'U').replace(/Ñ/g,'N');
+}
+
+// Sedes de la EPS del usuario (sin filtro de municipio)
+function ntdSedesPorEps(){
+  const eps=ntdNorm(NTD.eps||'');
+  if(!eps) return NTD_SEDES_LOCAL;
+  return NTD_SEDES_LOCAL.filter(s=>
+    s.eps.some(e=>ntdNorm(e).includes(eps)||eps.includes(ntdNorm(e)))
+  );
+}
+
+// Municipios únicos donde atiende la EPS del usuario
+function ntdMunicipiosPorEps(){
+  const muns=[...new Set(ntdSedesPorEps().map(s=>s.municipio).filter(Boolean))];
+  return muns.sort();
+}
+
+// Sedes filtradas por EPS + municipio
+function ntdSedesFiltradas(mun){
+  const munN=ntdNorm(mun||'');
+  const porEps=ntdSedesPorEps();
+  if(!munN) return porEps;
+  const match=porEps.filter(s=>{
+    const mS=ntdNorm(s.municipio||'');
+    return mS.includes(munN)||munN.includes(mS);
+  });
+  return match;
+}
+
+// Verificar si EPS cubre un municipio
+function ntdEpsCubreMunicipio(mun){
+  return ntdSedesFiltradas(mun).length > 0;
+}
+function ntdMostrarSedesLocales(sedes, titulo){
+  if(!sedes.length){
+    // EPS no cubre ese municipio — mostrar municipios válidos
+    const muns = ntdMunicipiosPorEps();
+    const eps  = NTD.eps || 'su EPS';
+    if(muns.length){
+      const munsHtml = muns.map((m,i)=>
+        `<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px;font-size:12px" onclick="ntdElegirMunicipio('${m}')">${['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'][i]||'▶️'} &nbsp;${m}</button>`
+      ).join('');
+      ntdAddMsg('nova',
+        `<p>Para <strong>${eps}</strong> no encontramos sedes en ese municipio. <strong>${eps}</strong> atiende en los siguientes municipios:</p>
+         <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Por favor indíquenos la sede de qué municipio necesita:</p>`,
+        `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px;margin-top:4px">
+           <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;background:rgba(37,99,235,.15);font-weight:600" onclick="ntdVerMasSedes()">🏥 Encontrar otras sedes</button>
+           <div style="height:6px"></div>
+           ${munsHtml}
+         </div>`);
+    } else {
+      ntdAddMsg('nova',
+        `<p>No encontramos sedes para <strong>${eps}</strong>. Comuníquese al PBX <strong>604 322 2432</strong> o WhatsApp <strong>304 341 2431</strong>.</p>`,
+        ntdBotonesFinales());
+    }
+    return;
+  }
+
+  // Ordenar por distancia si hay geo
+  let ordenadas=sedes;
+  if(NTD._geoLat&&NTD._geoLng){
+    ordenadas=sedes.map(s=>({
+      ...s, _dist:(s.lat&&s.lat!==0)?ntdHaversine(NTD._geoLat,NTD._geoLng,s.lat,s.lng):9999
+    })).sort((a,b)=>a._dist-b._dist);
+  }
+  const top=ordenadas.slice(0,3);
+  const hayGeo=NTD._geoLat&&NTD._geoLng;
+  const sH=top.map((s,i)=>{
+    const distTxt=hayGeo&&s._dist<9999?`<span style="font-size:10px;color:rgba(190,215,255,.4);margin-left:6px">📏 ${s._dist.toFixed(1)} km</span>`:'';
+    const badge=i===0&&hayGeo?'<span style="font-size:10px;background:#16a34a;color:#fff;padding:2px 8px;border-radius:99px;margin-left:6px">Más cercana</span>':'';
+    const mapsUrl=s.lat&&s.lat!==0?`https://maps.google.com/?q=${s.lat},${s.lng}`:`https://maps.google.com/?q=${encodeURIComponent(s.nombre+' '+s.municipio+' Colombia')}`;
+    return `<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.15)">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${s.nombre||'Sede'}${badge}${distTxt}</div>
+      <div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:5px">📍 ${s.direccion||'—'} · <em style="opacity:.6">${s.municipio||''}</em></div>
+      <a href="${mapsUrl}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">🗺️ Ver en Google Maps</a>
+    </div>`;
+  }).join('');
+
+  ntdAddMsg('nova',
+    `<p>${titulo}:</p>${sH}`,
+    ntdBotonesFinales(`
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdVerMasSedes()">3️⃣ &nbsp;🏥 Ver más sedes</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdCambiarEps()">4️⃣ &nbsp;🔄 Cambiar EPS</button>`));
+}
+
+// Elegir municipio de la lista de cobertura EPS
+function ntdElegirMunicipio(mun){
+  ntdAddMsg('user', ntdR2H(mun));
+  const sedes=ntdSedesFiltradas(mun);
+  ntdMostrarSedesLocales(sedes, `Sedes de <strong>${NTD.eps||'su EPS'}</strong> en <strong>${mun}</strong>`);
+}
+const NTD_EPS=['COOSALUD','SAVIA','SALUD TOTAL','NUEVA EPS','CEM','ANGIOSUR'];
 const NTD={
   fase:'politica', usuario:null, eps:null,
   _ced:null,_nom:null,_tel:null,_tipoDoc:'CÉDULA DE CIUDADANÍA',
+  _geoLat:null,_geoLng:null,_geoMunicipio:null,
   hist:[], busy:false, vipCb:null, _valT:null, arrancado:false, _enMenu:false,
-  geo:null,
 };
 
-// Geolocalización inversa (Nominatim/OpenStreetMap)
-async function ntdGeolocate(){
-  if(!navigator.geolocation) return null;
-  return new Promise(resolve=>{
-    navigator.geolocation.getCurrentPosition(async pos=>{
-      try{
-        const url='https://nominatim.openstreetmap.org/reverse?lat='+pos.coords.latitude+'&lon='+pos.coords.longitude+'&format=json&accept-language=es';
-        const r=await fetch(url);
-        const d=await r.json();
-        const ciudad=d.address?.city||d.address?.town||d.address?.village||d.address?.county||null;
-        NTD.geo=ciudad;
-        resolve(ciudad);
-      }catch(e){resolve(null);}
-    },()=>resolve(null),{timeout:6000});
-  });
+// Estado global de grabación de voz
+let ntdRecActive = false;
+let ntdMediaRecorder = null;
+let ntdAudioChunks = [];
+let ntdRecTimer = null;
+let ntdRecSeconds = 0;
+
+function ntdToggleVoz(){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    ntdAddMsg('nova','<p>⚠️ Tu navegador no soporta grabación de audio.</p>');
+    return;
+  }
+  if(ntdRecActive){
+    // Detener grabación
+    ntdRecActive = false;
+    if(ntdMediaRecorder && ntdMediaRecorder.state !== 'inactive') ntdMediaRecorder.stop();
+    clearInterval(ntdRecTimer);
+    const bar = ntd$('ntdRecBar');
+    if(bar) bar.style.display = 'none';
+    ntdUS();
+  } else {
+    // Iniciar grabación
+    navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{
+      ntdRecActive = true;
+      ntdAudioChunks = [];
+      ntdRecSeconds = 0;
+      const bar = ntd$('ntdRecBar');
+      if(bar){ bar.style.display='flex'; }
+      const timeEl = ntd$('ntdRecTime');
+      ntdRecTimer = setInterval(()=>{
+        ntdRecSeconds++;
+        const m=Math.floor(ntdRecSeconds/60), s=ntdRecSeconds%60;
+        if(timeEl) timeEl.textContent = m+':'+(s<10?'0':'')+s;
+        if(ntdRecSeconds >= 120){ ntdToggleVoz(); } // máx 2 min
+      },1000);
+      ntdMediaRecorder = new MediaRecorder(stream);
+      ntdMediaRecorder.ondataavailable = e=>{ if(e.data.size>0) ntdAudioChunks.push(e.data); };
+      ntdMediaRecorder.onstop = ()=>{
+        stream.getTracks().forEach(t=>t.stop());
+        ntdRecActive = false;
+        ntdUS();
+        // Notificar al usuario que el audio fue capturado (sin transcripción por ahora)
+        ntdAddMsg('nova','<p>🎤 Audio recibido. Por favor escriba su mensaje para continuar.</p>');
+      };
+      ntdMediaRecorder.start();
+      ntdUS();
+    }).catch(()=>{
+      ntdRecActive = false;
+      ntdAddMsg('nova','<p>⚠️ No se pudo acceder al micrófono. Verifique los permisos del navegador.</p>');
+    });
+  }
 }
 
 function ntdSys(){
-  const geo = NTD.geo ? `Municipio detectado por GPS: ${NTD.geo}` : 'Ubicación: no disponible';
-  return `Eres Nova TD, asistente virtual de Tododrogas CIA SAS (Colombia). Eres empática, cálida y profesional.
-Tododrogas es un operador logístico de medicamentos con cobertura en Antioquia y otras regiones de Colombia. Distribuye medicamentos a través de puntos de dispensación (droguerías aliadas) para usuarios afiliados a EPS como COOSALUD, SAVIA SALUD, SALUD TOTAL y NUEVA EPS.
+  const hora = new Date().getHours();
+  const saludo = hora<12?'Buenos días':hora<18?'Buenas tardes':'Buenas noches';
+  const fechaHoy = new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'});
+  return `Eres Nova TD — asistente virtual oficial de TODODROGAS CIA SAS, operador logístico de dispensación de medicamentos y tecnologías en salud para EPS en Antioquia y Colombia.
 
-═══════════ PERFIL DEL USUARIO ═══════════
-Nombre completo: ${NTD.usuario?.nombre||'—'}
-Primer nombre: ${NTD.usuario?.primerNombre||'—'}
-Cédula: ${NTD.usuario?.cedula||'—'}
-EPS: ${NTD.eps||'—'}
-VIP: ${NTD.usuario?.vip?'SÍ — usuario preferencial':'No'}
-${geo}
+══ IDENTIDAD Y CONTEXTO ══
+Hoy es ${fechaHoy}. Saludo apropiado: "${saludo}".
+USUARIO AUTENTICADO: Nombre completo: ${NTD.usuario?.nombre||'—'} | Llámalo SIEMPRE como: ${NTD.usuario?.primerNombre||'—'} | Cédula: ${NTD.usuario?.cedula||'—'} | EPS: ${NTD.eps||'—'} | Usuario VIP: ${NTD.usuario?.vip?'SÍ ⭐':'No'}
+${NTD._geoMunicipio?`Ubicación detectada: ${NTD._geoMunicipio}`:''}
 
-═══════════ SISTEMA DE SALUD COLOMBIANO ═══════════
-- EPS (Entidades Promotoras de Salud): intermedian entre usuarios y prestadores. Principales: COOSALUD, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, EPS SURA, COMPENSAR, FAMISANAR, SANITAS.
-- IPS: prestadores de salud (clínicas, hospitales). Tododrogas actúa como IPS farmacéutica.
-- PQRSFD: Petición, Queja, Reclamo, Sugerencia, Felicitación, Denuncia. Ley 1755/2015 → plazo legal máximo 15 días hábiles para respuesta.
-- Medicamentos POS (Plan de Beneficios en Salud — antes POS): cubiertos por la EPS sin costo adicional para el usuario.
-- NO POS: medicamentos no incluidos en el plan básico; requieren autorización del Comité Técnico Científico (CTC) o tutela.
-- Autorización de medicamentos: el médico formula, la EPS autoriza, Tododrogas dispensa. Si la EPS demora, el usuario puede exigir respuesta en 5 días (urgencia) o 10 días (tratamiento regular) según Resolución 3047/2008.
-- Superintendencia Nacional de Salud: ente de control. El usuario puede radicar quejas en www.supersalud.gov.co o línea gratuita 01 8000 513 700.
-- Defensoría del Pueblo Colombia: mecanismos de tutela para acceso a salud.
-- ADRES: Administradora de los Recursos del Sistema General de Seguridad Social en Salud. Maneja el flujo de recursos entre EPS e IPS.
-- Ley 100 de 1993: marco general del sistema de seguridad social en Colombia.
-- Ley Estatutaria 1751 de 2015: la salud es un derecho fundamental. Ninguna barrera administrativa puede negar servicios de salud urgentes.
-- Medicamentos controlados (psicotrópicos, estupefacientes): requieren fórmula especial en papel de seguridad; no se dispensan sin este documento.
-- Cadena de frío: algunos medicamentos (biológicos, insulinas, oncológicos) requieren refrigeración y manejo especializado.
-- Copago y cuota moderadora: aplican según nivel de ingresos del usuario (nivel 1, 2, 3 de SISBEN); los usuarios del nivel 1 están exentos en la mayoría de servicios.
+══ CONTEXTO SISTEMA DE SALUD COLOMBIANO ══
+• EPS que atendemos: COOSALUD, SAVIA, SALUD TOTAL, NUEVA EPS, CEM, ANGIOSUR (61 sedes en Antioquia y Colombia)
+• PBS (Plan de Beneficios en Salud): medicamentos incluidos en la lista oficial del MINSALUD
+• MIPRES: plataforma ministerial para prescripción de medicamentos NO PBS (alto costo, huérfanos)
+• Autorización médica: documento que la EPS emite para aprobar entrega de medicamentos
+• Plazos legales según Res. 1604/2013: entrega inmediata si hay stock, máx 48h si no hay, domicilio autorizado
+• Ley 1755/2015 (Derecho de Petición): respuesta máx 15 días hábiles para peticiones
+• Ley Estatutaria 1751/2015: derecho fundamental a la salud, prestación continua sin interrupciones
+• Glosa: objeción de la EPS a la factura del operador — puede retrasar entregas
+• Dispensación: entrega formal de medicamentos con registro farmacéutico
+• Tecnologías en salud: dispositivos médicos, insumos, procedimientos cubiertos por PBS
+• Fórmula médica vigente: debe tener fecha, firma del médico, nombre genérico del medicamento
+• Carta de autorización para terceros: documento firmado por el paciente para que otra persona reclame
 
-═══════════ INTELIGENCIA EMOCIONAL ═══════════
-Detecta el estado emocional del usuario por su tono y responde adecuadamente:
-- FRUSTRACIÓN / IRA (escriben en mayúsculas, dicen "LLEVO ESPERANDO", "CONCHUDO", "NUNCA HAY NADA"): Primero valida la emoción con empatía real ("Entiendo que esto es desesperante, ${NTD.usuario?.primerNombre||''}. Tienes toda la razón en sentirte así."). Luego ofrece solución concreta. NUNCA seas genérica ni defensiva.
-- ANGUSTIA / URGENCIA MÉDICA ("me muero sin el medicamento", "es urgente", "estoy grave"): Actúa inmediatamente → PBX 604 322 2432. Indica que puede exigir dispensación urgente a la EPS bajo Ley 1751.
-- CONFUSIÓN ("no entiendo", "cómo es eso", "qué hago"): Explica paso a paso, en lenguaje simple, sin tecnicismos.
-- ALEGRÍA / SATISFACCIÓN: Celebra con el usuario, refuerza positivamente.
-- DESÁNIMO ("ya me cansé", "esto no sirve"): Reconoce el cansancio, ofrece ayuda directa y camino más corto.
-- LENGUAJE INFORMAL / COLOQUIAL: Adapta el tono. Si el usuario habla relajado, responde más cercano (sin perder profesionalismo).
+══ INTELIGENCIA EMOCIONAL — CRÍTICO ══
+DETECTA el estado emocional del usuario y RESPONDE según el contexto:
+• FURIA/FRUSTRACIÓN ("CONCHUDOS","QUE DESASTRE","HARTO","LLEVO HORAS","NO HAY NADA","SIEMPRE LO MISMO"):
+  → Primero: valida la emoción con empatía real ("Entiendo tu frustración, ${NTD.usuario?.primerNombre||''}. Eso no debería pasar.")
+  → Luego: ofrece solución concreta (radicar queja, escalar, contacto directo)
+  → NO respondas con información genérica cuando hay emoción negativa intensa
+• URGENCIA MÉDICA ("urgente","emergencia","reacción","dolor","grave","hospital"):
+  → Responde inmediatamente con PBX 604 322 2432 y escala [ESCALAR]
+• CONFUSIÓN ("no entiendo","cómo","qué debo hacer"):
+  → Explica paso a paso en lenguaje simple
+• SATISFACCIÓN ("gracias","excelente","muy bien","los amo"):
+  → Agradece calurosamente y ofrece encuesta [ENCUESTA]
 
-═══════════ CAPACIDADES ═══════════
-- Consultar radicados: [CONSULTAR:valor]
-- Buscar sedes por municipio: [SEDES:municipio] — si el usuario da municipio, úsalo directamente
-- Escalar a asesor humano: [ESCALAR]
-- Mostrar formulario PQRSFD: [FORMULARIO]
-- Mostrar encuesta: [ENCUESTA]
-- Mostrar menú: [MENU]
-- Cambiar EPS: [CAMBIAR_EPS]
-- Sección medicamentos: [MEDICAMENTOS]
-- Explicar leyes, procesos, derechos del paciente: responde directamente con [MENU] al final
-- Atender cualquier pregunta libre sobre salud, medicamentos, EPS, trámites: responde con tu conocimiento
+══ SEDES — REGLAS CRÍTICAS ══
+• NUNCA inventes sedes, direcciones ni horarios que no estén en la base de datos
+• Si el usuario pregunta "en qué municipios atienden" o "dónde están" o "qué ciudades" → usa [SEDES:TODAS] y aclara que consultarás
+• Si menciona un municipio específico → [SEDES:municipio]
+• Si no hay sede en el municipio → dilo claramente: "No tenemos sede en [municipio]. La más cercana puede ser en [no inventes — sugiere llamar al PBX]"
+• Si el usuario ya tiene ubicación GPS → usa NTD._geoMunicipio si está disponible
 
-═══════════ CONTACTO TODODROGAS ═══════════
-PBX: 604 322 2432 · Opción #2 (Lun-Vie 7:00 a.m. - 5:30 p.m.)
+══ MEDICAMENTOS PENDIENTES ══
+Cuando el usuario dice "me dieron ficho","me toca esperar","no hay nada","medicamento pendiente","llevo esperando":
+→ Reconoce la situación: "Entiendo, ${NTD.usuario?.primerNombre||''}. Si su medicamento está pendiente tienes derecho a recibirlo en máx 48 horas según la Res. 1604/2013."
+→ Ofrece: 1) Consultar estado en App Solicitudes [MEDICAMENTOS] 2) Radicar queja [FORMULARIO] 3) Hablar con asesor [ESCALAR]
+
+══ CAPACIDADES Y TAGS ══
+[MENU] → mostrar menú numerado (NUNCA escribas el menú en texto)
+[MEDICAMENTOS] → consultar estado/entrega medicamentos via App Solicitudes Web
+[SEDES:municipio] → buscar sede en ese municipio para la EPS del usuario
+[CONSULTAR:valor] → consultar estado de radicado por número o correo
+[FORMULARIO] → ir a radicar PQRSFD
+[ENCUESTA] → ir a encuesta de satisfacción
+[ESCALAR] → conectar con asesor humano
+[CAMBIAR_EPS] → cambiar EPS del usuario
+
+══ REGLAS DE RESPUESTA ══
+• Español colombiano cálido, directo, nunca robótico
+• SIEMPRE usa: "${NTD.usuario?.nombre||''}" con trato de usted. Ej: "Hasbleidy, le informo que..."
+• Máximo 100 palabras por respuesta (excepto cuando hay lista de requisitos)
+• Máximo 1 emoji por mensaje
+• NUNCA escribas el menú en texto — usa [MENU]
+• NUNCA muestres tags al usuario
+• UN solo tag al final, solo si aplica
+• Si no sabes algo → di "No tengo esa información. Llama al PBX 604 322 2432" — nunca inventes
+• Si el usuario escribe en MAYÚSCULAS → probablemente está frustrado, sé más empático
+• TRATO OBLIGATORIO: SIEMPRE de USTED. NUNCA "tu", "tienes", "puedes", "haz". Usa "usted", "su", "puede", "tiene". Ejemplo: "Hasbleidy, le informamos que..."
+• ENTREGA/DEVOLUCIÓN MEDICAMENTOS: Cuando el usuario mencione entregar, devolver, cambiar o reclamar un medicamento, SIEMPRE al final ofrece contacto: PBX 604 322 2432 · WhatsApp 304 341 2431 · pqrsfd@tododrogas.com.co
+
+══ CONTACTO TODODROGAS ══
+PBX: 604 322 2432 · Lun-Vie 7am-5:30pm · Sáb 8am-12m
 WhatsApp: 304 341 2431
-Correo PQRSFD: pqrsfd@tododrogas.com.co
-Nova TD: disponible 24/7
-
-═══════════ REGLAS ESTRICTAS ═══════════
-1. Español colombiano ejecutivo y cálido. SIEMPRE llama al usuario por su PRIMER NOMBRE.
-2. Máximo 130 palabras por respuesta. Máximo 1 emoji (úsalo con intención).
-3. NUNCA escribas listas de menú en texto plano. Para mostrar el menú usa SOLO [MENU].
-4. Los TAGS van SIEMPRE al final del mensaje y son invisibles para el usuario. NUNCA los menciones.
-5. SOLO UN tag por respuesta.
-6. Si hay urgencia médica o el usuario dice que su vida está en riesgo → da el PBX inmediatamente.
-7. NUNCA inventes radicados, medicamentos, fechas ni datos de sedes.
-8. Si el usuario pregunta por una sede y menciona un municipio → usa [SEDES:NombreMunicipio].
-9. Si detectas frustración fuerte, valida primero y después informa — nunca al revés.
-10. Cuando el usuario use lenguaje soez por frustración (no por agresión), mantén la empatía sin juzgar.
-
-TAGS DISPONIBLES (exactamente uno, solo cuando aplica):
-[MENU] [FORMULARIO] [ESCALAR] [ENCUESTA] [MEDICAMENTOS] [CAMBIAR_EPS] [CONSULTAR:valor] [SEDES:municipio]`;
+Correo: pqrsfd@tododrogas.com.co
+Nova TD: 24/7
+App medicamentos: https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb`;
 }
 
 const ntdNOW=()=>new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
@@ -760,7 +1281,7 @@ function ntdOnKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ntdSend
 function ntdScroll(){const m=ntd$('ntdMsgs');setTimeout(()=>m.scrollTo({top:m.scrollHeight,behavior:'smooth'}),55);}
 function ntdProg(p,l){ntd$('ntdPFill').style.width=p+'%';ntd$('ntdStep').textContent=l;}
 function ntdTyping(v){ntd$('ntdDots').classList.toggle('on',v);ntd$('ntdTxt').style.display=v?'none':'';}
-function ntdEna(ph='Escribe tu respuesta...'){const t=ntd$('ntdTa');t.disabled=false;t.placeholder=ph;t.style.display='';t.focus();ntdUS();}
+function ntdEna(ph='Escriba su respuesta...'){const t=ntd$('ntdTa');t.disabled=false;t.placeholder=ph;t.style.display='';t.focus();ntdUS();}
 function ntdDis(){ntd$('ntdTa').disabled=true;ntd$('ntdSBtn').disabled=true;}
 
 function ntdR2H(raw){
@@ -813,18 +1334,16 @@ function ntdResetInact(){
   if(NTD.fase !== 'libre') return; // solo cuando ya está en conversación libre
   _ntdInactTimer = setTimeout(()=>{
     // Solo actuar si el modal está abierto
-    // (página independiente — siempre visible)
+    // (página independiente)
     // Mostrar mensaje de cierre con botón para reiniciar
     ntdAddMsg('nova',
       `<p>Esta conversación se cerró por inactividad.</p>
-       <p style="margin-top:4px">Si necesitas algo más, toca el botón para iniciar un nuevo chat. ¡Hasta pronto! 😊</p>`,
-      `<div class="ntd-chips">
-         <button class="ntd-ch g" onclick="ntdNuevoChat()" style="font-weight:700">
-           🔄 Iniciar nuevo chat
-         </button>
+       <p style="margin-top:4px">Si necesitas algo más, toque el botón para iniciar un nuevo chat. ¡Hasta pronto! 😊</p>`,
+      `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+         <button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-weight:700" onclick="ntdNuevoChat()">1️⃣ &nbsp;🔄 Iniciar nuevo chat</button>
        </div>`);
     ntdDis();
-  }, 2 * 60 * 1000); // 2 minutos
+  }, 4 * 60 * 1000); // 4 minutos
 }
 
 function ntdNuevoChat(){
@@ -847,6 +1366,22 @@ async function ntdSend(){
   NTD.busy=false;ntdUS();
 }
 
+// Alias de opciones del menú — llamados desde botones del DOM
+function ntdOpc(n){
+  NTD.busy=false;
+  const opc={
+    1:()=>ntdMedicamentos(),
+    2:()=>ntdSedes(),
+    3:()=>ntdRequisitosReclamar(),
+    4:()=>ntdAutorizacion(),
+    5:()=>ntdIrARadicar(),
+    6:()=>ntdConsultarRadicado(),
+    7:()=>ntdHorarios(),
+    8:()=>ntdEncuesta(),
+  };
+  if(opc[n]) opc[n]();
+}
+
 async function ntdDispatch(txt){
   if(NTD.fase==='politica')    return ntdFPolitica(txt);
   if(NTD.fase==='ident_ced')   return ntdFCedula(txt);
@@ -856,7 +1391,7 @@ async function ntdDispatch(txt){
   // Captura municipio para búsqueda de sedes
   if(NTD.fase==='municipio_sedes'){
     NTD.fase='libre';
-    ntdAddMsg('nova', ntdR2H(`Buscando sedes en **${txt}** para **${NTD.eps||'tu EPS'}**...`));
+    ntdAddMsg('nova', ntdR2H(`Buscando sedes en **${txt}** para **${NTD.eps||'su EPS'}**...`));
     await ntdFetchSedes(txt);
     return;
   }
@@ -875,6 +1410,23 @@ async function ntdDispatch(txt){
     };
     if(opc[n]){NTD.busy=false;opc[n]();return;}
   }
+  // Detectar preguntas genéricas de sedes antes de GPT
+  if(NTD.fase==='libre'){
+    const tl=txt.toLowerCase();
+    const esPreguntaSede = /municipio|ciudad|donde|dónde|puntos|sedes|atiend|dispensac|farmacia|droguería|drogueria/i.test(tl);
+    const esMedicamentoPendiente = /ficho|turno|espera|pendiente|no hay|nada|horas|días|demora/i.test(tl);
+    const esFrustracion = /conchudo|desgracia|p[eé]simo|horrible|harto|indigna|colmo|vergüenza|verguen/i.test(tl);
+
+    if(esFrustracion && !NTD._frustMensajeEnviado){
+      NTD._frustMensajeEnviado = true;
+      // Dejar que GPT maneje con el contexto emocional del system prompt
+    }
+    if(esMedicamentoPendiente && !esPreguntaSede){
+      // Redirigir a medicamentos + contexto de emoción
+      NTD.hist.push({role:'user',content:txt});
+      return ntdFLibre(txt); // GPT manejará con context emocional
+    }
+  }
   return ntdFLibre(txt);
 }
 
@@ -885,9 +1437,9 @@ function ntdStart(){
      <p>Soy <strong>Nova TD</strong>, tu asistente. Gracias por ponerte en contacto con nosotros.</p>
      <p>Antes de iniciar, es necesario que aceptes nuestras políticas de tratamiento de datos. Si deseas conocerlas, ingresa aquí: <a href="${NTD_C.polUrl}" target="_blank" style="color:#93c5fd;text-decoration:underline">📄 Ver política</a></p>
      <p style="margin-top:6px"><strong>Para continuar elige:</strong></p>`,
-    `<div class="ntd-chips">
-       <button class="ntd-ch g" onclick="ntdSU('ACEPTO')">✅ Acepto</button>
-       <button class="ntd-ch r" onclick="ntdSU('NO ACEPTO')">✗ No acepto</button>
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+       <button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSU('ACEPTO')">1️⃣ &nbsp;✅ Acepto la política</button>
+       <button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSU('NO ACEPTO')">2️⃣ &nbsp;✗ No acepto</button>
      </div>`);
   ntdProg(6,'Bienvenida');
   setTimeout(()=>ntdEna('Escribe Acepto o No acepto...'),300);
@@ -901,11 +1453,11 @@ async function ntdFPolitica(txt){
     NTD.fase='ident_ced';ntdProg(16,'Verificación');
     ntdAddMsg('nova',
       `<p>Selecciona el tipo de documento del usuario que necesita el servicio:</p>`,
-      `<div class="ntd-chips">
-         <button class="ntd-ch b" onclick="ntdSetTipoDoc('CÉDULA DE CIUDADANÍA')">🪪 Cédula de ciudadanía</button>
-         <button class="ntd-ch b" onclick="ntdSetTipoDoc('TARJETA DE IDENTIDAD')">📋 Tarjeta de identidad</button>
-         <button class="ntd-ch b" onclick="ntdSetTipoDoc('CÉDULA DE EXTRANJERÍA')">🌐 Cédula de extranjería</button>
-         <button class="ntd-ch b" onclick="ntdSetTipoDoc('PASAPORTE')">📕 Pasaporte</button>
+      `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetTipoDoc('CÉDULA DE CIUDADANÍA')">1️⃣ &nbsp;🪪 Cédula de ciudadanía</button>
+         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetTipoDoc('TARJETA DE IDENTIDAD')">2️⃣ &nbsp;📋 Tarjeta de identidad</button>
+         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetTipoDoc('CÉDULA DE EXTRANJERÍA')">3️⃣ &nbsp;🌐 Cédula de extranjería</button>
+         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetTipoDoc('PASAPORTE')">4️⃣ &nbsp;📕 Pasaporte</button>
        </div>`);
     ntdDis(); // espera que toque un chip
   }else if(t.includes('no')){
@@ -927,17 +1479,39 @@ function ntdSetTipoDoc(tipo){
 async function ntdFCedula(txt){
   const n=txt.replace(/\D/g,'');
   if(n.length<5){
-    ntdAddMsg('nova',ntdR2H('Valor incorrecto, por favor intente de nuevo.\n\nEscribe el número de documento sin puntos ni comas:'));
+    ntdAddMsg('nova',ntdR2H('Por favor ingrese un número de documento válido (sin puntos ni comas):'));
     ntdEna('Solo números');return;
   }
-  NTD._ced=n;NTD.fase='ident_nom';
-  ntdAddMsg('nova',ntdR2H('Escribe tu **nombre completo** (tal como aparece en el documento):'));
+  NTD._ced=n;
+  // Intentar validar solo con cédula primero
+  ntdTyping(true);ntdAddSk();
+  try{
+    const r=await fetch(NTD_C.validar,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cedula:n,nombre:'',telefono:''})});
+    const res=await r.json();
+    ntdRmSk();ntdTyping(false);
+    if(res.ok && res.nombre){
+      // ¡Encontrado solo con cédula! — dejar pasar con bienvenida amable
+      NTD._nom=res.nombre;
+      const pn=res.nombre.trim().split(/\s+/)[0];
+      NTD.usuario={nombre:res.nombre,primerNombre:pn,cedula:n,telefono:'',vip:!!res.vip,saludo:res.saludo||null};
+      ntdAddMsg('nova',ntdR2H(`¡Bienvenido/a, **${res.nombre}**! Es un placer atenderle. 😊`));
+      await ntdDelay(500);
+      if(res.vip&&res.saludo){NTD.vipCb=()=>ntdBienvenidaYEps();ntdShowVip(res.saludo);}
+      else{ntdBienvenidaYEps();}
+      return;
+    }
+  }catch(e){ntdRmSk();ntdTyping(false);}
+  // Flujo correcto: cédula → nombre → celular
+  NTD.fase='ident_nom';
+  ntdAddMsg('nova',
+    `<p>Por favor ingrese su <strong>nombre completo</strong> tal como aparece en el documento:</p>`);
   ntdEna('Nombre y apellido');
 }
 async function ntdFNombre(txt){
-  if(txt.trim().length<3){ntdAddMsg('nova',ntdR2H('Por favor escribe tu nombre completo.'));ntdEna('Nombre y apellido');return;}
+  if(txt.trim().length<3){ntdAddMsg('nova',ntdR2H('Por favor escriba su nombre completo.'));ntdEna('Nombre y apellido');return;}
   NTD._nom=txt.trim().toUpperCase();NTD.fase='ident_tel';
-  ntdAddMsg('nova',ntdR2H('¿Cuál es tu **número de celular**?'));
+  ntdAddMsg('nova',ntdR2H('Por favor ingrese su **número de celular** registrado:'));
   ntdEna('Ej: 3001234567');
 }
 async function ntdFTelefono(txt){
@@ -955,11 +1529,11 @@ async function ntdFTelefono(txt){
 
   if(!res.ok){
     const msg=res.msg||(res.razon==='no_encontrado'
-      ?'No encontramos tu registro. Verifica tus datos, comunícate al 604 322 2432 o escríbenos al WhatsApp 304 341 2431.'
-      :'Tus datos no coinciden. Verifica cédula, nombre y teléfono, comunícate al 604 322 2432 o escríbenos al WhatsApp 304 341 2431.');
+      ?'No encontramos su registro. Verifique sus datos o comuníquese al PBX 604 322 2432 · WhatsApp 304 341 2431.'
+      :'Los datos no coinciden. Verifique su cédula y teléfono, o comuníquese al PBX 604 322 2432 · WhatsApp 304 341 2431.');
     ntdShowVal(msg);
     NTD.fase='ident_ced';NTD._ced=null;NTD._nom=null;NTD._tel=null;
-    ntdAddMsg('nova',ntdR2H('Intentemos de nuevo. ¿Cuál es tu **cédula**?'));
+    ntdAddMsg('nova',ntdR2H('Intentemos de nuevo. Por favor ingrese su **número de cédula**:'));
     ntdEna('Número de cédula');return;
   }
   const pn=(res.nombre||NTD._nom).trim().split(/\s+/)[0];
@@ -969,24 +1543,52 @@ async function ntdFTelefono(txt){
 }
 
 async function ntdBienvenidaYEps(){
-  // Saludo personalizado con nombre — igual que el video
   ntdAddMsg('nova', ntdR2H(
-    `✅ Verificado. ¡Hola, **${NTD.usuario.primerNombre}**! Bienvenido/a a Tododrogas CIA SAS.`
+    `✅ Identidad verificada. ¡Bienvenido/a, **${NTD.usuario.nombre}**! Es un gusto atenderle en Tododrogas CIA SAS.`
   ));
   await ntdDelay(600);
-  // Aviso de inactividad — igual que en el video de EPS SURA
   ntdAddMsg('nova',
-    `<p>⏱ <strong>Aviso:</strong> Ten presente que si hay más de <strong>2 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
+    `<p>⏱ <strong>Aviso:</strong> Si hay más de <strong>4 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
   );
   await ntdDelay(700);
-  ntdIrAEps();
+  // Pedir geolocalización — opcional, mejora la búsqueda de sedes
+  ntdPedirGeo();
 }
 
+function ntdPedirGeo(){
+  if(!navigator.geolocation){ntdIrAEps();return;}
+  ntdAddMsg('nova',
+    `<p>📍 ¿Quieres que detecte tu ubicación para encontrar la sede más cercana automáticamente?</p>`,
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
+       <button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdActivarGeo()">1️⃣ &nbsp;📍 Sí, usar mi ubicación</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdIrAEps()">2️⃣ &nbsp;No, continuar sin ubicación</button>
+     </div>`);
+}
+
+function ntdActivarGeo(){
+  ntdAddMsg('nova',`<p>Detectando su ubicación...</p>`);
+  navigator.geolocation.getCurrentPosition(
+    async pos=>{
+      NTD._geoLat=pos.coords.latitude; NTD._geoLng=pos.coords.longitude;
+      const cc=NTD_SEDES_LOCAL.filter(s=>s.lat&&s.lat!==0);
+      if(cc.length){
+        const cerca=cc.map(s=>({...s,_d:ntdHaversine(pos.coords.latitude,pos.coords.longitude,s.lat,s.lng)})).sort((a,b)=>a._d-b._d)[0];
+        NTD._geoMunicipio=cerca.municipio;
+        ntdAddMsg('nova',ntdR2H(`📍 Ubicación detectada. La sede más cercana para su EPS está en **${cerca.municipio}** (${cerca._d.toFixed(1)} km). Seleccione "Puntos de dispensación" para ver las más cercanas.`));
+      }else{
+        ntdAddMsg('nova',ntdR2H('📍 Ubicación detectada. Cuando busque sedes le mostraré las más cercanas.'));
+      }
+      await ntdDelay(600); ntdIrAEps();
+    },
+    err=>{ntdAddMsg('nova',ntdR2H('Sin problema, puede escribir el municipio cuando busque sedes.'));ntdDelay(400).then(()=>ntdIrAEps());},
+    {timeout:10000,maximumAge:60000,enableHighAccuracy:false}
+  );
+}
 function ntdIrAEps(){
   NTD.fase='eps';ntdProg(42,'Tu EPS');
   ntdAddMsg('nova',ntdR2H(`${NTD.usuario.primerNombre}, ¿con qué **EPS** estás afiliado/a?`),
-    `<div class="ntd-chips">${NTD_EPS.map(e=>`<button class="ntd-ch b" onclick="ntdSU('${e.replace(/'/g,"\'")}');" style="font-size:11px">${e}</button>`).join('')}</div>`);
-  ntdEna('Escribe o toca tu EPS...');
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">${NTD_EPS.map((e,i)=>`<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSU('${e.replace(/'/g,"\'")}');">${['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣'][i]||'▶️'} &nbsp;${e}</button>`).join('')}</div>`);
+  ntdEna('Seleccione su EPS...');
 }
 async function ntdFEps(txt){
   const t=txt.trim().toUpperCase();
@@ -998,18 +1600,18 @@ async function ntdFEps(txt){
 
 function ntdMostrarMenu(){
   NTD.fase='libre';ntdProg(65,'En atención');
-  const n=NTD.usuario?.primerNombre||'';
+  const n=NTD.usuario?.nombre||'';
   ntdAddMsg('nova',
-    `<p><strong>${n}</strong>, digita el <strong>número</strong> de la opción que necesitas:</p>
-     <div style="margin-top:8px;font-size:13px;line-height:2.1">
-       <div>1️⃣ &nbsp;Estado o entrega de medicamentos</div>
-       <div>2️⃣ &nbsp;Puntos de dispensación</div>
-       <div>3️⃣ &nbsp;Requisitos para reclamar medicamentos</div>
-       <div>4️⃣ &nbsp;Autorización médica</div>
-       <div>5️⃣ &nbsp;Radicar PQRSFD</div>
-       <div>6️⃣ &nbsp;Estado de mi radicado PQRSFD</div>
-       <div>7️⃣ &nbsp;Horarios y canales de contacto</div>
-       <div>8️⃣ &nbsp;Encuesta de satisfacción</div>
+    `<p>¿En qué le puedo ayudar, <strong>${n}</strong>? Seleccione una opción:</p>`,
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px;margin-top:4px">
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-size:13px" onclick="ntdOpc(1)">1️⃣ &nbsp;Estado o entrega de medicamentos</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-size:13px" onclick="ntdOpc(2)">2️⃣ &nbsp;Puntos de dispensación</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-size:13px" onclick="ntdOpc(3)">3️⃣ &nbsp;Requisitos para reclamar medicamentos</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-size:13px" onclick="ntdOpc(4)">4️⃣ &nbsp;Autorización médica</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-size:13px" onclick="ntdOpc(5)">5️⃣ &nbsp;Radicar PQRSFD</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-size:13px" onclick="ntdOpc(6)">6️⃣ &nbsp;Estado de mi radicado PQRSFD</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-size:13px" onclick="ntdOpc(7)">7️⃣ &nbsp;Horarios y canales de contacto</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-size:13px" onclick="ntdOpc(8)">8️⃣ &nbsp;Encuesta de satisfacción</button>
      </div>`);
   ntdSetQbar([
     {e:'1️⃣',l:'Medicamentos',t:'1'},
@@ -1018,7 +1620,7 @@ function ntdMostrarMenu(){
     {e:'6️⃣',l:'Radicado',t:'6'},
     {e:'8️⃣',l:'Encuesta',t:'8'},
   ]);
-  ntdEna('Escribe el número de la opción...');
+  ntdEna('Escriba el número de la opción...');
   ntdResetInact();
 }
 
@@ -1031,13 +1633,11 @@ function ntdMedicamentos(){
   ntdAddMsg('nova',
     `<p><strong>${n}</strong>, para consultar el estado de tus medicamentos, entregas pendientes o historial de dispensación, ingresa a nuestra plataforma <strong>App Solicitudes Web</strong>:</p>
      <div style="text-align:center;margin:10px 0">
-       <a href="${MANTIS_URL}" target="_blank" style="display:inline-block">
-         <img src="${QR_MEDS}"
-           style="width:160px;height:160px;border-radius:10px;border:1px solid rgba(37,99,235,.3);cursor:pointer"
-           alt="QR Medicamentos" onerror="this.style.display='none'">
-       </a>
+       <img src="${QR_MEDS}"
+         style="width:160px;height:160px;border-radius:10px;border:1px solid rgba(37,99,235,.3)"
+         alt="QR Medicamentos" onerror="this.style.display='none'">
        <p style="font-size:11px;color:var(--ntd-t2,rgba(190,215,255,.6));margin-top:6px">
-         📱 Toca la imagen o el botón para abrir
+         📱 Escanea con tu cámara o toque el botón
        </p>
      </div>`,
 `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
@@ -1077,545 +1677,103 @@ ntdBotonesFinales(`
 
 // Funciones directas para el menú numerado (sin pasar por ntdSend)
 function ntdSedes(){
-  NTD.fase = 'municipio_sedes';
-  const geoBtn = `<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdUsarGeo()">📍 Usar mi ubicación actual</button>`;
-  ntdAddMsg('nova',
-    `<p>¿En qué <strong>municipio</strong> necesitas el punto de dispensación?</p>
-     <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe el nombre del municipio o toca tu ubicación para detectarlo automáticamente.</p>`,
-    ntdBotonesFinales(geoBtn));
-  ntdEna('Escribe el municipio...');
-}
-
-async function ntdUsarGeo(){
-  ntdAddMsg('nova','<p>📍 Detectando tu ubicación…</p>');
-  const ciudad = await ntdGeolocate();
-  if(ciudad){
-    NTD.fase='libre';
-    ntdAddMsg('nova', `<p>Ubicación detectada: <strong>${ciudad}</strong>. Buscando sedes…</p>`);
-    await ntdFetchSedes(ciudad);
-  }else{
-    ntdAddMsg('nova',ntdR2H('No pude detectar tu ubicación. Por favor **escribe el municipio** directamente.'));
-    NTD.fase='municipio_sedes';
-    ntdEna('Escribe el municipio...');
-  }
-}
-
-function ntdAutorizacion(){
-  ntdFLibreDirecto('PROCESO DE AUTORIZACIÓN DE MEDICAMENTOS CON LA EPS');
-}
-
-function ntdConsultarRadicado(){
-  ntdAddMsg('nova',
-    ntdR2H('Para consultar tu radicado ingresa el **número de radicado** (ej: TD-123456) o tu **correo electrónico**:'),
-ntdBotonesFinales());
-  ntdEna('Número de radicado o correo...');
-}
-
-function ntdEncuesta(){
-  const encBase = (typeof ENC_URL !== 'undefined' ? ENC_URL : NTD_C.encuesta);
-  const encSep  = encBase.includes('?') ? '&' : '?';
-  const encParams = new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
-  const encUrl = encBase + encSep + encParams.toString();
-  const qrUrl  = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(encUrl)+'&bgcolor=141e30&color=fcd34d&qzone=1';
-  ntdAddMsg('nova',
-    `<p>Tu opinión es muy importante para nosotros. Puedes realizar la <strong>encuesta de satisfacción</strong> aquí:</p>
-     <div style="text-align:center;margin:10px 0">
-       <a href="${encUrl}" target="_blank" style="display:inline-block">
-         <img src="${qrUrl}"
-           style="border-radius:10px;width:160px;height:160px;border:1px solid rgba(245,158,11,.3);cursor:pointer"
-           alt="QR Encuesta" onerror="this.style.display='none'">
-       </a>
-       <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:6px">
-         📱 Toca la imagen o el botón para ir a la encuesta
-       </p>
-     </div>`,
-ntdBotonesFinales(`
-       <button class="ntd-ch go" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="window.location.href='${encUrl}'">3️⃣ &nbsp;⭐ Realizar encuesta ahora →</button>`));
-}
-
-function ntdHorarios(){
-  ntdAddMsg('nova',
-    `<p>📞 <strong>Canales de contacto PQRSFD · Tododrogas</strong></p>
-     <ul>
-       <li>💬 WhatsApp: <strong>304 341 2431</strong></li>
-       <li>📞 PBX: <strong>604 322 2432</strong> · Opción #2</li>
-       <li>📧 Correo: <strong>pqrsfd@tododrogas.com.co</strong></li>
-       <li>🤖 Nova TD: <strong>24/7</strong></li>
-     </ul>
-     <p style="margin-top:6px">🕐 <strong>Horario asesores:</strong><br>
-     Lunes a viernes 7:00 a.m. – 5:30 p.m.<br>
-     Sábados 8:00 a.m. – 12:00 m.</p>`,
-    ntdBotonesFinales());
-}
-
-// ── Botones estándar de cierre para TODA respuesta ─────────
-function ntdBotonesFinales(extra){
-  let rows = extra || '';
-  rows += `
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaLibre()">2️⃣ &nbsp;💬 Realiza una consulta personalizada</button>`;
-  return `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">${rows}
-     </div>`;
-}
-
-// Activa GPT para consulta libre
-function ntdConsultaLibre(){
-  ntdAddMsg('nova',
-    `<p>¿Sobre qué quieres consultar, <strong>${NTD.usuario?.primerNombre||''}</strong>?</p>
-     <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe tu pregunta y te respondo de inmediato.</p>`);
-  ntdEna('Escribe tu pregunta...');
-}
-
-// Llamar a GPT directamente sin pasar por ntdSend (sin busy check)
-async function ntdFLibreDirecto(txt){
-  NTD.busy=true;
-  ntdDis();
-  try{ await ntdFLibre(txt); }
-  catch(e){
-    ntdRmSk();ntdTyping(false);
-    ntdAddMsg('nova',ntdR2H('No pude conectarme. Llama al **604 322 2432** o WhatsApp **304 341 2431**.'));
-  }
-  NTD.busy=false;ntdUS();
-}
-
-// Radicar — lleva al formulario QR o botón directo
-function ntdIrARadicar(){
-  ntdAddMsg('nova',
-    `<p>Para radicar tu solicitud PQRSFD tienes dos opciones:</p>`,
-ntdBotonesFinales(`
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">3️⃣ &nbsp;Radicar desde aquí →</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarQR()">4️⃣ &nbsp;Escanear código QR</button>`));
-}
-
-function ntdMostrarQR(){
-  const base = window.location.origin + '/' + NTD_C.pqrForm;
-  const params = new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
-  const url = base + '?' + params.toString();
-  ntdAddMsg('nova',
-    `<p>Escanea este código QR con tu celular para radicar tu solicitud desde cualquier punto de atención:</p>
-     <div style="text-align:center;margin-top:10px">
-       <a href="${url}" target="_blank" style="display:inline-block">
-         <img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(url)}&bgcolor=141e30&color=93c5fd&qzone=1"
-           style="border-radius:10px;width:160px;height:160px;cursor:pointer" alt="QR Radicar">
-       </a>
-       <p style="font-size:11px;color:var(--ntd-t3);margin-top:6px">O toca el botón para ir directamente</p>
-     </div>`,
-ntdBotonesFinales(`
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">3️⃣ &nbsp;Radicar ahora →</button>`));
-}
-
-// Escalar a asesor — siempre de último
-function ntdEscalarAgente(){
-  ntdAddMsg('nova',
-    ntdR2H(`${NTD.usuario?.primerNombre||''}, con gusto te conecto con uno de nuestros asesores.
-
-Nuestro horario de atención es **Lun-Vie 7:00 a.m. - 5:30 p.m.**`),
-    `<div class="ntd-chips">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px">3️⃣ &nbsp;WhatsApp: 304 341 2431</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px">4️⃣ &nbsp;PBX: 604 322 2432</button>
-       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
-     </div>`);
-}
-
-async function ntdFLibre(txt){
-  NTD.hist.push({role:'user',content:txt}); // txt ya viene en mayúsculas
-  ntdTyping(true);ntdAddSk();
-  let raw='';
-  try{
-    const ntdProxy=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
-    const resp=await fetch(ntdProxy,{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({system:ntdSys(),messages:NTD.hist.slice(-20),max_tokens:1500})
-    });
-    if(!resp.ok)throw new Error('HTTP '+resp.status);
-    const d=await resp.json();
-    raw=d.choices?.[0]?.message?.content||'';
-    if(!raw)throw new Error('Sin respuesta');
-  }catch(e){
-    ntdRmSk();ntdTyping(false);
-    ntdAddMsg('nova',ntdR2H('No pude conectarme. Llama al **604 322 2432** o WhatsApp **304 341 2431**.'));
-    ntdEna();return;
-  }
-  NTD.hist.push({role:'assistant',content:raw});
-  const{text,act,dat}=ntdParseAct(raw);
-  ntdRmSk();ntdTyping(false);
-  const html=ntdR2H(text);
-  switch(act){
-    case 'FORMULARIO':
-      ntdAddMsg('nova',html);await ntdDelay(200);ntdIrARadicar();break;
-    case 'ESCALAR':
-      ntdAddMsg('nova',html);ntdEscalarAgente();break;
-    case 'ENCUESTA':
-      ntdAddMsg('nova',html,`<div class="ntd-chips">
-        <button class="ntd-ch go" onclick="window.location.href='${NTD_C.encuesta}'">⭐ Ir a la encuesta →</button>
-        <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button></div>`);break;
-    case 'MENU':
-      ntdAddMsg('nova',html);await ntdDelay(300);ntdMostrarMenu();break;
-    case 'CAMBIAR_EPS':
-      ntdAddMsg('nova',html);await ntdDelay(300);ntdCambiarEps();break;
-    case 'CONSULTAR':
-      ntdAddMsg('nova',html);await ntdDelay(150);await ntdFetchRadicado(dat);break;
-    case 'SEDES':
-      ntdAddMsg('nova',html);await ntdDelay(150);await ntdFetchSedes(dat);break;
-    case 'MEDICAMENTOS':
-      ntdAddMsg('nova',html);await ntdDelay(200);ntdMedicamentos();break;
-    default:
-      ntdAddMsg('nova',html, ntdBotonesFinales());
-  }
-  ntdEna('Escribe tu mensaje...');
-  ntdResetInact();
-}
-
-function ntdParseAct(raw){
-  let text=raw,act=null,dat=null;
-  const pp=[[/\[FORMULARIO\]/,'FORMULARIO'],[/\[ESCALAR\]/,'ESCALAR'],[/\[ENCUESTA\]/,'ENCUESTA'],
-    [/\[MENU\]/,'MENU'],[/\[CAMBIAR_EPS\]/,'CAMBIAR_EPS'],[/\[MEDICAMENTOS\]/,'MEDICAMENTOS'],
-    [/\[CONSULTAR:([^\]]+)\]/,'CONSULTAR'],[/\[SEDES:([^\]]+)\]/,'SEDES']];
-  for(const[re,a]of pp){const m=text.match(re);if(m){text=text.replace(m[0],'').trim();act=a;dat=m[1]||null;break;}}
-  // Limpiar CUALQUIER tag residual que GPT haya dejado en el texto
-  text=text.replace(/\[[A-Z_]+(?::[^\]]+)?\]/g,'').trim();
-  return{text,act,dat};
-}
-
-function ntdCambiarEps(){
-  ntdAddMsg('nova',ntdR2H(`¿Con cuál EPS quieres actualizar, ${NTD.usuario?.primerNombre||''}?`),
-    `<div class="ntd-chips">${NTD_EPS.map(e=>`<button class="ntd-ch b" onclick="ntdSetEps('${e.replace(/'/g,"\'")}');" style="font-size:11px">${e}</button>`).join('')}</div>`);
-  ntdEna('Escribe o toca tu nueva EPS...');
-}
-function ntdSetEps(eps){
-  NTD.eps=eps;
-  NTD.hist.push({role:'user',content:'Mi EPS es '+eps});
-  ntdAddMsg('user',ntdR2H(eps));
-  ntdAddMsg('nova',ntdR2H(`EPS actualizada a **${eps}** ✅`),
-    `<div class="ntd-chips">
-       <button class="ntd-ch b" onclick="ntdSU('Consultar sedes')">🏥 Ver sedes</button>
-       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
-     </div>`);
-  ntdEna('Escribe tu mensaje...');
-}
-
-async function ntdFetchRadicado(ticket){
-  ntdTyping(true);ntdAddSk();
-  let d;
-  try{
-    const r=await fetch(NTD_C.consulta,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accion:'radicado',ticket_id:ticket,correo:ticket})});
-    d=await r.json();
-  }catch(e){d={encontrado:false};}
-  ntdRmSk();ntdTyping(false);
-  if(!d.encontrado){
-    ntdAddMsg('nova',ntdR2H(`No encontré radicado con **"${ticket}"**. Verifica el número (ej: TD-123456) o tu correo.`),
-      `<div class="ntd-chips"><button class="ntd-ch b" onclick="ntdSU('Consultar otro radicado')">🔍 Otro radicado</button>
-       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button></div>`);return;
-  }
-  const est=d.estado||'pendiente';
-  const bc=est==='cerrado'?'ntd-bg':(est==='urgente'||d.sla_vencido?'ntd-br':'ntd-by');
-  const fl=d.fecha_limite?new Date(d.fecha_limite).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'—';
-  let hH='';
-  if(d.historial?.length){
-    hH=`<div style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.04)">
-      <div style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:rgba(130,165,220,.35);margin-bottom:4px">Últimos eventos</div>
-      ${d.historial.map(h=>`<div style="font-size:11px;color:rgba(190,215,255,.6);padding:1px 0">
-        <span style="color:rgba(130,165,220,.35)">${new Date(h.created_at).toLocaleDateString('es-CO',{day:'2-digit',month:'short'})}</span> · ${h.evento}: ${h.descripcion}</div>`).join('')}
-    </div>`;
-  }
-  ntdAddMsg('nova',
-    `<p>Aquí está tu radicado 📋</p>
-     <div class="ntd-ic">
-       <div class="ntd-ict">Ticket ${d.ticket_id}</div>
-       <div class="ntd-ir"><span class="ntd-il">Estado</span><span class="ntd-badge ${bc}">${est.toUpperCase()}</span></div>
-       <div class="ntd-ir"><span class="ntd-il">Tipo</span><span class="ntd-iv">${d.tipo||'—'}</span></div>
-       <div class="ntd-ir"><span class="ntd-il">Prioridad</span><span class="ntd-iv">${d.prioridad||'media'}</span></div>
-       <div class="ntd-ir"><span class="ntd-il">Agente</span><span class="ntd-iv">${d.agente||'Sin asignar'}</span></div>
-       <div class="ntd-ir"><span class="ntd-il">Límite SLA</span><span class="ntd-iv">${fl}${d.sla_vencido?' ⚠️':''}</span></div>
-       ${d.resumen?`<div class="ntd-ir"><span class="ntd-il">Resumen</span><span class="ntd-iv">${d.resumen}</span></div>`:''}
-       ${hH}
-     </div>`,
-    `<div class="ntd-chips">
-       <button class="ntd-ch b" onclick="ntdSU('Consultar otro radicado')">🔍 Otro radicado</button>
-       ${est!=='cerrado'?`<button class="ntd-ch g" onclick="ntdSU('Hablar con agente sobre este radicado')">👤 Agente</button>`:''}
-       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
-     </div>`);
-}
-
-async function ntdFetchSedes(mun){
-  ntdTyping(true);ntdAddSk();
-  let d;
-  try{
-    const r=await fetch(NTD_C.consulta,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accion:'sede',municipio:mun,eps:NTD.eps||'TODAS'})});
-    d=await r.json();
-  }catch(e){d={encontrado:false};}
-  ntdRmSk();ntdTyping(false);
-  if(!d.encontrado||!d.sedes?.length){
-    ntdAddMsg('nova',ntdR2H(`No encontré sedes en **${mun}** para **${NTD.eps||'tu EPS'}**. Llama al 604 322 2432.`),
-      `<div class="ntd-chips"><button class="ntd-ch b" onclick="ntdSedes()">🏥 Otro municipio</button>
-       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button></div>`);return;
-  }
-  const sH=d.sedes.slice(0,4).map(s=>`
-    <div class="ntd-ic" style="margin-top:6px">
-      <div class="ntd-ict">${s.nombre||'Sede'} · ${s.ciudad||mun}</div>
-      <div class="ntd-ir"><span class="ntd-il">Dirección</span><span class="ntd-iv">${s.direccion||'—'}</span></div>
-      <div class="ntd-ir"><span class="ntd-il">Horario</span><span class="ntd-iv">${s.horario||'—'}</span></div>
-    </div>`).join('');
-  ntdAddMsg('nova',
-    `<p>Sedes en <strong>${d.municipio}</strong> · <strong>${NTD.eps||'—'}</strong> (${d.total} encontradas):</p>${sH}`,
-    `<div class="ntd-chips">
-       <button class="ntd-ch b" onclick="ntdSedes()">🏥 Otro municipio</button>
-       <button class="ntd-ch b" onclick="ntdFetchSedes('${d.municipio}')">🔄 Actualizar</button>
-       <button class="ntd-ch r"  onclick="ntdCambiarEps()">🔄 Cambiar EPS</button>
-       <button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
-     </div>`);
-}
-
-function ntdShowVip(msg){ntd$('ntdVipMsg').textContent=msg;ntd$('ntdVipBg').classList.add('on');}
-function ntdCloseVip(){ntd$('ntdVipBg').classList.remove('on');if(NTD.vipCb){NTD.vipCb();NTD.vipCb=null;}}
-
-function ntdShowVal(msg){
-  ntd$('ntdValMsg').textContent=msg;
-  const b=ntd$('ntdValBar');b.style.transition='none';b.style.width='100%';
-  ntd$('ntdValBg').classList.add('on');
-  let s=12;ntd$('ntdValCd').textContent='Cerrando en '+s+'s…';
-  setTimeout(()=>{b.style.transition='width 12s linear';b.style.width='0%';},40);
-  NTD._valT=setInterval(()=>{s--;ntd$('ntdValCd').textContent='Cerrando en '+s+'s…';if(s<=0)ntdCloseVal();},1000);
-}
-function ntdCloseVal(){clearInterval(NTD._valT);ntd$('ntdValBg').classList.remove('on');}
-
-/* ── AUDIO WHATSAPP STYLE ── */
-// ══════════════════════════════════════════════════════
-// AUDIO — Voz con Web Speech API (igual de fácil que WA)
-// Un toque → graba   |   segundo toque → detiene y envía
-// ══════════════════════════════════════════════════════
-let ntdRecActive = false, ntdRec = null, ntdRecSecs = 0, ntdRecTimer = null;
-let _ntdInterim  = '';   // texto parcial en tiempo real
-
-// ── Estado visual del botón de voz ──────────────────
-function ntdShowRecUI(on){
-  const bar  = ntd$('ntdRecBar');
-  const ta   = ntd$('ntdTa');
-  const sBtn = ntd$('ntdSBtn');
-  const vBtn = ntd$('ntdVBtn');
-  if(on){
-    bar.classList.add('on');
-    ta.style.display   = 'none';
-    sBtn.style.display = 'none';
-    vBtn.classList.add('rec');
-    vBtn.title = 'Toca para detener y enviar';
-    vBtn.innerHTML = '⏹';
-  } else {
-    bar.classList.remove('on');
-    ta.style.display   = '';
-    sBtn.style.display = '';
-    vBtn.classList.remove('rec');
-    vBtn.title = 'Habla con Nova';
-    vBtn.innerHTML = '🎤';
-    ntd$('ntdRecTime').textContent = '0:00';
-    _ntdInterim = '';
-  }
-}
-
-// ── Cronómetro ──────────────────────────────────────
-function ntdStartRecTimer(){
-  ntdRecSecs = 0;
-  clearInterval(ntdRecTimer);
-  ntdRecTimer = setInterval(()=>{
-    ntdRecSecs++;
-    const m = Math.floor(ntdRecSecs/60);
-    const s = String(ntdRecSecs%60).padStart(2,'0');
-    // Si hay texto parcial, mostrarlo; si no, el tiempo
-    const show = _ntdInterim ? _ntdInterim.slice(0,22)+(_ntdInterim.length>22?'…':'') : m+':'+s;
-    ntd$('ntdRecTime').textContent = show;
-    if(ntdRecSecs >= 90) ntdStopRec(); // máx 90s
-  }, 1000);
-}
-
-// ── Detener grabación ────────────────────────────────
-function ntdStopRec(){
-  clearInterval(ntdRecTimer);
-  if(ntdRec){ try{ ntdRec.stop(); }catch(e){} }
-}
-
-// ── Cancelar sin enviar ──────────────────────────────
-function ntdCancelRec(){
-  clearInterval(ntdRecTimer);
-  ntdRecActive = false;
-  if(ntdRec){ ntdRec.onresult=null; try{ ntdRec.stop(); }catch(e){} }
-  ntd$('ntdTa').value = '';
-  ntdShowRecUI(false);
-  ntdAH(ntd$('ntdTa'));
-  ntdUS();
-}
-
-// ── Toggle principal — idéntico al botón de WA ───────
-function ntdToggleVoz(){
-  // Si ya está grabando → detener (y onend auto-envía)
-  if(ntdRecActive){ ntdStopRec(); return; }
-
-  // Comprobar soporte
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){
-    // Sin soporte nativo → aviso amigable y foco en textarea
-    ntdAddMsg('nova',
-      '<p>🎤 Tu navegador no soporta voz. Escribe tu mensaje o usa <strong>Chrome / Edge</strong> para hablar.</p>');
-    ntd$('ntdTa').focus();
+  const eps = NTD.eps || 'su EPS';
+  // Si ya tiene geo → buscar directo
+  if(NTD._geoLat && NTD._geoLng){
+    ntdBuscarSedeConGeo();
     return;
   }
+  // Sin geo → pedir activación
+  ntdAddMsg('nova',
+    `<p>Nova TD le ayudará a encontrar la sede más cercana para <strong>${eps}</strong>.</p>
+     <p style="margin-top:6px;font-size:12px;color:rgba(190,215,255,.65)">Por favor active su ubicación para mostrarle la sede más cercana de forma automática.</p>`,
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+       <button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;font-weight:600" onclick="ntdSolicitudGeoSedes()">1️⃣ &nbsp;📍 Activar ubicación</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdPreguntarMunicipioSede()">2️⃣ &nbsp;🏙️ Indicar municipio</button>
+     </div>`);
+}
 
-  // Solicitar permiso de micrófono de forma explícita primero
-  navigator.mediaDevices?.getUserMedia({audio:true})
-    .then(stream=>{ stream.getTracks().forEach(t=>t.stop()); _ntdIniciarSR(SR); })
-    .catch(err=>{
-      // Permiso denegado o no disponible
-      if(err.name==='NotAllowedError'||err.name==='PermissionDeniedError'){
-        ntdAddMsg('nova',
-          '<p>🎤 Para usar voz <strong>acepta el permiso de micrófono</strong> cuando el navegador lo solicite y vuelve a tocar el botón.</p>');
-      } else {
-        // getUserMedia no disponible (iOS Safari sin HTTPS, etc.) — intentar SR directo
-        _ntdIniciarSR(SR);
+// Solicita geo específicamente para sedes
+function ntdSolicitudGeoSedes(){
+  if(!navigator.geolocation){
+    ntdAddMsg('nova', ntdR2H('Su dispositivo no soporta geolocalización. Por favor indique su municipio.'));
+    ntdPreguntarMunicipioSede(); return;
+  }
+  ntdAddMsg('nova',`<p style="font-size:12px;color:rgba(190,215,255,.7)">🔍 Detectando su ubicación...</p>`);
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      NTD._geoLat=pos.coords.latitude; NTD._geoLng=pos.coords.longitude;
+      // Detectar municipio por sede más cercana
+      const cc=NTD_SEDES_LOCAL.filter(s=>s.lat&&s.lat!==0);
+      if(cc.length){
+        const cerca=cc.map(s=>({...s,_d:ntdHaversine(pos.coords.latitude,pos.coords.longitude,s.lat,s.lng)})).sort((a,b)=>a._d-b._d)[0];
+        NTD._geoMunicipio=cerca.municipio;
       }
-    });
+      ntdBuscarSedeConGeo();
+    },
+    err=>{
+      ntdAddMsg('nova',ntdR2H('No se pudo obtener la ubicación. Por favor indique su municipio.'));
+      ntdPreguntarMunicipioSede();
+    },
+    {timeout:10000,maximumAge:60000,enableHighAccuracy:false}
+  );
 }
 
-function _ntdIniciarSR(SR){
-  ntdRec = new SR();
-  ntdRec.lang            = 'es-CO';
-  ntdRec.continuous      = true;   // continúa hasta que el usuario toque detener
-  ntdRec.interimResults  = true;   // muestra texto mientras habla
-  ntdRec.maxAlternatives = 1;
-
-  ntdRec.onstart = ()=>{
-    ntdRecActive = true;
-    _ntdInterim  = '';
-    ntdShowRecUI(true);
-    ntdStartRecTimer();
-  };
-
-  ntdRec.onresult = e=>{
-    let interim = '', final = '';
-    for(const r of e.results){
-      if(r.isFinal) final += r[0].transcript + ' ';
-      else          interim += r[0].transcript;
-    }
-    _ntdInterim = interim;
-    if(final){
-      const ta = ntd$('ntdTa');
-      ta.value = (ta.value + ' ' + final).trim();
-      ntdAH(ta);
-      _ntdInterim = '';
-    }
-  };
-
-  ntdRec.onspeechend = ()=>{
-    // Silencio prolongado → detener automáticamente
-    ntdStopRec();
-  };
-
-  ntdRec.onend = ()=>{
-    clearInterval(ntdRecTimer);
-    ntdRecActive = false;
-    ntdShowRecUI(false);
-    const ta = ntd$('ntdTa');
-    ntdAH(ta);
-    ntdUS();
-    // ✅ Auto-enviar si hay texto — igual que WA
-    if(ta.value.trim()) setTimeout(()=>ntdSend(), 180);
-  };
-
-  ntdRec.onerror = e=>{
-    clearInterval(ntdRecTimer);
-    ntdRecActive = false;
-    ntdShowRecUI(false);
-    ntdUS();
-    // Solo mostrar error si no es el caso "no-speech" (silencio normal)
-    if(e.error !== 'no-speech' && e.error !== 'aborted'){
-      ntdAddMsg('nova',
-        `<p>🎤 Error de voz (<em>${e.error}</em>). Verifica que el micrófono esté habilitado y vuelve a intentar.</p>`);
-    }
-  };
-
-  try{
-    ntdRec.start();
-  }catch(ex){
-    ntdRecActive = false;
-    ntdShowRecUI(false);
-    ntdUS();
+// Buscar sede con coordenadas GPS — flujo principal
+function ntdBuscarSedeConGeo(){
+  const eps=NTD.eps||'su EPS';
+  const sedesPorEps=ntdSedesPorEps();
+  if(!sedesPorEps.length){
+    ntdAddMsg('nova',ntdR2H(`No encontramos sedes registradas para **${eps}**. Comuníquese al PBX 604 322 2432.`));
+    return;
   }
-}
-/* FIN NOVA TD */
+  // Ordenar por distancia haversine
+  const conDist=sedesPorEps.map(s=>({
+    ...s,
+    _dist:(s.lat&&s.lat!==0)?ntdHaversine(NTD._geoLat,NTD._geoLng,s.lat,s.lng):9999
+  })).sort((a,b)=>a._dist-b._dist);
 
-/* ── Detección de origen QR / URL ── */
-function ntdDetectOrigen(){
-  const p = new URLSearchParams(window.location.search);
-  const origen = p.get('origen')||p.get('utm_source')||p.get('src')||'';
-  const esQR = origen.toLowerCase().includes('qr') || p.has('qr');
-  NTD._origenQR = esQR;
-  NTD._origenParams = {
-    nombre : p.get('nombre')||'',
-    cedula : p.get('cedula')||'',
-    eps    : p.get('eps')||'',
-    accion : p.get('accion')||'',   // 'radicar','encuesta','radicado','sedes'
-    ticket : p.get('ticket')||'',
-    mun    : p.get('mun')||'',
-  };
-}
+  const top=conDist.slice(0,3);
+  const sH=top.map((s,i)=>{
+    const distTxt=s._dist<9999?`<span style="font-size:10px;color:rgba(190,215,255,.4);margin-left:6px">📏 ${s._dist.toFixed(1)} km</span>`:'';
+    const badge=i===0?'<span style="font-size:10px;background:#16a34a;color:#fff;padding:2px 8px;border-radius:99px;margin-left:6px">Más cercana</span>':'';
+    const mapsUrl=s.lat&&s.lat!==0?`https://maps.google.com/?q=${s.lat},${s.lng}`:`https://maps.google.com/?q=${encodeURIComponent(s.nombre+' '+s.municipio+' Colombia')}`;
+    return `<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.09);border:1px solid rgba(37,99,235,.2)">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${s.nombre||'Sede'}${badge}${distTxt}</div>
+      <div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:5px">📍 ${s.direccion||'—'} · <em style="opacity:.6">${s.municipio||''}</em></div>
+      <a href="${mapsUrl}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">🗺️ Ver en Google Maps</a>
+    </div>`;
+  }).join('');
 
-/* Cuando viene por QR ya validado (origen=qr&cedula=...) saltamos directo a la acción */
-async function ntdQRFlow(){
-  const op = NTD._origenParams;
-  if(!op.cedula && !op.nombre) return false; // sin datos, flujo normal
-
-  // Pre-llenar datos si vienen en la URL
-  if(op.cedula) NTD._ced = op.cedula.replace(/\D/g,'');
-  if(op.nombre) NTD._nom = op.nombre.toUpperCase();
-  if(op.eps && NTD_EPS.includes(op.eps.toUpperCase())) NTD.eps = op.eps.toUpperCase();
-
-  // Si no hay EPS todavía pedirla primero
-  if(!NTD.eps && op.eps) NTD.eps = op.eps;
-
-  // Simular usuario validado (el QR ya acredita identidad)
-  const pn = (NTD._nom||op.nombre).trim().split(/\s+/)[0];
-  NTD.usuario = {nombre:NTD._nom||op.nombre, primerNombre:pn, cedula:NTD._ced, telefono:'', vip:false, saludo:null};
-  NTD.fase = 'libre';
-  ntdProg(65,'En atención');
-
-  ntdAddMsg('nova', `<p>✅ Bienvenido/a, <strong>${pn}</strong>. Acceso por QR detectado — tus datos ya están cargados.</p>`);
-  await ntdDelay(400);
-
-  // Ir directo a la acción indicada
-  switch((op.accion||'').toLowerCase()){
-    case 'radicar':  await ntdDelay(200); ntdIrARadicar(); return true;
-    case 'encuesta': await ntdDelay(200); ntdEncuesta();   return true;
-    case 'radicado': await ntdDelay(200);
-      if(op.ticket){ await ntdFetchRadicado(op.ticket); } else { ntdConsultarRadicado(); }
-      return true;
-    case 'sedes':    await ntdDelay(200);
-      if(op.mun){ await ntdFetchSedes(op.mun); } else { ntdSedes(); }
-      return true;
-    default:
-      ntdMostrarMenu(); return true;
-  }
+  ntdAddMsg('nova',
+    `<p>Su punto de dispensación de <strong>${eps}</strong> más cercano${top.length>1?` (${top.length} encontrados)`:''}:</p>${sH}`,
+    ntdBotonesFinales(`
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdVerMasSedes()">3️⃣ &nbsp;🏥 Ver más sedes</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdCambiarEps()">4️⃣ &nbsp;🔄 Cambiar EPS</button>`));
 }
 
-/* Arranque automático */
-document.addEventListener('DOMContentLoaded', async () => {
-  ntdDetectOrigen();
-  NTD.arrancado = true;
+// Preguntar municipio manualmente
+function ntdPreguntarMunicipioSede(){
+  NTD.fase='municipio_sedes';
+  ntdAddMsg('nova',
+    `<p>¿En qué municipio desea realizar la consulta de su sede?</p>
+     <p style="font-size:11px;color:rgba(190,215,255,.45);margin-top:4px">Escriba el nombre del municipio (ej: Caucasia, Turbo, Medellín...)</p>`,
+    ntdBotonesFinales());
+  ntdEna('Escriba el municipio...');
+}
 
-  if(NTD._origenQR && NTD._origenParams.cedula){
-    // Política aceptada implícitamente (el QR ya implica consentimiento)
-    ntdSep();
-    ntdAddMsg('nova',
-      `<p>¡Hola! 👋 Bienvenido/a a <strong>Tododrogas CIA SAS</strong> vía QR.</p>
-       <p>Al usar este código aceptas nuestras <a href="${NTD_C.polUrl}" target="_blank" style="color:#93c5fd">políticas de tratamiento de datos</a>.</p>`);
-    NTD.fase = 'politica'; // necesario para que ntdFPolitica acepte
-    await ntdDelay(300);
-    // Flujo QR directo
-    const handled = await ntdQRFlow();
-    if(!handled) ntdStart(); // fallback
-  } else {
-    ntdStart();
-  }
-});
+// Ver más sedes — pregunta municipio cercano
+function ntdVerMasSedes(){
+  NTD.fase='municipio_sedes';
+  ntdAddMsg('nova',
+    `<p>¿Qué otro municipio le queda cerca? Le mostraré las sedes disponibles de <strong>${NTD.eps||'su EPS'}</strong>.</p>`,
+    ntdBotonesFinales());
+  ntdEna('Escriba el municipio...');
+}
+
+
+document.addEventListener('DOMContentLoaded',()=>{NTD.arrancado=true;ntdStart();});
+
 </script>
 </body>
 </html>
