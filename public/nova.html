@@ -1052,115 +1052,132 @@ const ntdHav2=(lat1,lng1,lat2,lng2)=>{
 async function ntdFetchSedes(mun){
   NTD.fase='libre';
   ntdTyping(true);ntdAddSk();
-  const eps=NTD.eps||'TODAS';
+  const eps=(NTD.eps||'').toUpperCase().trim();
   const munNorm=ntdNormMun(mun);
-  let d;
+
+  // Consultar Supabase directamente — traer TODAS las sedes activas
+  const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+  const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+  let todasSedes=[];
   try{
-    const r=await fetch(NTD_C.consulta,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({accion:'sede',municipio:munNorm,eps:eps})});
-    d=await r.json();
-  }catch(e){d={encontrado:false};}
+    const r=await fetch(sbUrl+'/rest/v1/sedes?activa=eq.true&select=nombre,ciudad,direccion,telefono,lat,lng,eps,modelo,horario,municipio_norm',{
+      headers:{apikey:sbKey,Authorization:'Bearer '+sbKey,'Content-Type':'application/json'}
+    });
+    todasSedes=await r.json();
+    if(!Array.isArray(todasSedes))todasSedes=[];
+  }catch(e){todasSedes=[];}
   ntdRmSk();ntdTyping(false);
 
-  // ── Sin sedes en ese municipio → pedir a GPT las más cercanas ──
-  if(!d.encontrado||!d.sedes?.length){
-    ntdTyping(true);ntdAddSk();
-    let todasSedes=[];
+  if(!todasSedes.length){
+    ntdAddMsg('nova',ntdR2H('No pude conectarme para buscar sedes. Llame al **604 322 2432** o WhatsApp **304 341 2431**.'),ntdBotonesFinales());
+    ntdEna('Por favor escriba su respuesta...');return;
+  }
+
+  // Filtrar por EPS en el cliente (campo eps es array JSON en Supabase)
+  const sedesPorEps=eps?todasSedes.filter(s=>{
     try{
-      const r2=await fetch(NTD_C.consulta,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({accion:'sede',municipio:'TODAS',eps:eps})});
-      const d2=await r2.json();
-      todasSedes=d2.sedes||[];
-    }catch(e){}
-    ntdRmSk();ntdTyping(false);
+      const arr=Array.isArray(s.eps)?s.eps:JSON.parse(s.eps||'[]');
+      return arr.some(e=>(e||'').toUpperCase()===eps);
+    }catch(e){return false;}
+  }):todasSedes;
 
-    if(!todasSedes.length){
-      ntdAddMsg('nova',`<p>Confirmamos que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>. Por favor comuníquese al <a href="https://wa.me/573043412431" target="_blank" style="color:#93c5fd">WhatsApp 304 341 2431</a> o PBX 604 322 2432.</p>`,ntdBotonesFinales());
-      ntdEna('Por favor escriba su respuesta...');return;
+  // Obtener coordenadas de referencia: GPS del usuario o coordenadas del municipio consultado
+  let refLat=NTD._geoLat, refLng=NTD._geoLng;
+  if(!refLat||!refLng){
+    // Buscar coords del municipio en las sedes mismas
+    const ref=todasSedes.find(s=>(s.municipio_norm||'').toUpperCase()===munNorm && parseFloat(s.lat||0)!==0);
+    if(ref){refLat=parseFloat(ref.lat);refLng=parseFloat(ref.lng);}
+  }
+
+  // Sedes en el municipio consultado (con la EPS)
+  const sedesEnMun=sedesPorEps.filter(s=>(s.municipio_norm||'').toUpperCase()===munNorm);
+
+  if(sedesEnMun.length){
+    // Hay sedes en ese municipio → mostrarlas
+    let ord=sedesEnMun;
+    if(refLat&&refLng){
+      ord=sedesEnMun.map(s=>({...s,_dist:parseFloat(s.lat||0)!==0?ntdHav2(refLat,refLng,parseFloat(s.lat),parseFloat(s.lng)):9999})).sort((a,b)=>a._dist-b._dist);
     }
+    const top=ord.slice(0,4);
+    const hayGeo=NTD._geoLat&&NTD._geoLng;
+    const sH=top.map((s,i)=>{
+      const distTxt=hayGeo&&s._dist&&s._dist<9999?`<span style="font-size:10px;color:rgba(190,215,255,.45);margin-left:6px">📏 ${s._dist.toFixed(1)} km</span>`:'';
+      const orden=i===0&&hayGeo?'<span style="font-size:10px;background:#16a34a;color:#fff;padding:1px 6px;border-radius:99px;margin-left:6px">Más cercana</span>':'';
+      const mu=parseFloat(s.lat||0)!==0?`https://maps.google.com/?q=${s.lat},${s.lng}`:`https://maps.google.com/?q=${encodeURIComponent((s.nombre||'')+' '+(s.municipio_norm||s.ciudad||'')+' Colombia')}`;
+      return `<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2)">
+        <div style="font-weight:700;font-size:13px;margin-bottom:5px">${s.nombre||'Sede'}${orden}${distTxt}</div>
+        <div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:2px">📍 ${s.direccion||'—'}</div>
+        ${s.horario?`<div style="font-size:12px;color:rgba(190,215,255,.8)">🕐 ${s.horario}</div>`:''}
+        <a href="${mu}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">📍 Ver en Google Maps →</a>
+      </div>`;
+    }).join('');
+    ntdAddMsg('nova',
+      `<p>Sedes de <strong>${eps||'su EPS'}</strong> en <strong>${munNorm}</strong> (${sedesEnMun.length} encontradas):</p>${sH}`,
+      ntdBotonesFinales(
+        '<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button>'
+        +'<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdCambiarEps()">4️⃣ &nbsp;🔄 Cambiar EPS</button>'));
+    ntdEna('Por favor escriba su respuesta...');return;
+  }
 
-    // Pedir a GPT que identifique las más cercanas geográficamente
+  // No hay sedes en ese municipio → mostrar las más cercanas usando coordenadas
+  const conCoords=sedesPorEps.filter(s=>parseFloat(s.lat||0)!==0&&parseFloat(s.lng||0)!==0);
+  if(!conCoords.length){
+    ntdAddMsg('nova',`<p>Confirmamos que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>. Por favor comuníquese al WhatsApp <strong>304 341 2431</strong> o PBX <strong>604 322 2432</strong>.</p>`,ntdBotonesFinales());
+    ntdEna('Por favor escriba su respuesta...');return;
+  }
+
+  // Usar coords del municipio consultado como referencia para ordenar
+  let latRef=refLat, lngRef=refLng;
+  if(!latRef||!lngRef){
+    // Si no hay ref, usar coords del municipio buscado desde cualquier sede con ese nombre
+    const munSede=todasSedes.find(s=>(s.municipio_norm||'').toUpperCase()===munNorm&&parseFloat(s.lat||0)!==0);
+    if(munSede){latRef=parseFloat(munSede.lat);lngRef=parseFloat(munSede.lng);}
+  }
+
+  let cercanas=conCoords;
+  if(latRef&&lngRef){
+    cercanas=conCoords.map(s=>({...s,_dist:ntdHav2(latRef,lngRef,parseFloat(s.lat),parseFloat(s.lng))})).sort((a,b)=>a._dist-b._dist).slice(0,3);
+  }else{
+    // Sin referencia geográfica → pedir a GPT
     ntdTyping(true);ntdAddSk();
-    const listaParaGPT=todasSedes.filter(s=>s.lat&&parseFloat(s.lat)!==0).slice(0,50)
-      .map(s=>`${s.nombre} (${s.municipio||s.ciudad}, lat:${s.lat}, lng:${s.lng})`).join('\n');
-    let sedesCercanas=[];
+    const listaGPT=conCoords.slice(0,50).map(s=>`${s.nombre} (${s.municipio_norm||s.ciudad}, lat:${s.lat}, lng:${s.lng})`).join('\n');
     try{
       const prx=NTD_C.proxy||'/nova-proxy.php';
       const rg=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
-          system:`Eres un asistente geográfico de Colombia. Responde SOLO con JSON válido, sin explicaciones ni markdown.`,
-          messages:[{role:'user',content:`El usuario consultó sedes de ${eps} en "${mun}" (municipio de Antioquia, Colombia). No hay sedes en ese municipio.
-Estas son las sedes disponibles con coordenadas:
-${listaParaGPT}
-
-Selecciona las 3 sedes MÁS CERCANAS geográficamente al municipio "${mun}" (Antioquia).
-Responde ÚNICAMENTE con este JSON (sin texto adicional):
-{"sedes_cercanas":[{"nombre":"...","municipio":"...","distancia_aprox":"X km"}]}`}],
+          system:'Eres un asistente geográfico de Colombia. Responde SOLO con JSON válido, sin explicaciones ni markdown.',
+          messages:[{role:'user',content:`Sedes de ${eps} disponibles con coordenadas:\n${listaGPT}\n\nSelecciona las 3 MÁS CERCANAS al municipio "${mun}" (Antioquia, Colombia).\nResponde SOLO con: {"sedes_cercanas":[{"nombre":"...","municipio":"...","distancia_aprox":"X km"}]}`}],
           max_tokens:400
         })});
       const dg=await rg.json();
       const txt=(dg.choices?.[0]?.message?.content||dg.content?.[0]?.text||'').trim();
-      const parsed=JSON.parse(txt.replace(/```json|```/g,'').trim());
-      sedesCercanas=parsed.sedes_cercanas||[];
-    }catch(e){}
+      const parsed=JSON.parse(txt.replace(/\`\`\`json|\`\`\`/g,'').trim());
+      cercanas=(parsed.sedes_cercanas||[]).map(sc=>{
+        const real=conCoords.find(s=>(s.nombre||'').toUpperCase().includes((sc.nombre||'').toUpperCase().slice(0,12))
+          ||(s.municipio_norm||s.ciudad||'').toUpperCase()===((sc.municipio||'').toUpperCase()));
+        return real?{...real,_distGPT:sc.distancia_aprox}:null;
+      }).filter(Boolean).slice(0,3);
+    }catch(e){cercanas=conCoords.slice(0,3);}
     ntdRmSk();ntdTyping(false);
-
-    // Cruzar nombres GPT con datos reales de Supabase
-    const sedesRender=sedesCercanas.map(sc=>{
-      const real=todasSedes.find(s=>(s.nombre||'').toUpperCase().includes((sc.nombre||'').toUpperCase().slice(0,15))
-        ||(s.municipio||s.ciudad||'').toUpperCase()===((sc.municipio||'').toUpperCase()));
-      return real?Object.assign({},real,{_distGPT:sc.distancia_aprox}):sc;
-    }).filter(Boolean).slice(0,3);
-
-    const sH2=sedesRender.map(s=>{
-      const mu=s.lat&&parseFloat(s.lat)!==0
-        ?`https://maps.google.com/?q=${s.lat},${s.lng}`
-        :`https://maps.google.com/?q=${encodeURIComponent((s.nombre||'')+' '+(s.municipio||s.ciudad||'')+' Colombia')}`;
-      return `<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.15)">
-        <div style="font-weight:700;font-size:13px;margin-bottom:4px">${s.nombre||'Sede'} ${s._distGPT?'<span style="font-size:10px;color:rgba(190,215,255,.45);margin-left:4px">📏 ~'+s._distGPT+'</span>':''}</div>
-        <div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:2px">📍 ${s.direccion||'—'} · ${s.municipio||s.ciudad||''}</div>
-        ${s.horario?`<div style="font-size:12px;color:rgba(190,215,255,.8)">🕐 ${s.horario}</div>`:''}
-        ${s.telefono?`<div style="font-size:12px;color:rgba(190,215,255,.8)">📞 ${s.telefono}</div>`:''}
-        <a href="${mu}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">📍 Ver en Google Maps →</a>
-      </div>`;
-    }).join('');
-
-    ntdAddMsg('nova',
-      `<p>Confirmamos que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>.</p>
-       <p style="margin-top:4px">Nova TD le presenta las sedes de <strong>${eps}</strong> más cercanas a usted:</p>${sH2}`,
-      ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button>'));
-    ntdEna('Por favor escriba su respuesta...');return;
   }
 
-  // ── Sí hay sedes → mostrar ordenadas por distancia ──
-  let sedesOrdenadas=(d.sedes||[]).slice(0,8);
-  const refLat=NTD._geoLat||(sedesOrdenadas[0]?.lat?null:null);
-  const refLng=NTD._geoLng||null;
-  if(refLat&&refLng){
-    sedesOrdenadas=sedesOrdenadas.map(s=>({...s,_dist:(s.lat&&s.lng)?ntdHav2(refLat,refLng,parseFloat(s.lat),parseFloat(s.lng)):9999})).sort((a,b)=>a._dist-b._dist);
-  }
-  const sedesMostrar=sedesOrdenadas.slice(0,4);
-  const hayGeo=NTD._geoLat&&NTD._geoLng;
-  const sH=sedesMostrar.map((s,i)=>{
-    const distTxt=hayGeo&&s._dist&&s._dist<9999?`<span style="font-size:10px;color:rgba(190,215,255,.45);margin-left:6px">📏 ${s._dist.toFixed(1)} km</span>`:'';
-    const orden=i===0&&hayGeo?'<span style="font-size:10px;background:#16a34a;color:#fff;padding:1px 6px;border-radius:99px;margin-left:6px">Más cercana</span>':'';
-    const mu=s.lat&&parseFloat(s.lat)!==0?`https://maps.google.com/?q=${s.lat},${s.lng}`:`https://maps.google.com/?q=${encodeURIComponent((s.nombre||'')+' '+(s.municipio||s.ciudad||'')+' Colombia')}`;
-    return `<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2)">
-      <div style="font-weight:700;font-size:13px;margin-bottom:5px">${s.nombre||'Sede'}${orden}${distTxt}</div>
-      <div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:2px">📍 ${s.direccion||'—'}</div>
+  const sH2=cercanas.slice(0,3).map(s=>{
+    const mu=parseFloat(s.lat||0)!==0?`https://maps.google.com/?q=${s.lat},${s.lng}`:`https://maps.google.com/?q=${encodeURIComponent((s.nombre||'')+' '+(s.municipio_norm||s.ciudad||'')+' Colombia')}`;
+    const distLabel=s._dist?`<span style="font-size:10px;color:rgba(190,215,255,.45);margin-left:4px">📏 ${s._dist.toFixed(1)} km</span>`:s._distGPT?`<span style="font-size:10px;color:rgba(190,215,255,.45);margin-left:4px">📏 ~${s._distGPT}</span>`:'';
+    return `<div style="margin-top:8px;padding:10px 14px;border-radius:10px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.15)">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px">${s.nombre||'Sede'}${distLabel}</div>
+      <div style="font-size:12px;color:rgba(190,215,255,.8);margin-bottom:2px">📍 ${s.direccion||'—'} · ${s.municipio_norm||s.ciudad||''}</div>
       ${s.horario?`<div style="font-size:12px;color:rgba(190,215,255,.8)">🕐 ${s.horario}</div>`:''}
-      ${s.telefono?`<div style="font-size:12px;color:rgba(190,215,255,.8)">📞 ${s.telefono}</div>`:''}
       <a href="${mu}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">📍 Ver en Google Maps →</a>
     </div>`;
   }).join('');
+
   ntdAddMsg('nova',
-    `<p>Sedes de <strong>${NTD.eps||'su EPS'}</strong> en <strong>${d.municipio||munNorm}</strong> (${d.total||sedesMostrar.length} encontradas):</p>${sH}`,
-    ntdBotonesFinales(
-      '<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button>'
-      +'<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdCambiarEps()">4️⃣ &nbsp;🔄 Cambiar EPS</button>'));
+    `<p>Confirmamos que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>.</p>
+     <p style="margin-top:4px">Nova TD le presenta las sedes de <strong>${eps}</strong> más cercanas a usted:</p>${sH2}`,
+    ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button>'));
   ntdEna('Por favor escriba su respuesta...');
 }
-
 
 function ntdMostrarSedesLocales(sedes,titulo,mun){
   var contacto='<a href="https://wa.me/573043412431" target="_blank" style="color:#93c5fd">WA 304 341 2431</a>';
