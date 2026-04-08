@@ -630,6 +630,7 @@ const NTD_C = {
   consulta: (typeof window.NOVA_URL!=='undefined'?window.NOVA_URL:'/nova-consulta.php'),
   pqrForm : (typeof window.PQR_FORM_URL!=='undefined'?window.PQR_FORM_URL:'pqr_form.html'),
   encuesta: (typeof window.ENC_URL!=='undefined'?window.ENC_URL:'pqr_encuesta.html'),
+  consultaUrl: (typeof window.CONSULTA_URL!=='undefined'?window.CONSULTA_URL:'consulta.html'),
   polUrl  : 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf',
 };
 const NTD_EPS=['COOSALUD','SAVIA SALUD','SALUD TOTAL','NUEVA EPS'];
@@ -860,6 +861,12 @@ async function ntdDispatch(txt){
       '8':()=>ntdEncuesta(),
     };
     if(opc[n]){NTD.busy=false;opc[n]();return;}
+  }
+  // Si parece radicado (TD-xxxxxx), consultar directo sin GPT
+  if(/^TD-[\d\-]+$/i.test(txt.trim())||/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(txt.trim())){
+    ntdAddMsg('nova',ntdR2H('Consultando tu radicado...'));
+    await ntdFetchRadicado(txt.trim());
+    return;
   }
   return ntdFLibre(txt);
 }
@@ -1124,9 +1131,11 @@ function ntdAutorizacion(){ ntdFLibreDirecto('EXPLÍCAME EL PROCESO DE AUTORIZAC
 
 function ntdConsultarRadicado(){
   ntdAddMsg('nova',
-    ntdR2H('Para consultar tu radicado ingresa el **número de radicado** (ej: TD-123456) o tu **correo electrónico**:'),
-    ntdBotonesFinales());
-  ntdEna('Por favor escriba su radicado o correo...');
+    `<p>Para consultar el estado de tu solicitud PQRSFD ingresa el <strong>número de radicado</strong> (ej: TD-20260401-1234) o tu <strong>correo electrónico</strong>:</p>`,
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
+     </div>`);
+  ntdEna('Por favor escriba su número de radicado...');
 }
 
 function ntdEncuesta(){
@@ -1209,8 +1218,13 @@ async function ntdFetchRadicado(ticket){
   }catch(e){d={encontrado:false};}
   ntdRmSk();ntdTyping(false);
   if(!d.encontrado){
-    ntdAddMsg('nova',ntdR2H(`No encontré radicado con **"${ticket}"**. Verifica el número (ej: TD-123456) o tu correo.`),
-      ntdBotonesFinales(`<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultarRadicado()">3️⃣ &nbsp;🔍 Consultar otro radicado</button>`));
+    ntdAddMsg('nova',
+      `<p>No encontré el radicado <strong>${ticket}</strong>.</p>
+       <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.6)">Verifica que el número sea correcto (ej: TD-20260401-1234) o consulta directamente en nuestra plataforma.</p>`,
+      `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">1️⃣ &nbsp;🔍 Intentar con otro número</button>
+         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
+       </div>`);
     return;
   }
   const est=d.estado||'pendiente';
@@ -1447,7 +1461,7 @@ async function ntdFLibre(txt){
     case 'ENCUESTA':   ntdAddMsg('nova',html,`<div class="ntd-chips"><button class="ntd-ch go" onclick="window.open('${NTD_C.encuesta}','_blank')">⭐ Ir a la encuesta →</button><button class="ntd-ch b" onclick="ntdMostrarMenu()">🏠 Volver al menú principal</button></div>`);break;
     case 'MENU':       ntdAddMsg('nova',html);await ntdDelay(300);ntdMostrarMenu();break;
     case 'CAMBIAR_EPS':ntdAddMsg('nova',html);await ntdDelay(300);ntdCambiarEps();break;
-    case 'CONSULTAR':  ntdAddMsg('nova',html);await ntdDelay(150);await ntdFetchRadicado(dat);break;
+    case 'CONSULTAR':  await ntdFetchRadicado(dat);break;
     case 'SEDES':      await ntdFetchSedes(dat);break;
     case 'MEDICAMENTOS':ntdAddMsg('nova',html);await ntdDelay(200);ntdMedicamentos();break;
     default:           ntdAddMsg('nova',html, ntdBotonesFinales());
