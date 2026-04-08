@@ -629,7 +629,7 @@ function closeChat(){
     clearTimeout(_ntdCierreTimer);
     _ntdCierreTimer = setTimeout(()=>{
       ntdReset();
-    }, 2 * 60 * 1000); // 2 minutos
+    }, 5 * 60 * 1000); // 5 minutos
   }
 }
 
@@ -669,6 +669,7 @@ function ntdSys(){
   if(muns)s+='EPS '+eps+' cubre: '+muns+'. Municipio fuera=sin cobertura.\n';
   s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
   s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
+  s+='REGLA SEDES: Si confirmas cobertura en un municipio usa OBLIGATORIAMENTE [SEDES:municipio] al final.\n';
   s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
   return s;
 }
@@ -752,7 +753,7 @@ function ntdResetInact(){
        <p style="margin-top:4px">Si necesitas algo más, toca el botón para iniciar un nuevo chat. ¡Hasta pronto! 😊</p>`,
       `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()" style="font-weight:700">1️⃣ &nbsp;🔄 Iniciar nuevo chat</button></div>`);
     ntdDis();
-  }, 2 * 60 * 1000); // 2 minutos
+  }, 5 * 60 * 1000); // 5 minutos
 }
 
 function ntdNuevoChat(){
@@ -897,7 +898,7 @@ async function ntdBienvenidaYEps(){
   await ntdDelay(600);
   // Aviso de inactividad — igual que en el video de EPS SURA
   ntdAddMsg('nova',
-    `<p>⏱ <strong>Aviso:</strong> Ten presente que si hay más de <strong>2 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
+    `<p>⏱ <strong>Aviso:</strong> Ten presente que si hay más de <strong>5 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
   );
   await ntdDelay(700);
   NTD.busy=false;
@@ -946,6 +947,7 @@ function ntdMostrarMenu(){
   c+='<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(6)">6️⃣ &nbsp;Horarios y canales de contacto</button>';
   c+='<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(7)">7️⃣ &nbsp;Encuesta de satisfaccion</button>';
   c+='<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdOpc(8)">8️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button>';
+  c+='<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdFinalizarChat()">9️⃣ &nbsp;✖ Finalizar chat</button>';
   c+='</div>';
   ntdAddMsg('nova','<p>En que le puedo ayudar, <strong>'+n+'</strong>?</p>',c);
   ntdSetQbar([{e:'1️⃣',l:'Medicamentos',t:'1'},{e:'2️⃣',l:'Sedes',t:'2'},
@@ -1139,12 +1141,26 @@ function ntdHorarios(){
     ntdBotonesFinales());
 }
 
+// ── Finalizar chat ─────────────────────────────────
+function ntdFinalizarChat(){
+  ntdDis();
+  ntdAddMsg('nova',
+    `<p>¡Gracias por contactarnos, <strong>${NTD.usuario?.primerNombre||''}</strong>! 😊</p>
+     <p style="margin-top:4px">Fue un placer atenderte. Si necesitas algo más en el futuro, estaremos aquí para ayudarte.</p>`,
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+       <button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()">🔄 &nbsp;Iniciar nuevo chat</button>
+     </div>`);
+}
+
+
 // ── Botones estándar de cierre para TODA respuesta ─────────
 function ntdBotonesFinales(extra){
   let rows = extra || '';
   rows += `
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button>`;
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdEscalarAgente()">3️⃣ &nbsp;📞 Hablar con un asesor</button>
+       <button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdFinalizarChat()">4️⃣ &nbsp;✖ Finalizar chat</button>`;
   return `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">${rows}
      </div>`;
 }
