@@ -904,7 +904,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     </table>
 
     <!-- BLOQUE NOVA TD -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:linear-gradient(135deg,#0c2d5e 0%,#1a4a8a 100%);border-radius:2px;margin-bottom:24px'>
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:#0c2d5e;border-radius:2px;margin-bottom:24px'>
       <tr><td style='padding:26px 28px'>
         <table width='100%' cellpadding='0' cellspacing='0'>
           <tr>
