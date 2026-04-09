@@ -145,11 +145,6 @@ elseif  ($transcripcion)                            $canal = 'audio';
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 $origen         = $body['origen'] ?? 'formulario_web'; // nova_td | formulario_web
 
-$sede_id        = trim($body['sede_id']        ?? '');
-$sede_nombre    = trim($body['sede_nombre']    ?? '');
-$sede_ciudad    = trim($body['sede_ciudad']    ?? '');
-$sede_direccion = trim($body['sede_direccion'] ?? '');
-
 // ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
 $whisper_transcripcion = '';
 $whisper_error_pre     = '';
@@ -833,7 +828,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
       <tr style='background:#f6f9fd'>
         <td style='padding:11px 14px;font-size:11px;color:#7a90a8;width:160px;border-bottom:1px solid #d4dce8'>Fecha de radicado</td>
-        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$fecha_fmt_u}</td>
+        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$fecha_fmt_u} (hora Colombia)</td>
       </tr>
       <tr>
         <td style='padding:11px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Tipo de solicitud</td>
@@ -856,7 +851,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         </table>
         <table width='100%' cellpadding='0' cellspacing='0'>
           <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>01</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Su caso será revisado por uno de nuestros asesores especializados.</td></tr>
-          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Recibirá respuesta a su PQRSFD mediante el canal de contacto seleccionado.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Recibirá respuesta a este correo en el plazo indicado.</td></tr>
           <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top'>03</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Tododrogas CIA SAS se compromete a gestionar su solicitud con transparencia, diligencia y respeto, conforme a los estándares del servicio farmacéutico colombiano.</td></tr>
         </table>
       </td></tr>
@@ -887,8 +882,8 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     <!-- BLOQUE CONSULTA EN LÍNEA -->
     <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:#f0f5fb;border:1px solid #d4dce8;border-left:4px solid #0c2d5e;margin-bottom:24px'>
       <tr><td style='padding:22px 26px'>
-        <p style='margin:0 0 4px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:600'>✅ Su radicado, siempre al alcance</p>
-        <p style='margin:0 0 14px;font-size:12px;color:#3a4a5a;line-height:1.8;font-weight:300'>Con su <strong style='color:#0c2d5e;font-weight:600'>número de cédula</strong> podrá consultar en cualquier momento el estado actualizado de su radicado PQRSFD ({$ticket_id}). <span style='color:#4a6a90'>Tododrogas CIA SAS, siempre con usted.</span></p>
+        <p style='margin:0 0 4px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:600'>🔒 Su radicado, siempre al alcance</p>
+        <p style='margin:0 0 14px;font-size:12px;color:#3a4a5a;line-height:1.8;font-weight:300'>Con su <strong style='color:#0c2d5e;font-weight:600'>número de cédula</strong> podrá consultar en cualquier momento el estado actualizado de su PQRSFD. <span style='color:#4a6a90'>Tododrogas CIA SAS, siempre con usted.</span></p>
         <a href='https://tododrogas.online/consulta.html' style='display:inline-block;background:#0c2d5e;color:#ffffff;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-decoration:none;padding:12px 26px;border-radius:2px'>🔍 Consultar estado de mi radicado &rarr;</a>
         <p style='margin:10px 0 0;font-size:10px;color:#8a9ab8;letter-spacing:.3px'>tododrogas.online/consulta.html</p>
       </td></tr>
