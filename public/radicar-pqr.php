@@ -838,7 +838,8 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
       <tr>
         <td style='padding:11px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Tipo de solicitud</td>
         <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$emoji_tipo_u} {$tipo_label_u}" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " &mdash; {$categoria_ia}" : '') . "</td>
-      </tr>
+      </tr>" .
+      ($sede_nombre ? "<tr style='background:#f6f9fd'><td style='padding:11px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Sede</td><td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . ($sede_direccion ? "<br><span style='font-size:11px;color:#7a90a8;font-weight:400'>{$sede_direccion}</span>" : "") . "</td></tr>" : "") . "
       <tr style='background:#f6f9fd'>
         <td style='padding:11px 14px;font-size:11px;color:#7a90a8'>Canal de contacto</td>
         <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a'>{$canal_contacto}</td>
