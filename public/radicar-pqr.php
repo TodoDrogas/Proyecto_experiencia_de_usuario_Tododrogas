@@ -915,7 +915,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
               <table cellpadding='0' cellspacing='0' style='margin-bottom:18px'>
                 <tr><td style='font-size:11px;color:#9abcd8;line-height:1.9;font-weight:300'>📍&nbsp; Encuentre el punto Tododrogas más cercano a usted<br>💊&nbsp; Consulte la disponibilidad de sus medicamentos<br>📋&nbsp; Radique una PQRSFD en segundos, sin formularios<br>⭐&nbsp; Comparta su experiencia con nuestra encuesta de satisfacción<br>💬&nbsp; Resuelva dudas sobre su servicio farmacéutico</td></tr>
               </table>
-              <a href='https://tododrogas.online/nova.html' style='display:inline-block;background:#ffffff;color:#0c2d5e;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;padding:11px 24px;border-radius:2px'>✨ Hablar con Nova TD &rarr;</a>
+              <a href='https://tododrogas.online/nova.html' style='display:inline-block;background:#ffffff;color:#0c2d5e;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;padding:11px 24px;border-radius:2px'>Hablar con Nova TD &rarr;</a>
               <p style='margin:12px 0 0;font-size:10px;color:#4a6a90;letter-spacing:.3px'>tododrogas.online/nova.html</p>
             </td>
           </tr>
@@ -1088,7 +1088,6 @@ DATOS DEL CASO:
 - Resumen del caso: {$resumen_corto}
 - Texto original del usuario: " . mb_substr($texto_seguimiento, 0, 400) . "
 - Radicado: {$ticket_id}
-- Fecha límite de respuesta: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "
 
 INSTRUCCIONES CRÍTICAS:
 1. El correo debe tener máximo 4 párrafos cortos, fluidos y humanos — NADA de listas ni bullet points.
@@ -1096,11 +1095,12 @@ INSTRUCCIONES CRÍTICAS:
 3. Si el sentimiento es NEGATIVO o URGENTE: reconoce el malestar con empatía profunda, pide disculpas sinceras si aplica, y garantiza atención prioritaria.
 4. Si el sentimiento es POSITIVO o es una FELICITACIÓN: celebra con genuina alegría, agradece profundamente y transmite orgullo de equipo.
 5. Si es NEUTRO: sé cálido, profesional y tranquilizador.
-6. Siempre menciona el número de radicado {$ticket_id} y la fecha límite de respuesta.
+6. Menciona el número de radicado {$ticket_id}.
 7. Cierra con una frase memorable que refuerce el compromiso de Tododrogas con el usuario.
 8. Firma como: Equipo de Experiencia al Cliente · Tododrogas CIA SAS
-9. Tono: humano, cercano, colombiano — NUNCA robótico ni genérico.
-10. NO uses saludos como 'Estimado/a' — usa el nombre directamente de forma cálida.
+9. Tono: humano, cercano, colombiano — NUNCA robótico ni genérico. SIEMPRE usar usted, NUNCA tutear.
+10. NO uses saludos como 'Estimado/a' — dirígete por nombre de forma cálida y directa.
+11. PROHIBIDO usar emojis en el texto.
 
 Responde SOLO con el cuerpo del correo en texto plano, sin asunto, sin etiquetas HTML, sin explicaciones.";
 
@@ -1177,10 +1177,10 @@ $cuerpo_seguimiento = "
         <td style='background:{$bg_seg};padding:6px 16px;border-radius:20px'>
           <span style='font-size:11px;font-weight:700;color:{$color_seg};letter-spacing:.5px'>
             " . match($sentimiento) {
-                'positivo' => '💚 Su experiencia positiva nos inspira',
-                'negativo' => '🤝 Su caso tiene nuestra atención completa',
-                'urgente'  => '🚨 Atención prioritaria activada',
-                default    => '📋 Su solicitud está siendo gestionada'
+                'positivo' => 'Su experiencia positiva nos inspira',
+                'negativo' => 'Su caso tiene nuestra atención completa',
+                'urgente'  => 'Atención prioritaria activada',
+                default    => 'Su solicitud está siendo gestionada'
             } . "
           </span>
         </td>
@@ -1195,40 +1195,78 @@ $cuerpo_seguimiento = "
       <tr><td style='border-top:1px solid #d4dce8'></td></tr>
     </table>
 
-    <!-- BLOQUE COMPROMISO -->
+    <!-- DIVIDER CONSULTA RADICADO -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Consulte su radicado</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <!-- BLOQUE CONSULTA EN LÍNEA -->
     <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:#f0f5fb;border:1px solid #d4dce8;border-left:4px solid #0c2d5e;margin-bottom:24px'>
-      <tr><td style='padding:18px 22px'>
-        <p style='margin:0 0 6px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:600'>⏱ Fecha límite de respuesta</p>
-        <p style='margin:0;font-size:13px;color:#2a3a4a;font-weight:500'>" . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . " &nbsp;·&nbsp; {$horas_sla} horas hábiles</p>
+      <tr><td style='padding:22px 26px'>
+        <p style='margin:0 0 4px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:600'>Su radicado, siempre al alcance</p>
+        <p style='margin:0 0 14px;font-size:12px;color:#3a4a5a;line-height:1.8;font-weight:300'>Con su <strong style='color:#0c2d5e;font-weight:600'>número de cédula</strong> podrá consultar en cualquier momento el estado actualizado de su radicado PQRSFD ({$ticket_id}). <span style='color:#4a6a90'>Tododrogas CIA SAS, siempre con usted.</span></p>
+        <a href='https://tododrogas.online/consulta.html' style='display:inline-block;background:#0c2d5e;color:#ffffff;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-decoration:none;padding:12px 26px;border-radius:2px'>Consultar estado de mi radicado &rarr;</a>
+        <p style='margin:10px 0 0;font-size:10px;color:#8a9ab8;letter-spacing:.3px'>tododrogas.online/consulta.html</p>
       </td></tr>
     </table>
 
-    <!-- CANALES -->
+    <!-- DIVIDER NOVA TD -->
     <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
       <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>¿Necesita ayuda inmediata?</td>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Su asistente virtual</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <!-- BLOQUE NOVA TD -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:#0c2d5e;border-radius:2px;margin-bottom:24px'>
+      <tr><td style='padding:26px 28px'>
+        <table width='100%' cellpadding='0' cellspacing='0'>
+          <tr>
+            <td style='vertical-align:middle'>
+              <img src='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png' alt='Nova TD' style='height:42px;max-width:130px;object-fit:contain;display:block;margin-bottom:14px'>
+              <p style='margin:0 0 5px;font-size:14px;color:#ffffff;font-weight:600;letter-spacing:.3px;line-height:1.4'>¿Tiene otra consulta? Nova TD está aquí para ayudarle.</p>
+              <p style='margin:0 0 16px;font-size:11px;color:#7aaad8;line-height:1.8;font-weight:300'>Su asistente virtual disponible <strong style='color:#aaccee;font-weight:500'>las 24 horas, los 7 días de la semana</strong>. Sin filas, sin esperas — solo respuestas rápidas y amables cuando las necesite:</p>
+              <table cellpadding='0' cellspacing='0' style='margin-bottom:18px'>
+                <tr><td style='font-size:11px;color:#9abcd8;line-height:1.9;font-weight:300'>Encuentre el punto Tododrogas más cercano a usted<br>Consulte la disponibilidad de sus medicamentos<br>Radique una PQRSFD en segundos, sin formularios<br>Comparta su experiencia con nuestra encuesta de satisfacción<br>Resuelva dudas sobre su servicio farmacéutico</td></tr>
+              </table>
+              <a href='https://tododrogas.online/nova.html' style='display:inline-block;background:#ffffff;color:#0c2d5e;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;padding:11px 24px;border-radius:2px'>Hablar con Nova TD &rarr;</a>
+              <p style='margin:12px 0 0;font-size:10px;color:#4a6a90;letter-spacing:.3px'>tododrogas.online/nova.html</p>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
+    <!-- DIVIDER CANALES -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Canales de atención</td>
         <td style='border-top:1px solid #d4dce8'></td>
       </tr>
     </table>
     <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:0'>
       <tr>
-        <td width='50%' style='padding:14px 18px;border-bottom:1px solid #d4dce8;border-right:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>WhatsApp</p>
+        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>WhatsApp</p>
           <a href='https://wa.me/573043412431' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>304 341 2431</a>
         </td>
-        <td width='50%' style='padding:14px 18px;border-bottom:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX</p>
+        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX Atención</p>
           <a href='tel:6043222432' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>604 322 2432 Op. 2</a>
         </td>
       </tr>
       <tr>
-        <td width='50%' style='padding:14px 18px;border-right:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Correo PQRSFD</p>
+        <td width='50%' style='padding:16px 18px;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Correo PQRSFD</p>
           <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
         </td>
-        <td width='50%' style='padding:14px 18px;vertical-align:top'>
-          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Consultar radicado</p>
-          <a href='https://tododrogas.online/consulta.html' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.online/consulta</a>
+        <td width='50%' style='padding:16px 18px;vertical-align:top'>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Página web</p>
+          <a href='https://tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.com.co</a>
         </td>
       </tr>
     </table>
