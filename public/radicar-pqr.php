@@ -851,7 +851,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         </table>
         <table width='100%' cellpadding='0' cellspacing='0'>
           <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>01</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Su caso será revisado por uno de nuestros asesores especializados.</td></tr>
-          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Recibirá respuesta a este correo en el plazo indicado.</td></tr>
+          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Recibirá respuesta a su PQRSFD mediante el canal de contacto seleccionado.</td></tr>
           <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top'>03</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Tododrogas CIA SAS se compromete a gestionar su solicitud con transparencia, diligencia y respeto, conforme a los estándares del servicio farmacéutico colombiano.</td></tr>
         </table>
       </td></tr>
