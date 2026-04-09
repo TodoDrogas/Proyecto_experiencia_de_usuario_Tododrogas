@@ -1101,7 +1101,7 @@ INSTRUCCIONES CRÍTICAS:
 9. Tono: humano, cercano, colombiano — NUNCA robótico ni genérico. SIEMPRE usar usted, NUNCA tutear.
 10. NO uses saludos como 'Estimado/a' — dirígete por nombre de forma cálida y directa.
 11. PROHIBIDO usar emojis en el texto.
-12. PROHIBIDO usar la palabra "droguería" — reemplázala por "punto de atención" o "Tododrogas".
+12. PROHIBIDO usar la palabra drogueria — reemplazala por punto de atencion o Tododrogas.
 
 Responde SOLO con el cuerpo del correo en texto plano, sin asunto, sin etiquetas HTML, sin explicaciones.";
 
