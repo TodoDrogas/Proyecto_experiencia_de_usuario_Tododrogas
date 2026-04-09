@@ -949,8 +949,8 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
           <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
         </td>
         <td width='50%' style='padding:16px 18px;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Página Web</p>
-          <a href='https://www.tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.com.co</a>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Portal web</p>
+          <a href='https://tododrogas.online/pqr_form.html' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.online/pqr</a>
         </td>
       </tr>
     </table>
@@ -1065,3 +1065,205 @@ echo json_encode([
     'acuse_code'      => isset($acuse_code) ? $acuse_code : null,
     'mensaje'         => "Tu solicitud fue recibida exitosamente. Radicado: {$ticket_id}",
 ]);
+
+// ── PASO 5: CORREO DE SEGUIMIENTO PERSONALIZADO (1 min después) ───────
+// Cerramos la respuesta HTTP al usuario y seguimos en background
+if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
+if (!$correo || !filter_var($correo, FILTER_VALIDATE_EMAIL)) return;
+if (!$token || !$OPENAI_KEY) return;
+
+sleep(60);
+
+// ── Construir prompt para GPT ─────────────────────────────────────────
+$texto_seguimiento = $transcripcion ?: $canvas_transcripcion ?: $descripcion ?: '';
+$prompt_seguimiento = "Eres el equipo de atención al cliente de Tododrogas CIA SAS, una droguería colombiana de confianza. Tu misión es redactar un correo de seguimiento PERSONALIZADO, CÁLIDO y que haga sentir al usuario como la persona más importante del mundo — como un rey o reina. 
+
+DATOS DEL CASO:
+- Nombre: {$nombre}
+- Tipo de solicitud: {$tipo_pqr}
+- Categoría IA: {$categoria_ia}
+- Sentimiento detectado: {$sentimiento}
+- Tono: " . ($tono_ia ?? 'neutro') . "
+- Prioridad: {$prioridad}
+- Resumen del caso: {$resumen_corto}
+- Texto original del usuario: " . mb_substr($texto_seguimiento, 0, 400) . "
+- Radicado: {$ticket_id}
+- Fecha límite de respuesta: " . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . "
+
+INSTRUCCIONES CRÍTICAS:
+1. El correo debe tener máximo 4 párrafos cortos, fluidos y humanos — NADA de listas ni bullet points.
+2. Abre con una frase poderosa que demuestre que LEÍMOS y ENTENDEMOS su caso específico.
+3. Si el sentimiento es NEGATIVO o URGENTE: reconoce el malestar con empatía profunda, pide disculpas sinceras si aplica, y garantiza atención prioritaria.
+4. Si el sentimiento es POSITIVO o es una FELICITACIÓN: celebra con genuina alegría, agradece profundamente y transmite orgullo de equipo.
+5. Si es NEUTRO: sé cálido, profesional y tranquilizador.
+6. Siempre menciona el número de radicado {$ticket_id} y la fecha límite de respuesta.
+7. Cierra con una frase memorable que refuerce el compromiso de Tododrogas con el usuario.
+8. Firma como: Equipo de Experiencia al Cliente · Tododrogas CIA SAS
+9. Tono: humano, cercano, colombiano — NUNCA robótico ni genérico.
+10. NO uses saludos como 'Estimado/a' — usa el nombre directamente de forma cálida.
+
+Responde SOLO con el cuerpo del correo en texto plano, sin asunto, sin etiquetas HTML, sin explicaciones.";
+
+$ch_gpt = curl_init('https://api.openai.com/v1/chat/completions');
+curl_setopt_array($ch_gpt, [
+    CURLOPT_POST           => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT        => 30,
+    CURLOPT_HTTPHEADER     => ["Authorization: Bearer $OPENAI_KEY", 'Content-Type: application/json'],
+    CURLOPT_POSTFIELDS     => json_encode([
+        'model'       => 'gpt-4o-mini',
+        'max_tokens'  => 500,
+        'temperature' => 0.75,
+        'messages'    => [
+            ['role' => 'system', 'content' => 'Eres el equipo de atención al cliente de Tododrogas CIA SAS. Redactas correos cálidos, empáticos y personalizados en español colombiano. Haces sentir a cada usuario como la persona más importante del mundo.'],
+            ['role' => 'user', 'content' => $prompt_seguimiento],
+        ],
+    ]),
+]);
+$gpt_resp = curl_exec($ch_gpt);
+curl_close($ch_gpt);
+
+$gpt_data   = json_decode($gpt_resp, true);
+$cuerpo_gpt = trim($gpt_data['choices'][0]['message']['content'] ?? '');
+if (!$cuerpo_gpt) return;
+
+// ── Convertir texto plano a párrafos HTML ─────────────────────────────
+$parrafos_html = implode('', array_map(function($p) {
+    $p = trim($p);
+    return $p ? "<p style='margin:0 0 16px;font-size:13px;color:#2a3a4a;line-height:1.9;font-weight:300'>" . nl2br(htmlspecialchars($p)) . "</p>" : '';
+}, explode("\n\n", $cuerpo_gpt)));
+
+// ── Badge color según sentimiento ────────────────────────────────────
+$color_seg = ['positivo'=>'#0f5c2e','neutro'=>'#1a4a8a','negativo'=>'#8a1a1a','urgente'=>'#7a3200'][$sentimiento] ?? '#1a4a8a';
+$bg_seg    = ['positivo'=>'#dcfce7','neutro'=>'#dbeafe','negativo'=>'#fee2e2','urgente'=>'#fef3c7'][$sentimiento] ?? '#dbeafe';
+
+// ── Asunto del correo de seguimiento ─────────────────────────────────
+$asunto_seg = match($sentimiento) {
+    'positivo' => "{$nombre}, su opinión es el motor de Tododrogas — Radicado {$ticket_id}",
+    'negativo' => "Tododrogas asume su caso personalmente — Radicado {$ticket_id}",
+    'urgente'  => "Atención prioritaria confirmada — Su caso no puede esperar · {$ticket_id}",
+    default    => "Su solicitud está en las mejores manos — Radicado {$ticket_id}",
+};
+
+// ── HTML del correo de seguimiento ───────────────────────────────────
+$logo_seg = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+
+$cuerpo_seguimiento = "
+<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
+<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
+<tr><td align='center'>
+<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
+
+  <!-- HEADER -->
+  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
+    <img src='{$logo_seg}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 14px;filter:brightness(0) invert(1);opacity:.92'>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Mensaje personal del equipo &middot; Tododrogas CIA SAS</p>
+  </td></tr>
+
+  <!-- BAND RADICADO -->
+  <tr><td style='background:#0a2448;padding:18px 44px;text-align:center'>
+    <p style='color:#6a90b8;margin:0;font-size:9px;letter-spacing:2.5px;text-transform:uppercase'>Radicado</p>
+    <p style='color:#ffffff;margin:6px 0 2px;font-size:22px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_id}</p>
+    <p style='color:#4a6a90;margin:0;font-size:10px'>" . date('d/m/Y H:i') . "</p>
+  </td></tr>
+
+  <!-- BODY -->
+  <tr><td style='background:#ffffff;padding:40px 44px'>
+
+    <!-- BADGE ESTADO -->
+    <table cellpadding='0' cellspacing='0' style='margin-bottom:28px'>
+      <tr>
+        <td style='background:{$bg_seg};padding:6px 16px;border-radius:20px'>
+          <span style='font-size:11px;font-weight:700;color:{$color_seg};letter-spacing:.5px'>
+            " . match($sentimiento) {
+                'positivo' => '💚 Su experiencia positiva nos inspira',
+                'negativo' => '🤝 Su caso tiene nuestra atención completa',
+                'urgente'  => '🚨 Atención prioritaria activada',
+                default    => '📋 Su solicitud está siendo gestionada'
+            } . "
+          </span>
+        </td>
+      </tr>
+    </table>
+
+    <!-- CUERPO GPT -->
+    {$parrafos_html}
+
+    <!-- SEPARADOR -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin:28px 0 24px'>
+      <tr><td style='border-top:1px solid #d4dce8'></td></tr>
+    </table>
+
+    <!-- BLOQUE COMPROMISO -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:#f0f5fb;border:1px solid #d4dce8;border-left:4px solid #0c2d5e;margin-bottom:24px'>
+      <tr><td style='padding:18px 22px'>
+        <p style='margin:0 0 6px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:600'>⏱ Fecha límite de respuesta</p>
+        <p style='margin:0;font-size:13px;color:#2a3a4a;font-weight:500'>" . date('d/m/Y H:i', strtotime($fecha_limite_sla)) . " &nbsp;·&nbsp; {$horas_sla} horas hábiles</p>
+      </td></tr>
+    </table>
+
+    <!-- CANALES -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>¿Necesita ayuda inmediata?</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:0'>
+      <tr>
+        <td width='50%' style='padding:14px 18px;border-bottom:1px solid #d4dce8;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>WhatsApp</p>
+          <a href='https://wa.me/573043412431' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>304 341 2431</a>
+        </td>
+        <td width='50%' style='padding:14px 18px;border-bottom:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX</p>
+          <a href='tel:6043222432' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>604 322 2432 Op. 2</a>
+        </td>
+      </tr>
+      <tr>
+        <td width='50%' style='padding:14px 18px;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Correo PQRSFD</p>
+          <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
+        </td>
+        <td width='50%' style='padding:14px 18px;vertical-align:top'>
+          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Consultar radicado</p>
+          <a href='https://tododrogas.online/consulta.html' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.online/consulta</a>
+        </td>
+      </tr>
+    </table>
+
+  </td></tr>
+
+  <!-- FOOTER -->
+  <tr><td style='background:#0c2d5e;padding:18px 44px'>
+    <table width='100%' cellpadding='0' cellspacing='0'>
+      <tr>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Equipo de Experiencia al Cliente</td>
+        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Radicado: {$ticket_id}</td>
+      </tr>
+    </table>
+  </td></tr>
+
+</table></td></tr></table>
+</body></html>";
+
+// ── Enviar correo de seguimiento ──────────────────────────────────────
+$ch_seg = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
+curl_setopt_array($ch_seg, [
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => json_encode([
+        'message' => [
+            'subject'      => $asunto_seg,
+            'importance'   => in_array($sentimiento, ['negativo','urgente']) ? 'high' : 'normal',
+            'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_seguimiento],
+            'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
+        ],
+        'saveToSentItems' => true,
+    ]),
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
+    CURLOPT_TIMEOUT        => 30,
+]);
+curl_exec($ch_seg);
+curl_close($ch_seg);
