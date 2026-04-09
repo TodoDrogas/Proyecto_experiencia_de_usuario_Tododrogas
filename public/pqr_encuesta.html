@@ -1,788 +1,1187 @@
-<?php
-/**
- * radicar-encuesta.php — Encuesta de Satisfaccion · Tododrogas CIA SAS
- * ──────────────────────────────────────────────────────────────────────
- * 1. Recibe datos de la encuesta desde pqr_encuesta.html
- * 2. Inserta en Supabase tabla encuestas_satisfaccion
- * 3. Envia correo al usuario con formato formal (igual que radicar-pqr)
- * 4. Envia notificacion interna a pqrsfd con mismo formato
- * 5. Registra en historial_eventos
- * NO inserta en tabla correos (no aparece en admin como PQR)
- */
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Encuesta de Satisfacción · Tododrogas</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════
+   NOVA TD · ENCUESTA v5
+   Azul océano · Botones grandes y flotantes
+   Rojo→Verde · Sin morado · Texto nítido
+═══════════════════════════════════════════════ */
+:root{
+  --c1:#2979ff; --c2:#00b0ff; --c3:#00e5ff; --c4:#0091ea; --c5:#1565c0;
+  --r1:#ef5350; --r2:#ffc107; --r3:#00e676; --r4:#66bb6a; --r5:#00e676;
+  --bg:#04080f; --text:#e4f0ff; --text2:rgba(190,225,255,.9); --text3:rgba(140,190,230,.7);
+  --border:rgba(0,176,255,.22);
+  --float:0 8px 28px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.35);
+  --fneon:0 8px 28px rgba(0,0,0,.55),0 0 22px rgba(0,176,255,.28);
+  --glow:0 0 22px rgba(0,176,255,.45),0 0 60px rgba(0,229,255,.12);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;background:var(--bg)}
 
-header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
+/* ── TOPBAR ─────────────────────────────────── */
+.topbar{
+  position:fixed;top:0;left:0;right:0;z-index:200;height:52px;
+  background:rgba(4,8,15,.97);backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(0,176,255,.15);
+  display:flex;align-items:center;justify-content:space-between;padding:0 20px;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);
+}
+.topbar::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--c2),var(--c3),var(--c2),transparent);opacity:.5;}
+.tb-back{display:flex;align-items:center;gap:6px;background:rgba(0,176,255,.08);
+  border:1px solid rgba(0,176,255,.25);border-radius:8px;cursor:pointer;color:var(--c2);
+  font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;
+  padding:7px 14px;transition:all .18s;box-shadow:0 2px 10px rgba(0,0,0,.3);}
+.tb-back:hover{background:rgba(0,176,255,.16);color:var(--c3);box-shadow:var(--fneon);}
+.tb-brand{display:flex;align-items:center;gap:10px;}
+.tb-dot{width:8px;height:8px;border-radius:50%;background:var(--c3);
+  box-shadow:var(--glow);animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.tb-name{font-size:14px;font-weight:800;color:#fff;letter-spacing:-.2px;}
+.tb-time{font-family:'DM Mono',monospace;font-size:11px;color:var(--text3);}
 
-// ── CREDENCIALES ──────────────────────────────────────────────────────
-$SB_URL        = '__SB_URL__';
-$SB_KEY        = '__SB_KEY__';
-$TENANT_ID     = '__AZURE_TENANT_ID__';
-$CLIENT_ID     = '__AZURE_CLIENT_ID__';
-$CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
-$GRAPH_USER_ID = '__GRAPH_USER_ID__';
-$BUZON_PQRS    = 'pqrsfd@tododrogas.com.co';
-$LOGO_URL      = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+/* ── BARRA PROGRESO rojo→verde ──────────────── */
+.progress-bar{position:fixed;top:52px;left:0;right:0;z-index:199;height:3px;
+  background:rgba(255,255,255,.05);}
+.progress-fill{height:100%;border-radius:0 99px 99px 0;
+  transition:width .55s cubic-bezier(.4,0,.2,1);
+  background:linear-gradient(90deg,#ef5350 0%,#ff9800 25%,#ffc107 50%,#66bb6a 75%,#00e676 100%);
+  background-size:600px 100%;
+  box-shadow:0 0 14px rgba(0,229,255,.4);width:5%;}
+.step-dots{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+  display:flex;gap:8px;z-index:199;}
+.sdot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.12);transition:all .3s;}
+.sdot.active{background:var(--c2);width:22px;border-radius:3px;box-shadow:var(--glow);}
 
-// ── HELPERS ───────────────────────────────────────────────────────────
-function sbPost($url, $key, $endpoint, $data, $prefer = 'return=representation') {
-    $ch = curl_init("$url/rest/v1/$endpoint");
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode($data),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => [
-            "apikey: $key", "Authorization: Bearer $key",
-            'Content-Type: application/json', "Prefer: $prefer"
-        ],
-        CURLOPT_TIMEOUT => 15,
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    return ['code' => $code, 'body' => $resp];
+/* ── SLIDES ─────────────────────────────────── */
+.slides-wrap{position:fixed;top:55px;left:0;right:0;bottom:0;
+  display:flex;transition:transform .55s cubic-bezier(.4,0,.2,1);}
+.slides-wrap-mobile-lock{touch-action:none;user-select:none;}
+.slide{min-width:100vw;width:100vw;height:100%;
+  display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:20px 24px 55px;position:relative;overflow:hidden;}
+.slide-dark{
+  background:
+    radial-gradient(ellipse 65% 55% at 8% 12%,rgba(41,121,255,.22) 0%,transparent 60%),
+    radial-gradient(ellipse 55% 45% at 92% 88%,rgba(0,176,255,.18) 0%,transparent 55%),
+    radial-gradient(ellipse 40% 50% at 85% 5%, rgba(0,229,255,.10) 0%,transparent 50%),
+    linear-gradient(160deg,#04080f 0%,#060d1e 55%,#030810 100%);
+}
+.sgrid{position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,176,255,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,229,255,.025) 1px,transparent 1px);
+  background-size:52px 52px;
+  mask-image:radial-gradient(ellipse 90% 90% at 50% 40%,black 15%,transparent 100%);}
+
+/* ── LOGO EN SLIDE ──────────────────────────── */
+.slide-logo{
+  margin-bottom:22px;background:rgba(0,176,255,.07);
+  border:1px solid rgba(0,176,255,.22);border-radius:16px;padding:10px 28px;
+  display:inline-flex;align-items:center;box-shadow:var(--fneon);}
+.slide-logo img{height:30px;object-fit:contain;
+  filter:drop-shadow(0 0 8px rgba(0,229,255,.3));}
+
+/* ── TIPOGRAFÍA ─────────────────────────────── */
+.eyebrow{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--c3);margin-bottom:12px;display:flex;align-items:center;gap:10px;}
+.eyebrow::before{content:'';flex:0 0 30px;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,229,255,.6));}
+.eyebrow::after{content:'';flex:0 0 30px;height:1px;
+  background:linear-gradient(90deg,rgba(0,229,255,.6),transparent);}
+.slide-title{font-size:clamp(26px,4vw,40px);font-weight:800;color:#fff;
+  text-align:center;line-height:1.15;letter-spacing:-.5px;margin-bottom:12px;
+  text-shadow:0 2px 28px rgba(41,121,255,.35);}
+.slide-sub{font-size:14px;color:var(--text2);text-align:center;
+  margin-bottom:28px;line-height:1.6;max-width:500px;font-weight:400;}
+
+/* ── INPUTS ─────────────────────────────────── */
+.pqr-input{background:rgba(0,176,255,.06);border:1.5px solid var(--border);text-transform:uppercase;
+  border-radius:10px;padding:12px 14px;font-size:14px;
+  font-family:'Poppins',sans-serif;color:var(--text);
+  outline:none;transition:all .2s;width:100%;
+  box-shadow:0 2px 10px rgba(0,0,0,.3);}
+.pqr-input:focus{border-color:var(--c3);background:rgba(0,229,255,.07);
+  box-shadow:0 0 0 3px rgba(0,229,255,.12),var(--glow);}
+.pqr-input::placeholder{color:var(--text3);}
+.pqr-input.error{border-color:var(--r1);}
+.field-wrap{display:flex;flex-direction:column;gap:5px;width:100%;}
+.field-label{font-size:10px;font-weight:700;letter-spacing:.9px;
+  text-transform:uppercase;color:var(--c2);}
+.req{color:var(--c3);margin-left:2px;}
+.err-msg{font-size:11px;color:#ff6b6b;display:none;margin-top:2px;}
+.err-msg.show{display:block;}
+
+/* ── SEDE ───────────────────────────────────── */
+.sede-wrap{position:relative;width:100%;max-width:540px;}
+.sede-dd{position:absolute;top:calc(100% + 6px);left:0;right:0;
+  background:rgba(4,10,24,.99);border:1.5px solid rgba(0,176,255,.28);
+  border-radius:14px;max-height:220px;overflow-y:auto;z-index:50;
+  box-shadow:0 20px 60px rgba(0,0,0,.8),0 0 40px rgba(0,176,255,.08);}
+.sede-dd::-webkit-scrollbar{width:3px}
+.sede-dd::-webkit-scrollbar-thumb{background:rgba(0,176,255,.35);border-radius:99px}
+.sede-opt{padding:12px 16px;cursor:pointer;
+  border-bottom:1px solid rgba(255,255,255,.04);transition:all .12s;}
+.sede-opt:hover{background:rgba(0,176,255,.1);border-left:2px solid var(--c2);}
+.sede-opt-name{font-size:13px;font-weight:600;color:var(--text);}
+.sede-opt-sub{font-size:11px;color:var(--text3);margin-top:1px;}
+.sede-badge{display:none;align-items:center;gap:12px;
+  background:rgba(0,176,255,.07);border:1.5px solid rgba(0,176,255,.25);
+  border-radius:14px;padding:12px 16px;width:100%;max-width:540px;box-shadow:var(--fneon);}
+.sede-badge-icon{font-size:22px;}
+.sede-badge-info{flex:1;}
+.sede-badge-name{font-size:13px;font-weight:700;color:var(--text);}
+.sede-badge-sub{font-size:12px;color:var(--text2);}
+.sede-badge-change{background:none;border:1px solid rgba(0,176,255,.3);
+  color:var(--c2);border-radius:8px;padding:5px 12px;font-size:11px;
+  cursor:pointer;font-family:'Poppins',sans-serif;transition:all .15s;}
+.sede-badge-change:hover{border-color:var(--c3);color:var(--c3);}
+@keyframes pulse-geo{0%{opacity:.7;transform:scale(1)}100%{opacity:0;transform:scale(1.8)}}
+@keyframes spin-geo{to{transform:rotate(360deg)}}
+.sede-geo-btn{display:flex;align-items:center;gap:14px;background:rgba(0,176,255,.08);
+  border:1.5px solid rgba(0,176,255,.45);border-radius:14px;padding:14px 20px;
+  color:#00b0ff;font-size:14px;font-family:'Poppins',sans-serif;font-weight:500;
+  cursor:pointer;width:100%;max-width:540px;transition:all .2s;margin-bottom:10px;text-align:left;}
+.sede-geo-btn:hover{background:rgba(0,176,255,.15);border-color:rgba(0,176,255,.85);box-shadow:0 0 20px rgba(0,176,255,.22);}
+.sede-geo-btn:disabled{opacity:.6;cursor:not-allowed;}
+.sede-geo-icon{position:relative;width:44px;height:44px;flex-shrink:0;}
+.sede-geo-ring{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(0,176,255,.55);animation:pulse-geo 2s ease-out infinite;}
+.sede-geo-ring2{position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(0,176,255,.3);animation:pulse-geo 2s ease-out infinite .5s;}
+.sede-geo-circle{position:absolute;inset:0;border-radius:50%;background:rgba(0,176,255,.12);border:1.5px solid rgba(0,176,255,.4);display:flex;align-items:center;justify-content:center;}
+.sede-geo-spin{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(0,176,255,.2);border-top-color:#00b0ff;animation:spin-geo 1s linear infinite;}
+.sede-manual-btn{display:flex;align-items:center;justify-content:center;gap:8px;
+  background:none;border:1px solid rgba(0,176,255,.2);border-radius:10px;padding:8px 14px;
+  color:rgba(0,176,255,.6);font-size:12px;font-family:'Poppins',sans-serif;
+  cursor:pointer;width:100%;max-width:540px;transition:all .15s;margin-bottom:8px;}
+.sede-manual-btn:hover{border-color:rgba(0,176,255,.45);color:#00b0ff;}
+
+/* ── DATA CARD ──────────────────────────────── */
+.data-card{background:rgba(0,176,255,.05);border:1px solid rgba(0,176,255,.18);
+  border-radius:18px;padding:22px;width:100%;max-width:540px;
+  position:relative;box-shadow:var(--float);}
+.data-card::before{content:'';position:absolute;top:0;left:24px;right:24px;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,229,255,.35),transparent);}
+.data-card-title{font-size:12px;font-weight:700;color:var(--c2);
+  margin-bottom:16px;display:flex;align-items:center;gap:7px;letter-spacing:.4px;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+/* ── BTN NEXT flotante ──────────────────────── */
+.btn-next{
+  width:100%;max-width:540px;border:none;border-radius:14px;padding:17px;
+  font-size:16px;font-family:'Poppins',sans-serif;font-weight:700;
+  cursor:pointer;transition:all .22s cubic-bezier(.34,1.4,.64,1);
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  color:#fff;letter-spacing:.3px;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,var(--c5) 0%,var(--c1) 45%,var(--c2) 80%,var(--c3) 100%);
+  box-shadow:var(--fneon),inset 0 1px 0 rgba(255,255,255,.18);
+}
+.btn-next::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.14) 0%,transparent 55%);pointer-events:none;}
+.btn-next:hover:not(:disabled){transform:translateY(-4px);
+  box-shadow:0 16px 48px rgba(41,121,255,.55),0 0 0 1px rgba(0,229,255,.4),
+             0 0 60px rgba(0,176,255,.2),inset 0 1px 0 rgba(255,255,255,.18);}
+.btn-next:active:not(:disabled){transform:translateY(-1px);}
+.btn-next:disabled{opacity:.25;cursor:not-allowed;transform:none;
+  background:rgba(255,255,255,.07);box-shadow:none;}
+
+/* ── RATING ─────────────────────────────────── */
+.rating-card{width:100%;max-width:640px;}
+.q-header{margin-bottom:18px;text-align:center;}
+.q-title{font-size:clamp(22px,3vw,32px);font-weight:800;color:#fff;
+  margin-bottom:10px;line-height:1.2;text-shadow:0 2px 24px rgba(41,121,255,.3);}
+.q-sub{font-size:14px;color:var(--text2);line-height:1.6;}
+
+/* ── STAR BUTTONS — amplios, flotantes, color por nivel ── */
+.star-grid{display:flex;justify-content:center;gap:12px;margin-bottom:16px;}
+.star-btn{
+  background:rgba(0,176,255,.07);border:1.5px solid rgba(0,176,255,.2);
+  border-radius:18px;
+  padding:22px 8px 16px;
+  width:140px;flex-shrink:0;
+  cursor:pointer;
+  transition:all .22s cubic-bezier(.34,1.5,.64,1);
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  position:relative;overflow:hidden;
+  box-shadow:0 8px 24px rgba(0,0,0,.5),0 2px 6px rgba(0,0,0,.35),
+             0 0 0 1px rgba(0,176,255,.1);
+}
+.star-btn::before{content:'';position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(180deg,rgba(255,255,255,.08) 0%,transparent 50%);pointer-events:none;}
+
+.star-btn:hover{transform:translateY(-9px) scale(1.04);}
+.star-btn.selected{transform:translateY(-9px) scale(1.06);}
+
+/* Colores por nivel */
+.star-btn[data-v="1"]:hover,.star-btn.selected[data-v="1"]{
+  border-color:rgba(239,83,80,.75);background:rgba(239,83,80,.14);
+  box-shadow:0 16px 44px rgba(239,83,80,.38),0 0 0 1px rgba(239,83,80,.5),0 8px 14px rgba(0,0,0,.45);}
+.star-btn[data-v="2"]:hover,.star-btn.selected[data-v="2"]{
+  border-color:rgba(255,152,0,.75);background:rgba(255,152,0,.13);
+  box-shadow:0 16px 44px rgba(255,152,0,.38),0 0 0 1px rgba(255,152,0,.5),0 8px 14px rgba(0,0,0,.45);}
+.star-btn[data-v="3"]:hover,.star-btn.selected[data-v="3"]{
+  border-color:rgba(255,193,7,.7);background:rgba(255,193,7,.12);
+  box-shadow:0 16px 44px rgba(255,193,7,.32),0 0 0 1px rgba(255,193,7,.45),0 8px 14px rgba(0,0,0,.45);}
+.star-btn[data-v="4"]:hover,.star-btn.selected[data-v="4"]{
+  border-color:rgba(102,187,106,.7);background:rgba(102,187,106,.13);
+  box-shadow:0 16px 44px rgba(102,187,106,.35),0 0 0 1px rgba(102,187,106,.48),0 8px 14px rgba(0,0,0,.45);}
+.star-btn[data-v="5"]:hover,.star-btn.selected[data-v="5"]{
+  border-color:rgba(0,230,118,.7);background:rgba(0,230,118,.13);
+  box-shadow:0 16px 44px rgba(0,230,118,.4),0 0 0 1px rgba(0,230,118,.55),0 8px 14px rgba(0,0,0,.45),
+             0 0 60px rgba(0,230,118,.12);}
+
+/* Número grande y brillante */
+.sb-num{
+  font-size:30px;font-weight:800;font-family:'DM Mono',monospace;
+  color:rgba(100,180,255,.75);transition:all .2s;line-height:1;
+}
+.star-btn[data-v="1"]:hover .sb-num,.star-btn.selected[data-v="1"] .sb-num
+  {color:var(--r1);text-shadow:0 0 22px rgba(239,83,80,.8);}
+.star-btn[data-v="2"]:hover .sb-num,.star-btn.selected[data-v="2"] .sb-num
+  {color:var(--r2);text-shadow:0 0 22px rgba(255,152,0,.8);}
+.star-btn[data-v="3"]:hover .sb-num,.star-btn.selected[data-v="3"] .sb-num
+  {color:var(--r3);text-shadow:0 0 22px rgba(255,193,7,.8);}
+.star-btn[data-v="4"]:hover .sb-num,.star-btn.selected[data-v="4"] .sb-num
+  {color:var(--r4);text-shadow:0 0 22px rgba(102,187,106,.8);}
+.star-btn[data-v="5"]:hover .sb-num,.star-btn.selected[data-v="5"] .sb-num
+  {color:var(--r5);text-shadow:0 0 28px rgba(0,230,118,.9);}
+
+/* Label visible y grande */
+.sb-label{
+  font-size:11px;font-weight:700;color:var(--text2);
+  text-align:center;line-height:1.3;letter-spacing:.1px;transition:color .18s;
+}
+.star-btn:hover .sb-label,.star-btn.selected .sb-label{color:#fff;}
+
+.q-feedback{font-size:14px;font-weight:600;text-align:center;
+  min-height:22px;transition:opacity .25s;opacity:0;}
+.q-feedback.show{opacity:1;}
+.q-feedback.good{color:var(--r5);}
+.q-feedback.mid{color:var(--r3);}
+.q-feedback.bad{color:var(--r1);}
+
+/* ── Q PROGRESS ─────────────────────────────── */
+.q-progress{display:flex;align-items:center;gap:10px;margin-bottom:18px;width:100%;max-width:640px;}
+.qp-dots{display:flex;gap:5px;}
+.qp-dot{width:28px;height:4px;border-radius:99px;background:rgba(255,255,255,.08);transition:all .3s;}
+.qp-dot.done{background:linear-gradient(90deg,var(--c1),var(--c3));
+  box-shadow:0 0 8px rgba(0,229,255,.35);}
+.qp-dot.current{background:var(--c3);animation:qpulse 1s ease-in-out infinite alternate;
+  box-shadow:0 0 12px rgba(0,229,255,.5);}
+@keyframes qpulse{from{opacity:.5}to{opacity:1}}
+.qp-label{font-size:11px;font-family:'DM Mono',monospace;color:var(--text3);margin-left:auto;}
+
+/* ── TEXTAREA ───────────────────────────────── */
+.comment-textarea{background:rgba(0,176,255,.06);border:1.5px solid var(--border);
+  border-radius:12px;padding:14px 16px;font-size:14px;
+  font-family:'Poppins',sans-serif;color:var(--text);
+  outline:none;resize:none;width:100%;max-width:580px;
+  line-height:1.7;transition:all .2s;min-height:110px;
+  box-shadow:var(--float);}
+.comment-textarea:focus{border-color:var(--c3);background:rgba(0,229,255,.07);
+  box-shadow:0 0 0 3px rgba(0,229,255,.12),var(--glow);}
+.comment-textarea::placeholder{color:var(--text3);}
+
+/* ── BTN SUBMIT flotante ────────────────────── */
+.btn-submit{
+  width:100%;max-width:580px;border:none;border-radius:14px;padding:18px;
+  font-size:16px;font-family:'Poppins',sans-serif;font-weight:700;
+  cursor:pointer;transition:all .22s cubic-bezier(.34,1.4,.64,1);
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  color:#fff;letter-spacing:.3px;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,var(--c5) 0%,var(--c1) 40%,var(--c2) 75%,var(--c3) 100%);
+  box-shadow:var(--fneon),inset 0 1px 0 rgba(255,255,255,.18);}
+.btn-submit::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(255,255,255,.14) 0%,transparent 55%);pointer-events:none;}
+.btn-submit:hover:not(:disabled){transform:translateY(-4px);
+  box-shadow:0 16px 48px rgba(41,121,255,.55),0 0 0 1px rgba(0,229,255,.4),
+             0 0 60px rgba(0,176,255,.2),inset 0 1px 0 rgba(255,255,255,.18);}
+.btn-submit:active:not(:disabled){transform:translateY(-1px);}
+.btn-submit:disabled{opacity:.35;cursor:not-allowed;transform:none;}
+.btn-submit.loading{opacity:.6;cursor:wait;transform:none;}
+
+/* ── SUCCESS ────────────────────────────────── */
+.success-overlay{position:fixed;inset:0;z-index:300;background:rgba(2,6,14,.97);
+  backdrop-filter:blur(24px);display:flex;align-items:center;
+  justify-content:center;opacity:0;pointer-events:none;transition:opacity .35s;}
+.success-overlay.show{opacity:1;pointer-events:auto;}
+.success-card{position:relative;overflow:hidden;
+  background:linear-gradient(145deg,rgba(6,14,32,.98),rgba(3,8,20,.99));
+  border:1px solid rgba(0,176,255,.22);border-radius:24px;
+  padding:36px 32px;max-width:460px;width:92%;text-align:center;
+  animation:scaleIn .4s cubic-bezier(.34,1.56,.64,1) both;
+  box-shadow:0 24px 80px rgba(0,0,0,.9),0 0 100px rgba(0,176,255,.06);}
+.success-card::before{content:'';position:absolute;top:0;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,var(--c3),var(--c2),transparent);}
+@keyframes scaleIn{from{transform:scale(.82);opacity:0}to{transform:scale(1);opacity:1}}
+.success-glow{width:90px;height:90px;border-radius:50%;
+  background:radial-gradient(circle,rgba(0,229,255,.2) 0%,rgba(41,121,255,.1) 100%);
+  border:2px solid rgba(0,229,255,.55);
+  display:flex;align-items:center;justify-content:center;font-size:42px;
+  margin:0 auto 20px;
+  box-shadow:0 0 40px rgba(0,229,255,.45),0 0 80px rgba(0,176,255,.2),0 0 0 8px rgba(0,229,255,.07);
+  animation:glowP 2.5s ease-in-out infinite;}
+@keyframes glowP{
+  0%,100%{box-shadow:0 0 40px rgba(0,229,255,.4),0 0 80px rgba(0,176,255,.15),0 0 0 8px rgba(0,229,255,.07);}
+  50%{box-shadow:0 0 60px rgba(0,229,255,.6),0 0 120px rgba(0,176,255,.3),0 0 0 14px rgba(0,229,255,.05);}}
+.success-card h2{font-size:24px;font-weight:800;color:#f0f8ff;margin-bottom:8px;
+  text-shadow:0 0 30px rgba(0,229,255,.3);}
+.success-card p{font-size:14px;color:var(--text2);margin-bottom:16px;line-height:1.6;}
+.score-badge{display:inline-flex;align-items:center;gap:12px;
+  background:linear-gradient(135deg,rgba(0,229,255,.1),rgba(41,121,255,.12));
+  border:1px solid rgba(0,229,255,.3);border-radius:14px;padding:14px 24px;margin-bottom:16px;
+  box-shadow:0 0 40px rgba(0,229,255,.1),0 8px 24px rgba(0,0,0,.3);}
+.score-num{font-family:'DM Mono',monospace;font-size:42px;font-weight:700;
+  color:var(--c3);line-height:1;text-shadow:0 0 30px rgba(0,229,255,.7);}
+.score-lbl{font-size:12px;color:var(--text2);text-align:left;line-height:1.4;}
+.success-chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-bottom:14px;}
+.s-chip{background:rgba(0,176,255,.08);border:1px solid rgba(0,176,255,.22);
+  border-radius:99px;padding:6px 14px;font-size:11px;color:var(--text2);font-weight:500;}
+.confirm-email{font-size:13px;color:var(--text2);margin-bottom:14px;}
+.confirm-email span{color:var(--c3);font-weight:600;text-shadow:0 0 10px rgba(0,229,255,.4);}
+.countdown-text{font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;margin-top:6px;}
+.btn-home{margin-top:12px;background:rgba(0,176,255,.08);border:1px solid rgba(0,176,255,.28);
+  color:var(--c2);padding:11px 26px;border-radius:10px;font-size:13px;
+  font-family:'Poppins',sans-serif;cursor:pointer;font-weight:600;
+  letter-spacing:.3px;transition:all .18s;box-shadow:0 4px 14px rgba(0,0,0,.3);}
+.btn-home:hover{background:rgba(0,176,255,.16);color:#fff;box-shadow:var(--fneon);}
+
+/* ── TOASTS ─────────────────────────────────── */
+#toasts{position:fixed;bottom:50px;left:50%;transform:translateX(-50%);
+  z-index:999;display:flex;flex-direction:column;gap:6px;align-items:center;}
+.toast{padding:9px 20px;border-radius:99px;font-size:12px;font-weight:600;
+  font-family:'Poppins',sans-serif;white-space:nowrap;animation:fadeUp .3s ease;backdrop-filter:blur(8px);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.toast.error{background:rgba(239,83,80,.9);color:#fff;box-shadow:0 4px 20px rgba(239,83,80,.4);}
+.toast.info{background:rgba(0,176,255,.9);color:#04080f;box-shadow:0 4px 20px rgba(0,176,255,.4);}
+.toast.ok{background:rgba(0,230,118,.9);color:#04080f;box-shadow:0 4px 20px rgba(0,230,118,.4);}
+
+/* ══ RESPONSIVE ════════════════════════════════
+   Funciona en: móvil 360px, tablet 768px, desktop
+═══════════════════════════════════════════════ */
+@media(max-width:900px){
+  html,body{overflow:hidden;height:100%;}
+  .slides-wrap{position:fixed;top:55px;left:0;right:0;bottom:0;display:flex;overflow:hidden;transform:none!important;}
+  .slide,.slide-dark{min-width:100vw;width:100vw;height:100%;overflow-y:auto;
+    padding:72px 16px 80px;justify-content:flex-start;}
+  .star-grid{gap:8px;}
+  .star-btn{padding:18px 4px 13px;border-radius:16px;}
+  .sb-num{font-size:24px;}
+  .sb-label{font-size:10px;}
+  .btn-next,.btn-submit{max-width:100%;}
+  .field-row{grid-template-columns:1fr;}
+  .rating-card,.q-progress{max-width:100%;}
+  .comment-textarea{max-width:100%;}
+}
+@media(max-width:600px){
+  .topbar{padding:0 14px;}
+  .slide-title{font-size:clamp(22px,6vw,28px);}
+  .slide-sub{font-size:13px;margin-bottom:18px;}
+  .eyebrow{font-size:9px;}
+  .star-grid{gap:6px;}
+  .star-btn{padding:16px 3px 11px;border-radius:14px;}
+  .sb-num{font-size:22px;}
+  .sb-label{font-size:9px;}
+  .data-card{padding:14px;}
+  .btn-next,.btn-submit{padding:16px;font-size:15px;}
+  .sede-wrap{max-width:100%;}
+  .sede-badge{max-width:100%;}
+}
+@media(max-width:400px){
+  .star-grid{gap:4px;}
+  .star-btn{padding:14px 2px 10px;border-radius:12px;}
+  .sb-num{font-size:20px;}
+  .sb-label{font-size:8px;}
+  .btn-next,.btn-submit{padding:14px;font-size:14px;}
 }
 
-function getGraphToken($tenant, $client_id, $client_secret) {
-    $ch = curl_init("https://login.microsoftonline.com/$tenant/oauth2/v2.0/token");
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => http_build_query([
-            'grant_type'    => 'client_credentials',
-            'client_id'     => $client_id,
-            'client_secret' => $client_secret,
-            'scope'         => 'https://graph.microsoft.com/.default',
-        ]),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-        CURLOPT_TIMEOUT        => 15,
-    ]);
-    $resp = curl_exec($ch);
-    curl_close($ch);
-    $data = json_decode($resp, true);
-    return $data['access_token'] ?? null;
+/* ── MODAL ERROR VALIDACIÓN ─────────────────────────────── */
+.val-modal-bg{
+  position:fixed;inset:0;z-index:999;
+  background:rgba(2,6,14,.85);backdrop-filter:blur(12px);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;
+  transition:opacity .3s ease;
+}
+.val-modal-bg.show{opacity:1;pointer-events:auto;}
+.val-modal{
+  position:relative;
+  background:linear-gradient(145deg,rgba(6,14,32,.99),rgba(3,8,20,.99));
+  border:1px solid rgba(239,83,80,.45);
+  border-radius:20px;
+  padding:36px 32px 28px;
+  max-width:420px;width:90%;
+  text-align:center;
+  animation:modalIn .35s cubic-bezier(.34,1.56,.64,1) both;
+  box-shadow:0 0 60px rgba(239,83,80,.15),0 24px 80px rgba(0,0,0,.9);
+}
+.val-modal::before{
+  content:'';position:absolute;top:0;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(239,83,80,.6),transparent);
+}
+@keyframes modalIn{from{transform:scale(.82);opacity:0}to{transform:scale(1);opacity:1}}
+.val-modal-icon{
+  width:64px;height:64px;border-radius:50%;
+  background:radial-gradient(circle,rgba(239,83,80,.18) 0%,rgba(239,83,80,.06) 100%);
+  border:1.5px solid rgba(239,83,80,.5);
+  display:flex;align-items:center;justify-content:center;
+  font-size:28px;margin:0 auto 18px;
+  box-shadow:0 0 28px rgba(239,83,80,.3),0 0 0 6px rgba(239,83,80,.05);
+  animation:iconPulse 2.5s ease-in-out infinite;
+}
+@keyframes iconPulse{
+  0%,100%{box-shadow:0 0 28px rgba(239,83,80,.3),0 0 0 6px rgba(239,83,80,.05);}
+  50%{box-shadow:0 0 40px rgba(239,83,80,.5),0 0 0 12px rgba(239,83,80,.03);}
+}
+.val-modal-title{
+  font-size:17px;font-weight:700;color:#fff;margin-bottom:10px;
+  text-shadow:0 0 20px rgba(239,83,80,.3);
+}
+.val-modal-msg{
+  font-size:13px;color:rgba(190,225,255,.85);line-height:1.7;margin-bottom:22px;
+}
+.val-modal-countdown{
+  font-size:11px;color:rgba(140,190,230,.5);
+  font-family:'DM Mono',monospace;margin-bottom:16px;
+}
+.val-modal-bar{
+  width:100%;height:2px;background:rgba(255,255,255,.06);
+  border-radius:99px;overflow:hidden;margin-bottom:20px;
+}
+.val-modal-bar-fill{
+  height:100%;border-radius:99px;
+  background:linear-gradient(90deg,#ef5350,#ff9800);
+  width:100%;transition:width 1s linear;
+}
+.val-modal-btn{
+  background:rgba(239,83,80,.1);
+  border:1px solid rgba(239,83,80,.4);
+  color:#ef5350;border-radius:10px;
+  padding:10px 28px;font-size:13px;font-weight:600;
+  font-family:'Poppins',sans-serif;cursor:pointer;
+  transition:all .18s;letter-spacing:.3px;
+}
+.val-modal-btn:hover{
+  background:rgba(239,83,80,.2);border-color:rgba(239,83,80,.7);
+  color:#fff;box-shadow:0 0 20px rgba(239,83,80,.25);
 }
 
-function sendMail($token, $graph_user_id, $payload) {
-    $ch = curl_init("https://graph.microsoft.com/v1.0/users/{$graph_user_id}/sendMail");
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode(['message' => $payload, 'saveToSentItems' => true]),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'Content-Type: application/json'],
-        CURLOPT_TIMEOUT        => 30,
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    return $code === 202;
+/* ── MODAL VIP EJECUTIVO ──────────────────────────────── */
+.vip-modal-bg{
+  position:fixed;inset:0;z-index:1000;
+  background:rgba(1,3,8,.96);backdrop-filter:blur(20px);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .45s ease;
+}
+.vip-modal-bg.show{opacity:1;pointer-events:auto;}
+.vip-modal{
+  position:relative;overflow:hidden;
+  background:linear-gradient(160deg,rgba(10,8,2,.99),rgba(18,14,4,.99),rgba(8,6,2,.99));
+  border:1px solid rgba(212,175,55,.4);border-radius:4px;
+  padding:52px 48px 40px;max-width:520px;width:92%;text-align:center;
+  animation:vipIn .55s cubic-bezier(.16,1,.3,1) both;
+  box-shadow:0 0 0 1px rgba(212,175,55,.12),0 0 80px rgba(212,175,55,.08),0 40px 100px rgba(0,0,0,.98),inset 0 1px 0 rgba(212,175,55,.15);
+}
+@keyframes vipIn{from{transform:translateY(32px) scale(.96);opacity:0}to{transform:translateY(0) scale(1);opacity:1}}
+.vip-modal::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(212,175,55,.9) 30%,rgba(255,235,150,.6) 50%,rgba(212,175,55,.9) 70%,transparent);}
+.vip-modal::after{content:'';position:absolute;bottom:0;left:20%;right:20%;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(212,175,55,.3),transparent);}
+.vip-particles{position:absolute;inset:0;pointer-events:none;overflow:hidden;}
+.vip-p{position:absolute;border-radius:50%;background:rgba(212,175,55,.5);animation:vipFloat linear infinite;}
+@keyframes vipFloat{0%{transform:translateY(100%) scale(0);opacity:0}15%{opacity:.6}85%{opacity:.15}100%{transform:translateY(-110vh) scale(.5);opacity:0}}
+.vip-monogram{width:72px;height:72px;border-radius:2px;border:1px solid rgba(212,175,55,.5);
+  display:flex;align-items:center;justify-content:center;margin:0 auto 28px;position:relative;
+  background:linear-gradient(145deg,rgba(212,175,55,.08),rgba(212,175,55,.03));}
+.vip-monogram::before,.vip-monogram::after{content:'';position:absolute;width:8px;height:8px;border-color:rgba(212,175,55,.8);border-style:solid;}
+.vip-monogram::before{top:-1px;left:-1px;border-width:1px 0 0 1px;}
+.vip-monogram::after{bottom:-1px;right:-1px;border-width:0 1px 1px 0;}
+.vip-monogram-inner{width:2px;height:32px;background:linear-gradient(180deg,transparent,rgba(212,175,55,.8),transparent);position:relative;}
+.vip-monogram-inner::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:32px;height:2px;background:linear-gradient(90deg,transparent,rgba(212,175,55,.8),transparent);}
+.vip-eyebrow{font-size:9px;font-weight:500;letter-spacing:4px;text-transform:uppercase;
+  color:rgba(212,175,55,.6);margin-bottom:20px;display:flex;align-items:center;justify-content:center;gap:12px;}
+.vip-eyebrow::before,.vip-eyebrow::after{content:'';width:32px;height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,.4));}
+.vip-eyebrow::after{transform:scaleX(-1);}
+.vip-title{font-size:11px;font-weight:500;letter-spacing:3px;text-transform:uppercase;color:rgba(212,175,55,.5);margin-bottom:24px;}
+.vip-msg{font-size:16px;color:rgba(230,220,200,.88);line-height:1.85;margin-bottom:32px;font-weight:300;letter-spacing:.2px;}
+.vip-msg strong{color:rgba(212,175,55,.95);font-weight:500;text-shadow:0 0 20px rgba(212,175,55,.3);}
+.vip-msg em{display:block;font-style:normal;font-size:12px;letter-spacing:3px;margin-top:12px;color:rgba(212,175,55,.6);text-transform:uppercase;}
+.vip-line{display:flex;align-items:center;gap:10px;margin:0 auto 28px;width:60%;}
+.vip-line::before,.vip-line::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(212,175,55,.4));}
+.vip-line::after{transform:scaleX(-1);}
+.vip-line-diamond{width:5px;height:5px;background:rgba(212,175,55,.7);transform:rotate(45deg);flex-shrink:0;}
+.vip-btn{background:transparent;border:1px solid rgba(212,175,55,.5);color:rgba(212,175,55,.9);
+  border-radius:2px;padding:13px 44px;font-size:11px;font-weight:500;font-family:'Poppins',sans-serif;
+  cursor:pointer;transition:all .25s;letter-spacing:2.5px;text-transform:uppercase;}
+.vip-btn:hover{background:rgba(212,175,55,.08);border-color:rgba(212,175,55,.9);color:rgba(255,240,180,.95);
+  box-shadow:0 0 30px rgba(212,175,55,.15),inset 0 0 20px rgba(212,175,55,.03);}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <button class="tb-back" onclick="goBack()">
+    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    Volver
+  </button>
+  <div class="tb-brand">
+    <div class="tb-dot"></div>
+    <img id="topbarLogo" src="" alt="Tododrogas" style="height:26px;object-fit:contain;display:none;filter:drop-shadow(0 0 8px rgba(0,229,255,.3));">
+    <span class="tb-name" id="topbarName">Tododrogas</span>
+  </div>
+  <span id="clockDisplay" class="tb-time">--:--</span>
+</div>
+
+<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+<div class="step-dots" id="stepDots"></div>
+
+<div class="slides-wrap" id="slidesWrap">
+
+  <!-- SLIDE 0: SEDE + DATOS -->
+  <div class="slide slide-dark">
+    <div class="sgrid"></div>
+    <div class="eyebrow">Paso 1 de 7</div>
+    <h1 class="slide-title">¿En qué sede fue<br>atendido?</h1>
+    <p class="slide-sub">Indique la sede que visitó y sus datos de contacto para enviarle la confirmación de su encuesta.</p>
+
+    <div style="width:100%;max-width:520px;margin-bottom:18px;">
+      <div class="field-label" style="margin-bottom:8px;">📍 Sede visitada <span class="req">*</span></div>
+      <button class="sede-geo-btn" id="btnGeo" onclick="detectarSedePorGeoEnc()" type="button">
+        <div class="sede-geo-icon">
+          <div class="sede-geo-ring"></div>
+          <div class="sede-geo-ring2"></div>
+          <div class="sede-geo-circle" id="geoCircle">
+            <svg width="18" height="18" fill="none" stroke="#00b0ff" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>
+          </div>
+        </div>
+        <div>
+          <div id="geoLabel" style="font-size:14px;font-weight:500;color:#00b0ff;letter-spacing:.2px;">Detectar mi sede automáticamente</div>
+          <div id="geoSub" style="font-size:11px;color:rgba(0,176,255,.55);margin-top:2px;">Permite el acceso a tu ubicación</div>
+        </div>
+      </button>
+      <button class="sede-manual-btn" id="btnManual" onclick="mostrarBuscadorManualEnc()" type="button">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Ingresar manualmente
+      </button>
+      <div class="sede-wrap" id="sedeWrap" style="display:none;">
+        <input class="pqr-input" type="text" id="inputSede"
+          placeholder="Escribe el municipio o nombre del servicio…"
+          oninput="buscarSede(this.value)" autocomplete="off">
+        <div class="sede-dd" id="sedeDd" style="display:none;"></div>
+      </div>
+      <div class="sede-badge" id="sedeBadge">
+        <div class="sede-badge-icon" style="display:none;"></div>
+        <div class="sede-badge-info">
+          <div class="sede-badge-name" id="sbName">—</div>
+          <div class="sede-badge-sub"  id="sbSub">—</div>
+        </div>
+        <button class="sede-badge-change" onclick="cambiarSede()">Cambiar</button>
+      </div>
+      <div class="err-msg" id="errSede">Seleccione la sede donde fue atendido</div>
+    </div>
+
+    <div class="data-card">
+      <div class="data-card-title">👤 Datos de contacto</div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div class="field-row">
+          <div class="field-wrap">
+            <div class="field-label">Nombre completo <span class="req">*</span></div>
+            <input class="pqr-input" type="text" id="inNombre" placeholder="NOMBRE Y APELLIDO">
+            <div class="err-msg" id="errNombre">Ingrese su nombre</div>
+          </div>
+          <div class="field-wrap">
+            <div class="field-label">Documento <span class="req">*</span></div>
+            <input class="pqr-input" type="text" id="inDoc" placeholder="CÉDULA / NIT">
+            <div class="err-msg" id="errDoc">Ingrese su documento</div>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-wrap">
+            <div class="field-label">Celular <span class="req">*</span></div>
+            <input class="pqr-input" type="tel" id="inTel" placeholder="300 123 4567">
+            <div class="err-msg" id="errTel">Ingrese su número de celular</div>
+          </div>
+          <div class="field-wrap">
+            <div class="field-label">Correo electrónico
+              <span style="font-size:10px;color:rgba(255,255,255,.28);font-weight:400;">(opcional)</span>
+            </div>
+            <input class="pqr-input" type="email" id="inCorreo" placeholder="ejemplo@correo.com">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:12px;"></div>
+
+    <!-- ── AUTORIZACIÓN TRATAMIENTO DE DATOS ── -->
+    <div style="width:100%;max-width:540px;background:rgba(0,176,255,.06);border:1px solid rgba(0,176,255,.2);border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+      <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;user-select:none;">
+        <input type="checkbox" id="chkPoliticaEnc" onchange="checkBtn0()"
+          style="width:16px;height:16px;margin-top:2px;flex-shrink:0;accent-color:#2979ff;cursor:pointer;">
+        <span style="font-size:11px;color:rgba(190,225,255,.75);line-height:1.65;">
+          Autorizo el tratamiento de mis datos personales conforme a la
+          <a href="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_01_Tratamiento_Datos_V03.pdf"
+             target="_blank" rel="noopener"
+             style="color:#00b0ff;text-decoration:underline;font-weight:600;">
+            Política de Tratamiento de Datos Personales
+          </a>
+          de Tododrogas CIA S.A.S. <span style="color:rgba(239,68,68,.8);">*</span>
+        </span>
+      </label>
+    </div>
+
+    <button class="btn-next" id="btn0" disabled>
+      Iniciar encuesta
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+  </div>
+
+  <!-- SLIDES 1-5 generados por JS -->
+
+  <!-- SLIDE 6: COMENTARIO -->
+  <div class="slide slide-dark" id="slideComment">
+    <div class="sgrid"></div>
+    <div class="eyebrow">Paso 7 de 7</div>
+    <h1 class="slide-title">¿Desea agregar<br>algún comentario?</h1>
+    <p class="slide-sub">Su observación nos permite implementar mejoras concretas. Este campo es opcional.</p>
+    <div class="q-progress" id="qpComment"></div>
+    <textarea class="comment-textarea" id="commentInp" rows="4"
+      placeholder="Escriba cualquier observación, sugerencia o reconocimiento que desee compartir…"></textarea>
+    <div style="height:16px;"></div>
+    <button class="btn-submit" id="submitBtn" onclick="submitSurvey()">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Enviar calificación
+    </button>
+    <p style="font-size:11px;color:rgba(255,255,255,.22);margin-top:10px;text-align:center;">
+      El comentario es opcional. Puede enviar sin completarlo.
+    </p>
+  </div>
+
+</div>
+
+<!-- SUCCESS -->
+<div class="success-overlay" id="successOverlay">
+  <div class="success-card">
+    <div id="sLogoWrap" style="margin-bottom:14px;display:none;">
+      <div style="background:#fff;border-radius:10px;padding:8px 18px;display:inline-block">
+        <img id="sLogo" src="" alt="Tododrogas" style="height:32px;object-fit:contain;display:block">
+      </div>
+    </div>
+    <div class="success-glow">✅</div>
+    <h2>¡Encuesta registrada!</h2>
+    <p>Su calificación ha sido recibida exitosamente.<br>Gracias por contribuir a la mejora de nuestro servicio.</p>
+    <div class="score-badge">
+      <div class="score-num" id="sAvg">—</div>
+      <div class="score-lbl">Promedio<br>/ 3.0</div>
+    </div>
+    <div style="font-size:12px;color:rgba(203,213,225,.65);margin-bottom:10px;" id="sSede"></div>
+    <div class="success-chips" id="sChips"></div>
+    <div class="confirm-email" id="sEmailLine" style="display:none;">
+      📩 Confirmación enviada a <span id="sEmail">—</span>
+    </div>
+    <div class="countdown-text" id="sCountdown">Volviendo al inicio en 10s…</div>
+    <button class="btn-home" onclick="irInicio()">🏠 Ir al inicio</button>
+  </div>
+</div>
+
+
+<!-- MODAL ERROR VALIDACIÓN -->
+<div class="val-modal-bg" id="valModalBg">
+  <div class="val-modal">
+    <div class="val-modal-icon">🚫</div>
+    <div class="val-modal-title">Acceso no autorizado</div>
+    <div class="val-modal-msg" id="valModalMsg">—</div>
+    <div class="val-modal-bar"><div class="val-modal-bar-fill" id="valModalBar"></div></div>
+    <div class="val-modal-countdown" id="valModalCountdown">Cerrando en 15s…</div>
+    <button class="val-modal-btn" onclick="cerrarValModal()">Cerrar</button>
+  </div>
+</div>
+
+
+<!-- MODAL VIP EJECUTIVO -->
+<div class="vip-modal-bg" id="vipModalBg">
+  <div class="vip-modal">
+    <div class="vip-particles" id="vipParticles"></div>
+    <div class="vip-monogram"><div class="vip-monogram-inner"></div></div>
+    <div class="vip-eyebrow">Nova TD · Protocolo VIP</div>
+    <div class="vip-title">Identidad verificada</div>
+    <div class="vip-msg" id="vipMsg">—</div>
+    <div class="vip-line"><div class="vip-line-diamond"></div></div>
+    <button class="vip-btn" onclick="cerrarVipModal()">Acceder al sistema</button>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+
+// ══════════════════════════════════════════
+// VALIDACIÓN PACIENTE vía validar-paciente.php
+// ══════════════════════════════════════════
+async function validarPaciente(cedula, nombre, telefono){
+  try{
+    const r = await fetch('/validar-paciente.php',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cedula, nombre, telefono})
+    });
+    if(!r.ok) return {ok:true, razon:'error_api'};
+    return await r.json();
+  }catch(e){
+    return {ok:true, razon:'error_red'};
+  }
 }
 
-// ── LEER INPUT ────────────────────────────────────────────────────────
-$body = json_decode(file_get_contents('php://input'), true);
-if (!$body) { http_response_code(400); echo json_encode(['error' => 'Invalid JSON']); exit; }
+const LOGO_URL='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+(function(){
+  const tb=document.getElementById('topbarLogo'),tn=document.getElementById('topbarName');
+  const sl=document.getElementById('sLogo'),sw=document.getElementById('sLogoWrap');
+  if(tb){tb.src=LOGO_URL;tb.style.display='block';}
+  if(tn)tn.style.display='none';
+  if(sl){sl.src=LOGO_URL;sl.onload=()=>{const sw=document.getElementById('sLogoWrap');if(sw)sw.style.display='block';};}
+  if(sw)sw.style.display='block';
+})();
+(function clock(){
+  const el=document.getElementById('clockDisplay');
+  const t=()=>el.textContent=new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  t();setInterval(t,10000);
+})();
 
-date_default_timezone_set('America/Bogota');
-$now      = date('c');
-$fecha_fmt = date('d/m/Y H:i');
-
-$nombre        = trim($body['nombre']        ?? '');
-$correo        = trim($body['correo']        ?? '');
-$telefono      = trim($body['telefono']      ?? '');
-$documento     = trim($body['documento']     ?? '');
-$comentario    = trim($body['comentario']    ?? '');
-$sede_id       = trim($body['sede_id']       ?? '');
-$sede_nombre   = trim($body['sede_nombre']   ?? '');
-$sede_ciudad   = trim($body['sede_ciudad']   ?? '');
-$sede_direccion = trim($body['sede_direccion'] ?? '');
-$canal         = trim($body['canal']         ?? 'web');
-
-$instalaciones = intval($body['instalaciones'] ?? 0);
-$atencion      = intval($body['atencion']      ?? 0);
-$tiempos       = intval($body['tiempos']       ?? 0);
-$medicamentos  = intval($body['medicamentos']  ?? 0);
-$recomendacion = intval($body['recomendacion'] ?? 0);
-$promedio      = floatval($body['promedio']    ?? 0);
-$calificacion  = (int) round($promedio);
-
-// Ticket encuesta
-$fecha_enc  = date('Ymd');
-$rand_enc   = str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
-$ticket_enc = "ENC-{$fecha_enc}-{$rand_enc}";
-
-// Clasificacion sin emojis
-$prio_enc  = $calificacion >= 3 ? 'baja'     : ($calificacion >= 2 ? 'media'   : 'alta');
-$sent_enc  = $calificacion >= 3 ? 'positivo' : ($calificacion >= 2 ? 'neutro'  : 'negativo');
-$color_cal = $calificacion >= 3 ? '#0f5c2e'  : ($calificacion >= 2 ? '#7a5200' : '#8a1a1a');
-$bg_cal    = $calificacion >= 3 ? '#dcfce7'  : ($calificacion >= 2 ? '#fef9c3' : '#fee2e2');
-$nivel_cal = $calificacion >= 3 ? 'SATISFACTORIO' : ($calificacion >= 2 ? 'NEUTRO' : 'INSATISFACTORIO');
-
-// ── PASO 1: INSERTAR EN encuestas_satisfaccion ────────────────────────
-// Leer origen del canal (viene del frontend)
-$origen_enc = trim($body['origen'] ?? $body['canal'] ?? 'web');
-
-$payload = [
-    'calificacion'    => $calificacion,
-    'comentario'      => $comentario ?: null,
-    'sede_id'         => $sede_id    ?: null,
-    'canal'           => $canal,
-    'origen'          => $origen_enc,   // web | qr | nova_web | nova_directo
-    'nombre'          => trim($body['nombre'] ?? '') ?: null,
-    'cedula'          => trim($body['cedula'] ?? $body['documento'] ?? '') ?: null,
-    'eps'             => trim($body['eps']    ?? '') ?: null,
-    'ip_origen'       => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? 'web',
-    'ticket_id'       => $ticket_enc,
-    'correo_id'       => null,
-    'created_at'      => $now,
+const SEDES=[
+  {id:'abejorral',municipio:'ABEJORRAL',nombre:'SERVICIO FARMACÉUTICO TODODROGAS ABEJORRAL',direccion:'CARRERA SANTANDER # 48 - 11'},
+  {id:'amaga',municipio:'AMAGA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS AMAGA',direccion:'CALLE 51 N 51 BLOQUE 1 PRIMER PISO'},
+  {id:'andes',municipio:'ANDES',nombre:'SERVICIO FARMACÉUTICO TODODROGAS ANDES',direccion:'CARRERA 50 # 49-68 LOCAL 102'},
+  {id:'apartado',municipio:'APARTADÓ',nombre:'SERVICIO FARMACÉUTICO TODODROGAS APARTADO',direccion:'CARRERA 102 # 92 - 16/18'},
+  {id:'carepa',municipio:'CAREPA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CAREPA',direccion:'CALLE 81 CON CARRERA 74-12/14'},
+  {id:'caucasia',municipio:'CAUCASIA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CAUCASIA',direccion:'CARRERA 20 # 3-76 CC CAUCA CENTRO'},
+  {id:'chigorodo',municipio:'CHIGORODÓ',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CHIGORODO',direccion:'CALLE 95 # 97 04 LOCAL 2'},
+  {id:'ciudad-bolivar',municipio:'CIUDAD BOLÍVAR',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CIUDAD BOLIVAR',direccion:'CALLE 49 # 50-57 LOCAL 104'},
+  {id:'el-bagre',municipio:'EL BAGRE',nombre:'SERVICIO FARMACÉUTICO TODODROGAS EL BAGRE',direccion:'CALLE 50 #47A-31'},
+  {id:'medellin',municipio:'MEDELLÍN',nombre:'SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN',direccion:'CARRERA 49 # 48-57'},
+  {id:'medellin2',municipio:'MEDELLÍN',nombre:'SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN 2',direccion:'CALLE 48 # 48-03'},
+  {id:'puerto-berrio',municipio:'PUERTO BERRÍO',nombre:'SERVICIO FARMACÉUTICO TODODROGAS PUERTO BERRIO',direccion:'CALLE 48 # 4-56 BARRIO EL HOYO'},
+  {id:'santa-barbara',municipio:'SANTA BÁRBARA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS SANTA BARBARA',direccion:'CARRERA 50 # 48-17'},
+  {id:'santa-fe-antioquia',municipio:'SANTA FE DE ANTIOQUIA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS SANTA FE',direccion:'CALLE 10 # 7-49'},
+  {id:'segovia',municipio:'SEGOVIA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS SEGOVIA',direccion:'CALLE 52 N 48-69'},
+  {id:'tamesis',municipio:'TÁMESIS',nombre:'SERVICIO FARMACÉUTICO TODODROGAS TAMESIS',direccion:'CARRERA 10 # 9-47'},
+  {id:'turbo',municipio:'TURBO',nombre:'SERVICIO FARMACÉUTICO TODODROGAS TURBO',direccion:'CALLE 101 # 15-14'},
+  {id:'yarumal',municipio:'YARUMAL',nombre:'SERVICIO FARMACÉUTICO TODODROGAS YARUMAL',direccion:'CARRERA 21 # 17-17 MALL CUBOX'},
+  {id:'yolombo',municipio:'YOLOMBÓ',nombre:'SERVICIO FARMACÉUTICO TODODROGAS YOLOMBO',direccion:'CARRERA 24 CALLE 18-04'},
+  {id:'zaragoza',municipio:'ZARAGOZA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS ZARAGOZA',direccion:'CALLE PRINCIPAL SAN GREGORIO 36-20'},
+  {id:'nechi',municipio:'NECHÍ',nombre:'SERVICIO FARMACÉUTICO TODODROGAS NECHI',direccion:'CL 25 N.º 31A – 16'},
+  {id:'rionegro',municipio:'RIONEGRO',nombre:'SERVICIO FARMACÉUTICO TODODROGAS RIONEGRO',direccion:'CL 52 #45-70 Local 2006'},
+  {id:'la-ceja',municipio:'LA CEJA',nombre:'SERVICIO FARMACÉUTICO TODODROGAS CEJA',direccion:'CARRERA 24 19 40'},
+  {id:'sopetran',municipio:'SOPETRÁN',nombre:'SERVICIO FARMACEUTICO TODO DROGAS SOPETRAN',direccion:'CARRERA 10 # 11-65'},
+  {id:'amalfi',municipio:'AMALFI',nombre:'DROGUERIA FARMAVIDA',direccion:'CALLE 23 # 29-54'},
+  {id:'angostura',municipio:'ANGOSTURA',nombre:'DROGUERIA COOPRIACHON ANGOSTURA',direccion:'CARRERA 10 # 9-20'},
+  {id:'anori',municipio:'ANORÍ',nombre:'DROGUERIA SAN RAFAEL ANORI',direccion:'AVENIDA 31 n 30-16'},
+  {id:'frontino',municipio:'FRONTINO',nombre:'DROGUERIA FRONTIFARMA',direccion:'CARRERA 30 #38-47'},
+  {id:'mutata',municipio:'MUTATÁ',nombre:'DROGUERIA FAMILIAR EDDY',direccion:'CARRERA 10 # 10-41-43'},
+  {id:'necocli',municipio:'NECOCLÍ',nombre:'DROGUERIA LA PILDORA',direccion:'CALLE 51 # 48-38'},
+  {id:'remedios',municipio:'REMEDIOS',nombre:'FARMAX LA DROGUERIA S.A.S',direccion:'CALLE 11 # 8-12'},
+  {id:'giraldo',municipio:'GIRALDO',nombre:'HOSPITAL SAN ISIDRO ESE',direccion:'CARRERA 10 # 11-05'},
+  {id:'dabeiba',municipio:'DABEIBA',nombre:'DROGUERIA DONDE NATALIA',direccion:'CARRERA 10 # 6-47'},
+  {id:'hispania',municipio:'HISPANIA',nombre:'DROGUERIA BIOMEDIC',direccion:'CALLE 50 TOLEDO # 50-12'},
+  {id:'jardin',municipio:'JARDÍN',nombre:'DROGUERIA MACRODESCUENTOS # 9',direccion:'CALLE 9 # 2-59'},
+  {id:'liborina',municipio:'LIBORINA',nombre:'DROGUERIA SAN GABRIEL',direccion:'CARRERA 9 #8-4'},
+  {id:'sabanalarga',municipio:'SABANALARGA',nombre:'DROGUERIA LA AMISTAD',direccion:'CALLE 17 # 18-06'},
+  {id:'caceres',municipio:'CÁCERES',nombre:'DROGUERIA BIENESTAR CACERES',direccion:'CALLE 49 #51-36'},
+  {id:'jerico',municipio:'JERICÓ',nombre:'DROGUERIA SAN ANTONIO JERICO',direccion:'CARRERA 5 #6-09'},
+  {id:'taraza',municipio:'TARAZÁ',nombre:'DROGUERIA KIRIUS LA BOMBA',direccion:'CARRERA 28 #27-26'},
+  {id:'barbosa',municipio:'BARBOSA',nombre:'DROGUERIA LA SOLIDARIA',direccion:'CALLE 15 No. 17-22'},
+  {id:'girardota',municipio:'GIRARDOTA',nombre:'DROGUERIA FAMILIAR E&M',direccion:'CARRERA 15 No. 5-42'},
+  {id:'rionegro2',municipio:'RIONEGRO',nombre:'DROGUERIAS ORIENTE',direccion:'CARRERA 48 # 51-15'},
+  {id:'concordia',municipio:'CONCORDIA',nombre:'DROGUERIA LA NUESTRA',direccion:'CALLE 19 No. 19-30'},
+  {id:'copacabana',municipio:'COPACABANA',nombre:'DROGUERIA ALMA SALUD 1',direccion:'CALLE 40 No. 84-18'},
+  {id:'sabaneta',municipio:'SABANETA',nombre:'DROGUERIA INNOVA FARMA',direccion:'CALLE 73 sur # 46-09'},
 ];
 
-$sb_result   = sbPost($SB_URL, $SB_KEY, 'encuestas_satisfaccion', $payload);
-$encuesta_id = null;
-$saved       = ($sb_result['code'] >= 200 && $sb_result['code'] < 300);
-if ($saved) {
-    $inserted    = json_decode($sb_result['body'], true);
-    $encuesta_id = $inserted[0]['id'] ?? null;
-}
-
-// ── HELPER: construir filas de calificaciones ─────────────────────────
-$labels = [
-    'Instalaciones y limpieza',
-    'Atencion al cliente',
-    'Tiempos de espera',
-    'Disponibilidad de medicamentos',
-    'Recomendaria el servicio',
+const QUESTIONS=[
+  {id:'instalaciones',icon:'🏥',label:'Instalaciones y limpieza',sub:'¿Cómo encontró el estado y aseo de nuestras instalaciones?',labels:['Insatisfecho','Neutral','Satisfecho']},
+  {id:'atencion',icon:'🤝',label:'Atención del personal',sub:'¿Cómo califica el trato y profesionalismo de nuestro equipo?',labels:['Insatisfecho','Neutral','Satisfecho']},
+  {id:'tiempos',icon:'⏱',label:'Tiempos de espera',sub:'¿La atención fue oportuna y sin esperas innecesarias?',labels:['Insatisfecho','Neutral','Satisfecho']},
+  {id:'medicamentos',icon:'💊',label:'Disponibilidad de medicamentos',sub:'¿Encontró los medicamentos que necesitaba?',labels:['Insatisfecho','Neutral','Satisfecho']},
+  {id:'recomendacion',icon:'⭐',label:'¿Recomendaría nuestro servicio?',sub:'¿Con qué probabilidad recomendaría Tododrogas a un familiar o amigo?',labels:['No recomendaría','Tal vez','Definitivamente sí']},
 ];
-$valores = [$instalaciones, $atencion, $tiempos, $medicamentos, $recomendacion];
-
-// ── Filas para correo al USUARIO (fondo blanco, barras azul marino) ───
-$filas_usuario = '';
-foreach ($labels as $i => $label) {
-    $v = $valores[$i];
-    $barras = '';
-    for ($b = 1; $b <= 3; $b++) {
-        $col = $b <= $v ? '#0c2d5e' : '#d8e4f0';
-        $barras .= "<span style='display:inline-block;width:18px;height:3px;background:{$col};border-radius:2px;margin-right:2px'></span>";
-    }
-    $vc = $v >= 4 ? '#0f5c2e' : ($v >= 3 ? '#7a5200' : '#8a1a1a');
-    $bb = ($i < count($labels)-1) ? 'border-bottom:1px solid #e8eef6;' : '';
-    $filas_usuario .= "
-    <tr>
-      <td style='padding:11px 0;font-size:12px;color:#2a3a4a;width:42%;{$bb}'>{$label}</td>
-      <td style='padding:11px 14px 11px 0;width:38%;{$bb}'>{$barras}</td>
-      <td style='padding:11px 0;font-size:12px;font-weight:500;text-align:right;color:{$vc};{$bb}'>{$v} / 3</td>
-    </tr>";
-}
-
-// ── Filas para correo INTERNO a pqrsfd ────────────────────────────────
-$filas_interno = '';
-foreach ($labels as $i => $label) {
-    $v = $valores[$i];
-    $barras = '';
-    for ($b = 1; $b <= 3; $b++) {
-        $col = $b <= $v ? '#2563eb' : '#d8e4f0';
-        $barras .= "<span style='display:inline-block;width:16px;height:5px;background:{$col};border-radius:3px;margin-right:2px'></span>";
-    }
-    $vc = $v >= 4 ? '#0f5c2e' : ($v >= 3 ? '#7a5200' : '#8a1a1a');
-    $bb = ($i < count($labels)-1) ? 'border-bottom:1px solid #e8eef6;' : '';
-    $filas_interno .= "
-      <tr>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:200px;{$bb}'>{$label}</td>
-        <td style='padding:9px 14px;{$bb}'>{$barras}</td>
-        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:{$vc};text-align:right;{$bb}'>{$v} / 3</td>
-      </tr>";
-}
-
-// ── PASO 2: CORREO AL USUARIO ─────────────────────────────────────────
-$correo_enviado = false;
-$token = null;
-
-if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
-    $token = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
-
-    if ($token) {
-        $nombre_first = explode(' ', $nombre)[0];
-
-        $bloque_comentario_u = '';
-        if ($comentario) {
-            $bloque_comentario_u = "
-            <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:24px'>
-              <p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Observacion del usuario</p>
-              <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . htmlspecialchars($comentario, ENT_QUOTES) . "</p>
-            </div>";
-        }
-
-        $cuerpo_usuario = "
-<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
-<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
-<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
-<tr><td align='center'>
-<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
-
-  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
-    <img src='{$LOGO_URL}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 12px;filter:brightness(0) invert(1);opacity:.92'>
-    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Evaluacion de experiencia de usuario &middot; Servicio Farmaceutico</p>
-  </td></tr>
-
-  <tr><td style='background:#0a2448;padding:20px 44px;text-align:center'>
-    <p style='color:#6a90b8;margin:0;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Registro</p>
-    <p style='color:#ffffff;margin:8px 0 4px;font-size:22px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_enc}</p>
-    <p style='color:#4a6a90;margin:0;font-size:10px'>{$fecha_fmt} &middot; {$sede_nombre}</p>
-  </td></tr>
-
-  <tr><td style='background:#ffffff;padding:36px 44px'>
-
-    <p style='margin:0 0 10px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Estimado/a, <strong style='font-weight:500;color:#0c2d5e'>{$nombre_first}</strong>,</p>
-    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Hemos recibido su evaluacion de experiencia. Su retroalimentacion es parte fundamental de nuestro proceso de mejora continua. Cada respuesta es revisada de manera directa por el equipo de calidad de servicio.</p>
-
-    <!-- DIVIDER CALIFICACION GLOBAL -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
-      <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Calificacion global</td>
-        <td style='border-top:1px solid #d4dce8'></td>
-      </tr>
-    </table>
-
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
-      <tr>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #e8eef6'>Sede</td>
-        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . "</td>
-      </tr>
-      <tr style='background:#f6f9fd'>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Resultado</td>
-        <td style='padding:9px 14px'>
-          <span style='background:{$bg_cal};color:{$color_cal};padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:.5px'>{$nivel_cal}</span>
-        </td>
-      </tr>
-    </table>
-
-    <!-- DIVIDER INDICADORES -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
-      <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Resumen de indicadores</td>
-        <td style='border-top:1px solid #d4dce8'></td>
-      </tr>
-    </table>
-
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;margin-bottom:24px'>
-      {$filas_usuario}
-    </table>
-
-    {$bloque_comentario_u}
-
-    <!-- BLOQUE QUE SUCEDE -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:28px'>
-      <tr><td style='padding:22px 24px'>
-        <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:16px'>
-          <tr>
-            <td style='width:20px;border-top:2px solid #0c2d5e;vertical-align:middle'></td>
-            <td style='padding-left:10px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:500'>Que sucede con su evaluacion</td>
-          </tr>
-        </table>
-        <table width='100%' cellpadding='0' cellspacing='0'>
-          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>01</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Su calificacion es revisada por el equipo de calidad de la sede.</td></tr>
-          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top;padding:0 0 10px'>02</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300;padding:0 0 10px'>Los indicadores con oportunidad de mejora son escalados al area correspondiente.</td></tr>
-          <tr><td style='width:24px;font-size:10px;font-weight:500;color:#0c2d5e;vertical-align:top'>03</td><td style='font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Si su caso requiere seguimiento, nos pondremos en contacto.</td></tr>
-        </table>
-      </td></tr>
-    </table>
-    
-    <!-- BLOQUE NOVA TD -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:linear-gradient(135deg,#0c2d5e 0%,#1a4a8a 100%);border-radius:2px;margin-bottom:24px'>
-      <tr><td style='padding:26px 28px'>
-        <table width='100%' cellpadding='0' cellspacing='0'>
-          <tr>
-            <td style='vertical-align:middle'>
-              <img src='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png' alt='Nova TD' style='height:42px;max-width:130px;object-fit:contain;display:block;margin-bottom:14px'>
-              <p style='margin:0 0 5px;font-size:14px;color:#ffffff;font-weight:600;letter-spacing:.3px;line-height:1.4'>¿Tiene otra consulta? Nova TD está aquí para ayudarle.</p>
-              <p style='margin:0 0 16px;font-size:11px;color:#7aaad8;line-height:1.8;font-weight:300'>Su asistente virtual disponible <strong style='color:#aaccee;font-weight:500'>las 24 horas, los 7 días de la semana</strong>. Sin filas, sin esperas — solo respuestas rápidas y amables cuando las necesite:</p>
-              <table cellpadding='0' cellspacing='0' style='margin-bottom:18px'>
-                <tr><td style='font-size:11px;color:#9abcd8;line-height:1.9;font-weight:300'>📍&nbsp; Encuentre el punto Tododrogas más cercano a usted<br>💊&nbsp; Consulte la disponibilidad de sus medicamentos<br>📋&nbsp; Radique una PQRSFD en segundos, sin formularios<br>⭐&nbsp; Comparta su experiencia con nuestra encuesta de satisfacción<br>💬&nbsp; Resuelva dudas sobre su servicio farmacéutico</td></tr>
-              </table>
-              <a href='https://tododrogas.online/nova.html' style='display:inline-block;background:#ffffff;color:#0c2d5e;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;padding:11px 24px;border-radius:2px'>Hablar con Nova TD &rarr;</a>
-              <p style='margin:12px 0 0;font-size:10px;color:#4a6a90;letter-spacing:.3px'>tododrogas.online/nova.html</p>
-            </td>
-          </tr>
-        </table>
-      </td></tr>
-    </table>
-    
-    <!-- DIVIDER CANALES -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
-      <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Canales de atencion</td>
-        <td style='border-top:1px solid #d4dce8'></td>
-      </tr>
-    </table>
-
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8'>
-      <tr>
-        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;border-right:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>WhatsApp</p>
-          <a href='https://wa.me/573043412431' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>304 341 2431</a>
-        </td>
-        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX Atencion</p>
-          <a href='tel:6043222432' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>604 322 2432 Op. 2</a>
-        </td>
-      </tr>
-      <tr>
-        <td width='50%' style='padding:16px 18px;border-right:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Correo PQRSFD</p>
-          <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
-        </td>
-        <td width='50%' style='padding:16px 18px;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Página web</p>
-          <a href='https://www.tododrogas.com.co/' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>www.tododrogas.com.co</a>
-        </td>
-      </tr>
-    </table>
-
-  </td></tr>
-
-  <tr><td style='background:#0c2d5e;padding:18px 44px'>
-    <table width='100%' cellpadding='0' cellspacing='0'>
-      <tr>
-        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente</td>
-        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Sistema PQRSFD<br>{$ticket_enc}</td>
-      </tr>
-    </table>
-  </td></tr>
-
-</table></td></tr></table>
-</body></html>";
-
-        $correo_enviado = sendMail($token, $GRAPH_USER_ID, [
-            'subject'      => "Su evaluacion fue recibida · {$ticket_enc} · Tododrogas CIA SAS",
-            'importance'   => 'normal',
-            'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_usuario],
-            'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
-        ]);
-    }
-}
-
-// ── PASO 3: CORREO INTERNO A pqrsfd ──────────────────────────────────
-if (!$token) {
-    $token = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
-}
-
-if ($token) {
-    $bloque_comentario_i = '';
-    if ($comentario) {
-        $bloque_comentario_i = "
-      <tr>
-        <td colspan='3' style='padding:12px 14px;background:#f6f9fd;border-top:2px solid #0c2d5e'>
-          <p style='margin:0 0 6px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>Observacion del usuario</p>
-          <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . htmlspecialchars($comentario, ENT_QUOTES) . "</p>
-        </td>
-      </tr>";
-    }
-
-    $cuerpo_interno = "
-<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
-<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
-<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
-<tr><td align='center'>
-<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
-
-  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
-    <img src='{$LOGO_URL}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 12px;filter:brightness(0) invert(1);opacity:.92'>
-    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Nueva encuesta de satisfaccion recibida &middot; Plataforma Nova TD</p>
-  </td></tr>
-
-  <tr><td style='background:#0a2448;padding:20px 44px;text-align:center'>
-    <p style='color:#6a90b8;margin:0;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Numero de registro</p>
-    <p style='color:#ffffff;margin:8px 0 4px;font-size:22px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_enc}</p>
-    <p style='color:#4a6a90;margin:0;font-size:10px'>{$fecha_fmt}</p>
-  </td></tr>
-
-  <tr><td style='background:#ffffff;padding:36px 44px'>
-
-    <p style='margin:0 0 24px;font-size:14px;color:#1a2535;line-height:1.8;font-weight:300'>Se ha recibido una nueva encuesta de satisfaccion mediante la <strong style='font-weight:500;color:#0c2d5e'>Plataforma Inteligente Nova TD</strong>.</p>
-
-    <!-- DIVIDER RESULTADO -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
-      <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Resultado de la evaluacion</td>
-        <td style='border-top:1px solid #d4dce8'></td>
-      </tr>
-    </table>
-
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
-      <tr style='background:#f6f9fd'>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #d4dce8'>Sede</td>
-        <td colspan='2' style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . ($sede_direccion ? "<br><span style='font-size:11px;color:#7a90a8;font-weight:400'>{$sede_direccion}</span>" : "") . "</td>
-      </tr>
-      <tr>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Promedio</td>
-        <td colspan='2' style='padding:9px 14px;font-size:14px;font-weight:700;color:{$color_cal};border-bottom:1px solid #e8eef6'>{$promedio} / 3.0</td>
-      </tr>
-      <tr style='background:#f6f9fd'>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Resultado</td>
-        <td colspan='2' style='padding:9px 14px;border-bottom:1px solid #d4dce8'>
-          <span style='background:{$bg_cal};color:{$color_cal};padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:.5px'>{$nivel_cal}</span>
-        </td>
-      </tr>
-      <tr>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Prioridad</td>
-        <td colspan='2' style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>" . mb_strtoupper($prio_enc, 'UTF-8') . "</td>
-      </tr>
-      <tr style='background:#f6f9fd'>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Fecha</td>
-        <td colspan='2' style='padding:9px 14px;font-size:12px;color:#2a3a4a'>{$fecha_fmt}</td>
-      </tr>
-    </table>
-
-    <!-- DIVIDER CIUDADANO -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
-      <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Datos del encuestado</td>
-        <td style='border-top:1px solid #d4dce8'></td>
-      </tr>
-    </table>
-
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
-      <tr>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #e8eef6'>Nombre</td>
-        <td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>" . htmlspecialchars($nombre, ENT_QUOTES) . "</td>
-      </tr>" .
-      ($documento ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Documento</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>" . htmlspecialchars($documento, ENT_QUOTES) . "</td></tr>" : "") .
-      ($correo ? "<tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Correo</td><td style='padding:9px 14px;font-size:12px;border-bottom:1px solid #e8eef6'><a href='mailto:{$correo}' style='color:#0c2d5e;font-weight:500;text-decoration:none'>" . htmlspecialchars($correo, ENT_QUOTES) . "</a></td></tr>" : "") .
-      ($telefono ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Telefono</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;border-bottom:1px solid #d4dce8'>" . htmlspecialchars($telefono, ENT_QUOTES) . "</td></tr>" : "") .
-      "<tr><td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Canal</td><td style='padding:9px 14px;font-size:12px;color:#2a3a4a;text-transform:capitalize'>{$canal}</td></tr>
-    </table>
-
-    <!-- DIVIDER INDICADORES -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
-      <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Calificaciones por indicador</td>
-        <td style='border-top:1px solid #d4dce8'></td>
-      </tr>
-    </table>
-
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
-      {$filas_interno}
-      {$bloque_comentario_i}
-    </table>
-
-    <!-- BLOQUE ESTADO -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8'>
-      <tr><td style='padding:16px 20px'>
-        <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:10px'>
-          <tr>
-            <td style='width:20px;border-top:2px solid #0c2d5e;vertical-align:middle'></td>
-            <td style='padding-left:10px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:500'>Estado del sistema</td>
-          </tr>
-        </table>
-        <p style='margin:0;font-size:12px;color:#4a5a6a;line-height:1.6;font-weight:300'>Esta encuesta ha sido <strong style='font-weight:500'>guardada automaticamente</strong> en la tabla de encuestas_satisfaccion. No requiere gestion en el buzon PQRSFD.</p>
-      </td></tr>
-    </table>
-
-  </td></tr>
-
-  <tr><td style='background:#0c2d5e;padding:18px 44px'>
-    <table width='100%' cellpadding='0' cellspacing='0'>
-      <tr>
-        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente &middot; Nova TD</td>
-        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Registro: {$ticket_enc}<br>ID: " . ($encuesta_id ?? 'N/A') . "</td>
-      </tr>
-    </table>
-  </td></tr>
-
-</table></td></tr></table>
-</body></html>";
-
-    $canal_enc_label = match($origen_enc) {
-    'nova_web'               => '🤖 NOVA TD',
-    'nova_directo'           => '🤖 NOVA TD DIRECTO',
-    'qr'                     => '📷 QR',
-    'web', 'formulario_web'  => '🖥️ WEB',
-    default                  => '📋'
+const FEEDBACK={
+  1:['Lamentamos su experiencia. Su comentario nos ayuda a mejorar.','bad'],
+  2:['Gracias. Trabajaremos para que su próxima visita sea mejor.','bad'],
+  3:['Bien. Continuamos mejorando para superar sus expectativas.','mid'],
+  4:['Muy bien. Su satisfacción nos motiva a seguir adelante.','good'],
+  5:['Excelente. Es un honor contar con su confianza.','good'],
 };
-$subject_interno = "[{$ticket_enc}] {$canal_enc_label} | ENCUESTA | {$calificacion}/3 | {$nivel_cal} | {$sede_nombre}";
 
-    sendMail($token, $GRAPH_USER_ID, [
-        'subject'      => $subject_interno,
-        'importance'   => $calificacion <= 2 ? 'high' : 'normal',
-        'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_interno],
-        'toRecipients' => [['emailAddress' => ['address' => $BUZON_PQRS, 'name' => 'PQRSFD Tododrogas']]],
-    ]);
+let currentSlide=0, ratings=new Array(5).fill(null), sedeSeleccionada=null, userData={};
+const TOTAL_SLIDES=7;
+
+function buildSlides(){
+  const wrap=document.getElementById('slidesWrap');
+  const cs=document.getElementById('slideComment');
+  QUESTIONS.forEach((q,qi)=>{
+    const s=document.createElement('div');
+    s.className='slide slide-dark'; s.id='slideQ'+qi;
+    s.innerHTML=`<div class="sgrid"></div>
+      <div class="eyebrow">Pregunta ${qi+1} de 5</div>
+      <div class="q-progress" id="qp${qi}"></div>
+      <div class="rating-card">
+        <div class="q-header">
+          <div class="q-title">${q.label}</div>
+          <div class="q-sub">${q.sub}</div>
+        </div>
+        <div class="star-grid" id="stars${qi}"></div>
+        <div class="q-feedback" id="fb${qi}"></div>
+      </div>
+      <div style="height:18px;"></div>
+      <button class="btn-next" id="btnQ${qi}" disabled>
+        ${qi<4?'Siguiente pregunta':'Continuar'}
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>`;
+    wrap.insertBefore(s,cs);
+    for(let v=1;v<=3;v++){
+      const b=document.createElement('button');
+      b.className='star-btn'; b.dataset.q=qi; b.dataset.v=v;
+      b.innerHTML=`<span class="sb-label">${q.labels[v-1]}</span><span class="sb-num">${v}</span>`;
+      b.onclick=()=>rate(qi,v);
+      document.getElementById('stars'+qi).appendChild(b);
+    }
+  });
+  const dw=document.getElementById('stepDots');
+  for(let i=0;i<TOTAL_SLIDES;i++){
+    const d=document.createElement('div');
+    d.className='sdot'+(i===0?' active':''); d.id='sd'+i;
+    dw.appendChild(d);
+  }
+  renderQP(document.getElementById('qpComment'),5);
 }
 
-// ── PASO 4: HISTORIAL_EVENTOS ─────────────────────────────────────────
-sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
-    'evento'      => 'encuesta_recibida',
-    'descripcion' => "Encuesta registrada. Sede: {$sede_nombre}. Promedio: {$promedio}. Confirmacion: " . ($correo_enviado ? 'OK' : ($correo ? 'error' : 'sin correo')),
-    'from_email'  => $correo ?: $telefono,
-    'subject'     => "Encuesta · {$sede_nombre} · {$nombre}",
-    'datos_extra' => json_encode([
-        'encuesta_id'   => $encuesta_id,
-        'ticket'        => $ticket_enc,
-        'nombre'        => $nombre,
-        'correo'        => $correo,
-        'sede_nombre'   => $sede_nombre,
-        'sede_ciudad'   => $sede_ciudad,
-        'calificacion'  => $calificacion,
-        'promedio'      => $promedio,
-        'instalaciones' => $instalaciones,
-        'atencion'      => $atencion,
-        'tiempos'       => $tiempos,
-        'medicamentos'  => $medicamentos,
-        'recomendacion' => $recomendacion,
-    ]),
-    'created_at' => $now,
-], 'return=minimal');
+function renderQP(el,done){
+  if(!el)return;
+  el.innerHTML='<div class="qp-dots">'+QUESTIONS.map((_,i)=>
+    `<div class="qp-dot ${i<done?'done':i===done?'current':''}"></div>`
+  ).join('')+'</div><span class="qp-label">'+done+'/5 respondidas</span>';
+}
 
-// ── RESPUESTA ─────────────────────────────────────────────────────────
-http_response_code(200);
-echo json_encode([
-    'ok'             => $saved,
-    'encuesta_id'    => $encuesta_id,
-    'ticket'         => $ticket_enc,
-    'correo_enviado' => $correo_enviado,
-    'mensaje'        => $saved
-        ? "Encuesta registrada correctamente."
-        : "No se pudo guardar en BD.",
-]);
+function goTo(idx){
+  currentSlide=idx;
+  const mob=window.matchMedia('(max-width:900px)').matches;
+  if(!mob){
+    document.getElementById('slidesWrap').style.transform=`translateX(-${idx*100}vw)`;
+  }
+  document.querySelectorAll('.sdot').forEach((d,i)=>d.classList.toggle('active',i===idx));
+  const pct=Math.round((idx/(TOTAL_SLIDES-1))*92)+5;
+  document.getElementById('progressFill').style.width=pct+'%';
+  if(mob){
+    const slides=document.querySelectorAll('#slidesWrap > *');
+    if(slides[idx]) setTimeout(()=>slides[idx].scrollIntoView({behavior:'smooth',block:'start'}),50);
+  } else {
+    window.scrollTo(0,0);
+  }
+}
 
-// ── PASO 5: CORREO DE SEGUIMIENTO PERSONALIZADO (1 min después) ───────
-if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
-if (!$correo || !filter_var($correo, FILTER_VALIDATE_EMAIL)) return;
+function goBack(){
+  if(currentSlide>0){goTo(currentSlide-1);return;}
+  document.body.style.opacity='0';document.body.style.transition='opacity .3s';
+  setTimeout(()=>window.location.href='pqr_bienvenida.html',300);
+}
 
-$token_seg = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
-if (!$token_seg) return;
+let sedeTimer;
 
-// Recuperar OPENAI_KEY si no está definida en este contexto
-$OPENAI_KEY_SEG = '__OPENAI_KEY__';
+function mostrarBuscadorManualEnc(){
+  document.getElementById('sedeWrap').style.display='block';
+  document.getElementById('btnManual').style.display='none';
+  document.getElementById('inputSede').focus();
+}
 
-sleep(60);
+function detectarSedePorGeoEnc(){
+  const btn=document.getElementById('btnGeo');
+  const label=document.getElementById('geoLabel');
+  const sub=document.getElementById('geoSub');
+  const circle=document.getElementById('geoCircle');
+  if(!navigator.geolocation){mostrarBuscadorManualEnc();return;}
+  btn.disabled=true;
+  circle.innerHTML='<div class="sede-geo-spin"></div>';
+  label.textContent='Detectando ubicación…';
+  sub.textContent='Buscando la sede más cercana';
+  navigator.geolocation.getCurrentPosition(
+    pos=>{
+      const{latitude:lat,longitude:lng}=pos.coords;
+      function hav(a,b,c,d){const R=6371,dL=(c-a)*Math.PI/180,dl=(d-b)*Math.PI/180;const x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
+      const closest=SEDES.filter(s=>s.lat&&s.lng).map(s=>({...s,dist:hav(lat,lng,s.lat,s.lng)})).sort((a,b)=>a.dist-b.dist)[0];
+      circle.innerHTML='<svg width="18" height="18" fill="none" stroke="#00b0ff" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>';
+      btn.disabled=false;
+      if(closest&&closest.dist<50){_ss(closest);}
+      else{label.textContent='Detectar mi sede automáticamente';sub.textContent='Permite el acceso a tu ubicación';mostrarBuscadorManualEnc();}
+    },
+    _=>{
+      circle.innerHTML='<svg width="18" height="18" fill="none" stroke="#00b0ff" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/></svg>';
+      btn.disabled=false;
+      label.textContent='Detectar mi sede automáticamente';sub.textContent='Permite el acceso a tu ubicación';
+      mostrarBuscadorManualEnc();
+    },
+    {timeout:8000,maximumAge:60000}
+  );
+}
 
-// ── Indicadores en texto para GPT ────────────────────────────────────
-$labels_enc = [
-    'Instalaciones y limpieza'       => $instalaciones,
-    'Atención al cliente'            => $atencion,
-    'Tiempos de espera'              => $tiempos,
-    'Disponibilidad de medicamentos' => $medicamentos,
-    'Recomendaría el servicio'       => $recomendacion,
-];
-$resumen_indicadores = implode(', ', array_map(
-    fn($k, $v) => "{$k}: {$v}/3",
-    array_keys($labels_enc), $labels_enc
-));
+// Agregar coordenadas al array SEDES existente
+const SEDES_COORDS={abejorral:{lat:5.7917,lng:-75.4267},amaga:{lat:6.0383,lng:-75.6983},andes:{lat:5.6583,lng:-75.8783},apartado:{lat:7.8827,lng:-76.6274},carepa:{lat:7.7586,lng:-76.6564},caucasia:{lat:7.9883,lng:-75.1967},chigorodo:{lat:7.6741,lng:-76.6847},'ciudad-bolivar':{lat:5.8617,lng:-75.9150},'el-bagre':{lat:7.5953,lng:-74.8103},medellin:{lat:6.2518,lng:-75.5636},medellin2:{lat:6.2508,lng:-75.5640},'puerto-berrio':{lat:6.4894,lng:-74.4044},'santa-barbara':{lat:5.8750,lng:-75.5717},'santa-fe-antioquia':{lat:6.5567,lng:-75.8283},segovia:{lat:7.0883,lng:-74.7050},tamesis:{lat:5.6667,lng:-75.7167},turbo:{lat:8.0972,lng:-76.7294},yarumal:{lat:7.0000,lng:-75.4167},yolombo:{lat:6.5983,lng:-75.0150},zaragoza:{lat:7.4917,lng:-74.8667},nechi:{lat:8.0967,lng:-74.7717},rionegro:{lat:6.1550,lng:-75.3767},'la-ceja':{lat:6.0283,lng:-75.4383},sopetran:{lat:6.5033,lng:-75.7517},amalfi:{lat:6.9133,lng:-75.0767},angostura:{lat:6.8833,lng:-75.3333},anori:{lat:7.0733,lng:-75.1417},frontino:{lat:6.7783,lng:-76.1317},mutata:{lat:7.2450,lng:-76.4383},necocli:{lat:8.4233,lng:-76.7817},remedios:{lat:7.0283,lng:-74.6933},giraldo:{lat:6.6783,lng:-75.9483},dabeiba:{lat:7.0033,lng:-76.2700},hispania:{lat:5.8183,lng:-75.9283},jardin:{lat:5.5983,lng:-75.8183},liborina:{lat:6.6933,lng:-75.8567},sabanalarga:{lat:6.8883,lng:-75.7350},caceres:{lat:7.5650,lng:-75.3367},jerico:{lat:5.7883,lng:-75.7817},taraza:{lat:7.5783,lng:-75.4017},barbosa:{lat:6.4383,lng:-75.3317},girardota:{lat:6.3783,lng:-75.4450},rionegro2:{lat:6.1533,lng:-75.3750},concordia:{lat:6.0450,lng:-75.9083},copacabana:{lat:6.3500,lng:-75.5117},sabaneta:{lat:6.1517,lng:-75.6167}};
+SEDES.forEach(s=>{if(SEDES_COORDS[s.id]){s.lat=SEDES_COORDS[s.id].lat;s.lng=SEDES_COORDS[s.id].lng;}});
 
-// ── Prompt GPT encuesta ───────────────────────────────────────────────
-$prompt_enc = "Eres el equipo de atención al cliente de Tododrogas CIA SAS, empresa colombiana de servicios farmacéuticos. Redacta un correo de seguimiento a una encuesta de satisfacción. El usuario debe sentirse como un rey o reina — su opinión es lo más valioso que existe para Tododrogas.
+function buscarSede(val){
+  const dd=document.getElementById('sedeDd');
+  clearTimeout(sedeTimer);sedeSeleccionada=null;checkBtn0();
+  if(val.trim().length<2){dd.style.display='none';return;}
+  sedeTimer=setTimeout(()=>{
+    const q=val.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const res=SEDES.filter(s=>(s.nombre+' '+s.municipio+' '+(s.direccion||''))
+      .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').includes(q)).slice(0,10);
+    if(!res.length){dd.style.display='none';return;}
+    dd.innerHTML=res.map(s=>`<div class="sede-opt" onclick='_ss(${JSON.stringify(s)})'>
+      <div class="sede-opt-name">${s.nombre}</div>
+      <div class="sede-opt-sub">📍 ${s.municipio} · ${s.direccion||''}</div></div>`).join('');
+    dd.style.display='block';
+  },200);
+}
 
-DATOS DE LA ENCUESTA:
-- Nombre: {$nombre}
-- Sede visitada: {$sede_nombre}" . ($sede_ciudad ? " · {$sede_ciudad}" : "") . "
-- Resultado: {$nivel_cal}
-- Detalle por indicador: {$resumen_indicadores}
-- Comentario del usuario: " . ($comentario ?: 'No dejó comentario') . "
-- Ticket: {$ticket_enc}
+function _ss(s){
+  sedeSeleccionada=s;
+  document.getElementById('btnGeo').style.display    ='none';
+  document.getElementById('btnManual').style.display ='none';
+  document.getElementById('sedeWrap').style.display  ='none';
+  document.getElementById('sedeDd').style.display    ='none';
+  document.getElementById('sbName').textContent=s.nombre;
+  document.getElementById('sbSub').textContent='📍 '+s.municipio+(s.direccion?' · '+s.direccion:'');
+  document.getElementById('sedeBadge').style.display='flex';
+  markErr('inputSede','errSede',false);checkBtn0();
+}
 
-INSTRUCCIONES CRÍTICAS:
-1. Máximo 4 párrafos cortos, fluidos y humanos. NADA de listas ni bullet points.
-2. Si el resultado es SATISFACTORIO: celebra con alegría genuina, agradece profundamente, menciona que su experiencia positiva motiva a todo el equipo de la sede {$sede_nombre}.
-3. Si el resultado es NEUTRO: agradece sinceramente, reconoce que hay aspectos por mejorar, comprométete a trabajar en ello y expresa el deseo de sorprenderle en su próxima visita.
-4. Si el resultado es INSATISFACTORIO: pide disculpas con profunda humildad, reconoce que fallaron, comprométete a una mejora concreta en la sede {$sede_nombre} y hazle saber que su voz generó un cambio real.
-5. Si dejó comentario, refiérete a él de forma específica — no genérica.
-6. Cierra con una frase poderosa y memorable que refuerce el compromiso de Tododrogas.
-7. Firma: Equipo de Experiencia al Cliente · Tododrogas CIA SAS · Sede {$sede_nombre}
-8. Tono: humano, cercano, colombiano — NUNCA robótico. SIEMPRE usar usted, NUNCA tutear.
-9. NO uses 'Estimado/a' — dirígete por nombre de forma cálida y directa.
-10. PROHIBIDO usar emojis en el texto.
-11. PROHIBIDO usar la palabra "droguería" — reemplázala por "punto de atención" o "Tododrogas".
+function cambiarSede(){
+  sedeSeleccionada=null;
+  document.getElementById('sedeBadge').style.display ='none';
+  document.getElementById('btnGeo').style.display    ='flex';
+  document.getElementById('btnManual').style.display ='flex';
+  document.getElementById('sedeWrap').style.display  ='none';
+  document.getElementById('inputSede').value='';
+  checkBtn0();
+}
 
-Responde SOLO con el cuerpo del correo en texto plano, sin asunto, sin HTML, sin explicaciones.";
+function checkBtn0(){
+  const ok=sedeSeleccionada
+    &&document.getElementById('inNombre').value.trim().length>=2
+    &&document.getElementById('inDoc').value.trim().length>=4
+    &&document.getElementById('inTel').value.trim().replace(/\D/g,'').length>=7
+    &&(document.getElementById('chkPoliticaEnc')?.checked||false);
+  document.getElementById('btn0').disabled=!ok;
+}
+['inNombre','inDoc','inTel'].forEach(id=>{
+  const el=document.getElementById(id);
+  el.addEventListener('input',function(){
+    const pos=this.selectionStart;
+    this.value=this.value.toUpperCase();
+    this.setSelectionRange(pos,pos);
+    checkBtn0();
+  });
+});
+// Correo: solo checkBtn0, sin mayúsculas
+document.getElementById('inCorreo').addEventListener('input',checkBtn0);
 
-$ch_gpt_enc = curl_init('https://api.openai.com/v1/chat/completions');
-curl_setopt_array($ch_gpt_enc, [
-    CURLOPT_POST           => true,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 30,
-    CURLOPT_HTTPHEADER     => ["Authorization: Bearer {$OPENAI_KEY_SEG}", 'Content-Type: application/json'],
-    CURLOPT_POSTFIELDS     => json_encode([
-        'model'       => 'gpt-4o-mini',
-        'max_tokens'  => 500,
-        'temperature' => 0.75,
-        'messages'    => [
-            ['role' => 'system', 'content' => 'Eres el equipo de atención al cliente de Tododrogas CIA SAS. Redactas correos cálidos, empáticos y personalizados en español colombiano. Cada usuario es tratado como un rey o reina.'],
-            ['role' => 'user', 'content' => $prompt_enc],
-        ],
-    ]),
-]);
-$gpt_resp_enc = curl_exec($ch_gpt_enc);
-curl_close($ch_gpt_enc);
+document.getElementById('btn0').addEventListener('click', async ()=>{
+  let ok=true;
+  if(!sedeSeleccionada){markErr('inputSede','errSede',true);ok=false;}
+  if(document.getElementById('inNombre').value.trim().length<2){markErr('inNombre','errNombre',true);ok=false;}
+  if(document.getElementById('inDoc').value.trim().length<4){markErr('inDoc','errDoc',true);ok=false;}
+  if(document.getElementById('inTel').value.trim().replace(/\D/g,'').length<7){markErr('inTel','errTel',true);ok=false;}
+  if(!ok) return;
 
-$gpt_data_enc   = json_decode($gpt_resp_enc, true);
-$cuerpo_gpt_enc = trim($gpt_data_enc['choices'][0]['message']['content'] ?? '');
-if (!$cuerpo_gpt_enc) return;
+  const btn0el = document.getElementById('btn0');
+  const txtOrig = btn0el.innerHTML;
+  btn0el.disabled = true;
+  btn0el.innerHTML = '⏳ Verificando registro…';
 
-// ── Párrafos HTML ─────────────────────────────────────────────────────
-$parrafos_enc = implode('', array_map(function($p) {
-    $p = trim($p);
-    return $p ? "<p style='margin:0 0 16px;font-size:13px;color:#2a3a4a;line-height:1.9;font-weight:300'>" . nl2br(htmlspecialchars($p)) . "</p>" : '';
-}, explode("\n\n", $cuerpo_gpt_enc)));
+  const cedula   = document.getElementById('inDoc').value.trim();
+  const nombre   = document.getElementById('inNombre').value.trim();
+  const telefono = document.getElementById('inTel').value.trim();
+  const val = await validarPaciente(cedula, nombre, telefono);
 
-// ── Colores según calificación ────────────────────────────────────────
-$color_enc = $calificacion >= 3 ? '#0f5c2e' : ($calificacion >= 2 ? '#7a5200' : '#8a1a1a');
-$bg_enc    = $calificacion >= 3 ? '#dcfce7' : ($calificacion >= 2 ? '#fef9c3' : '#fee2e2');
+  btn0el.disabled = false;
+  btn0el.innerHTML = txtOrig;
 
-// ── Asunto ────────────────────────────────────────────────────────────
-$asunto_enc = match(true) {
-    $calificacion >= 3 => "{$nombre}, su satisfacción es nuestra mayor recompensa — Encuesta {$ticket_enc}",
-    $calificacion >= 2 => "{$nombre}, su opinión nos impulsa a ser mejores — Encuesta {$ticket_enc}",
-    default            => "{$nombre}, nos duele no haberle dado lo mejor — Encuesta {$ticket_enc}",
-};
+  if(!val.ok){
+    const msg = val.msg || (val.razon==='no_encontrado'
+      ? 'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.'
+      : 'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.');
+    showValModal(msg);
+    return;
+  }
 
-// ── HTML del correo ───────────────────────────────────────────────────
-$logo_enc_seg = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+  // ── VIP: mostrar saludo antes de continuar ────────────
+  if(val.vip && val.saludo){
+    userData={
+      nombre:document.getElementById('inNombre').value.trim(),
+      documento:document.getElementById('inDoc').value.trim(),
+      telefono:document.getElementById('inTel').value.trim(),
+      correo:document.getElementById('inCorreo').value.trim(),
+      sede_id:sedeSeleccionada.id,
+      sede_nombre:sedeSeleccionada.nombre,
+      sede_ciudad:sedeSeleccionada.municipio,
+      sede_direccion:sedeSeleccionada.direccion||'',
+    };
+    showVipModal(val.saludo, ()=>{ goTo(1); });
+    return;
+  }
 
-$cuerpo_seg_enc = "
-<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
-<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
-<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
-<tr><td align='center'>
-<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
+  userData={
+    nombre:document.getElementById('inNombre').value.trim(),
+    documento:document.getElementById('inDoc').value.trim(),
+    telefono:document.getElementById('inTel').value.trim(),
+    correo:document.getElementById('inCorreo').value.trim(),
+    sede_id:sedeSeleccionada.id,
+    sede_nombre:sedeSeleccionada.nombre,
+    sede_ciudad:sedeSeleccionada.municipio,
+    sede_direccion:sedeSeleccionada.direccion||'',
+  };
+  goTo(1);
+});
 
-  <!-- HEADER -->
-  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
-    <img src='{$logo_enc_seg}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 14px;filter:brightness(0) invert(1);opacity:.92'>
-    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Mensaje personal del equipo &middot; Tododrogas CIA SAS</p>
-  </td></tr>
+function rate(qi,v){
+  ratings[qi]=v;
+  document.querySelectorAll(`[data-q="${qi}"]`).forEach(b=>b.classList.toggle('selected',parseInt(b.dataset.v)===v));
+  const[msg,cls]=FEEDBACK[v];
+  const fb=document.getElementById('fb'+qi);
+  fb.textContent=msg;fb.className='q-feedback show '+cls;
+  const btn=document.getElementById('btnQ'+qi);if(btn)btn.disabled=false;
+  const done=ratings.filter(r=>r!==null).length;
+  for(let i=0;i<QUESTIONS.length;i++){const qp=document.getElementById('qp'+i);if(qp)renderQP(qp,done);}
+  renderQP(document.getElementById('qpComment'),done);
+  if(v>=3)setTimeout(()=>{const b=document.getElementById('btnQ'+qi);if(b&&!b.disabled)b.click();},500);
+}
 
-  <!-- BAND TICKET -->
-  <tr><td style='background:#0a2448;padding:18px 44px;text-align:center'>
-    <p style='color:#6a90b8;margin:0;font-size:9px;letter-spacing:2.5px;text-transform:uppercase'>Encuesta</p>
-    <p style='color:#ffffff;margin:6px 0 2px;font-size:22px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_enc}</p>
-    <p style='color:#4a6a90;margin:0;font-size:10px'>" . date('d/m/Y H:i') . " &middot; {$sede_nombre}</p>
-  </td></tr>
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[id^="btnQ"]');if(!b)return;
+  const qi=parseInt(b.id.replace('btnQ',''));
+  goTo(qi<QUESTIONS.length-1?qi+2:6);
+});
 
-  <!-- BODY -->
-  <tr><td style='background:#ffffff;padding:40px 44px'>
+async function submitSurvey(){
+  if(ratings.some(r=>r===null)){showToast('Por favor responda las 5 preguntas','error');return;}
+  const btn=document.getElementById('submitBtn');
+  btn.classList.add('loading');btn.disabled=true;
+  btn.innerHTML='⏳ Registrando encuesta…';
+  const avg=ratings.reduce((a,b)=>a+b,0)/5;
+  const payload={...userData,
+    instalaciones:ratings[0],atencion:ratings[1],tiempos:ratings[2],
+    medicamentos:ratings[3],recomendacion:ratings[4],
+    promedio:parseFloat(avg.toFixed(2)),
+    comentario:document.getElementById('commentInp').value.trim()||null,
+    canal:   (new URLSearchParams(window.location.search).get('origen') || 'web'),
+    origen:  (new URLSearchParams(window.location.search).get('origen') || 'web'),
+    ip_origen:window.location.hostname||'web',
+  };
+  let saved=false;
+  try{
+    const r=await fetch('radicar-encuesta.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(r.ok){const d=await r.json();saved=d.ok===true;}
+  }catch(e){console.warn('Sin conexión:',e.message);}
+  if(!saved){
+    try{const p=JSON.parse(localStorage.getItem('td_encuestas_offline')||'[]');p.push({...payload,_pendiente:true,_ts:new Date().toISOString()});localStorage.setItem('td_encuestas_offline',JSON.stringify(p));}catch(_){}
+  }
+  showSuccess(avg,payload);
+}
 
-    <!-- BADGE CALIFICACIÓN -->
-    <table cellpadding='0' cellspacing='0' style='margin-bottom:28px'>
-      <tr>
-        <td style='background:{$bg_enc};padding:6px 16px;border-radius:20px'>
-          <span style='font-size:11px;font-weight:700;color:{$color_enc};letter-spacing:.5px'>" .
-          ($calificacion >= 3 ? 'Experiencia satisfactoria' :
-          ($calificacion >= 2 ? 'Experiencia neutra' :
-          'Experiencia insatisfactoria')) . "
-          </span>
-        </td>
-      </tr>
-    </table>
+function showSuccess(avg,payload){
+  document.getElementById('sAvg').textContent=avg.toFixed(1);
+  document.getElementById('sSede').textContent='📍 '+(payload.sede_nombre||'');
+  const labels=['Instalaciones','Atención','Tiempos','Medicamentos','Recomienda'];
+  document.getElementById('sChips').innerHTML=ratings.map((r,i)=>`<div class="s-chip">${labels[i]}: <strong>${QUESTIONS[i].labels[r-1]}</strong> (${r}/3)</div>`).join('');
+  if(payload.correo&&payload.correo.includes('@')){document.getElementById('sEmail').textContent=payload.correo;document.getElementById('sEmailLine').style.display='block';}
+  spawnConfetti();
+  document.getElementById('successOverlay').classList.add('show');
+  let t=10;const iv=setInterval(()=>{t--;document.getElementById('sCountdown').textContent=`Volviendo al inicio en ${t}s…`;if(t<=0){clearInterval(iv);irInicio();}},1000);
+}
 
-    <!-- CUERPO GPT -->
-    {$parrafos_enc}
+function irInicio(){document.body.style.opacity='0';document.body.style.transition='opacity .3s';setTimeout(()=>window.location.href='pqr_bienvenida.html',300);}
 
-    <!-- SEPARADOR -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='margin:28px 0 24px'>
-      <tr><td style='border-top:1px solid #d4dce8'></td></tr>
-    </table>
+function markErr(a,b,s){
+  const e=document.getElementById(a);if(e)e.classList.toggle('error',s);
+  const r=document.getElementById(b);if(r)r.classList.toggle('show',s);
+}
 
-    <!-- BLOQUE SEDE -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:#f0f5fb;border:1px solid #d4dce8;border-left:4px solid #0c2d5e;margin-bottom:24px'>
-      <tr><td style='padding:18px 22px'>
-        <p style='margin:0 0 4px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:600'>Sede evaluada</p>
-        <p style='margin:0;font-size:13px;color:#2a3a4a;font-weight:500'>{$sede_nombre}" .
-        ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") .
-        ($sede_direccion ? "<br><span style='font-size:11px;color:#7a90a8;font-weight:400'>{$sede_direccion}</span>" : "") . "</p>
-      </td></tr>
-    </table>
 
-    <!-- DIVIDER NOVA TD -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
-      <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Su asistente virtual</td>
-        <td style='border-top:1px solid #d4dce8'></td>
-      </tr>
-    </table>
+// ── MODAL ERROR VALIDACIÓN ───────────────────────────────
+let _valModalTimer = null;
+function showValModal(msg){
+  document.getElementById('valModalMsg').textContent = msg;
+  document.getElementById('valModalBar').style.transition = 'none';
+  document.getElementById('valModalBar').style.width = '100%';
+  document.getElementById('valModalBg').classList.add('show');
+  let secs = 15;
+  document.getElementById('valModalCountdown').textContent = 'Cerrando en ' + secs + 's…';
+  // Animar barra
+  setTimeout(()=>{
+    document.getElementById('valModalBar').style.transition = 'width 15s linear';
+    document.getElementById('valModalBar').style.width = '0%';
+  }, 50);
+  clearInterval(_valModalTimer);
+  _valModalTimer = setInterval(()=>{
+    secs--;
+    document.getElementById('valModalCountdown').textContent = 'Cerrando en ' + secs + 's…';
+    if(secs <= 0){ clearInterval(_valModalTimer); cerrarValModal(); }
+  }, 1000);
+}
+function cerrarValModal(){
+  clearInterval(_valModalTimer);
+  document.getElementById('valModalBg').classList.remove('show');
+}
 
-    <!-- BLOQUE NOVA TD -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:#0c2d5e;border-radius:2px;margin-bottom:24px'>
-      <tr><td style='padding:26px 28px'>
-        <table width='100%' cellpadding='0' cellspacing='0'>
-          <tr>
-            <td style='vertical-align:middle'>
-              <img src='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png' alt='Nova TD' style='height:42px;max-width:130px;object-fit:contain;display:block;margin-bottom:14px'>
-              <p style='margin:0 0 5px;font-size:14px;color:#ffffff;font-weight:600;letter-spacing:.3px;line-height:1.4'>¿Tiene otra consulta? Nova TD está aquí para ayudarle.</p>
-              <p style='margin:0 0 16px;font-size:11px;color:#7aaad8;line-height:1.8;font-weight:300'>Su asistente virtual disponible <strong style='color:#aaccee;font-weight:500'>las 24 horas, los 7 días de la semana</strong>. Sin filas, sin esperas — solo respuestas rápidas y amables cuando las necesite:</p>
-              <table cellpadding='0' cellspacing='0' style='margin-bottom:18px'>
-                <tr><td style='font-size:11px;color:#9abcd8;line-height:1.9;font-weight:300'>📍&nbsp; Encuentre el punto Tododrogas más cercano a usted<br>💊&nbsp; Consulte la disponibilidad de sus medicamentos<br>📋&nbsp; Radique una PQRSFD en segundos, sin formularios<br>⭐&nbsp; Comparta su experiencia con nuestra encuesta de satisfacción<br>💬&nbsp; Resuelva dudas sobre su servicio farmacéutico</td></tr>
-              </table>
-              <a href='https://tododrogas.online/nova.html' style='display:inline-block;background:#ffffff;color:#0c2d5e;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;padding:11px 24px;border-radius:2px'>Hablar con Nova TD &rarr;</a>
-              <p style='margin:12px 0 0;font-size:10px;color:#4a6a90;letter-spacing:.3px'>tododrogas.online/nova.html</p>
-            </td>
-          </tr>
-        </table>
-      </td></tr>
-    </table>
 
-    <!-- DIVIDER CANALES -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
-      <tr>
-        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Canales de atención</td>
-        <td style='border-top:1px solid #d4dce8'></td>
-      </tr>
-    </table>
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8'>
-      <tr>
-        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;border-right:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>WhatsApp</p>
-          <a href='https://wa.me/573043412431' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>304 341 2431</a>
-        </td>
-        <td width='50%' style='padding:16px 18px;border-bottom:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX Atención</p>
-          <a href='tel:6043222432' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>604 322 2432 Op. 2</a>
-        </td>
-      </tr>
-      <tr>
-        <td width='50%' style='padding:16px 18px;border-right:1px solid #d4dce8;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Correo PQRSFD</p>
-          <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
-        </td>
-        <td width='50%' style='padding:16px 18px;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Página web</p>
-          <a href='https://tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.com.co</a>
-        </td>
-      </tr>
-    </table>
+// ── MODAL VIP EJECUTIVO ───────────────────────────────
+function showVipModal(saludo, onClose){
+  const formatted = saludo
+    .replace(/Acceso concedido,\s*([^.]+)\./, 'Acceso concedido, <strong>$1</strong>.')
+    .replace(/BIENVENIDO\./, '<em>Bienvenido</em>')
+    .replace(/BIENVENIDA\./, '<em>Bienvenida</em>');
+  document.getElementById('vipMsg').innerHTML = formatted;
+  document.getElementById('vipModalBg').classList.add('show');
+  // Partículas doradas sutiles
+  const p = document.getElementById('vipParticles');
+  p.innerHTML = '';
+  for(let i=0;i<12;i++){
+    const d=document.createElement('div'); d.className='vip-p';
+    const sz=(1+Math.random()*2)+'px';
+    Object.assign(d.style,{left:Math.random()*100+'%',
+      animationDuration:(5+Math.random()*6)+'s',animationDelay:(Math.random()*4)+'s',
+      width:sz,height:sz,opacity:(Math.random()*.4+.2)+'',});
+    p.appendChild(d);
+  }
+  window._vipOnClose = onClose || null;
+}
+function cerrarVipModal(){
+  document.getElementById('vipModalBg').classList.remove('show');
+  if(window._vipOnClose){ window._vipOnClose(); }
+  window._vipOnClose = null;
+}
 
-  </td></tr>
+function showToast(msg,type='info'){
+  const w=document.getElementById('toasts'),t=document.createElement('div');
+  t.className='toast '+type;t.textContent=msg;w.appendChild(t);
+  setTimeout(()=>t.remove(),3400);
+}
 
-  <!-- FOOTER -->
-  <tr><td style='background:#0c2d5e;padding:18px 44px'>
-    <table width='100%' cellpadding='0' cellspacing='0'>
-      <tr>
-        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Equipo de Experiencia al Cliente</td>
-        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Encuesta: {$ticket_enc}</td>
-      </tr>
-    </table>
-  </td></tr>
+function spawnConfetti(){
+  const c=['#2563eb','#1d4ed8','#16a34a','#bfdbfe','#ffffff'];
+  for(let i=0;i<60;i++){
+    const d=document.createElement('div'),col=c[Math.floor(Math.random()*c.length)];
+    Object.assign(d.style,{position:'fixed',top:'0',left:Math.random()*100+'vw',width:'7px',height:'7px',background:col,borderRadius:Math.random()>.5?'50%':'2px',zIndex:9998,pointerEvents:'none',animation:`fall ${1+Math.random()}s ease-in ${Math.random()*.7}s forwards`});
+    document.body.appendChild(d);setTimeout(()=>d.remove(),2500);
+  }
+  if(!document.getElementById('csty')){const s=document.createElement('style');s.id='csty';s.textContent='@keyframes fall{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}';document.head.appendChild(s);}
+}
 
-</table></td></tr></table>
-</body></html>";
-
-// ── Enviar ────────────────────────────────────────────────────────────
-$ch_seg_enc = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
-curl_setopt_array($ch_seg_enc, [
-    CURLOPT_POST           => true,
-    CURLOPT_POSTFIELDS     => json_encode([
-        'message' => [
-            'subject'      => $asunto_enc,
-            'importance'   => $calificacion <= 1 ? 'high' : 'normal',
-            'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_seg_enc],
-            'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
-        ],
-        'saveToSentItems' => true,
-    ]),
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_HTTPHEADER     => ["Authorization: Bearer {$token_seg}", 'Content-Type: application/json'],
-    CURLOPT_TIMEOUT        => 30,
-]);
-curl_exec($ch_seg_enc);
-curl_close($ch_seg_enc);
+document.addEventListener('click',e=>{if(!e.target.closest('.sede-wrap'))document.getElementById('sedeDd').style.display='none';});
+buildSlides();
+</script>
+</body>
+</html>
