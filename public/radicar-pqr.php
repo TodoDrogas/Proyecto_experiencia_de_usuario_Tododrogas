@@ -949,8 +949,8 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
           <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
         </td>
         <td width='50%' style='padding:16px 18px;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Portal web</p>
-          <a href='https://tododrogas.online/pqr_form.html' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.online/pqr</a>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Página Web</p>
+          <a href='https://www.tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.com.co</a>
         </td>
       </tr>
     </table>
