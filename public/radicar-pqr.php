@@ -883,7 +883,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:#f0f5fb;border:1px solid #d4dce8;border-left:4px solid #0c2d5e;margin-bottom:24px'>
       <tr><td style='padding:22px 26px'>
         <p style='margin:0 0 4px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:600'>✅ Su radicado, siempre al alcance</p>
-        <p style='margin:0 0 14px;font-size:12px;color:#3a4a5a;line-height:1.8;font-weight:300'>Con su <strong style='color:#0c2d5e;font-weight:600'>número de cédula</strong> podrá consultar en cualquier momento el estado actualizado de su radicado PQRSFD. <span style='color:#4a6a90'>Tododrogas CIA SAS, siempre con usted.</span></p>
+        <p style='margin:0 0 14px;font-size:12px;color:#3a4a5a;line-height:1.8;font-weight:300'>Con su <strong style='color:#0c2d5e;font-weight:600'>número de cédula</strong> podrá consultar en cualquier momento el estado actualizado de su radicado ({$ticket_id})PQRSFD. <span style='color:#4a6a90'>Tododrogas CIA SAS, siempre con usted.</span></p>
         <a href='https://tododrogas.online/consulta.html' style='display:inline-block;background:#0c2d5e;color:#ffffff;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;text-decoration:none;padding:12px 26px;border-radius:2px'>🔍 Consultar estado de mi radicado &rarr;</a>
         <p style='margin:10px 0 0;font-size:10px;color:#8a9ab8;letter-spacing:.3px'>tododrogas.online/consulta.html</p>
       </td></tr>
