@@ -250,10 +250,6 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         <td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . "</td>
       </tr>
       <tr style='background:#f6f9fd'>
-        <td style='padding:9px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Promedio</td>
-        <td style='padding:9px 14px;font-size:13px;font-weight:700;color:{$color_cal};border-bottom:1px solid #d4dce8'>{$promedio} / 3.0</td>
-      </tr>
-      <tr>
         <td style='padding:9px 14px;font-size:11px;color:#7a90a8'>Resultado</td>
         <td style='padding:9px 14px'>
           <span style='background:{$bg_cal};color:{$color_cal};padding:3px 10px;font-size:11px;font-weight:700;letter-spacing:.5px'>{$nivel_cal}</span>
@@ -597,7 +593,7 @@ INSTRUCCIONES CRÍTICAS:
 8. Tono: humano, cercano, colombiano — NUNCA robótico. SIEMPRE usar usted, NUNCA tutear.
 9. NO uses 'Estimado/a' — dirígete por nombre de forma cálida y directa.
 10. PROHIBIDO usar emojis en el texto.
-11. PROHIBIDO usar la palabra drogueria — reemplazala por punto de atencion o Tododrogas.
+11. PROHIBIDO usar la palabra "droguería" — reemplázala por "punto de atención" o "Tododrogas".
 
 Responde SOLO con el cuerpo del correo en texto plano, sin asunto, sin HTML, sin explicaciones.";
 
