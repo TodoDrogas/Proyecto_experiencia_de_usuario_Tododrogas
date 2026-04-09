@@ -871,6 +871,34 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
       ".($audio_url || $canvas_url ? "<p style='margin:10px 0 0;font-size:10px;color:#7a90a8'>Su ".($audio_url?'audio':'imagen')." fue adjuntado a este correo como evidencia.</p>" : "")."
     </div>" : "")."
 
+    <!-- DIVIDER CONSULTA RADICADO -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Consulte su radicado</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <!-- BLOQUE CONSULTA EN LÍNEA -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;margin-bottom:24px'>
+      <tr><td style='padding:22px 24px'>
+        <table width='100%' cellpadding='0' cellspacing='0'>
+          <tr>
+            <td style='vertical-align:middle;padding-right:20px'>
+              <p style='margin:0 0 6px;font-size:11px;color:#0c2d5e;font-weight:700;letter-spacing:.3px'>Haga seguimiento en línea a su solicitud</p>
+              <p style='margin:0 0 14px;font-size:11px;color:#4a5a6a;line-height:1.6;font-weight:300'>Con su número de radicado puede consultar el estado actualizado de su PQRSFD en cualquier momento.</p>
+              <a href='https://tododrogas.online/consulta.html' style='display:inline-block;background:#0c2d5e;color:#ffffff;font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;padding:10px 22px;border-radius:2px'>🔍 Consultar estado &rarr;</a>
+              <p style='margin:10px 0 0;font-size:10px;color:#8a9ab8;letter-spacing:.3px'>tododrogas.online/consulta.html</p>
+            </td>
+            <td style='vertical-align:middle;text-align:right;width:120px'>
+              <img src='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png' alt='Nova TD' style='height:48px;max-width:110px;object-fit:contain;display:block;margin-left:auto'>
+              <p style='margin:6px 0 0;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#8a9ab8;text-align:right'>Powered by</p>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
     <!-- DIVIDER CANALES -->
     <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
       <tr>
