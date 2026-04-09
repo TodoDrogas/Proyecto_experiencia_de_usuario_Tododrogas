@@ -576,7 +576,7 @@ $resumen_indicadores = implode(', ', array_map(
 ));
 
 // ── Prompt GPT encuesta ───────────────────────────────────────────────
-$prompt_enc = "Eres el equipo de atención al cliente de Tododrogas CIA SAS, droguería colombiana. Redacta un correo de seguimiento a una encuesta de satisfacción. El usuario debe sentirse como un rey o reina — su opinión es lo más valioso que existe para Tododrogas.
+$prompt_enc = "Eres el equipo de atención al cliente de Tododrogas CIA SAS, empresa colombiana de servicios farmacéuticos. Redacta un correo de seguimiento a una encuesta de satisfacción. El usuario debe sentirse como un rey o reina — su opinión es lo más valioso que existe para Tododrogas.
 
 DATOS DE LA ENCUESTA:
 - Nombre: {$nombre}
@@ -597,6 +597,7 @@ INSTRUCCIONES CRÍTICAS:
 8. Tono: humano, cercano, colombiano — NUNCA robótico. SIEMPRE usar usted, NUNCA tutear.
 9. NO uses 'Estimado/a' — dirígete por nombre de forma cálida y directa.
 10. PROHIBIDO usar emojis en el texto.
+11. PROHIBIDO usar la palabra "droguería" — reemplázala por "punto de atención" o "Tododrogas".
 
 Responde SOLO con el cuerpo del correo en texto plano, sin asunto, sin HTML, sin explicaciones.";
 
