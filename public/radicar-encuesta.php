@@ -549,3 +549,215 @@ echo json_encode([
         ? "Encuesta registrada correctamente."
         : "No se pudo guardar en BD.",
 ]);
+
+// ── PASO 5: CORREO DE SEGUIMIENTO PERSONALIZADO (1 min después) ───────
+if (function_exists('fastcgi_finish_request')) { fastcgi_finish_request(); }
+if (!$correo || !filter_var($correo, FILTER_VALIDATE_EMAIL)) return;
+
+$token_seg = getGraphToken($TENANT_ID, $CLIENT_ID, $CLIENT_SECRET);
+if (!$token_seg) return;
+
+// Recuperar OPENAI_KEY si no está definida en este contexto
+$OPENAI_KEY_SEG = '__OPENAI_KEY__';
+
+sleep(60);
+
+// ── Indicadores en texto para GPT ────────────────────────────────────
+$labels_enc = [
+    'Instalaciones y limpieza'       => $instalaciones,
+    'Atención al cliente'            => $atencion,
+    'Tiempos de espera'              => $tiempos,
+    'Disponibilidad de medicamentos' => $medicamentos,
+    'Recomendaría el servicio'       => $recomendacion,
+];
+$resumen_indicadores = implode(', ', array_map(
+    fn($k, $v) => "{$k}: {$v}/3",
+    array_keys($labels_enc), $labels_enc
+));
+
+// ── Prompt GPT encuesta ───────────────────────────────────────────────
+$prompt_enc = "Eres el equipo de atención al cliente de Tododrogas CIA SAS, droguería colombiana. Redacta un correo de seguimiento a una encuesta de satisfacción. El usuario debe sentirse como un rey o reina — su opinión es lo más valioso que existe para Tododrogas.
+
+DATOS DE LA ENCUESTA:
+- Nombre: {$nombre}
+- Sede visitada: {$sede_nombre}" . ($sede_ciudad ? " · {$sede_ciudad}" : "") . "
+- Calificación global: {$calificacion}/3 — {$nivel_cal}
+- Promedio: {$promedio}/3.0
+- Detalle por indicador: {$resumen_indicadores}
+- Comentario del usuario: " . ($comentario ?: 'No dejó comentario') . "
+- Ticket: {$ticket_enc}
+
+INSTRUCCIONES CRÍTICAS:
+1. Máximo 4 párrafos cortos, fluidos y humanos. NADA de listas ni bullet points.
+2. Si la calificación es ALTA (3/3 — SATISFACTORIO): celebra con alegría genuina, agradece profundamente, menciona que su experiencia positiva motiva a todo el equipo de la sede {$sede_nombre}.
+3. Si la calificación es MEDIA (2/3 — NEUTRO): agradece sinceramente, reconoce que hay aspectos por mejorar, comprométete a trabajar en ello y expresa el deseo de sorprenderle en su próxima visita.
+4. Si la calificación es BAJA (1/3 — INSATISFACTORIO): pide disculpas con profunda humildad, reconoce que fallaron, comprométete a una mejora concreta en la sede {$sede_nombre} y hazle saber que su voz generó un cambio real.
+5. Si dejó comentario, refiérete a él de forma específica — no genérica.
+6. Cierra con una frase poderosa y memorable que refuerce el compromiso de Tododrogas.
+7. Firma: Equipo de Experiencia al Cliente · Tododrogas CIA SAS · Sede {$sede_nombre}
+8. Tono: humano, cercano, colombiano — NUNCA robótico.
+9. NO uses 'Estimado/a' — dirígete por nombre de forma cálida y directa.
+
+Responde SOLO con el cuerpo del correo en texto plano, sin asunto, sin HTML, sin explicaciones.";
+
+$ch_gpt_enc = curl_init('https://api.openai.com/v1/chat/completions');
+curl_setopt_array($ch_gpt_enc, [
+    CURLOPT_POST           => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT        => 30,
+    CURLOPT_HTTPHEADER     => ["Authorization: Bearer {$OPENAI_KEY_SEG}", 'Content-Type: application/json'],
+    CURLOPT_POSTFIELDS     => json_encode([
+        'model'       => 'gpt-4o-mini',
+        'max_tokens'  => 500,
+        'temperature' => 0.75,
+        'messages'    => [
+            ['role' => 'system', 'content' => 'Eres el equipo de atención al cliente de Tododrogas CIA SAS. Redactas correos cálidos, empáticos y personalizados en español colombiano. Cada usuario es tratado como un rey o reina.'],
+            ['role' => 'user', 'content' => $prompt_enc],
+        ],
+    ]),
+]);
+$gpt_resp_enc = curl_exec($ch_gpt_enc);
+curl_close($ch_gpt_enc);
+
+$gpt_data_enc   = json_decode($gpt_resp_enc, true);
+$cuerpo_gpt_enc = trim($gpt_data_enc['choices'][0]['message']['content'] ?? '');
+if (!$cuerpo_gpt_enc) return;
+
+// ── Párrafos HTML ─────────────────────────────────────────────────────
+$parrafos_enc = implode('', array_map(function($p) {
+    $p = trim($p);
+    return $p ? "<p style='margin:0 0 16px;font-size:13px;color:#2a3a4a;line-height:1.9;font-weight:300'>" . nl2br(htmlspecialchars($p)) . "</p>" : '';
+}, explode("\n\n", $cuerpo_gpt_enc)));
+
+// ── Colores según calificación ────────────────────────────────────────
+$color_enc = $calificacion >= 3 ? '#0f5c2e' : ($calificacion >= 2 ? '#7a5200' : '#8a1a1a');
+$bg_enc    = $calificacion >= 3 ? '#dcfce7' : ($calificacion >= 2 ? '#fef9c3' : '#fee2e2');
+
+// ── Asunto ────────────────────────────────────────────────────────────
+$asunto_enc = match(true) {
+    $calificacion >= 3 => "{$nombre}, su satisfacción es nuestra mayor recompensa — Encuesta {$ticket_enc}",
+    $calificacion >= 2 => "{$nombre}, su opinión nos impulsa a ser mejores — Encuesta {$ticket_enc}",
+    default            => "{$nombre}, nos duele no haberle dado lo mejor — Encuesta {$ticket_enc}",
+};
+
+// ── HTML del correo ───────────────────────────────────────────────────
+$logo_enc_seg = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+
+$cuerpo_seg_enc = "
+<!DOCTYPE html><html><head><meta charset='UTF-8'></head>
+<body style='margin:0;padding:0;background:#d8dfe9;font-family:Arial,sans-serif'>
+<table width='100%' cellpadding='0' cellspacing='0' style='background:#d8dfe9;padding:32px 16px'>
+<tr><td align='center'>
+<table width='580' cellpadding='0' cellspacing='0' style='max-width:580px;width:100%;background:#ffffff'>
+
+  <!-- HEADER -->
+  <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
+    <img src='{$logo_enc_seg}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 14px;filter:brightness(0) invert(1);opacity:.92'>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Mensaje personal del equipo &middot; Tododrogas CIA SAS</p>
+  </td></tr>
+
+  <!-- BAND TICKET -->
+  <tr><td style='background:#0a2448;padding:18px 44px;text-align:center'>
+    <p style='color:#6a90b8;margin:0;font-size:9px;letter-spacing:2.5px;text-transform:uppercase'>Encuesta</p>
+    <p style='color:#ffffff;margin:6px 0 2px;font-size:22px;font-weight:700;letter-spacing:3px;font-family:monospace'>{$ticket_enc}</p>
+    <p style='color:#4a6a90;margin:0;font-size:10px'>" . date('d/m/Y H:i') . " &middot; {$sede_nombre}</p>
+  </td></tr>
+
+  <!-- BODY -->
+  <tr><td style='background:#ffffff;padding:40px 44px'>
+
+    <!-- BADGE CALIFICACIÓN -->
+    <table cellpadding='0' cellspacing='0' style='margin-bottom:28px'>
+      <tr>
+        <td style='background:{$bg_enc};padding:6px 16px;border-radius:20px'>
+          <span style='font-size:11px;font-weight:700;color:{$color_enc};letter-spacing:.5px'>" .
+          ($calificacion >= 3 ? 'Experiencia satisfactoria · ' . $promedio . '/3.0' :
+          ($calificacion >= 2 ? 'Experiencia neutra · ' . $promedio . '/3.0' :
+          'Experiencia insatisfactoria · ' . $promedio . '/3.0')) . "
+          </span>
+        </td>
+      </tr>
+    </table>
+
+    <!-- CUERPO GPT -->
+    {$parrafos_enc}
+
+    <!-- SEPARADOR -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin:28px 0 24px'>
+      <tr><td style='border-top:1px solid #d4dce8'></td></tr>
+    </table>
+
+    <!-- BLOQUE SEDE -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:#f0f5fb;border:1px solid #d4dce8;border-left:4px solid #0c2d5e;margin-bottom:24px'>
+      <tr><td style='padding:18px 22px'>
+        <p style='margin:0 0 4px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0c2d5e;font-weight:600'>Sede evaluada</p>
+        <p style='margin:0;font-size:13px;color:#2a3a4a;font-weight:500'>{$sede_nombre}" .
+        ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") .
+        ($sede_direccion ? "<br><span style='font-size:11px;color:#7a90a8;font-weight:400'>{$sede_direccion}</span>" : "") . "</p>
+      </td></tr>
+    </table>
+
+    <!-- CANALES -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>¿Necesita comunicarse con nosotros?</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8'>
+      <tr>
+        <td width='50%' style='padding:14px 18px;border-bottom:1px solid #d4dce8;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>WhatsApp</p>
+          <a href='https://wa.me/573043412431' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>304 341 2431</a>
+        </td>
+        <td width='50%' style='padding:14px 18px;border-bottom:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>PBX</p>
+          <a href='tel:6043222432' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>604 322 2432 Op. 2</a>
+        </td>
+      </tr>
+      <tr>
+        <td width='50%' style='padding:14px 18px;border-right:1px solid #d4dce8;vertical-align:top'>
+          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Correo PQRSFD</p>
+          <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
+        </td>
+        <td width='50%' style='padding:14px 18px;vertical-align:top'>
+          <p style='margin:0 0 3px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Radicar solicitud</p>
+          <a href='https://tododrogas.online/pqr_bienvenida.html' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.online/pqr</a>
+        </td>
+      </tr>
+    </table>
+
+  </td></tr>
+
+  <!-- FOOTER -->
+  <tr><td style='background:#0c2d5e;padding:18px 44px'>
+    <table width='100%' cellpadding='0' cellspacing='0'>
+      <tr>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Equipo de Experiencia al Cliente</td>
+        <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Encuesta: {$ticket_enc}</td>
+      </tr>
+    </table>
+  </td></tr>
+
+</table></td></tr></table>
+</body></html>";
+
+// ── Enviar ────────────────────────────────────────────────────────────
+$ch_seg_enc = curl_init("https://graph.microsoft.com/v1.0/users/{$GRAPH_USER_ID}/sendMail");
+curl_setopt_array($ch_seg_enc, [
+    CURLOPT_POST           => true,
+    CURLOPT_POSTFIELDS     => json_encode([
+        'message' => [
+            'subject'      => $asunto_enc,
+            'importance'   => $calificacion <= 1 ? 'high' : 'normal',
+            'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_seg_enc],
+            'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
+        ],
+        'saveToSentItems' => true,
+    ]),
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER     => ["Authorization: Bearer {$token_seg}", 'Content-Type: application/json'],
+    CURLOPT_TIMEOUT        => 30,
+]);
+curl_exec($ch_seg_enc);
+curl_close($ch_seg_enc);
