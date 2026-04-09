@@ -338,7 +338,7 @@ if (!$texto_pqr && $canal === 'audio') {
 
 if ($OPENAI_KEY && $texto_pqr) {
     $prompt = <<<PROMPT
-Analiza esta solicitud de una drogueria colombiana. Responde SOLO JSON valido sin markdown.
+Analiza esta solicitud de una punto de atención farmacéutico colombiano. Responde SOLO JSON valido sin markdown.
 
 CANAL: {$canal}
 TIPO DECLARADO: $tipo_pqr_raw
@@ -1076,7 +1076,7 @@ sleep(60);
 
 // ── Construir prompt para GPT ─────────────────────────────────────────
 $texto_seguimiento = $transcripcion ?: $canvas_transcripcion ?: $descripcion ?: '';
-$prompt_seguimiento = "Eres el equipo de atención al cliente de Tododrogas CIA SAS, una droguería colombiana de confianza. Tu misión es redactar un correo de seguimiento PERSONALIZADO, CÁLIDO y que haga sentir al usuario como la persona más importante del mundo — como un rey o reina. 
+$prompt_seguimiento = "Eres el equipo de atención al cliente de Tododrogas CIA SAS, una empresa colombiana de servicios farmacéuticos. Tu misión es redactar un correo de seguimiento PERSONALIZADO, CÁLIDO y que haga sentir al usuario como la persona más importante del mundo — como un rey o reina. 
 
 DATOS DEL CASO:
 - Nombre: {$nombre}
@@ -1101,6 +1101,7 @@ INSTRUCCIONES CRÍTICAS:
 9. Tono: humano, cercano, colombiano — NUNCA robótico ni genérico. SIEMPRE usar usted, NUNCA tutear.
 10. NO uses saludos como 'Estimado/a' — dirígete por nombre de forma cálida y directa.
 11. PROHIBIDO usar emojis en el texto.
+12. PROHIBIDO usar la palabra "droguería" — reemplázala por "punto de atención" o "Tododrogas".
 
 Responde SOLO con el cuerpo del correo en texto plano, sin asunto, sin etiquetas HTML, sin explicaciones.";
 
