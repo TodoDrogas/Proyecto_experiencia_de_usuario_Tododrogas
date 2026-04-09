@@ -145,11 +145,6 @@ elseif  ($transcripcion)                            $canal = 'audio';
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 $origen         = $body['origen'] ?? 'formulario_web'; // nova_td | formulario_web
 
-$sede_id        = trim($body['sede_id']        ?? '');
-$sede_nombre    = trim($body['sede_nombre']    ?? '');
-$sede_ciudad    = trim($body['sede_ciudad']    ?? '');
-$sede_direccion = trim($body['sede_direccion'] ?? '');
-
 // ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
 $whisper_transcripcion = '';
 $whisper_error_pre     = '';
@@ -840,13 +835,9 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
         <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$emoji_tipo_u} {$tipo_label_u}" . (strtolower($categoria_ia) !== strtolower($tipo_pqr) ? " &mdash; {$categoria_ia}" : '') . "</td>
       </tr>
       <tr style='background:#f6f9fd'>
-        <td style='padding:11px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #d4dce8'>Canal de contacto</td>
-        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$canal_contacto}</td>
+        <td style='padding:11px 14px;font-size:11px;color:#7a90a8'>Canal de contacto</td>
+        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a'>{$canal_contacto}</td>
       </tr>
-      " . ($sede_nombre ? "<tr>
-        <td style='padding:11px 14px;font-size:11px;color:#7a90a8'>Sede</td>
-        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . ($sede_direccion ? "<br><span style='font-size:11px;color:#7a90a8;font-weight:400'>{$sede_direccion}</span>" : "") . "</td>
-      </tr>" : "") . "
     </table>
 
     <!-- BLOQUE QUÉ SIGUE -->
@@ -952,8 +943,8 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
           <a href='mailto:pqrsfd@tododrogas.com.co' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>pqrsfd@tododrogas.com.co</a>
         </td>
         <td width='50%' style='padding:16px 18px;vertical-align:top'>
-          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Página web</p>
-          <a href='https://www.tododrogas.com.co/' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>www.tododrogas.com.co</a>
+          <p style='margin:0 0 4px;font-size:9px;letter-spacing:1.8px;text-transform:uppercase;color:#8a9ab8'>Portal web</p>
+          <a href='https://tododrogas.online/pqr_form.html' style='font-size:12px;color:#0c2d5e;font-weight:500;text-decoration:none'>tododrogas.online/pqr</a>
         </td>
       </tr>
     </table>
