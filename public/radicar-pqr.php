@@ -145,6 +145,11 @@ elseif  ($transcripcion)                            $canal = 'audio';
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 $origen         = $body['origen'] ?? 'formulario_web'; // nova_td | formulario_web
 
+$sede_id        = trim($body['sede_id']        ?? '');
+$sede_nombre    = trim($body['sede_nombre']    ?? '');
+$sede_ciudad    = trim($body['sede_ciudad']    ?? '');
+$sede_direccion = trim($body['sede_direccion'] ?? '');
+
 // ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
 $whisper_transcripcion = '';
 $whisper_error_pre     = '';
