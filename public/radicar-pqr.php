@@ -828,7 +828,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
       <tr style='background:#f6f9fd'>
         <td style='padding:11px 14px;font-size:11px;color:#7a90a8;width:160px;border-bottom:1px solid #d4dce8'>Fecha de radicado</td>
-        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$fecha_fmt_u} (hora Colombia)</td>
+        <td style='padding:11px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$fecha_fmt_u}</td>
       </tr>
       <tr>
         <td style='padding:11px 14px;font-size:11px;color:#7a90a8;border-bottom:1px solid #e8eef6'>Tipo de solicitud</td>
