@@ -931,6 +931,34 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
       </tr>
     </table>
 
+    <!-- DIVIDER NOVA TD -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='margin-top:24px;margin-bottom:12px'>
+      <tr>
+        <td style='font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#7a90a8;font-weight:500;white-space:nowrap;padding-right:12px'>Su asistente virtual</td>
+        <td style='border-top:1px solid #d4dce8'></td>
+      </tr>
+    </table>
+
+    <!-- BLOQUE NOVA TD -->
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;background:linear-gradient(135deg,#0c2d5e 0%,#1a4a8a 100%);border-radius:2px;margin-bottom:4px'>
+      <tr><td style='padding:26px 28px'>
+        <table width='100%' cellpadding='0' cellspacing='0'>
+          <tr>
+            <td style='vertical-align:middle'>
+              <img src='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png' alt='Nova TD' style='height:42px;max-width:130px;object-fit:contain;display:block;margin-bottom:14px'>
+              <p style='margin:0 0 5px;font-size:14px;color:#ffffff;font-weight:600;letter-spacing:.3px;line-height:1.4'>¿Tiene otra consulta? Nova TD está aquí para ayudarle.</p>
+              <p style='margin:0 0 16px;font-size:11px;color:#7aaad8;line-height:1.8;font-weight:300'>Su asistente virtual disponible <strong style='color:#aaccee;font-weight:500'>las 24 horas, los 7 días de la semana</strong>. Sin filas, sin esperas — solo respuestas rápidas y amables cuando las necesite:</p>
+              <table cellpadding='0' cellspacing='0' style='margin-bottom:18px'>
+                <tr><td style='font-size:11px;color:#9abcd8;line-height:1.9;font-weight:300'>📍&nbsp; Encuentre el punto Tododrogas más cercano a usted<br>💊&nbsp; Consulte la disponibilidad de sus medicamentos<br>📋&nbsp; Radique una PQRSFD en segundos, sin formularios<br>⭐&nbsp; Comparta su experiencia con nuestra encuesta de satisfacción<br>💬&nbsp; Resuelva dudas sobre su servicio farmacéutico</td></tr>
+              </table>
+              <a href='https://tododrogas.online/nova.html' style='display:inline-block;background:#ffffff;color:#0c2d5e;font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;text-decoration:none;padding:11px 24px;border-radius:2px'>✨ Hablar con Nova TD &rarr;</a>
+              <p style='margin:12px 0 0;font-size:10px;color:#4a6a90;letter-spacing:.3px'>tododrogas.online/nova.html</p>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
   </td></tr>
 
   <!-- FOOTER -->
