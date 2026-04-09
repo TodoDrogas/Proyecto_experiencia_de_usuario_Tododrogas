@@ -145,6 +145,10 @@ elseif  ($transcripcion)                            $canal = 'audio';
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 $origen         = $body['origen'] ?? 'formulario_web'; // nova_td | formulario_web
 
+$sede_nombre    = trim($body['sede_nombre']    ?? '');
+$sede_ciudad    = trim($body['sede_ciudad']    ?? '');
+$sede_direccion = trim($body['sede_direccion'] ?? '');
+
 // ── PRE-PASO: TRANSCRIBIR AUDIO CON WHISPER ANTES DE CLASIFICAR ───────
 $whisper_transcripcion = '';
 $whisper_error_pre     = '';
@@ -524,7 +528,8 @@ if ($token) {
     </table>
 
     <!-- TABLA CIUDADANO -->
-    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>
+    <table width='100%' cellpadding='0' cellspacing='0' style='border-collapse:collapse;border:1px solid #d4dce8;margin-bottom:24px'>" .
+      ($sede_nombre ? "<tr style='background:#f6f9fd'><td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #d4dce8'>Sede</td><td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #d4dce8'>{$sede_nombre}" . ($sede_ciudad ? " &middot; {$sede_ciudad}" : "") . ($sede_direccion ? "<br><span style='font-size:11px;color:#7a90a8;font-weight:400'>{$sede_direccion}</span>" : "") . "</td></tr>" : "") . "
       <tr>
         <td style='padding:9px 14px;font-size:11px;color:#7a90a8;width:150px;border-bottom:1px solid #e8eef6'>Nombre</td>
         <td style='padding:9px 14px;font-size:12px;font-weight:500;color:#2a3a4a;border-bottom:1px solid #e8eef6'>{$nombre}</td>
