@@ -650,7 +650,7 @@ const NTD_C = {
   consultaUrl: (typeof window.CONSULTA_URL!=='undefined'?window.CONSULTA_URL:'consulta.html'),
   polUrl  : 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf',
 };
-const NTD_EPS=['COOSALUD','SAVIA','SALUD TOTAL','NUEVA EPS','CEM','ANGIOSUR'];
+const NTD_EPS=['COOSALUD','SAVIA','SALUD TOTAL','NUEVA EPS'];
 const NTD={
   fase:'politica', usuario:null, eps:null,
   _ced:null,_nom:null,_tel:null,_tipoDoc:'CÉDULA DE CIUDADANÍA',
@@ -786,8 +786,6 @@ async function ntdSend(){
 async function ntdDispatch(txt){
   if(NTD.fase==='politica')    return ntdFPolitica(txt);
   if(NTD.fase==='ident_ced')   return ntdFCedula(txt);
-  if(NTD.fase==='ident_nom')   return ntdFNombre(txt);
-  if(NTD.fase==='ident_tel')   return ntdFTelefono(txt);
   if(NTD.fase==='eps')         return ntdFEps(txt);
   // Captura municipio para búsqueda de sedes
   if(NTD.fase==='municipio_sedes'){
@@ -857,61 +855,47 @@ function ntdSetTipoDoc(tipo){
   ntdEna('Por favor escriba su respuesta...');
 }
 
+
+
 async function ntdFCedula(txt){
   const n=txt.replace(/\D/g,'');
   if(n.length<5){
-    ntdAddMsg('nova',ntdR2H('Valor incorrecto, por favor intente de nuevo.\n\nEscribe el número de documento sin puntos ni comas:'));
-    ntdEna('Por favor escriba su respuesta...');return;
+    ntdAddMsg('nova',ntdR2H('Número de documento inválido. Por favor escríbelo sin puntos ni comas:'));
+    ntdEna('Por favor escriba su número de documento...');return;
   }
-  NTD._ced=n;NTD.fase='ident_nom';
-  ntdAddMsg('nova',ntdR2H('Escribe tu **nombre completo** (tal como aparece en el documento):'));
-  ntdEna('Por favor escriba su nombre completo...');
-}
-async function ntdFNombre(txt){
-  if(txt.trim().length<3){ntdAddMsg('nova',ntdR2H('Por favor escribe tu nombre completo.'));ntdEna('Por favor escriba su nombre completo...');return;}
-  NTD._nom=txt.trim().toUpperCase();NTD.fase='ident_tel';
-  ntdAddMsg('nova',ntdR2H('¿Cuál es tu **número de celular**?'));
-  ntdEna('Por favor escriba su número de celular...');
-}
-async function ntdFTelefono(txt){
-  const n=txt.replace(/\D/g,'');
-  if(n.length<7){ntdAddMsg('nova',ntdR2H('El número debe tener al menos 7 dígitos.'));ntdEna('Por favor escriba su respuesta...');return;}
-  NTD._tel=n;
+  NTD._ced=n;NTD._nom='';NTD._tel='';
   ntdTyping(true);ntdAddSk();
   let res;
   try{
     const r=await fetch(NTD_C.validar,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({cedula:NTD._ced,nombre:NTD._nom,telefono:NTD._tel})});
-    res=r.ok?await r.json():{ok:true,razon:'error_api'};
-  }catch(e){res={ok:true,razon:'error_red'};}
+      body:JSON.stringify({cedula:NTD._ced,nombre:'',telefono:''})});
+    res=r.ok?await r.json():{ok:false,razon:'error_api'};
+  }catch(e){res={ok:false,razon:'error_red'};}
   ntdRmSk();ntdTyping(false);
 
   if(!res.ok){
-    const msg=res.msg||(res.razon==='no_encontrado'
-      ?'No encontramos tu registro. Verifica tus datos, comunícate al 604 322 2432 o escríbenos al WhatsApp 304 341 2431.'
-      :'Tus datos no coinciden. Verifica cédula, nombre y teléfono, comunícate al 604 322 2432 o escríbenos al WhatsApp 304 341 2431.');
+    const msg=res.msg||'No encontramos su registro en nuestra base de datos. Verifique su número de documento, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.';
     ntdShowVal(msg);
-    NTD.fase='ident_ced';NTD._ced=null;NTD._nom=null;NTD._tel=null;
-    ntdAddMsg('nova',ntdR2H('Intentemos de nuevo. ¿Cuál es tu **cédula**?'));
+    NTD.fase='ident_ced';NTD._ced=null;
+    ntdAddMsg('nova',ntdR2H('Intentemos de nuevo. Por favor ingrese su **número de documento**:'));
     ntdEna('Por favor escriba su número de documento...');return;
   }
-  const pn=(res.nombre||NTD._nom).trim().split(/\s+/)[0];
-  NTD.usuario={nombre:res.nombre||NTD._nom,primerNombre:pn,cedula:NTD._ced,telefono:NTD._tel,vip:!!res.vip,saludo:res.saludo||null};
+  const pn=(res.nombre||'').trim().split(/\s+/)[0];
+  NTD.usuario={nombre:res.nombre||'',primerNombre:pn,cedula:NTD._ced,telefono:'',vip:!!res.vip,saludo:res.saludo||null,ciudad:res.ciudad||null,epsRegistrada:res.eps||null};
   if(res.vip&&res.saludo){NTD.vipCb=()=>ntdBienvenidaYEps();ntdShowVip(res.saludo);}
   else{ ntdBienvenidaYEps(); }
 }
 
 async function ntdBienvenidaYEps(){
-  // Saludo personalizado con nombre — igual que el video
+  const nombre=NTD.usuario.primerNombre||NTD.usuario.nombre||'estimado/a usuario/a';
   ntdAddMsg('nova', ntdR2H(
-    `✅ Verificado. ¡Hola, **${NTD.usuario.primerNombre}**! Bienvenido/a a Tododrogas CIA SAS.`
+    `✅ **¡Bienvenido/a, ${nombre}!**\n\nEs un gusto atenderle. Mi nombre es **Nova TD**, la asistente virtual de **Tododrogas CIA SAS**, y estoy aquí para ayudarle con todo lo relacionado a sus medicamentos y servicios farmacéuticos.`
   ));
-  await ntdDelay(600);
-  // Aviso de inactividad — igual que en el video de EPS SURA
-  ntdAddMsg('nova',
-    `<p>⏱ <strong>Aviso:</strong> Ten presente que si hay más de <strong>5 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
-  );
   await ntdDelay(700);
+  ntdAddMsg('nova',
+    `<p>⏱ <strong>Aviso:</strong> Si hay más de <strong>5 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
+  );
+  await ntdDelay(600);
   NTD.busy=false;
   ntdIrAEps();
 }
@@ -934,7 +918,111 @@ async function ntdFEps(txt){
   const match=NTD_EPS.find(e=>t.includes(e.replace(' / NO SÉ',''))||e.includes(t))||t;
   NTD.eps=match;NTD.fase='libre';ntdProg(62,'En atención');
   ntdAddMsg('nova',ntdR2H(`EPS **${match}** ✅`));
-  await ntdDelay(350);ntdMostrarMenu();
+  await ntdDelay(400);
+  // Mostrar sede más cercana según ciudad inscrita del paciente y cobertura de EPS
+  await ntdBienvenidaConSede(match);
+}
+
+async function ntdBienvenidaConSede(eps){
+  const nombre=NTD.usuario.primerNombre||'';
+  // Obtener ciudad inscrita desde tabla_usuarios via PHP
+  let ciudadInscrita=null;
+  try{
+    const r=await fetch(NTD_C.validar,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cedula:NTD.usuario.cedula,nombre:'',telefono:'',get_ciudad:true})});
+    if(r.ok){const d=await r.json();ciudadInscrita=(d.ciudad||'').toUpperCase().trim();}
+  }catch(e){}
+
+  // Cargar sedes de Supabase
+  let todasSedes=[];
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    const r=await fetch(sbUrl+'/rest/v1/sedes?activa=eq.true&select=nombre,ciudad,direccion,telefono,lat,lng,eps,horario,municipio_norm',{
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey}});
+    if(r.ok) todasSedes=await r.json();
+  }catch(e){todasSedes=NTD_SEDES_LOCAL;}
+  if(!todasSedes||!todasSedes.length) todasSedes=NTD_SEDES_LOCAL;
+
+  const epsNorm=eps.replace('SAVIA SALUD','SAVIA');
+
+  // Filtrar sedes que atienden esta EPS
+  const sedesPorEps=todasSedes.filter(s=>{
+    let arr=[];
+    if(Array.isArray(s.eps)) arr=s.eps;
+    else if(typeof s.eps==='string'){try{arr=JSON.parse(s.eps);}catch(e){arr=[s.eps];}}
+    return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA');return en===epsNorm||en===eps;});
+  });
+
+  if(!sedesPorEps.length){
+    ntdAddMsg('nova',ntdR2H(`${nombre}, lamentablemente no encontramos sedes activas para **${eps}** en nuestra red. Por favor comuníquese al **604 322 2432** o WhatsApp **304 341 2431** para orientarle.`));
+    await ntdDelay(400);ntdMostrarMenu();return;
+  }
+
+  // Verificar si la ciudad inscrita tiene cobertura de la EPS
+  let sedesEnCiudad=[];
+  if(ciudadInscrita){
+    sedesEnCiudad=sedesPorEps.filter(s=>(s.municipio_norm||s.ciudad||'').toUpperCase()===ciudadInscrita);
+  }
+
+  if(sedesEnCiudad.length){
+    // Hay sede en ciudad inscrita → mostrar la primera como sede principal
+    const s=sedesEnCiudad[0];
+    const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
+    ntdAddMsg('nova', ntdR2H(
+      `${nombre}, según su registro, su ciudad de inscripción es **${ciudadInscrita}** y su EPS es **${eps}**.\n\nSu sede más cercana es:`
+    ));
+    await ntdDelay(400);
+    ntdAddMsg('nova',
+      `<div style="background:var(--card,#1e293b);border-radius:12px;padding:14px;margin:4px 0">
+        <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--accent,#38bdf8)">📍 ${s.nombre||'Sede'}</div>
+        <div style="font-size:13px;margin-bottom:4px">🏙️ <strong>Municipio:</strong> ${s.municipio_norm||s.ciudad||'—'}</div>
+        <div style="font-size:13px;margin-bottom:4px">📌 <strong>Dirección:</strong> ${s.direccion||'—'}</div>
+        <div style="font-size:13px;margin-bottom:8px">🕐 <strong>Horario:</strong> ${s.horario||'Lun-Vie 7:00 AM – 5:30 PM'}</div>
+        <a href="${mu}" target="_blank" style="font-size:12px;color:var(--accent,#38bdf8);text-decoration:none">📍 Ver en Google Maps →</a>
+      </div>`
+    );
+    if(sedesEnCiudad.length>1){
+      await ntdDelay(400);
+      ntdAddMsg('nova',ntdR2H(`Hay **${sedesEnCiudad.length} sedes** de **${eps}** en **${ciudadInscrita}**. ¿Desea ver todas las opciones?`));
+    }
+  } else if(ciudadInscrita){
+    // Ciudad inscrita sin cobertura → informar y mostrar más cercanas
+    ntdAddMsg('nova', ntdR2H(
+      `${nombre}, le informamos que **${eps}** no tiene cobertura activa en su municipio de inscripción **${ciudadInscrita}**.\n\nA continuación le mostramos las sedes más cercanas donde **${eps}** sí presta servicio:`
+    ));
+    await ntdDelay(500);
+    const cercanas=sedesPorEps.filter(s=>parseFloat(s.lat||0)!==0).slice(0,3);
+    cercanas.forEach(s=>{
+      const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
+      ntdAddMsg('nova',
+        `<div style="background:var(--card,#1e293b);border-radius:12px;padding:12px;margin:4px 0">
+          <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--accent,#38bdf8)">📍 ${s.nombre||'Sede'}</div>
+          <div style="font-size:12px;margin-bottom:2px">🏙️ ${s.municipio_norm||s.ciudad||'—'}</div>
+          <div style="font-size:12px;margin-bottom:2px">📌 ${s.direccion||'—'}</div>
+          <div style="font-size:12px;margin-bottom:6px">🕐 ${s.horario||'Lun-Vie 7:00 AM – 5:30 PM'}</div>
+          <a href="${mu}" target="_blank" style="font-size:12px;color:var(--accent,#38bdf8);text-decoration:none">📍 Ver en Google Maps →</a>
+        </div>`
+      );
+    });
+  } else {
+    // Sin ciudad inscrita → mostrar primeras sedes de la EPS
+    ntdAddMsg('nova',ntdR2H(`${nombre}, estas son las sedes disponibles para **${eps}**:`));
+    await ntdDelay(400);
+    sedesPorEps.slice(0,2).forEach(s=>{
+      const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
+      ntdAddMsg('nova',
+        `<div style="background:var(--card,#1e293b);border-radius:12px;padding:12px;margin:4px 0">
+          <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--accent,#38bdf8)">📍 ${s.nombre||'Sede'}</div>
+          <div style="font-size:12px;margin-bottom:2px">🏙️ ${s.municipio_norm||s.ciudad||'—'}</div>
+          <div style="font-size:12px;margin-bottom:6px">📌 ${s.direccion||'—'}</div>
+          <a href="${mu}" target="_blank" style="font-size:12px;color:var(--accent,#38bdf8);text-decoration:none">📍 Ver en Google Maps →</a>
+        </div>`
+      );
+    });
+  }
+  await ntdDelay(600);
+  ntdMostrarMenu();
 }
 
 function ntdOpc(n){
