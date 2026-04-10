@@ -658,7 +658,54 @@ const NTD={
   _ced:null,_nom:null,_tel:null,_tipoDoc:'CÉDULA DE CIUDADANÍA',
   hist:[], busy:false, vipCb:null, _valT:null, arrancado:false, _enMenu:false,
   _consultas:0, _encuestaVista:false,
+  _sesionId:null, _sesionInicio:null, _menuUsados:[], _preguntasLibres:0,
 };
+
+
+// ── MÉTRICAS: registro de sesión en Supabase ────────────────
+async function ntdAbrirSesion(){
+  if(NTD._sesionId) return;
+  NTD._sesionInicio = Date.now();
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    const r=await fetch(sbUrl+'/rest/v1/rpc/registrar_sesion_nova',{
+      method:'POST',
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        p_cedula:   NTD.usuario?.cedula||'',
+        p_nombre:   NTD.usuario?.nombre||'',
+        p_eps:      NTD.eps||'',
+        p_municipio:NTD.usuario?.ciudad||'',
+        p_es_vip:   !!NTD.usuario?.vip,
+        p_origen:   (typeof _BV_ORIGEN!=='undefined'?_BV_ORIGEN:'nova_web')
+      })
+    });
+    if(r.ok){ const d=await r.json(); NTD._sesionId=d; }
+  }catch(e){}
+}
+
+async function ntdCerrarSesion(motivo){
+  if(!NTD._sesionId) return;
+  const dur=Math.round((Date.now()-(NTD._sesionInicio||Date.now()))/1000);
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    await fetch(sbUrl+'/rest/v1/rpc/cerrar_sesion_nova',{
+      method:'POST',
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        p_id:               NTD._sesionId,
+        p_calificacion:     NTD._calificacion||'',
+        p_menu_elegido:     NTD._menuUsados.join(','),
+        p_consultas_count:  NTD._consultas,
+        p_preguntas_libres: NTD._preguntasLibres,
+        p_duracion_seg:     dur,
+        p_motivo_cierre:    motivo||'usuario'
+      })
+    });
+  }catch(e){}
+}
 
 function ntdSys(){
   var eps=(NTD.eps||'').toUpperCase();
@@ -763,6 +810,7 @@ function ntdResetInact(){
       `<p>Esta conversación se cerró por inactividad.</p>
        <p style="margin-top:4px">Si necesitas algo más, toca el botón para iniciar un nuevo chat. ¡Hasta pronto! 😊</p>`,
       `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()" style="font-weight:700">1️⃣ &nbsp;🔄 Iniciar nuevo chat</button></div>`);
+    ntdCerrarSesion('inactividad');
     ntdDis();
   }, 5 * 60 * 1000); // 5 minutos
 }
@@ -895,6 +943,7 @@ async function ntdFCedula(txt){
   NTD.eps=res.eps||null; // EPS directo desde la BD — no preguntar
   if(res.vip&&res.saludo){NTD.vipCb=()=>ntdBienvenidaYEps();ntdShowVip(res.saludo);}
   else{ ntdBienvenidaYEps(); }
+  ntdAbrirSesion(); // registrar sesión en Supabase
 }
 
 async function ntdBienvenidaYEps(){
@@ -1043,6 +1092,9 @@ function ntdOpc(n){
   NTD.busy=false;
   NTD._encuestaVista=false;
   clearTimeout(_ntdResTimer);
+  // Registrar opción de menú usada
+  const _menuLabels={1:'Medicamentos',2:'Sedes',3:'Requisitos',4:'Radicar',5:'Radicado',6:'Horarios',7:'Encuesta',8:'PreguntaLibre'};
+  if(_menuLabels[n]) NTD._menuUsados.push(_menuLabels[n]);
   ntdEna('Por favor escriba su respuesta...');
   var opc={1:ntdMedicamentos,2:ntdSedes,3:ntdRequisitosReclamar,
     4:ntdIrARadicar,5:ntdConsultarRadicado,6:ntdHorarios,
@@ -1472,6 +1524,7 @@ function ntdHorarios(){
 
 // ── Finalizar chat ─────────────────────────────────
 function ntdFinalizarChat(){
+  ntdCerrarSesion('usuario');
   ntdDis();
   ntdAddMsg('nova',
     `<p>¡Gracias por contactarnos, <strong>${NTD.usuario?.primerNombre||''}</strong>! 😊</p>
@@ -1572,6 +1625,7 @@ function ntdMostrarEncuestaFinal(forzar){
 }
 
 function ntdCalificar(tipo){
+  NTD._calificacion=tipo; // guardar para métricas
   var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
   if(tipo==='excelente'){
     ntdAddMsg('nova', ntdR2H(
@@ -1601,6 +1655,7 @@ function ntdCalificar(tipo){
 
 // Activa GPT para consulta libre
 function ntdConsultaPersonalizada(){
+  NTD._preguntasLibres++;
   ntdAddMsg('nova',
     `<p>¿Sobre qué quieres consultar, <strong>${NTD.usuario?.primerNombre||''}</strong>?</p>
      <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe tu pregunta y te respondo de inmediato.</p>`);
