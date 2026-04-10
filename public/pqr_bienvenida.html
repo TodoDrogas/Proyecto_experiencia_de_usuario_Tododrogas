@@ -337,7 +337,7 @@ body{background:var(--ink);display:flex;min-height:100vh;}
         <div class="agent-divider"></div>
         <div class="agent-right">
           <button class="btn-chat" onclick="openChat()">💬 Hablar con Nova TD</button>
-          <button class="btn-audio" onclick="openChatVoice()">🎤 Prefiero audio</button>
+          <button class="btn-audio" onclick="openChatVoice()">🎤 No sé escribir, prefiero hablar</button>
         </div>
       </div>
     </div>
@@ -641,6 +641,7 @@ const NTD={
   hist:[], busy:false, vipCb:null, _valT:null, arrancado:false, _enMenu:false,
   _consultas:0, _encuestaVista:false,
   _sesionId:null, _sesionInicio:null, _menuUsados:[], _preguntasLibres:0,
+  _modoVoz:false,
 };
 
 
@@ -801,8 +802,17 @@ function ntdNuevoChat(){
   ntdReset();
   NTD._consultas=0;
   NTD._encuestaVista=false;
+  NTD._sesionId=null;
   clearTimeout(_ntdResTimer);
   _ntdOfrecioAyuda=false;
+  // En bienvenida: cerrar modal y resetear para próximo usuario
+  const overlay=document.getElementById('overlay');
+  if(overlay) overlay.classList.remove('open');
+  // Resetear para que el próximo click abra chat limpio
+  NTD.arrancado=false;
+  NTD._modoVoz=false;
+  _ttsQueue=[];
+  _ttsPlaying=false;
   setTimeout(()=>{ ntdStart(); }, 150);
 }
 
@@ -1122,9 +1132,8 @@ function ntdMedicamentos(){
        </p>
      </div>`,
 `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px;text-decoration:none">1️⃣ &nbsp;🔗 Consultar en App Solicitudes Web →</a>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">3️⃣ &nbsp;💬 Preguntarle a Nova TD</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Preguntarle a Nova TD</button>
      </div>`);
   ntdPreguntarResolucion();
 }
@@ -1133,7 +1142,7 @@ function ntdMedicamentosPendientes(){
   ntdAddMsg('nova',
     ntdR2H(`Para registrar un medicamento pendiente o incompleto necesito los siguientes datos:\n\n• **Nombre del medicamento** o tecnología de salud\n• **Fecha de solicitud** o entrega anterior\n• **Punto de dispensación** donde lo solicitas\n\nPor favor escríbelos y un asesor verificará el estado en el sistema.`),
 `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px">1️⃣ &nbsp;Ver en App Solicitudes →</a>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdEscalarAgente()">2️⃣ &nbsp;Hablar con un asesor</button>
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
@@ -1688,8 +1697,8 @@ function ntdEscalarAgente(){
   ntdAddMsg('nova',
     ntdR2H('Por supuesto, **'+n+'**. Con mucho gusto le conecto con uno de nuestros asesores. Están disponibles **Lun-Vie 7:00am-5:30pm · Sáb 8:00-12:00m**:\n\nEscoja el canal que prefiera:'),
     '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
-    +'<a href="https://wa.me/573043412431" target="_blank" class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none;display:flex;align-items:center">1️⃣ &nbsp;💬 WhatsApp: 304 341 2431 →</a>'
-    +'<a href="tel:6043222432" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none;display:flex;align-items:center">2️⃣ &nbsp;📞 PBX: 604 322 2432</a>'
+    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px">1️⃣ &nbsp;💬 WhatsApp: 304 341 2431</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px">2️⃣ &nbsp;📞 PBX: 604 322 2432</button>'
     +'<a href="mailto:pqrsfd@tododrogas.com.co" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none;display:flex;align-items:center">3️⃣ &nbsp;✉️ pqrsfd@tododrogas.com.co</a>'
     +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">4️⃣ &nbsp;🏠 Menú principal</button>'
     +'</div>');
@@ -1948,10 +1957,13 @@ async function ntdProcesarAudio(blob){
     if(txt){
       ntdAddMsg('user',ntdR2H(txt.toUpperCase()));
       NTD.hist.push({role:'user',content:txt.toUpperCase()});
-      await ntdFLibre('');
+      await ntdDispatch(txt.toUpperCase());
+      // En modo voz: el mic se reactiva automáticamente via TTS onend
     }else{
-      ntdAddMsg('nova',ntdR2H('No pude entender el audio. Escriba su mensaje.'));
-      ntdEna();
+      const noAudio = NTD._modoVoz ? 'No escuché bien. Por favor intente de nuevo.' : 'No pude entender el audio. Por favor escríbalo.';
+      ntdAddMsg('nova',ntdR2H(noAudio));
+      if(NTD._modoVoz) setTimeout(()=>{if(!ntdRecActive)ntdStartRec();},1200);
+      else ntdEna();
     }
   }catch(e){
     ntdRmSk();ntdTyping(false);
@@ -1971,16 +1983,78 @@ function openChat(){
   if(typeof ntdResetInact==='function')ntdResetInact();
 }
 
+// ── TTS: Nova habla con voz shimmer de OpenAI ────────────
+let _ttsQueue=[], _ttsPlaying=false;
+
+function ntdHablar(texto){
+  if(!NTD._modoVoz) return;
+  // Limpiar HTML y emojis
+  const tmp=document.createElement('div');
+  tmp.innerHTML=texto||'';
+  const limpio=(tmp.textContent||tmp.innerText||'')
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu,'')
+    .replace(/\*\*/g,'').replace(/\n+/g,' ').trim();
+  if(!limpio||limpio.length<2) return;
+  _ttsQueue.push(limpio);
+  if(!_ttsPlaying) _ttsNext();
+}
+
+async function _ttsNext(){
+  if(!_ttsQueue.length){_ttsPlaying=false;_ttsActivarMic();return;}
+  _ttsPlaying=true;
+  const txt=_ttsQueue.shift();
+  try{
+    const prx=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
+    const r=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'tts',texto:txt})});
+    const d=await r.json();
+    if(d.audio_b64){
+      const audio=new Audio('data:'+(d.mime||'audio/mpeg')+';base64,'+d.audio_b64);
+      audio.playbackRate=1.0;
+      audio.onended=()=>{_ttsNext();};
+      audio.onerror=()=>{_ttsNext();};
+      await audio.play().catch(()=>_ttsNext());
+    } else { _ttsNext(); }
+  }catch(e){ _ttsNext(); }
+}
+
+function _ttsActivarMic(){
+  if(NTD._modoVoz && !ntdRecActive){
+    const fasesVoz=['politica','ident_ced','eps','libre'];
+    if(fasesVoz.includes(NTD.fase)){
+      setTimeout(()=>{if(!ntdRecActive&&NTD._modoVoz)ntdStartRec();},500);
+    }
+  }
+}
+
+function ntdDetenerVoz(){
+  _ttsQueue=[];_ttsPlaying=false;
+  if(window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+// Interceptar ntdAddMsg para narrar mensajes de nova en modo voz
+const _ntdAddMsgOrig = ntdAddMsg;
+function ntdAddMsg(from, html, chips){
+  _ntdAddMsgOrig(from, html, chips);
+  if(from==='nova' && NTD._modoVoz){
+    // Extraer texto plano del HTML para narrar
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html||'';
+    ntdHablar(tmp.textContent||tmp.innerText||'');
+  }
+}
+
+
 function openChatVoice(){
+  NTD._modoVoz = true; // activar modo voz
   openChat();
-  // Wait for Nova to initialize, then auto-start voice with friendly message
+  // OpenAI TTS shimmer — no requiere precargar voces
   setTimeout(()=>{
-    // Add a warm Nova message inviting to speak
-    if(typeof ntdAddMsg==='function'){
-      ntdAddMsg('nova',
-        '<p style="font-size:13px">🎙️ <strong>¡Hola! Estoy lista para escucharte.</strong></p>' +
-        '<p style="font-size:12px;color:rgba(190,215,255,.7);margin-top:4px">Presiona el <strong>🎤 micrófono</strong> y dime tu número de documento cuando estés listo/a. Habla con calma, te escucho perfectamente. 💙</p>'
-      );
+    // En modo voz Nova narra automáticamente desde el inicio
+    // El ntdStart() ya fue llamado por openChat() y habrá narrado la política
+    // Solo activar mic si ya está en fase de identificación
+    if(NTD.fase==='ident_ced'||NTD.fase==='politica'){
+      if(!ntdRecActive) ntdStartRec();
     }
     // Auto-activate microphone
     if(typeof ntdToggleVoz==='function') ntdToggleVoz();
