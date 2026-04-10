@@ -68,13 +68,11 @@ foreach ($rows as $row) {
     $puntos = 0;
     $dbCed  = preg_replace('/\D/', '', $row['Cedula Pacientes'] ?? '');
     $dbNom  = strtoupper(trim($row['Nombre Paciente'] ?? ''));
-    $dbTel1 = preg_replace('/\D/', '', $row['Telefono']   ?? '');
-    $dbTel2 = preg_replace('/\D/', '', $row['Telefono 2'] ?? '');
+    $dbTel1 = preg_replace('/\D/', '', $row['Telefono'] ?? '');
 
     if ($cedula   && $dbCed === $cedula)                                    $puntos++;
     if ($tok1_4   && strlen($tok1_4)>=3 && str_contains($dbNom, $tok1_4))  $puntos++;
     if ($telefono && $dbTel1 && strlen($dbTel1)>=7 && $dbTel1===$telefono) $puntos++;
-    if ($telefono && $dbTel2 && strlen($dbTel2)>=7 && $dbTel2===$telefono) $puntos++;
 
     if ($puntos >= 2) {
         // ── VERIFICAR VIP ─────────────────────────────────
