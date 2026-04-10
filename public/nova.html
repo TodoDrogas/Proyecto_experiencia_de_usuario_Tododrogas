@@ -108,12 +108,11 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
 .ntd-mav.us{background:linear-gradient(135deg,#0f766e,#0d9488);font-weight:700;color:#fff;font-size:11px;}
 .ntd-mb{max-width:calc(100% - 37px);}
 .ntd-mr.u .ntd-mb{display:flex;flex-direction:column;align-items:flex-end;}
-.ntd-bub{padding:9px 13px;border-radius:15px;font-size:13px;line-height:1.57;word-break:break-word;color:rgba(232,240,254,.95);}
-.ntd-bub.n{background:#141e30;border:1px solid rgba(37,99,235,.13);border-bottom-left-radius:4px;}
-.ntd-bub.u{background:linear-gradient(135deg,#1a45c4,#2563eb);border-bottom-right-radius:4px;color:#fff;
-  box-shadow:0 3px 13px rgba(37,99,235,.38);}
-.ntd-bub p{margin-bottom:4px;}.ntd-bub p:last-child{margin-bottom:0;}
-.ntd-bub strong{font-weight:600;color:#93c5fd;}.ntd-bub.u strong{color:rgba(255,255,255,.95);}
+.ntd-bub{padding:10px 14px;border-radius:16px;font-size:13px;line-height:1.6;word-break:break-word;color:rgba(232,240,254,.95);font-family:'Sora',sans-serif;}
+.ntd-bub.n{background:linear-gradient(135deg,#0d1b2e,#111e35);border:1px solid rgba(56,189,248,.12);border-bottom-left-radius:4px;}
+.ntd-bub.u{background:linear-gradient(135deg,#1a45c4,#2563eb);border-bottom-right-radius:4px;color:#fff;box-shadow:0 3px 13px rgba(37,99,235,.38);}
+.ntd-bub p{margin-bottom:4px;font-size:13px;}.ntd-bub p:last-child{margin-bottom:0;}
+.ntd-bub strong{font-weight:600;color:#7dd3fc;}.ntd-bub.u strong{color:rgba(255,255,255,.95);}
 .ntd-bub ul{padding-left:0;margin:4px 0;list-style:none;}
 .ntd-bub li{padding:2px 0;padding-left:13px;position:relative;}
 .ntd-bub li::before{content:'›';position:absolute;left:0;color:#00b0ff;font-weight:700;}
@@ -925,17 +924,26 @@ async function ntdFEps(txt){
   await ntdBienvenidaConSede(match);
 }
 
+// ── Card sede con Maps prominente ────────────────────────
+function ntdCardSede(s, badge){
+  const mun=(s.municipio_norm||s.ciudad||'').replace(/, Antioquia$/i,'');
+  const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+mun+', Antioquia, Colombia')}`;
+  const dist=s._dist&&s._dist<9000?`<span style="font-size:10px;background:rgba(56,189,248,.15);color:#38bdf8;border-radius:20px;padding:2px 8px;margin-left:6px">📍 ${s._dist.toFixed(1)} km</span>`:'';
+  const badgeHtml=badge?`<span style="font-size:10px;background:rgba(0,195,154,.2);color:#00c39a;border-radius:20px;padding:2px 8px;margin-left:4px">${badge}</span>`:'';
+  return `<div style="background:linear-gradient(135deg,#0f2044 80%,#1a3a6b);border:1px solid rgba(56,189,248,.2);border-radius:14px;padding:14px 14px 10px;margin:4px 0;font-family:'Sora',sans-serif">
+    <div style="font-weight:700;font-size:13px;color:#e2e8f0;margin-bottom:6px;line-height:1.3">${s.nombre||'Sede'}${dist}${badgeHtml}</div>
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">🏙️ ${mun}</div>
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">📌 ${s.direccion||'—'}</div>
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">🕐 ${s.horario||'Lun-Vie 7:00 AM – 5:30 PM'}</div>
+    <a href="${mu}" target="_blank" style="display:block;text-align:center;background:linear-gradient(90deg,#00c39a,#0891b2);color:#fff;font-weight:700;font-size:12px;border-radius:8px;padding:8px 0;text-decoration:none;letter-spacing:.3px">🗺️ Abrir en Google Maps</a>
+  </div>`;
+}
+
 async function ntdBienvenidaConSede(eps){
   const nombre=NTD.usuario.primerNombre||'';
-  // Obtener ciudad inscrita desde tabla_usuarios via PHP
-  let ciudadInscrita=null;
-  try{
-    const r=await fetch(NTD_C.validar,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({cedula:NTD.usuario.cedula,nombre:'',telefono:'',get_ciudad:true})});
-    if(r.ok){const d=await r.json();ciudadInscrita=(d.ciudad||'').toUpperCase().trim();}
-  }catch(e){}
+  const ciudadInscrita=(NTD.usuario.ciudad||'').toUpperCase().trim();
 
-  // Cargar sedes de Supabase
+  // Cargar sedes de Supabase (con fallback a local)
   let todasSedes=[];
   try{
     const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
@@ -943,87 +951,80 @@ async function ntdBienvenidaConSede(eps){
     const r=await fetch(sbUrl+'/rest/v1/sedes?activa=eq.true&select=nombre,ciudad,direccion,telefono,lat,lng,eps,horario,municipio_norm',{
       headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey}});
     if(r.ok) todasSedes=await r.json();
-  }catch(e){todasSedes=NTD_SEDES_LOCAL;}
+  }catch(e){}
   if(!todasSedes||!todasSedes.length) todasSedes=NTD_SEDES_LOCAL;
 
-  const epsNorm=eps.replace('SAVIA SALUD','SAVIA');
+  const epsUp=eps.toUpperCase().replace('SAVIA SALUD','SAVIA');
 
-  // Filtrar sedes que atienden esta EPS
+  // Filtrar sedes que atienden esta EPS o "TODAS"
   const sedesPorEps=todasSedes.filter(s=>{
     let arr=[];
     if(Array.isArray(s.eps)) arr=s.eps;
     else if(typeof s.eps==='string'){try{arr=JSON.parse(s.eps);}catch(e){arr=[s.eps];}}
-    return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA');return en===epsNorm||en===eps;});
+    return arr.some(e=>{
+      const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA');
+      return en==='TODAS'||en===epsUp||en===eps.toUpperCase();
+    });
   });
 
   if(!sedesPorEps.length){
-    ntdAddMsg('nova',ntdR2H(`${nombre}, lamentablemente no encontramos sedes activas para **${eps}** en nuestra red. Por favor comuníquese al **604 322 2432** o WhatsApp **304 341 2431** para orientarle.`));
+    ntdAddMsg('nova',ntdR2H(`${nombre}, no encontramos sedes activas para **${eps}** en nuestra red. Por favor comuníquese al **604 322 2432** o WhatsApp **304 341 2431**.`));
     await ntdDelay(400);ntdMostrarMenu();return;
   }
 
-  // Verificar si la ciudad inscrita tiene cobertura de la EPS
-  let sedesEnCiudad=[];
-  if(ciudadInscrita){
-    sedesEnCiudad=sedesPorEps.filter(s=>(s.municipio_norm||s.ciudad||'').toUpperCase()===ciudadInscrita);
+  // Obtener geolocalización del usuario
+  const geoPos = await new Promise(res=>{
+    if(!navigator.geolocation){res(null);return;}
+    navigator.geolocation.getCurrentPosition(
+      p=>res({lat:p.coords.latitude,lng:p.coords.longitude}),
+      ()=>res(null),{timeout:4000}
+    );
+  });
+
+  // Referencia de coordenadas: geoloc > ciudad inscrita > primera sede
+  let refLat=null, refLng=null;
+  if(geoPos){refLat=geoPos.lat;refLng=geoPos.lng;}
+  else if(ciudadInscrita){
+    const ref=sedesPorEps.find(s=>(s.municipio_norm||s.ciudad||'').toUpperCase().includes(ciudadInscrita));
+    if(ref&&parseFloat(ref.lat||0)!==0){refLat=parseFloat(ref.lat);refLng=parseFloat(ref.lng);}
   }
 
-  if(sedesEnCiudad.length){
-    // Hay sede en ciudad inscrita → mostrar la primera como sede principal
-    const s=sedesEnCiudad[0];
-    const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
-    ntdAddMsg('nova', ntdR2H(
-      `${nombre}, según su registro, su ciudad de inscripción es **${ciudadInscrita}** y su EPS es **${eps}**.\n\nSu sede más cercana es:`
-    ));
-    await ntdDelay(400);
-    ntdAddMsg('nova',
-      `<div style="background:var(--card,#1e293b);border-radius:12px;padding:14px;margin:4px 0">
-        <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--accent,#38bdf8)">📍 ${s.nombre||'Sede'}</div>
-        <div style="font-size:13px;margin-bottom:4px">🏙️ <strong>Municipio:</strong> ${s.municipio_norm||s.ciudad||'—'}</div>
-        <div style="font-size:13px;margin-bottom:4px">📌 <strong>Dirección:</strong> ${s.direccion||'—'}</div>
-        <div style="font-size:13px;margin-bottom:8px">🕐 <strong>Horario:</strong> ${s.horario||'Lun-Vie 7:00 AM – 5:30 PM'}</div>
-        <a href="${mu}" target="_blank" style="font-size:12px;color:var(--accent,#38bdf8);text-decoration:none">📍 Ver en Google Maps →</a>
-      </div>`
-    );
-    if(sedesEnCiudad.length>1){
-      await ntdDelay(400);
-      ntdAddMsg('nova',ntdR2H(`Hay **${sedesEnCiudad.length} sedes** de **${eps}** en **${ciudadInscrita}**. ¿Desea ver todas las opciones?`));
-    }
-  } else if(ciudadInscrita){
-    // Ciudad inscrita sin cobertura → informar y mostrar más cercanas
-    ntdAddMsg('nova', ntdR2H(
-      `${nombre}, le informamos que **${eps}** no tiene cobertura activa en su municipio de inscripción **${ciudadInscrita}**.\n\nA continuación le mostramos las sedes más cercanas donde **${eps}** sí presta servicio:`
-    ));
-    await ntdDelay(500);
-    const cercanas=sedesPorEps.filter(s=>parseFloat(s.lat||0)!==0).slice(0,3);
-    cercanas.forEach(s=>{
-      const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
-      ntdAddMsg('nova',
-        `<div style="background:var(--card,#1e293b);border-radius:12px;padding:12px;margin:4px 0">
-          <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--accent,#38bdf8)">📍 ${s.nombre||'Sede'}</div>
-          <div style="font-size:12px;margin-bottom:2px">🏙️ ${s.municipio_norm||s.ciudad||'—'}</div>
-          <div style="font-size:12px;margin-bottom:2px">📌 ${s.direccion||'—'}</div>
-          <div style="font-size:12px;margin-bottom:6px">🕐 ${s.horario||'Lun-Vie 7:00 AM – 5:30 PM'}</div>
-          <a href="${mu}" target="_blank" style="font-size:12px;color:var(--accent,#38bdf8);text-decoration:none">📍 Ver en Google Maps →</a>
-        </div>`
-      );
-    });
-  } else {
-    // Sin ciudad inscrita → mostrar primeras sedes de la EPS
-    ntdAddMsg('nova',ntdR2H(`${nombre}, estas son las sedes disponibles para **${eps}**:`));
-    await ntdDelay(400);
-    sedesPorEps.slice(0,2).forEach(s=>{
-      const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
-      ntdAddMsg('nova',
-        `<div style="background:var(--card,#1e293b);border-radius:12px;padding:12px;margin:4px 0">
-          <div style="font-weight:700;font-size:13px;margin-bottom:6px;color:var(--accent,#38bdf8)">📍 ${s.nombre||'Sede'}</div>
-          <div style="font-size:12px;margin-bottom:2px">🏙️ ${s.municipio_norm||s.ciudad||'—'}</div>
-          <div style="font-size:12px;margin-bottom:6px">📌 ${s.direccion||'—'}</div>
-          <a href="${mu}" target="_blank" style="font-size:12px;color:var(--accent,#38bdf8);text-decoration:none">📍 Ver en Google Maps →</a>
-        </div>`
-      );
-    });
+  // Ordenar todas las sedes por distancia si tenemos referencia
+  let ordenadas=sedesPorEps;
+  if(refLat&&refLng){
+    ordenadas=sedesPorEps.map(s=>({
+      ...s,
+      _dist:parseFloat(s.lat||0)!==0?ntdHav2(refLat,refLng,parseFloat(s.lat),parseFloat(s.lng)):9999
+    })).sort((a,b)=>a._dist-b._dist);
   }
-  await ntdDelay(600);
+
+  const sedesEnCiudad=ciudadInscrita
+    ?ordenadas.filter(s=>(s.municipio_norm||s.ciudad||'').toUpperCase().replace(/, ANTIOQUIA$/,'').includes(ciudadInscrita))
+    :[];
+
+  if(sedesEnCiudad.length){
+    const s=sedesEnCiudad[0];
+    ntdAddMsg('nova',ntdR2H(`${nombre}, su ciudad de inscripción es **${ciudadInscrita}** y su EPS es **${eps}**. Su sede más cercana es:`));
+    await ntdDelay(350);
+    ntdAddMsg('nova', ntdCardSede(s,'⭐ Más cercana'));
+    if(sedesEnCiudad.length>1){
+      await ntdDelay(300);
+      ntdAddMsg('nova',ntdR2H(`Hay **${sedesEnCiudad.length} sedes** de **${eps}** en **${ciudadInscrita}**. Puede consultarlas desde el menú → Puntos de dispensación.`));
+    }
+  } else {
+    // Sin cobertura en ciudad inscrita → 2 más cercanas por distancia
+    const msg=ciudadInscrita
+      ?`${nombre}, **${eps}** no tiene sede directa en **${ciudadInscrita}**. Le mostramos las más cercanas:`
+      :`${nombre}, estas son las sedes más cercanas para **${eps}**:`;
+    ntdAddMsg('nova',ntdR2H(msg));
+    await ntdDelay(400);
+    const top=ordenadas.filter(s=>parseFloat(s.lat||0)!==0).slice(0,2);
+    for(let i=0;i<top.length;i++){
+      ntdAddMsg('nova',ntdCardSede(top[i],i===0?'⭐ Más cercana':''));
+      await ntdDelay(250);
+    }
+  }
+  await ntdDelay(500);
   ntdMostrarMenu();
 }
 
