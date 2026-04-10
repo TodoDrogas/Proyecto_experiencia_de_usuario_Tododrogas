@@ -63,7 +63,7 @@ if ($action === 'whisper') {
             'file'     => new CURLFile($tmp, $mime_type, 'audio.' . $ext),
             'model'    => 'whisper-1',
             'language' => 'es',
-            'prompt'   => 'Tododrogas, medicamentos, EPS, PQRSFD, Colombia',
+            'prompt'   => 'Tododrogas CIA SAS, Nova TD, PQRSFD, Colombia, Antioquia. EPS: COOSALUD, SAVIA SALUD, Savia, Salud Total, Nueva EPS, Preventiva, CEM, Angiosur. Medicamentos: fórmula médica, dispensación, tecnología de salud, medicamento pendiente, entrega, historial. Municipios: Medellín, Turbo, Apartadó, Caucasia, Rionegro, Yarumal, Segovia, El Bagre, Necocli, Carepa, Chigorodó, Mutata, Frontino, Dabeiba, Valdivia, Taraza, Cáceres, Anorí, Amalfi, Jericó, Andes, Ciudad Bolívar, Santa Bárbara, Santa Fe de Antioquia, Amaga, Puerto Berrío, Zaragoza, Remedios, Yolombó, San Carlos, Guatapé. Trámites: radicar, radicado, solicitud, queja, reclamo, petición, felicitación, sugerencia, denuncia, consultar estado. Documentos: cédula, documento de identidad, historia clínica, autorización, carta de autorización. Frases comunes: dónde puedo reclamar, puntos de dispensación, sede más cercana, requisitos para reclamar, encuesta de satisfacción, horarios de atención, sábados, PBX, WhatsApp.',
         ],
     ]);
     $resp = curl_exec($ch);
