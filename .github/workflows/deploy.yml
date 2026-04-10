@@ -155,9 +155,9 @@ jobs:
             ERRORS=$((ERRORS+1))
           fi
 
-          # PHP — verificar placeholders residuales solo en archivos existentes
+          # PHP — verificar placeholders residuales en TODOS los archivos incluido nova-proxy.php
           PLACEHOLDERS='__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_TENANT_ID__\|__AZURE_CLIENT_ID__\|__AZURE_CLIENT_SECRET__\|__GRAPH_USER_ID__'
-          for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php public/sincronizar-correos.php public/nova-td-respuesta.php public/nova-proxy.php public/cargar-plantillas.php public/validar-paciente.php; do
+          for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php public/sincronizar-correos.php public/nova-td-respuesta.php public/nova-proxy.php public/nova-consulta.php public/cargar-plantillas.php public/validar-paciente.php; do
             [ -f "$f" ] || continue
             if grep -q "$PLACEHOLDERS" "$f"; then
               echo "❌ Placeholders sin reemplazar en $f"
@@ -366,7 +366,7 @@ jobs:
 
             echo "--- Placeholders residuales ---"
             FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__' \
-              /var/www/pqr/*.php 2>/dev/null | grep -v 'nova-proxy.php' || true)
+              /var/www/pqr/*.php 2>/dev/null || true)
             if [ -n "$FOUND" ]; then
               echo "❌ Placeholders sin reemplazar en: $FOUND"
               ERRORS=$((ERRORS+1))
