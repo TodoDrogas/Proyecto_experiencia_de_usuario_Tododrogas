@@ -60,7 +60,7 @@ if (!$rows) {
     exit;
 }
 
-// ── EVALUAR 2 DE 3 ───────────────────────────────────────
+// ── EVALUAR 1 DE 2 (cédula O nombre) ─────────────────────
 $tok1   = $nombre ? (array_values(array_filter(explode(' ', $nombre)))[0] ?? '') : '';
 $tok1_4 = substr($tok1, 0, 4);
 
@@ -74,7 +74,7 @@ foreach ($rows as $row) {
     if ($tok1_4   && strlen($tok1_4)>=3 && str_contains($dbNom, $tok1_4))  $puntos++;
     if ($telefono && $dbTel1 && strlen($dbTel1)>=7 && $dbTel1===$telefono) $puntos++;
 
-    if ($puntos >= 2) {
+    if ($puntos >= 1) {
         // ── VERIFICAR VIP ─────────────────────────────────
         $vip_data = null;
         if ($cedula) {
