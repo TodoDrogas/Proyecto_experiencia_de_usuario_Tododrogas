@@ -117,6 +117,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
 .ntd-bub li{padding:2px 0;padding-left:13px;position:relative;}
 .ntd-bub li::before{content:'›';position:absolute;left:0;color:#00b0ff;font-weight:700;}
 .ntd-bub a{color:#93c5fd;text-decoration:underline;}
+@keyframes ntdMicPulse{0%,100%{box-shadow:0 0 0 4px rgba(0,195,154,.25),0 0 16px rgba(0,195,154,.4)}50%{box-shadow:0 0 0 8px rgba(0,195,154,.1),0 0 24px rgba(0,195,154,.6)}}
+#ntdMicLbl{display:none;text-align:center;font-size:11px;color:#00c39a;font-weight:600;padding:4px 0 2px;letter-spacing:.2px;font-family:'Sora',sans-serif;}
 .ntd-mt{font-size:10px;color:rgba(130,165,220,.35);margin-top:2px;padding:0 2px;}
 .ntd-sk{display:flex;gap:7px;}
 .ntd-skb{display:flex;gap:5px;align-items:center;padding:10px 13px;
@@ -535,7 +537,8 @@ body::before{content:'';position:fixed;inset:0;pointer-events:none;
           </div>
         </div>
         <!-- Botón micrófono (derecha, siempre visible) -->
-        <button class="ntd-vbtn-mic" id="ntdVBtn" onclick="ntdToggleVoz()" title="Mantén para grabar">🎤</button>
+        <button class="ntd-vbtn-mic" id="ntdVBtn" onclick="ntdToggleVoz()" title="Grabar voz">🎤</button>
+        <div id="ntdMicLbl">🎙️ Grabando... presiona de nuevo para enviar</div>
       </div>
     </div>
 
@@ -1510,11 +1513,11 @@ function ntdCalificar(ok){
     ntdAddMsg('nova',
       ntdR2H('¡Qué alegría, **'+n+'**! 🎉 Fue un placer atenderle. ¿Nos regala una calificación antes de salir?'),
       '<div class="ntd-chips" style="flex-direction:row;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap">'
-      +'<button onclick="ntdRating(5)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform='scale(1.3)'" onmouseout="this.style.transform='scale(1)'">⭐</button>'
-      +'<button onclick="ntdRating(4)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform='scale(1.3)'" onmouseout="this.style.transform='scale(1)'">⭐</button>'
-      +'<button onclick="ntdRating(3)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform='scale(1.3)'" onmouseout="this.style.transform='scale(1)'">⭐</button>'
-      +'<button onclick="ntdRating(2)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform='scale(1.3)'" onmouseout="this.style.transform='scale(1)'">⭐</button>'
-      +'<button onclick="ntdRating(1)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform='scale(1.3)'" onmouseout="this.style.transform='scale(1)'">⭐</button>'
+      +'<button onclick="ntdRating(5)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform=&apos;scale(1.3)&apos;" onmouseout="this.style.transform=&apos;scale(1)&apos;">⭐</button>'
+      +'<button onclick="ntdRating(4)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform=&apos;scale(1.3)&apos;" onmouseout="this.style.transform=&apos;scale(1)&apos;">⭐</button>'
+      +'<button onclick="ntdRating(3)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform=&apos;scale(1.3)&apos;" onmouseout="this.style.transform=&apos;scale(1)&apos;">⭐</button>'
+      +'<button onclick="ntdRating(2)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform=&apos;scale(1.3)&apos;" onmouseout="this.style.transform=&apos;scale(1)&apos;">⭐</button>'
+      +'<button onclick="ntdRating(1)" style="background:none;border:none;font-size:28px;cursor:pointer;transition:transform .15s" onmouseover="this.style.transform=&apos;scale(1.3)&apos;" onmouseout="this.style.transform=&apos;scale(1)&apos;">⭐</button>'
       +'</div>'
     );
   } else {
@@ -1756,17 +1759,29 @@ function ntdCloseVal(){clearInterval(NTD._valT);ntd$('ntdValBg').classList.remov
 let ntdRecActive=false, ntdRec=null, ntdRecSecs=0, ntdRecTimer=null;
 
 function ntdShowRecUI(on){
-  var bar=ntd$('ntdRecBar'),ta=ntd$('ntdTa'),sb=ntd$('ntdSBtn'),vb=ntd$('ntdVBtn');
+  var bar=ntd$('ntdRecBar'),ta=ntd$('ntdTa'),sb=ntd$('ntdSBtn'),vb=ntd$('ntdVBtn'),lbl=ntd$('ntdMicLbl');
   if(on){
     if(bar)bar.style.display='flex';
     if(ta)ta.style.display='none';
     if(sb)sb.style.display='none';
-    if(vb){vb.style.background='#dc2626';vb.title='Detener';}
+    if(vb){
+      vb.style.background='linear-gradient(135deg,#00c39a,#059669)';
+      vb.style.boxShadow='0 0 0 4px rgba(0,195,154,.25),0 0 16px rgba(0,195,154,.4)';
+      vb.style.animation='ntdMicPulse 1s ease-in-out infinite';
+      vb.title='Presiona de nuevo para enviar';
+    }
+    if(lbl){lbl.textContent='🎙️ Grabando... presiona de nuevo para enviar';lbl.style.display='block';}
   }else{
     if(bar)bar.style.display='none';
     if(ta)ta.style.display='';
     if(sb)sb.style.display='';
-    if(vb){vb.style.background='';vb.title='Grabar';}
+    if(vb){
+      vb.style.background='';
+      vb.style.boxShadow='';
+      vb.style.animation='';
+      vb.title='Grabar';
+    }
+    if(lbl){lbl.style.display='none';}
     var rt=ntd$('ntdRecTime');if(rt)rt.textContent='0:00';
   }
 }
