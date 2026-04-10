@@ -63,7 +63,7 @@ if ($action === 'whisper') {
             'file'     => new CURLFile($tmp, $mime_type, 'audio.' . $ext),
             'model'    => 'whisper-1',
             'language' => 'es',
-            'prompt'   => 'Tododrogas, medicamentos, EPS, PQRSFD, Colombia',
+            'prompt'   => 'Tododrogas, COOSALUD, SAVIA, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, EPS, medicamentos, fórmula médica, dispensación, PQRSFD, reclamar, municipio, Antioquia, Colombia, cédula, afiliado, sede, punto de dispensación, autorización, historia clínica, Medellín, Turbo, Apartadó, Caucasia, Rionegro, Yarumal, Segovia, radicado, asesor, pendiente, entrega, solicitud.',
         ],
     ]);
     $resp = curl_exec($ch);
