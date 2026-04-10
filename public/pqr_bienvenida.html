@@ -754,7 +754,63 @@ function ntdSep(l='Hoy'){
   const e=document.createElement('div');e.className='ntd-sep';e.textContent=l;
   ntd$('ntdMsgs').appendChild(e);
 }
+// ── TTS: Nova habla con voz shimmer de OpenAI ────────────
+let _ttsQueue=[], _ttsPlaying=false;
+
+function ntdHablar(texto){
+  if(!NTD._modoVoz) return;
+  // Limpiar HTML y emojis
+  const tmp=document.createElement('div');
+  tmp.innerHTML=texto||'';
+  const limpio=(tmp.textContent||tmp.innerText||'')
+    .replace(/[\u{1F000}-\u{1FFFF}]/gu,'')
+    .replace(/\*\*/g,'').replace(/\n+/g,' ').trim();
+  if(!limpio||limpio.length<2) return;
+  _ttsQueue.push(limpio);
+  if(!_ttsPlaying) _ttsNext();
+}
+
+async function _ttsNext(){
+  if(!_ttsQueue.length){_ttsPlaying=false;_ttsActivarMic();return;}
+  _ttsPlaying=true;
+  const txt=_ttsQueue.shift();
+  try{
+    const prx=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
+    const r=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'tts',texto:txt})});
+    const d=await r.json();
+    if(d.audio_b64){
+      const audio=new Audio('data:'+(d.mime||'audio/mpeg')+';base64,'+d.audio_b64);
+      audio.playbackRate=1.0;
+      audio.onended=()=>{_ttsNext();};
+      audio.onerror=()=>{_ttsNext();};
+      await audio.play().catch(()=>_ttsNext());
+    } else { _ttsNext(); }
+  }catch(e){ _ttsNext(); }
+}
+
+function _ttsActivarMic(){
+  if(NTD._modoVoz && !ntdRecActive){
+    const fasesVoz=['politica','ident_ced','eps','libre'];
+    if(fasesVoz.includes(NTD.fase)){
+      setTimeout(()=>{if(!ntdRecActive&&NTD._modoVoz)ntdStartRec();},500);
+    }
+  }
+}
+
+function ntdDetenerVoz(){
+  _ttsQueue=[];_ttsPlaying=false;
+  if(window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+
+
 function ntdAddMsg(who,html,chips=''){
+  // TTS: narrar mensajes de Nova en modo voz
+  if(who!=='user' && NTD._modoVoz && typeof ntdHablar==='function'){
+    const _tmp=document.createElement('div');_tmp.innerHTML=html||'';
+    ntdHablar(_tmp.textContent||_tmp.innerText||'');
+  }
   const isN=who!=='user';
   const row=document.createElement('div');row.className='ntd-mr'+(isN?'':' u');
   const avHtml = isN
@@ -1981,67 +2037,6 @@ function openChat(){
   document.getElementById('overlay').classList.add('open');
   if(!NTD.arrancado){NTD.arrancado=true;ntdStart();}
   if(typeof ntdResetInact==='function')ntdResetInact();
-}
-
-// ── TTS: Nova habla con voz shimmer de OpenAI ────────────
-let _ttsQueue=[], _ttsPlaying=false;
-
-function ntdHablar(texto){
-  if(!NTD._modoVoz) return;
-  // Limpiar HTML y emojis
-  const tmp=document.createElement('div');
-  tmp.innerHTML=texto||'';
-  const limpio=(tmp.textContent||tmp.innerText||'')
-    .replace(/[\u{1F000}-\u{1FFFF}]/gu,'')
-    .replace(/\*\*/g,'').replace(/\n+/g,' ').trim();
-  if(!limpio||limpio.length<2) return;
-  _ttsQueue.push(limpio);
-  if(!_ttsPlaying) _ttsNext();
-}
-
-async function _ttsNext(){
-  if(!_ttsQueue.length){_ttsPlaying=false;_ttsActivarMic();return;}
-  _ttsPlaying=true;
-  const txt=_ttsQueue.shift();
-  try{
-    const prx=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
-    const r=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'tts',texto:txt})});
-    const d=await r.json();
-    if(d.audio_b64){
-      const audio=new Audio('data:'+(d.mime||'audio/mpeg')+';base64,'+d.audio_b64);
-      audio.playbackRate=1.0;
-      audio.onended=()=>{_ttsNext();};
-      audio.onerror=()=>{_ttsNext();};
-      await audio.play().catch(()=>_ttsNext());
-    } else { _ttsNext(); }
-  }catch(e){ _ttsNext(); }
-}
-
-function _ttsActivarMic(){
-  if(NTD._modoVoz && !ntdRecActive){
-    const fasesVoz=['politica','ident_ced','eps','libre'];
-    if(fasesVoz.includes(NTD.fase)){
-      setTimeout(()=>{if(!ntdRecActive&&NTD._modoVoz)ntdStartRec();},500);
-    }
-  }
-}
-
-function ntdDetenerVoz(){
-  _ttsQueue=[];_ttsPlaying=false;
-  if(window.speechSynthesis) window.speechSynthesis.cancel();
-}
-
-// Interceptar ntdAddMsg para narrar mensajes de nova en modo voz
-const _ntdAddMsgOrig = ntdAddMsg;
-function ntdAddMsg(from, html, chips){
-  _ntdAddMsgOrig(from, html, chips);
-  if(from==='nova' && NTD._modoVoz){
-    // Extraer texto plano del HTML para narrar
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html||'';
-    ntdHablar(tmp.textContent||tmp.innerText||'');
-  }
 }
 
 
