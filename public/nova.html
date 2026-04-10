@@ -786,7 +786,7 @@ async function ntdSend(){
 async function ntdDispatch(txt){
   if(NTD.fase==='politica')    return ntdFPolitica(txt);
   if(NTD.fase==='ident_ced')   return ntdFCedula(txt);
-  if(NTD.fase==='eps')         return ntdFEps(txt);
+
   // Captura municipio para búsqueda de sedes
   if(NTD.fase==='municipio_sedes'){
     ntdAddMsg('nova', ntdR2H(`Buscando sedes en **${txt}** para **${NTD.eps||'tu EPS'}**...`));
@@ -882,22 +882,24 @@ async function ntdFCedula(txt){
   }
   const pn=(res.nombre||'').trim().split(/\s+/)[0];
   NTD.usuario={nombre:res.nombre||'',primerNombre:pn,cedula:NTD._ced,telefono:'',vip:!!res.vip,saludo:res.saludo||null,ciudad:res.ciudad||null,epsRegistrada:res.eps||null};
+  NTD.eps=res.eps||null; // EPS directo desde la BD — no preguntar
   if(res.vip&&res.saludo){NTD.vipCb=()=>ntdBienvenidaYEps();ntdShowVip(res.saludo);}
   else{ ntdBienvenidaYEps(); }
 }
 
 async function ntdBienvenidaYEps(){
   const nombre=NTD.usuario.primerNombre||NTD.usuario.nombre||'estimado/a usuario/a';
+  const eps=NTD.eps||'';
   ntdAddMsg('nova', ntdR2H(
-    `✅ **¡Bienvenido/a, ${nombre}!**\n\nEs un gusto atenderle. Mi nombre es **Nova TD**, la asistente virtual de **Tododrogas CIA SAS**, y estoy aquí para ayudarle con todo lo relacionado a sus medicamentos y servicios farmacéuticos.`
+    `✅ **¡Bienvenido/a, ${nombre}!**\n\nEs un gusto atenderle. Mi nombre es **Nova TD**, la asistente virtual de **Tododrogas CIA SAS**, y estoy aquí para ayudarle con todo lo relacionado a sus medicamentos y servicios farmacéuticos.\n\nIdentificamos que usted está afiliado/a a **${eps}**.`
   ));
   await ntdDelay(700);
   ntdAddMsg('nova',
     `<p>⏱ <strong>Aviso:</strong> Si hay más de <strong>5 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
   );
-  await ntdDelay(600);
-  NTD.busy=false;
-  ntdIrAEps();
+  await ntdDelay(500);
+  // Mostrar sede más cercana automáticamente
+  await ntdBienvenidaConSede(eps);
 }
 
 function ntdIrAEps(){
