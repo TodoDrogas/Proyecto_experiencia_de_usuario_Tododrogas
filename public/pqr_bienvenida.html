@@ -634,7 +634,6 @@ const NTD_C = {
   consultaUrl: (typeof window.CONSULTA_URL!=='undefined'?window.CONSULTA_URL:'consulta.html'),
   polUrl  : 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf',
 };
-
 const NTD_EPS=['COOSALUD','SAVIA','SALUD TOTAL','NUEVA EPS'];
 const NTD={
   fase:'politica', usuario:null, eps:null,
@@ -1963,10 +1962,65 @@ async function ntdProcesarAudio(blob){
 /* FIN NOVA TD */
 
 /* Arranque automático */
-document.addEventListener('DOMContentLoaded', () => {
-  NTD.arrancado = true;
-  ntdStart();
+
+function openChat(){
+  clearTimeout(_ntdCierreTimer);_ntdCierreTimer=null;
+  document.getElementById('overlay').classList.add('open');
+  if(!NTD.arrancado){NTD.arrancado=true;ntdStart();}
+  if(typeof ntdResetInact==='function')ntdResetInact();
+}
+
+function openChatVoice(){
+  openChat();
+  // Wait for Nova to initialize, then auto-start voice with friendly message
+  setTimeout(()=>{
+    // Add a warm Nova message inviting to speak
+    if(typeof ntdAddMsg==='function'){
+      ntdAddMsg('nova',
+        '<p style="font-size:13px">🎙️ <strong>¡Hola! Estoy lista para escucharte.</strong></p>' +
+        '<p style="font-size:12px;color:rgba(190,215,255,.7);margin-top:4px">Presiona el <strong>🎤 micrófono</strong> y dime tu número de documento cuando estés listo/a. Habla con calma, te escucho perfectamente. 💙</p>'
+      );
+    }
+    // Auto-activate microphone
+    if(typeof ntdToggleVoz==='function') ntdToggleVoz();
+  }, 1200);
+}
+
+function closeChat(){
+  document.getElementById('overlay').classList.remove('open');
+  if(NTD.arrancado){
+    clearTimeout(_ntdCierreTimer);
+    _ntdCierreTimer=setTimeout(()=>{ntdReset();},5*60*1000);
+  }
+}
+
+function onOvClick(e){
+  if(e.target===document.getElementById('overlay'))closeChat();
+}
+
+/* ══ INIT ══ */
+function updateClock(){
+  const now=new Date();const h=String(now.getHours()).padStart(2,'0');const m=String(now.getMinutes()).padStart(2,'0');
+  const el=document.getElementById('clockDisplay');if(el)el.textContent=h+':'+m;
+}
+setInterval(updateClock,1000);updateClock();
+
+document.body.style.opacity='0';document.body.style.transition='opacity .4s ease';
+setTimeout(()=>{document.body.style.opacity='1';},50);
+
+startCarousel();
+
+requestAnimationFrame(()=>{
+  requestAnimationFrame(()=>{
+    applyQRs();
+    _lastQrUrl=FORM_URL;
+    pollSupabaseConfig();
+    setInterval(pollSupabaseConfig,30000);
+  });
 });
+
+document.getElementById('btn-radicar-main').addEventListener('click', goToForm);
+window.addEventListener('orientationchange',()=>{setTimeout(applyQRs,400);});
 </script>
 </body>
 </html>
