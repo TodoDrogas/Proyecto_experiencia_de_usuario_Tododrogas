@@ -63,7 +63,7 @@ if ($action === 'whisper') {
             'file'     => new CURLFile($tmp, $mime_type, 'audio.' . $ext),
             'model'    => 'whisper-1',
             'language' => 'es',
-            'prompt'   => 'Tododrogas, COOSALUD, SAVIA, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, EPS, medicamentos, fórmula médica, dispensación, PQRSFD, reclamar, municipio, Antioquia, Colombia, cédula, afiliado, sede, punto de dispensación, autorización, historia clínica, Medellín, Turbo, Apartadó, Caucasia, Rionegro, Yarumal, Segovia, radicado, asesor, pendiente, entrega, solicitud.',
+            'prompt'   => 'Tododrogas, medicamentos, EPS, PQRSFD, Colombia',
         ],
     ]);
     $resp = curl_exec($ch);
@@ -72,6 +72,47 @@ if ($action === 'whisper') {
     @unlink($tmp);
     $data = json_decode($resp, true);
     echo json_encode(['text' => $data['text'] ?? '', 'code' => $code]);
+    exit;
+}
+
+// ── MODO TTS: OpenAI Text-to-Speech (shimmer) ─────────────
+if ($action === 'tts') {
+    $texto = trim($body['texto'] ?? '');
+    if (!$texto) {
+        http_response_code(400);
+        echo json_encode(['error' => 'texto requerido']);
+        exit;
+    }
+    $texto = strip_tags($texto);
+    $texto = preg_replace('/[\x{1F000}-\x{1FFFF}]/u', '', $texto);
+    $texto = trim($texto);
+    if (!$texto) { echo json_encode(['audio_b64' => '']); exit; }
+
+    $ch = curl_init('https://api.openai.com/v1/audio/speech');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode([
+            'model' => 'tts-1',
+            'voice' => 'shimmer',
+            'input' => mb_substr($texto, 0, 4096),
+            'speed' => 0.95,
+        ]),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_HTTPHEADER     => [
+            'Authorization: Bearer ' . $OPENAI_KEY,
+            'Content-Type: application/json',
+        ],
+    ]);
+    $audio = curl_exec($ch);
+    $code  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code === 200 && $audio) {
+        echo json_encode(['audio_b64' => base64_encode($audio), 'mime' => 'audio/mpeg']);
+    } else {
+        echo json_encode(['audio_b64' => '', 'error' => 'tts_failed_'.$code]);
+    }
     exit;
 }
 
