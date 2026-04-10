@@ -63,7 +63,7 @@ if ($action === 'whisper') {
             'file'     => new CURLFile($tmp, $mime_type, 'audio.' . $ext),
             'model'    => 'whisper-1',
             'language' => 'es',
-            'prompt'   => 'Tododrogas CIA SAS, Nova TD, PQRSFD, Colombia, Antioquia. EPS: COOSALUD, SAVIA SALUD, Salud Total, Nueva EPS, Preventiva, CEM, Angiosur. Medicamentos: formula medica, dispensacion, tecnologia de salud, medicamento pendiente, entrega, historial. Municipios: Medellin, Turbo, Apartado, Caucasia, Rionegro, Yarumal, Segovia, El Bagre, Necocli, Carepa, Chigorodo, Mutata, Frontino, Dabeiba, Valdivia, Taraza, Caceres, Anori, Amalfi, Jerico, Andes, Ciudad Bolivar, Santa Barbara, Santa Fe de Antioquia, Amaga, Puerto Berrio, Zaragoza, Remedios, Yolombo, San Carlos, Guatape. Tramites: radicar, radicado, solicitud, queja, reclamo, peticion, felicitacion, sugerencia, denuncia, consultar estado. Documentos: cedula, documento de identidad, historia clinica, autorizacion. Frases: donde puedo reclamar, puntos de dispensacion, sede mas cercana, requisitos para reclamar, encuesta de satisfaccion, horarios.',
+            'prompt'   => 'Tododrogas, medicamentos, EPS, PQRSFD, Colombia',
         ],
     ]);
     $resp = curl_exec($ch);
@@ -108,41 +108,6 @@ if ($action === 'tts') {
     $code  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($code === 200 && $audio) {
-        echo json_encode(['audio_b64' => base64_encode($audio), 'mime' => 'audio/mpeg']);
-    } else {
-        echo json_encode(['audio_b64' => '', 'error' => 'tts_failed_'.$code]);
-    }
-    exit;
-}
-
-// ── MODO TTS: OpenAI Text-to-Speech (shimmer) ─────────────
-if ($action === 'tts') {
-    $texto = trim($body['texto'] ?? '');
-    if (!$texto) { echo json_encode(['audio_b64' => '']); exit; }
-    $texto = strip_tags($texto);
-    $texto = preg_replace('/[\x{1F000}-\x{1FFFF}]/u', '', $texto);
-    $texto = trim($texto);
-    if (!$texto) { echo json_encode(['audio_b64' => '']); exit; }
-    $ch = curl_init('https://api.openai.com/v1/audio/speech');
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode([
-            'model' => 'tts-1',
-            'voice' => 'shimmer',
-            'input' => mb_substr($texto, 0, 4096),
-            'speed' => 0.95,
-        ]),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 20,
-        CURLOPT_HTTPHEADER     => [
-            'Authorization: Bearer ' . $OPENAI_KEY,
-            'Content-Type: application/json',
-        ],
-    ]);
-    $audio = curl_exec($ch);
-    $code  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
     if ($code === 200 && $audio) {
         echo json_encode(['audio_b64' => base64_encode($audio), 'mime' => 'audio/mpeg']);
     } else {
