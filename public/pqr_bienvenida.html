@@ -712,7 +712,7 @@ function ntdSys(){
   s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
   s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
   s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, mal concentración, deteriorado o equivocado — di SIEMPRE: No lo consuma. Por su seguridad NO utilice ese medicamento. Acérquese al punto más cercano o llame al PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] o [ESCALAR].\n';
-  s+='REGLA SEDES: Usa [SEDES:municipio] SOLO cuando el usuario pregunta EXPLÍCITAMENTE por puntos de dispensación, sedes, dónde retirar o si hay cobertura en un municipio. NO lo uses si pregunta por requisitos, procesos, derechos o información general sobre una EPS. Si menciona una EPS diferente a la suya (ej: "si soy SALUD TOTAL"), usa [SEDES:municipio:EPSMENCIONADA].\n';
+  ss+='REGLA SEDES: Usa [SEDES:municipio] SOLO cuando el usuario pregunta por sedes, dónde retirar o cobertura. IMPORTANTE: si el usuario NO menciona municipio, PREGÚNTALE primero en qué municipio se encuentra — no uses [SEDES] sin municipio. Cuando tengas el municipio usa [SEDES:municipio]. Si menciona EPS diferente usa [SEDES:municipio:EPSMENCIONADA].\n';
   s+='REGLA CONSULTAR: Si el usuario escribe un número de radicado (ej: TD-xxxxx) o correo para consultar estado, usa SIEMPRE [CONSULTAR:valor] al final con el valor exacto que escribió.\n';
   s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
   s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
@@ -925,7 +925,21 @@ async function ntdSend(){
 
 async function ntdDispatch(txt){
   if(NTD.fase==='politica')    return ntdFPolitica(txt);
-  if(NTD.fase==='ident_ced')   return ntdFCedula(txt);
+  if(NTD.fase==='ident_ced'){
+    // En modo voz: convertir palabras numéricas a dígitos
+    let txtCed = txt;
+    if(NTD._modoVoz){
+      const _palabras={'cero':'0','uno':'1','una':'1','dos':'2','tres':'3','cuatro':'4',
+        'cinco':'5','seis':'6','siete':'7','ocho':'8','nueve':'9','diez':'10',
+        'once':'11','doce':'12','trece':'13','catorce':'14','quince':'15'};
+      txtCed = txtCed.toLowerCase()
+        .replace(/\b(cero|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve)\b/gi,
+          m=>_palabras[m.toLowerCase()]||m)
+        .replace(/[^\d]/g,'');
+      if(txtCed.length>=5) txt=txtCed;
+    }
+    return ntdFCedula(txt);
+  }
 
   // Captura municipio para búsqueda de sedes
   if(NTD.fase==='municipio_sedes'){
@@ -1344,6 +1358,14 @@ function ntdMostrarMenu(){
   c+='<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdFinalizarChat()">9️⃣ &nbsp;✖ Finalizar chat</button>';
   c+='</div>';
   ntdAddMsg('nova','<p>En que le puedo ayudar, <strong>'+n+'</strong>?</p>',c);
+  // En modo voz: narrar menú resumido y activar mic
+  if(NTD._modoVoz){
+    setTimeout(function(){
+      ntdHablar('En qué le puedo ayudar? Dígame: medicamentos, sedes, requisitos, radicar, radicado, horarios o encuesta.');
+      // Activar mic después de narrar
+      setTimeout(function(){if(!ntdRecActive)ntdStartRec();},3500);
+    },300);
+  }
   ntdSetQbar([{e:'1️⃣',l:'Medicamentos',t:'1'},{e:'2️⃣',l:'Sedes',t:'2'},
     {e:'4️⃣',l:'Radicar',t:'4'},{e:'5️⃣',l:'Radicado',t:'5'},{e:'7️⃣',l:'Encuesta',t:'7'}]);
   ntdEna('Por favor escriba el número de la opción...');
@@ -1515,6 +1537,12 @@ const ntdHav2=(lat1,lng1,lat2,lng2)=>{
 
 async function ntdFetchSedes(mun){
   NTD.fase='libre';
+  // Si no hay municipio → pedir ubicación o escribir municipio
+  if(!mun||!mun.trim()){
+    ntdRmSk();ntdTyping(false);
+    ntdSedes();
+    return;
+  }
   ntdTyping(true);ntdAddSk();
   const eps=(NTD.eps||'').toUpperCase().trim();
   const munNorm=ntdNormMun(mun);
@@ -2224,7 +2252,18 @@ async function ntdProcesarAudio(blob){
     if(txt){
       ntdAddMsg('user',ntdR2H(txt.toUpperCase()));
       NTD.hist.push({role:'user',content:txt.toUpperCase()});
-      await ntdDispatch(txt.toUpperCase());
+      // En modo voz: mapear palabras habladas a opciones de menú
+      let txtFinal = txt.toUpperCase();
+      if(NTD._modoVoz){
+        if(/MEDIC|ENTREG|ESTADO|PEDIDO/i.test(txt)) { ntdOpc(1); return; }
+        if(/SEDE|PUNTO|DISPEN|D[OÓ]NDE|CERCA|RECLAMAR/i.test(txt)) { ntdOpc(2); return; }
+        if(/REQUIS|LLEVAR|PIDEN|DOCUM/i.test(txt)) { ntdOpc(3); return; }
+        if(/RADIC[AO]R|QUEJA|RECLAM[AO]|PQR|SOLICIT/i.test(txt)) { ntdOpc(4); return; }
+        if(/RADICADO|ESTADO.*QUEJA|CONSUL.*PQR|NUM.*RADIC/i.test(txt)) { ntdOpc(5); return; }
+        if(/HORARIO|CONTACT|TEL[EÉ]FONO|CORREO|CANAL/i.test(txt)) { ntdOpc(6); return; }
+        if(/ENCUESTA|CALIFIC|SATISF/i.test(txt)) { ntdOpc(7); return; }
+      }
+      await ntdDispatch(txtFinal);
       // En modo voz: el mic se reactiva automáticamente via TTS onend
     }else{
       const noAudio = NTD._modoVoz ? 'No escuché bien. Por favor intente de nuevo.' : 'No pude entender el audio. Por favor escríbalo.';
