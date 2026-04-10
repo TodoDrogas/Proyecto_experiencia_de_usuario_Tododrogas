@@ -60,7 +60,7 @@ if (!$rows) {
     exit;
 }
 
-// ── EVALUAR 1 DE 2 (cédula O nombre) ─────────────────────
+// ── EVALUAR 1 DE 2 ────────────────────────────────────────
 $tok1   = $nombre ? (array_values(array_filter(explode(' ', $nombre)))[0] ?? '') : '';
 $tok1_4 = substr($tok1, 0, 4);
 
@@ -84,7 +84,13 @@ foreach ($rows as $row) {
             }
         }
 
-        $resp = ['ok'=>true, 'razon'=>'validado', 'nombre'=>$row['Nombre Paciente']];
+        $resp = [
+            'ok'     => true,
+            'razon'  => 'validado',
+            'nombre' => $row['Nombre Paciente'] ?? '',
+            'ciudad' => $row['Ciudad']          ?? '',
+            'eps'    => $row['EPS']             ?? '',
+        ];
         if ($vip_data) {
             $resp['vip']    = true;
             $resp['saludo'] = $vip_data['saludo'];
@@ -95,4 +101,4 @@ foreach ($rows as $row) {
 }
 
 echo json_encode(['ok'=>false,'razon'=>'datos_no_coinciden',
-    'msg'=>'Sus datos no coinciden con ningún registro. Verifique cédula, nombre y teléfono, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
+    'msg'=>'Sus datos no coinciden con ningún registro. Verifique su documento, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
