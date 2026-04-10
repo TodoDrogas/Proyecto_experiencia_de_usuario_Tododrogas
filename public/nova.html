@@ -657,6 +657,7 @@ const NTD={
   fase:'politica', usuario:null, eps:null,
   _ced:null,_nom:null,_tel:null,_tipoDoc:'CÉDULA DE CIUDADANÍA',
   hist:[], busy:false, vipCb:null, _valT:null, arrancado:false, _enMenu:false,
+  _consultas:0, _encuestaVista:false,
 };
 
 function ntdSys(){
@@ -767,7 +768,10 @@ function ntdResetInact(){
 
 function ntdNuevoChat(){
   ntdReset();
-  // Pequeña pausa para que el reset limpie el DOM
+  NTD._consultas=0;
+  NTD._encuestaVista=false;
+  clearTimeout(_ntdResTimer);
+  _ntdOfrecioAyuda=false;
   setTimeout(()=>{ ntdStart(); }, 150);
 }
 
@@ -1033,6 +1037,8 @@ async function ntdBienvenidaConSede(eps){
 
 function ntdOpc(n){
   NTD.busy=false;
+  NTD._encuestaVista=false;
+  clearTimeout(_ntdResTimer);
   ntdEna('Por favor escriba su respuesta...');
   var opc={1:ntdMedicamentos,2:ntdSedes,3:ntdRequisitosReclamar,
     4:ntdIrARadicar,5:ntdConsultarRadicado,6:ntdHorarios,
@@ -1498,22 +1504,67 @@ function ntdBotonesFinales(extra){
 }
 
 // ── PREGUNTA DE RESOLUCIÓN + CALIFICACIÓN ─────────────────
+let _ntdResTimer = null;   // timer de 30s para encuesta
+let _ntdOfrecioAyuda = false; // ya ofreció seguir ayudando?
+
 function ntdPreguntarResolucion(){
+  NTD._consultas++;
+  _ntdOfrecioAyuda = false;
+  clearTimeout(_ntdResTimer);
+
   var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
-  setTimeout(function(){
-    ntdAddMsg('nova',
-      ntdR2H(
-        'Ha sido un honor acompañarle, **'+n+'**. 🌟\n\n'
-        +'Su satisfacción es nuestra mayor motivación en **Tododrogas CIA SAS**. '
-        +'¿Cómo calificaría la atención que recibió hoy por parte de **Nova TD**?'
-      ),
-      '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:6px">'
-      +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:11px 14px;font-weight:600" onclick="ntdCalificar(&apos;excelente&apos;)">🌟 &nbsp;Excelente — superó mis expectativas</button>'
-      +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:11px 14px;font-weight:600" onclick="ntdCalificar(&apos;buena&apos;)">✅ &nbsp;Buena — quedé satisfecho/a</button>'
-      +'<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:11px 14px;font-weight:600" onclick="ntdCalificar(&apos;mala&apos;)">👎 &nbsp;Necesito más ayuda</button>'
-      +'</div>'
-    );
-  }, 1800);
+
+  // Si ya van 3+ consultas → encuesta inmediata después de ofrecer ayuda
+  if(NTD._consultas >= 3){
+    setTimeout(function(){
+      ntdOfrecerMasAyuda(true); // true = ir directo a encuesta si no responde en 30s
+    }, 1500);
+  } else {
+    // Menos de 3 → ofrecer ayuda, esperar 30s, luego encuesta
+    setTimeout(function(){
+      ntdOfrecerMasAyuda(false);
+    }, 1500);
+  }
+}
+
+function ntdOfrecerMasAyuda(inmediato){
+  var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
+  _ntdOfrecioAyuda = true;
+  clearTimeout(_ntdResTimer);
+
+  ntdAddMsg('nova',
+    ntdR2H('**'+n+'**, ¿hay algo más en lo que pueda ayudarle hoy? 😊'),
+    '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
+    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:10px 14px;font-weight:600" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Sí, ver el menú principal</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:10px 14px;font-weight:600" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Tengo otra pregunta</button>'
+    +'<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:10px 14px;font-weight:600" onclick="ntdMostrarEncuestaFinal()">3️⃣ &nbsp;✓ No, estoy bien — finalizar</button>'
+    +'</div>'
+  );
+
+  // Esperar 30 segundos sin respuesta → lanzar encuesta
+  _ntdResTimer = setTimeout(function(){
+    if(NTD._encuestaVista) return;
+    ntdMostrarEncuestaFinal();
+  }, 30 * 1000);
+}
+
+function ntdMostrarEncuestaFinal(){
+  if(NTD._encuestaVista) return;
+  NTD._encuestaVista = true;
+  clearTimeout(_ntdResTimer);
+  var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
+  ntdAddMsg('nova',
+    ntdR2H(
+      'Ha sido un honor acompañarle, **'+n+'**. 🌟\n\n'
+      +'Su satisfacción es nuestra mayor motivación en **Tododrogas CIA SAS**. '
+      +'¿Cómo calificaría la atención recibida hoy?'
+    ),
+    '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:6px">'
+    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:11px 14px;font-weight:600" onclick="ntdCalificar(&apos;excelente&apos;)">🌟 &nbsp;Excelente — superó mis expectativas</button>'
+    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:11px 14px;font-weight:600" onclick="ntdCalificar(&apos;buena&apos;)">✅ &nbsp;Buena — quedé satisfecho/a</button>'
+    +'<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:11px 14px;font-weight:600" onclick="ntdCalificar(&apos;mala&apos;)">👎 &nbsp;Necesito más ayuda</button>'
+    +'</div>'
+  );
 }
 
 function ntdCalificar(tipo){
