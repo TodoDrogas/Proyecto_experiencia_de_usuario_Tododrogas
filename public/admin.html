@@ -691,6 +691,45 @@ table.agents-tbl tr:hover td{background:var(--bg)}
               </div>
             </div>
           </div>
+
+              <!-- ══ NUEVAS MÉTRICAS NOVA TD ══ -->
+              <!-- Calificación -->
+              <div style="margin-top:18px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 18px">
+                <div style="font-size:10px;font-weight:700;color:#15803d;letter-spacing:.5px;margin-bottom:10px">⭐ CALIFICACIÓN NOVA TD</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px">
+                  <div style="text-align:center"><div style="font-size:20px;font-weight:700;color:#15803d" id="ntCalExc">—</div><div style="font-size:10px;color:#166534">🌟 Excelente</div></div>
+                  <div style="text-align:center"><div style="font-size:20px;font-weight:700;color:#0891b2" id="ntCalBue">—</div><div style="font-size:10px;color:#0e7490">✅ Buena</div></div>
+                  <div style="text-align:center"><div style="font-size:20px;font-weight:700;color:#dc2626" id="ntCalMal">—</div><div style="font-size:10px;color:#991b1b">👎 Más ayuda</div></div>
+                  <div style="text-align:center"><div style="font-size:20px;font-weight:700;color:#7c3aed" id="ntCalSat">—</div><div style="font-size:10px;color:#6d28d9">Satisfacción</div></div>
+                </div>
+                <div style="margin-top:10px;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;display:flex">
+                  <div id="ntCalBarExc" style="background:#16a34a;height:100%;transition:width .4s;width:0%"></div>
+                  <div id="ntCalBarBue" style="background:#0891b2;height:100%;transition:width .4s;width:0%"></div>
+                  <div id="ntCalBarMal" style="background:#dc2626;height:100%;transition:width .4s;width:0%"></div>
+                </div>
+              </div>
+              <!-- Menú + Municipios + Tiempos -->
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px">
+                <div style="background:#faf5ff;border:1px solid #ddd6fe;border-radius:10px;padding:12px 14px">
+                  <div style="font-size:10px;font-weight:700;color:#7c3aed;letter-spacing:.5px;margin-bottom:8px">📋 MENÚ MÁS ELEGIDO</div>
+                  <div id="ntMenuList" style="font-size:12px;display:flex;flex-direction:column;gap:4px"><div style="color:#94a3b8;font-size:11px">Sin datos aún</div></div>
+                </div>
+                <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px">
+                  <div style="font-size:10px;font-weight:700;color:#1d4ed8;letter-spacing:.5px;margin-bottom:8px">🏙️ TOP MUNICIPIOS</div>
+                  <div id="ntMunList" style="font-size:12px;display:flex;flex-direction:column;gap:4px"><div style="color:#94a3b8;font-size:11px">Sin datos aún</div></div>
+                </div>
+                <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px">
+                  <div style="font-size:10px;font-weight:700;color:#c2410c;letter-spacing:.5px;margin-bottom:8px">⏱️ TIEMPOS Y FLUJO</div>
+                  <div style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:#374151">
+                    <div style="display:flex;justify-content:space-between"><span>Duración media</span><strong id="ntDurMed">—</strong></div>
+                    <div style="display:flex;justify-content:space-between"><span>Preguntas libres/ses.</span><strong id="ntPregProm">—</strong></div>
+                    <div style="display:flex;justify-content:space-between"><span>Validados</span><strong id="ntFunValid">—</strong></div>
+                    <div style="display:flex;justify-content:space-between"><span>Usaron menú</span><strong id="ntFunMenu">—</strong></div>
+                    <div style="display:flex;justify-content:space-between"><span>Calificaron</span><strong id="ntFunCal">—</strong></div>
+                    <div style="display:flex;justify-content:space-between"><span>VIP activos</span><strong id="ntVipCount" style="color:#d97706">—</strong></div>
+                  </div>
+                </div>
+              </div>
         </div><!-- /mtab-nova -->
 
         <!-- ══ TAB: GLOBAL ══ -->
@@ -4097,8 +4136,8 @@ async function loadNovaMetrics(){
     sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.qr&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_web&select=id,created_at,turnos,motivo_cierre&limit=2000')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,turnos,motivo_cierre&limit=2000')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_web&select=id,created_at,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
   ]);
 
   novaDatos={
@@ -4182,6 +4221,86 @@ function renderNovaMetrics(){
   set('ntKpiEnc',    allEncNova);
   set('ntKpiAuto',   tasaAuto+'%');
   set('ntKpiTurnos', avgT);
+
+  // ── NUEVAS MÉTRICAS ──────────────────────────────────────
+  const set2=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+
+  // Calificación
+  const calSes=allSes.filter(s=>s.calificacion);
+  const calExc=calSes.filter(s=>s.calificacion==='excelente').length;
+  const calBue=calSes.filter(s=>s.calificacion==='buena').length;
+  const calMal=calSes.filter(s=>s.calificacion==='mala').length;
+  const calTotal=calSes.length||1;
+  const calSat=Math.round((calExc+calBue)/calTotal*100);
+  set2('ntCalExc', calExc);
+  set2('ntCalBue', calBue);
+  set2('ntCalMal', calMal);
+  set2('ntCalSat', calSat+'%');
+  const eb=document.getElementById('ntCalBarExc');
+  const bb=document.getElementById('ntCalBarBue');
+  const mb=document.getElementById('ntCalBarMal');
+  if(eb) eb.style.width=Math.round(calExc/calTotal*100)+'%';
+  if(bb) bb.style.width=Math.round(calBue/calTotal*100)+'%';
+  if(mb) mb.style.width=Math.round(calMal/calTotal*100)+'%';
+
+  // Menú más elegido
+  const menuCount={};
+  allSes.forEach(s=>{
+    if(s.menu_elegido) s.menu_elegido.split(',').forEach(m=>{
+      const t=m.trim();if(t) menuCount[t]=(menuCount[t]||0)+1;
+    });
+  });
+  const menuSorted=Object.entries(menuCount).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const menuMax=menuSorted[0]?.[1]||1;
+  const menuEl=document.getElementById('ntMenuList');
+  if(menuEl){
+    if(menuSorted.length){
+      menuEl.innerHTML=menuSorted.map(([k,v])=>
+        `<div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;background:#e9d5ff;border-radius:3px;height:6px;overflow:hidden">
+            <div style="background:#7c3aed;height:100%;width:${Math.round(v/menuMax*100)}%"></div>
+          </div>
+          <span style="min-width:22px;text-align:right;color:#7c3aed;font-weight:700">${v}</span>
+          <span style="color:#374151;min-width:80px">${k}</span>
+        </div>`
+      ).join('');
+    } else { menuEl.innerHTML='<div style="color:#94a3b8;font-size:11px">Sin datos aún</div>'; }
+  }
+
+  // Top municipios
+  const munCount={};
+  allSes.forEach(s=>{if(s.municipio&&s.municipio.trim()) {const m=s.municipio.trim().toUpperCase();munCount[m]=(munCount[m]||0)+1;}});
+  const munSorted=Object.entries(munCount).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const munMax=munSorted[0]?.[1]||1;
+  const munEl=document.getElementById('ntMunList');
+  if(munEl){
+    if(munSorted.length){
+      munEl.innerHTML=munSorted.map(([k,v])=>
+        `<div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;background:#dbeafe;border-radius:3px;height:6px;overflow:hidden">
+            <div style="background:#1d4ed8;height:100%;width:${Math.round(v/munMax*100)}%"></div>
+          </div>
+          <span style="min-width:22px;text-align:right;color:#1d4ed8;font-weight:700">${v}</span>
+          <span style="color:#374151;min-width:70px;font-size:11px">${k}</span>
+        </div>`
+      ).join('');
+    } else { munEl.innerHTML='<div style="color:#94a3b8;font-size:11px">Sin datos aún</div>'; }
+  }
+
+  // Tiempos y flujo
+  const sesCon=allSes.filter(s=>s.duracion_seg>0);
+  const avgDur=sesCon.length?Math.round(sesCon.reduce((a,s)=>a+(s.duracion_seg||0),0)/sesCon.length):0;
+  const durMin=Math.floor(avgDur/60), durSeg=avgDur%60;
+  const avgPreg=allSes.length?( allSes.reduce((a,s)=>a+(s.preguntas_libres||0),0)/allSes.length ).toFixed(1):'—';
+  const conMenu=allSes.filter(s=>s.consultas_count>0).length;
+  const conCal=allSes.filter(s=>s.calificacion).length;
+  const vipCount=allSes.filter(s=>s.es_vip).length;
+  set2('ntDurMed', avgDur>0?durMin+'m '+durSeg+'s':'—');
+  set2('ntPregProm', avgPreg);
+  set2('ntFunValid', allSes.length);
+  set2('ntFunMenu', conMenu+' ('+(allSes.length?Math.round(conMenu/allSes.length*100):0)+'%)');
+  set2('ntFunCal', conCal+' ('+(allSes.length?Math.round(conCal/allSes.length*100):0)+'%)');
+  set2('ntVipCount', vipCount);
   // Desglose Nova Web vs Directo
   set('ntKpiWebSes', D.sesNovaWeb.length);
   set('ntKpiWebRad', D.radNovaWeb.length);
