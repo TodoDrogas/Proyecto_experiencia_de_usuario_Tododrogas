@@ -680,7 +680,8 @@ function ntdSys(){
   s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, mal concentración, deteriorado o equivocado — di SIEMPRE: No lo consuma. Por su seguridad NO utilice ese medicamento. Acérquese al punto más cercano o llame al PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] o [ESCALAR].\n';
   s+='REGLA SEDES: Usa [SEDES:municipio] SOLO cuando el usuario pregunta EXPLÍCITAMENTE por puntos de dispensación, sedes, dónde retirar o si hay cobertura en un municipio. NO lo uses si pregunta por requisitos, procesos, derechos o información general sobre una EPS. Si menciona una EPS diferente a la suya (ej: "si soy SALUD TOTAL"), usa [SEDES:municipio:EPSMENCIONADA].\n';
   s+='REGLA CONSULTAR: Si el usuario escribe un número de radicado (ej: TD-xxxxx) o correo para consultar estado, usa SIEMPRE [CONSULTAR:valor] al final con el valor exacto que escribió.\n';
-  s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
+  s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
+  s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
   return s;
 }
 
@@ -783,6 +784,9 @@ async function ntdSend(){
   const txtUp=txt.toUpperCase();
   ntdAddMsg('user',ntdR2H(txtUp)); // siempre en mayúsculas
   ntdResetInact();
+  // Cancelar timer de 30s de encuesta — el usuario sigue activo
+  clearTimeout(_ntdResTimer);
+  NTD._encuestaVista=false;
   NTD.busy=true;ntdDis();
   try{await ntdDispatch(txtUp);}
   catch(e){ntdRmSk();ntdTyping(false);ntdAddMsg('nova',ntdR2H('Tuve un problema. Llama al **604 322 2432** o WhatsApp **304 341 2431**.'));}
@@ -1700,6 +1704,8 @@ async function ntdFLibre(txt){
       await ntdFetchSedes(_mun);
       if(_epsOverride) NTD.eps=_epsOriginal;
       break;}
+    case 'REQUISITOS':
+      ntdAddMsg('nova',html);await ntdDelay(200);ntdRequisitosReclamar();break;
     case 'MEDICAMENTOS':
       ntdAddMsg('nova',html);await ntdDelay(200);ntdMedicamentos();break;
     default:
