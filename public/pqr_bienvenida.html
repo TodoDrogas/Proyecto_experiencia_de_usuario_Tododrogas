@@ -634,12 +634,61 @@ const NTD_C = {
   consultaUrl: (typeof window.CONSULTA_URL!=='undefined'?window.CONSULTA_URL:'consulta.html'),
   polUrl  : 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf',
 };
-const NTD_EPS=['COOSALUD','SAVIA','SALUD TOTAL','NUEVA EPS','CEM','ANGIOSUR'];
+
+const NTD_EPS=['COOSALUD','SAVIA','SALUD TOTAL','NUEVA EPS'];
 const NTD={
   fase:'politica', usuario:null, eps:null,
   _ced:null,_nom:null,_tel:null,_tipoDoc:'CÉDULA DE CIUDADANÍA',
   hist:[], busy:false, vipCb:null, _valT:null, arrancado:false, _enMenu:false,
+  _consultas:0, _encuestaVista:false,
+  _sesionId:null, _sesionInicio:null, _menuUsados:[], _preguntasLibres:0,
 };
+
+
+// ── MÉTRICAS: registro de sesión en Supabase ────────────────
+async function ntdAbrirSesion(){
+  if(NTD._sesionId) return;
+  NTD._sesionInicio = Date.now();
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    const r=await fetch(sbUrl+'/rest/v1/rpc/registrar_sesion_nova',{
+      method:'POST',
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        p_cedula:   NTD.usuario?.cedula||'',
+        p_nombre:   NTD.usuario?.nombre||'',
+        p_eps:      NTD.eps||'',
+        p_municipio:NTD.usuario?.ciudad||'',
+        p_es_vip:   !!NTD.usuario?.vip,
+        p_origen:   'nova_bienvenida'
+      })
+    });
+    if(r.ok){ const d=await r.json(); NTD._sesionId=d; }
+  }catch(e){}
+}
+
+async function ntdCerrarSesion(motivo){
+  if(!NTD._sesionId) return;
+  const dur=Math.round((Date.now()-(NTD._sesionInicio||Date.now()))/1000);
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    await fetch(sbUrl+'/rest/v1/rpc/cerrar_sesion_nova',{
+      method:'POST',
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        p_id:               NTD._sesionId,
+        p_calificacion:     NTD._calificacion||'',
+        p_menu_elegido:     NTD._menuUsados.join(','),
+        p_consultas_count:  NTD._consultas,
+        p_preguntas_libres: NTD._preguntasLibres,
+        p_duracion_seg:     dur,
+        p_motivo_cierre:    motivo||'usuario'
+      })
+    });
+  }catch(e){}
+}
 
 function ntdSys(){
   var eps=(NTD.eps||'').toUpperCase();
@@ -661,7 +710,8 @@ function ntdSys(){
   s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, mal concentración, deteriorado o equivocado — di SIEMPRE: No lo consuma. Por su seguridad NO utilice ese medicamento. Acérquese al punto más cercano o llame al PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] o [ESCALAR].\n';
   s+='REGLA SEDES: Usa [SEDES:municipio] SOLO cuando el usuario pregunta EXPLÍCITAMENTE por puntos de dispensación, sedes, dónde retirar o si hay cobertura en un municipio. NO lo uses si pregunta por requisitos, procesos, derechos o información general sobre una EPS. Si menciona una EPS diferente a la suya (ej: "si soy SALUD TOTAL"), usa [SEDES:municipio:EPSMENCIONADA].\n';
   s+='REGLA CONSULTAR: Si el usuario escribe un número de radicado (ej: TD-xxxxx) o correo para consultar estado, usa SIEMPRE [CONSULTAR:valor] al final con el valor exacto que escribió.\n';
-  s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
+  s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
+  s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
   return s;
 }
 
@@ -743,13 +793,17 @@ function ntdResetInact(){
       `<p>Esta conversación se cerró por inactividad.</p>
        <p style="margin-top:4px">Si necesitas algo más, toca el botón para iniciar un nuevo chat. ¡Hasta pronto! 😊</p>`,
       `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()" style="font-weight:700">1️⃣ &nbsp;🔄 Iniciar nuevo chat</button></div>`);
+    ntdCerrarSesion('inactividad');
     ntdDis();
   }, 5 * 60 * 1000); // 5 minutos
 }
 
 function ntdNuevoChat(){
   ntdReset();
-  // Pequeña pausa para que el reset limpie el DOM
+  NTD._consultas=0;
+  NTD._encuestaVista=false;
+  clearTimeout(_ntdResTimer);
+  _ntdOfrecioAyuda=false;
   setTimeout(()=>{ ntdStart(); }, 150);
 }
 
@@ -761,6 +815,9 @@ async function ntdSend(){
   const txtUp=txt.toUpperCase();
   ntdAddMsg('user',ntdR2H(txtUp)); // siempre en mayúsculas
   ntdResetInact();
+  // Cancelar timer de 30s de encuesta — el usuario sigue activo
+  clearTimeout(_ntdResTimer);
+  NTD._encuestaVista=false;
   NTD.busy=true;ntdDis();
   try{await ntdDispatch(txtUp);}
   catch(e){ntdRmSk();ntdTyping(false);ntdAddMsg('nova',ntdR2H('Tuve un problema. Llama al **604 322 2432** o WhatsApp **304 341 2431**.'));}
@@ -770,9 +827,7 @@ async function ntdSend(){
 async function ntdDispatch(txt){
   if(NTD.fase==='politica')    return ntdFPolitica(txt);
   if(NTD.fase==='ident_ced')   return ntdFCedula(txt);
-  if(NTD.fase==='ident_nom')   return ntdFNombre(txt);
-  if(NTD.fase==='ident_tel')   return ntdFTelefono(txt);
-  if(NTD.fase==='eps')         return ntdFEps(txt);
+
   // Captura municipio para búsqueda de sedes
   if(NTD.fase==='municipio_sedes'){
     ntdAddMsg('nova', ntdR2H(`Buscando sedes en **${txt}** para **${NTD.eps||'tu EPS'}**...`));
@@ -841,63 +896,52 @@ function ntdSetTipoDoc(tipo){
   ntdEna('Por favor escriba su respuesta...');
 }
 
+
+
 async function ntdFCedula(txt){
   const n=txt.replace(/\D/g,'');
   if(n.length<5){
-    ntdAddMsg('nova',ntdR2H('Valor incorrecto, por favor intente de nuevo.\n\nEscribe el número de documento sin puntos ni comas:'));
-    ntdEna('Por favor escriba su respuesta...');return;
+    ntdAddMsg('nova',ntdR2H('Número de documento inválido. Por favor escríbelo sin puntos ni comas:'));
+    ntdEna('Por favor escriba su número de documento...');return;
   }
-  NTD._ced=n;NTD.fase='ident_nom';
-  ntdAddMsg('nova',ntdR2H('Escribe tu **nombre completo** (tal como aparece en el documento):'));
-  ntdEna('Por favor escriba su nombre completo...');
-}
-async function ntdFNombre(txt){
-  if(txt.trim().length<3){ntdAddMsg('nova',ntdR2H('Por favor escribe tu nombre completo.'));ntdEna('Por favor escriba su nombre completo...');return;}
-  NTD._nom=txt.trim().toUpperCase();NTD.fase='ident_tel';
-  ntdAddMsg('nova',ntdR2H('¿Cuál es tu **número de celular**?'));
-  ntdEna('Por favor escriba su número de celular...');
-}
-async function ntdFTelefono(txt){
-  const n=txt.replace(/\D/g,'');
-  if(n.length<7){ntdAddMsg('nova',ntdR2H('El número debe tener al menos 7 dígitos.'));ntdEna('Por favor escriba su respuesta...');return;}
-  NTD._tel=n;
+  NTD._ced=n;NTD._nom='';NTD._tel='';
   ntdTyping(true);ntdAddSk();
   let res;
   try{
     const r=await fetch(NTD_C.validar,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({cedula:NTD._ced,nombre:NTD._nom,telefono:NTD._tel})});
-    res=r.ok?await r.json():{ok:true,razon:'error_api'};
-  }catch(e){res={ok:true,razon:'error_red'};}
+      body:JSON.stringify({cedula:NTD._ced,nombre:'',telefono:''})});
+    res=r.ok?await r.json():{ok:false,razon:'error_api'};
+  }catch(e){res={ok:false,razon:'error_red'};}
   ntdRmSk();ntdTyping(false);
 
   if(!res.ok){
-    const msg=res.msg||(res.razon==='no_encontrado'
-      ?'No encontramos tu registro. Verifica tus datos, comunícate al 604 322 2432 o escríbenos al WhatsApp 304 341 2431.'
-      :'Tus datos no coinciden. Verifica cédula, nombre y teléfono, comunícate al 604 322 2432 o escríbenos al WhatsApp 304 341 2431.');
+    const msg=res.msg||'No encontramos su registro en nuestra base de datos. Verifique su número de documento, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.';
     ntdShowVal(msg);
-    NTD.fase='ident_ced';NTD._ced=null;NTD._nom=null;NTD._tel=null;
-    ntdAddMsg('nova',ntdR2H('Intentemos de nuevo. ¿Cuál es tu **cédula**?'));
+    NTD.fase='ident_ced';NTD._ced=null;
+    ntdAddMsg('nova',ntdR2H('Intentemos de nuevo. Por favor ingrese su **número de documento**:'));
     ntdEna('Por favor escriba su número de documento...');return;
   }
-  const pn=(res.nombre||NTD._nom).trim().split(/\s+/)[0];
-  NTD.usuario={nombre:res.nombre||NTD._nom,primerNombre:pn,cedula:NTD._ced,telefono:NTD._tel,vip:!!res.vip,saludo:res.saludo||null};
+  const pn=(res.nombre||'').trim().split(/\s+/)[0];
+  NTD.usuario={nombre:res.nombre||'',primerNombre:pn,cedula:NTD._ced,telefono:'',vip:!!res.vip,saludo:res.saludo||null,ciudad:res.ciudad||null,epsRegistrada:res.eps||null};
+  NTD.eps=res.eps||null; // EPS directo desde la BD — no preguntar
   if(res.vip&&res.saludo){NTD.vipCb=()=>ntdBienvenidaYEps();ntdShowVip(res.saludo);}
   else{ ntdBienvenidaYEps(); }
+  ntdAbrirSesion(); // registrar sesión en Supabase
 }
 
 async function ntdBienvenidaYEps(){
-  // Saludo personalizado con nombre — igual que el video
+  const nombre=NTD.usuario.primerNombre||NTD.usuario.nombre||'estimado/a usuario/a';
+  const eps=NTD.eps||'';
   ntdAddMsg('nova', ntdR2H(
-    `✅ Verificado. ¡Hola, **${NTD.usuario.primerNombre}**! Bienvenido/a a Tododrogas CIA SAS.`
+    `✅ **¡Bienvenido/a, ${nombre}!**\n\nEs un gusto atenderle. Mi nombre es **Nova TD**, la asistente virtual de **Tododrogas CIA SAS**, y estoy aquí para ayudarle con todo lo relacionado a sus medicamentos y servicios farmacéuticos.\n\nIdentificamos que usted está afiliado/a a **${eps}**.`
   ));
-  await ntdDelay(600);
-  // Aviso de inactividad — igual que en el video de EPS SURA
-  ntdAddMsg('nova',
-    `<p>⏱ <strong>Aviso:</strong> Ten presente que si hay más de <strong>5 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
-  );
   await ntdDelay(700);
-  NTD.busy=false;
-  ntdIrAEps();
+  ntdAddMsg('nova',
+    `<p>⏱ <strong>Aviso:</strong> Si hay más de <strong>5 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
+  );
+  await ntdDelay(500);
+  // Mostrar sede más cercana automáticamente
+  await ntdBienvenidaConSede(eps);
 }
 
 function ntdIrAEps(){
@@ -918,11 +962,122 @@ async function ntdFEps(txt){
   const match=NTD_EPS.find(e=>t.includes(e.replace(' / NO SÉ',''))||e.includes(t))||t;
   NTD.eps=match;NTD.fase='libre';ntdProg(62,'En atención');
   ntdAddMsg('nova',ntdR2H(`EPS **${match}** ✅`));
-  await ntdDelay(350);ntdMostrarMenu();
+  await ntdDelay(400);
+  // Mostrar sede más cercana según ciudad inscrita del paciente y cobertura de EPS
+  await ntdBienvenidaConSede(match);
+}
+
+// ── Card sede con Maps prominente ────────────────────────
+function ntdCardSede(s, badge){
+  const mun=(s.municipio_norm||s.ciudad||'').replace(/, Antioquia$/i,'');
+  const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+mun+', Antioquia, Colombia')}`;
+  const dist=s._dist&&s._dist<9000?`<span style="font-size:10px;background:rgba(56,189,248,.15);color:#38bdf8;border-radius:20px;padding:2px 8px;margin-left:6px">📍 ${s._dist.toFixed(1)} km</span>`:'';
+  const badgeHtml=badge?`<span style="font-size:10px;background:rgba(0,195,154,.2);color:#00c39a;border-radius:20px;padding:2px 8px;margin-left:4px">${badge}</span>`:'';
+  return `<div style="background:linear-gradient(135deg,#0f2044 80%,#1a3a6b);border:1px solid rgba(56,189,248,.2);border-radius:14px;padding:14px 14px 10px;margin:4px 0;font-family:'Sora',sans-serif">
+    <div style="font-weight:700;font-size:13px;color:#e2e8f0;margin-bottom:6px;line-height:1.3">${s.nombre||'Sede'}${dist}${badgeHtml}</div>
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">🏙️ ${mun}</div>
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">📌 ${s.direccion||'—'}</div>
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">🕐 ${s.horario||'Lun-Vie 7:00 AM – 5:30 PM'}</div>
+    <a href="${mu}" target="_blank" style="display:block;text-align:center;background:linear-gradient(90deg,#00c39a,#0891b2);color:#fff;font-weight:700;font-size:12px;border-radius:8px;padding:8px 0;text-decoration:none;letter-spacing:.3px">🗺️ Abrir en Google Maps</a>
+  </div>`;
+}
+
+async function ntdBienvenidaConSede(eps){
+  const nombre=NTD.usuario.primerNombre||'';
+  const ciudadInscrita=(NTD.usuario.ciudad||'').toUpperCase().trim();
+
+  // Cargar sedes de Supabase (con fallback a local)
+  let todasSedes=[];
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    const r=await fetch(sbUrl+'/rest/v1/sedes?activa=eq.true&select=nombre,ciudad,direccion,telefono,lat,lng,eps,horario,municipio_norm',{
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey}});
+    if(r.ok) todasSedes=await r.json();
+  }catch(e){}
+  if(!todasSedes||!todasSedes.length) todasSedes=NTD_SEDES_LOCAL;
+
+  const epsUp=eps.toUpperCase().replace('SAVIA SALUD','SAVIA');
+
+  // Filtrar sedes que atienden esta EPS o "TODAS"
+  const sedesPorEps=todasSedes.filter(s=>{
+    let arr=[];
+    if(Array.isArray(s.eps)) arr=s.eps;
+    else if(typeof s.eps==='string'){try{arr=JSON.parse(s.eps);}catch(e){arr=[s.eps];}}
+    return arr.some(e=>{
+      const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA');
+      return en==='TODAS'||en===epsUp||en===eps.toUpperCase();
+    });
+  });
+
+  if(!sedesPorEps.length){
+    ntdAddMsg('nova',ntdR2H(`${nombre}, no encontramos sedes activas para **${eps}** en nuestra red. Por favor comuníquese al **604 322 2432** o WhatsApp **304 341 2431**.`));
+    await ntdDelay(400);ntdMostrarMenu();return;
+  }
+
+  // Obtener geolocalización del usuario
+  const geoPos = await new Promise(res=>{
+    if(!navigator.geolocation){res(null);return;}
+    navigator.geolocation.getCurrentPosition(
+      p=>res({lat:p.coords.latitude,lng:p.coords.longitude}),
+      ()=>res(null),{timeout:4000}
+    );
+  });
+
+  // Referencia de coordenadas: geoloc > ciudad inscrita > primera sede
+  let refLat=null, refLng=null;
+  if(geoPos){refLat=geoPos.lat;refLng=geoPos.lng;}
+  else if(ciudadInscrita){
+    const ref=sedesPorEps.find(s=>(s.municipio_norm||s.ciudad||'').toUpperCase().includes(ciudadInscrita));
+    if(ref&&parseFloat(ref.lat||0)!==0){refLat=parseFloat(ref.lat);refLng=parseFloat(ref.lng);}
+  }
+
+  // Ordenar todas las sedes por distancia si tenemos referencia
+  let ordenadas=sedesPorEps;
+  if(refLat&&refLng){
+    ordenadas=sedesPorEps.map(s=>({
+      ...s,
+      _dist:parseFloat(s.lat||0)!==0?ntdHav2(refLat,refLng,parseFloat(s.lat),parseFloat(s.lng)):9999
+    })).sort((a,b)=>a._dist-b._dist);
+  }
+
+  const sedesEnCiudad=ciudadInscrita
+    ?ordenadas.filter(s=>(s.municipio_norm||s.ciudad||'').toUpperCase().replace(/, ANTIOQUIA$/,'').includes(ciudadInscrita))
+    :[];
+
+  if(sedesEnCiudad.length){
+    const s=sedesEnCiudad[0];
+    ntdAddMsg('nova',ntdR2H(`${nombre}, su ciudad de inscripción es **${ciudadInscrita}** y su EPS es **${eps}**. Su sede más cercana es:`));
+    await ntdDelay(350);
+    ntdAddMsg('nova', ntdCardSede(s,'⭐ Más cercana'));
+    if(sedesEnCiudad.length>1){
+      await ntdDelay(300);
+      ntdAddMsg('nova',ntdR2H(`Hay **${sedesEnCiudad.length} sedes** de **${eps}** en **${ciudadInscrita}**. Puede consultarlas desde el menú → Puntos de dispensación.`));
+    }
+  } else {
+    // Sin cobertura en ciudad inscrita → 2 más cercanas por distancia
+    const msg=ciudadInscrita
+      ?`${nombre}, **${eps}** no tiene sede directa en **${ciudadInscrita}**. Le mostramos las más cercanas:`
+      :`${nombre}, estas son las sedes más cercanas para **${eps}**:`;
+    ntdAddMsg('nova',ntdR2H(msg));
+    await ntdDelay(400);
+    const top=ordenadas.filter(s=>parseFloat(s.lat||0)!==0).slice(0,2);
+    for(let i=0;i<top.length;i++){
+      ntdAddMsg('nova',ntdCardSede(top[i],i===0?'⭐ Más cercana':''));
+      await ntdDelay(250);
+    }
+  }
+  await ntdDelay(500);
+  ntdMostrarMenu();
 }
 
 function ntdOpc(n){
   NTD.busy=false;
+  NTD._encuestaVista=false;
+  clearTimeout(_ntdResTimer);
+  // Registrar opción de menú usada
+  const _menuLabels={1:'Medicamentos',2:'Sedes',3:'Requisitos',4:'Radicar',5:'Radicado',6:'Horarios',7:'Encuesta',8:'PreguntaLibre'};
+  if(_menuLabels[n]) NTD._menuUsados.push(_menuLabels[n]);
   ntdEna('Por favor escriba su respuesta...');
   var opc={1:ntdMedicamentos,2:ntdSedes,3:ntdRequisitosReclamar,
     4:ntdIrARadicar,5:ntdConsultarRadicado,6:ntdHorarios,
@@ -960,13 +1115,19 @@ function ntdMedicamentos(){
   ntdAddMsg('nova',
     `<p><strong>${n}</strong>, para consultar el estado de tus medicamentos, entregas pendientes o historial de dispensación, ingresa a nuestra plataforma <strong>App Solicitudes Web</strong>:</p>
      <div style="text-align:center;margin:10px 0">
-       <img src="${QR_MEDS}" style="width:160px;height:160px;border-radius:10px;border:1px solid rgba(37,99,235,.3)" alt="QR Medicamentos" onerror="this.style.display='none'">
-       <p style="font-size:11px;color:rgba(190,215,255,.6);margin-top:6px">📱 Escanea el QR con tu cámara</p>
+       <img src="${QR_MEDS}"
+         style="width:160px;height:160px;border-radius:10px;border:1px solid rgba(37,99,235,.3)"
+         alt="QR Medicamentos" onerror="this.style.display='none'">
+       <p style="font-size:11px;color:var(--ntd-t2,rgba(190,215,255,.6));margin-top:6px">
+         📱 Escanea con tu cámara o toca el botón
+       </p>
      </div>`,
 `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Preguntarle a Nova TD</button>
+       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px;text-decoration:none">1️⃣ &nbsp;🔗 Consultar en App Solicitudes Web →</a>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">3️⃣ &nbsp;💬 Preguntarle a Nova TD</button>
      </div>`);
+  ntdPreguntarResolucion();
 }
 
 function ntdMedicamentosPendientes(){
@@ -977,23 +1138,32 @@ function ntdMedicamentosPendientes(){
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdEscalarAgente()">2️⃣ &nbsp;Hablar con un asesor</button>
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
+  ntdPreguntarResolucion();
 }
 
 function ntdRequisitosReclamar(){
+  var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
   ntdAddMsg('nova',
-    '<div><p style="font-weight:700;margin-bottom:6px">Requisitos para reclamar sus medicamentos:</p>'
-    +'<ul style="margin:0;padding-left:18px;line-height:1.9">'
-    +'<li>Formula medica</li><li>Historia clinica</li>'
-    +'<li>Documento de identidad <strong>original</strong></li>'
+    '<div>'
+    +'<p style="margin-bottom:8px">Con mucho gusto, <strong>'+n+'</strong>. Para retirar sus medicamentos en nuestros puntos de dispensación necesita:</p>'
+    +'<ul style="margin:0;padding-left:18px;line-height:2">'
+    +'<li>📋 Fórmula médica vigente</li>'
+    +'<li>📁 Historia clínica</li>'
+    +'<li>🪪 Documento de identidad <strong>original</strong></li>'
     +'</ul>'
-    +'<p style="font-weight:700;margin-top:10px;margin-bottom:6px">Si va en representacion de alguien:</p>'
-    +'<ul style="margin:0;padding-left:18px;line-height:1.9">'
-    +'<li>Formula medica</li><li>Historia clinica</li>'
-    +'<li>Documento original de quien reclama</li>'
-    +'<li>Documento original del usuario</li>'
-    +'<li style="font-size:12px;color:rgba(190,215,255,.7)">Si no tiene el doc del usuario, llevar carta de autorizacion firmada por el usuario</li>'
-    +'</ul></div>',
-    ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;Ver puntos de dispensacion</button>'));
+    +'<p style="font-weight:700;margin-top:12px;margin-bottom:6px">¿Va a recoger en nombre de alguien?</p>'
+    +'<ul style="margin:0;padding-left:18px;line-height:2">'
+    +'<li>📋 Fórmula médica + Historia clínica</li>'
+    +'<li>🪪 Su documento original + el del usuario</li>'
+    +'<li style="font-size:12px;color:rgba(190,215,255,.6)">💡 Sin el doc del usuario, traiga una carta de autorización firmada por él/ella</li>'
+    +'</ul>'
+    +'<p style="margin-top:10px;font-size:12px;color:rgba(190,215,255,.55)">Recuerde que puede consultar el estado de sus medicamentos en la App Solicitudes Web 👇</p>'
+    +'</div>',
+    ntdBotonesFinales(
+      '<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">2️⃣ &nbsp;📍 Ver mi sede más cercana</button>'
+      +'<a href="'+MANTIS_URL+'" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">3️⃣ &nbsp;🔗 Consultar App Solicitudes Web →</a>'
+    ));
+  ntdPreguntarResolucion();
 }
 
 // Funciones directas para el menú numerado (sin pasar por ntdSend)
@@ -1141,7 +1311,7 @@ async function ntdFetchSedes(mun){
         <div class="ntd-ir"><span class="ntd-il">Municipio</span><span class="ntd-iv">${s.municipio_norm||s.ciudad||'—'}</span></div>
         <div class="ntd-ir"><span class="ntd-il">Dirección</span><span class="ntd-iv">${s.direccion||'—'}</span></div>
         <div class="ntd-ir"><span class="ntd-il">Horario</span><span class="ntd-iv">${s.horario||'—'}</span></div>
-        <div class="ntd-ir" style="border:none"><span class="ntd-il"></span><a href="${mu}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">📍 Ver en Google Maps →</a></div>
+        <div class="ntd-ir" style="border:none;padding-top:8px"><a href="${mu}" target="_blank" style="display:block;text-align:center;background:linear-gradient(90deg,#00c39a,#0891b2);color:#fff;font-weight:700;font-size:12px;border-radius:8px;padding:8px 0;text-decoration:none;width:100%">🗺️ Abrir en Google Maps</a></div>
       </div>`;
     }).join('');
     ntdAddMsg('nova',
@@ -1189,7 +1359,7 @@ async function ntdFetchSedes(mun){
       <div class="ntd-ir"><span class="ntd-il">Municipio</span><span class="ntd-iv">${s.municipio_norm||s.ciudad||'—'}</span></div>
       <div class="ntd-ir"><span class="ntd-il">Dirección</span><span class="ntd-iv">${s.direccion||'—'}</span></div>
       <div class="ntd-ir"><span class="ntd-il">Horario</span><span class="ntd-iv">${s.horario||'—'}</span></div>
-      <div class="ntd-ir" style="border:none"><span class="ntd-il"></span><a href="${mu}" target="_blank" style="font-size:11px;color:#93c5fd;text-decoration:none">📍 Ver en Google Maps →</a></div>
+      <div class="ntd-ir" style="border:none;padding-top:8px"><a href="${mu}" target="_blank" style="display:block;text-align:center;background:linear-gradient(90deg,#00c39a,#0891b2);color:#fff;font-weight:700;font-size:12px;border-radius:8px;padding:8px 0;text-decoration:none;width:100%">🗺️ Abrir en Google Maps</a></div>
     </div>`;
   }).join('');
 
@@ -1240,6 +1410,7 @@ function ntdMostrarSedesLocales(sedes,titulo,mun){
 }
 function ntdConfirmarSede(){
   ntdAddMsg('nova','<p>Perfecto. Recuerde llevar formula medica, historia clinica y documento de identidad original.</p>',ntdBotonesFinales());
+  ntdPreguntarResolucion();
 }
 function ntdOtrasSedes(){
   NTD.fase='municipio_sedes';
@@ -1294,8 +1465,10 @@ function ntdConsultarRadicado(){
   ntdAddMsg('nova',
     `<p>Para consultar el estado de tu solicitud PQRSFD ingresa el <strong>número de radicado</strong> (ej: TD-20260401-1234) o tu <strong>correo electrónico</strong>:</p>`,
     `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
+       <a href="${NTD_C.consultaUrl}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">1️⃣ &nbsp;🔍 Consultar en plataforma →</a>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
      </div>`);
+  ntdPreguntarResolucion();
   ntdEna('Por favor escriba su número de radicado...');
 }
 
@@ -1317,6 +1490,7 @@ function ntdEncuesta(){
      </div>`,
 ntdBotonesFinales(`
        <button class="ntd-ch go" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="window.location.href='${encUrl}'">3️⃣ &nbsp;⭐ Realizar encuesta ahora →</button>`));
+  ntdPreguntarResolucion();
 }
 
 function ntdHorarios(){
@@ -1333,6 +1507,7 @@ function ntdHorarios(){
 
 // ── Finalizar chat ─────────────────────────────────
 function ntdFinalizarChat(){
+  ntdCerrarSesion('usuario');
   ntdDis();
   ntdAddMsg('nova',
     `<p>¡Gracias por contactarnos, <strong>${NTD.usuario?.primerNombre||''}</strong>! 😊</p>
@@ -1348,8 +1523,8 @@ function ntdCanalesContacto(){
   return '<div style="margin-top:10px;padding:10px 13px;border-radius:10px;background:rgba(37,99,235,.07);border:1px solid rgba(37,99,235,.13)">'
     +'<div style="font-size:11px;font-weight:700;color:rgba(130,165,220,.6);margin-bottom:6px">📞 CANALES DE CONTACTO</div>'
     +'<div style="font-size:12px;color:rgba(190,215,255,.85);line-height:1.8">'
-    +'💬 WhatsApp: <strong style="color:#93c5fd">304 341 2431</strong><br>'
-    +'📞 PBX: <strong style="color:#93c5fd">604 322 2432</strong> · Opción #2<br>'
+    +'💬 WhatsApp: <a href="https://wa.me/573043412431" target="_blank" style="color:#93c5fd;font-weight:600">304 341 2431</a><br>'
+    +'📞 PBX: <a href="tel:6043222432" style="color:#93c5fd;font-weight:600">604 322 2432</a> · Opción #2<br>'
     +'📧 pqrsfd@tododrogas.com.co<br>'
     +'🕐 Lun-Vie 7:00am–5:30pm · Sáb 8:00am–12:00m'
     +'</div></div>';
@@ -1361,15 +1536,109 @@ function ntdBotonesFinales(extra){
   let rows = extra || '';
   rows += `
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Preguntarle algo más a Nova TD</button>
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdEscalarAgente()">3️⃣ &nbsp;📞 Hablar con un asesor</button>
        <button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdFinalizarChat()">4️⃣ &nbsp;✖ Finalizar chat</button>`;
   return `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">${rows}
      </div>`;
 }
 
+// ── PREGUNTA DE RESOLUCIÓN + CALIFICACIÓN ─────────────────
+let _ntdResTimer = null;   // timer de 30s para encuesta
+let _ntdOfrecioAyuda = false; // ya ofreció seguir ayudando?
+
+function ntdPreguntarResolucion(){
+  NTD._consultas++;
+  _ntdOfrecioAyuda = false;
+  clearTimeout(_ntdResTimer);
+
+  var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
+
+  // Si ya van 3+ consultas → encuesta inmediata después de ofrecer ayuda
+  if(NTD._consultas >= 3){
+    setTimeout(function(){
+      ntdOfrecerMasAyuda(true); // true = ir directo a encuesta si no responde en 30s
+    }, 1500);
+  } else {
+    // Menos de 3 → ofrecer ayuda, esperar 30s, luego encuesta
+    setTimeout(function(){
+      ntdOfrecerMasAyuda(false);
+    }, 1500);
+  }
+}
+
+function ntdOfrecerMasAyuda(inmediato){
+  var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
+  _ntdOfrecioAyuda = true;
+  clearTimeout(_ntdResTimer);
+
+  ntdAddMsg('nova',
+    ntdR2H('**'+n+'**, ¿hay algo más en lo que pueda ayudarle hoy? 😊'),
+    '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
+    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:10px 14px;font-weight:600" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Sí, ver el menú principal</button>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:10px 14px;font-weight:600" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Tengo otra pregunta</button>'
+    +'<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:10px 14px;font-weight:600" onclick="ntdMostrarEncuestaFinal(true)">3️⃣ &nbsp;✓ No, estoy bien — finalizar</button>'
+    +'</div>'
+  );
+
+  // Esperar 30 segundos sin respuesta → lanzar encuesta
+  _ntdResTimer = setTimeout(function(){
+    if(NTD._encuestaVista) return;
+    ntdMostrarEncuestaFinal();
+  }, 30 * 1000);
+}
+
+function ntdMostrarEncuestaFinal(forzar){
+  if(NTD._encuestaVista && !forzar) return;
+  NTD._encuestaVista = true;
+  clearTimeout(_ntdResTimer);
+  var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
+  ntdAddMsg('nova',
+    ntdR2H(
+      'Ha sido un honor acompañarle, **'+n+'**. 🌟\n\n'
+      +'Su satisfacción es nuestra mayor motivación en **Tododrogas CIA SAS**. '
+      +'¿Cómo calificaría la atención recibida hoy?'
+    ),
+    '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:6px">'
+    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:11px 14px;font-weight:600" onclick="ntdCalificar(&apos;excelente&apos;)">🌟 &nbsp;Excelente — superó mis expectativas</button>'
+    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:11px 14px;font-weight:600" onclick="ntdCalificar(&apos;buena&apos;)">✅ &nbsp;Buena — quedé satisfecho/a</button>'
+    +'<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:11px 14px;font-weight:600" onclick="ntdCalificar(&apos;mala&apos;)">👎 &nbsp;Necesito más ayuda</button>'
+    +'</div>'
+  );
+}
+
+function ntdCalificar(tipo){
+  NTD._calificacion=tipo; // guardar para métricas
+  var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
+  if(tipo==='excelente'){
+    ntdAddMsg('nova', ntdR2H(
+      '¡Eso nos llena de orgullo, **'+n+'**! 🌟💙\n\n'
+      +'Saber que superamos sus expectativas es el mejor reconocimiento para nuestro equipo. '
+      +'En **Tododrogas CIA SAS** trabajamos cada día para brindarle la mejor experiencia. '
+      +'¡Hasta pronto y que tenga un día extraordinario! ✨'
+    ));
+    setTimeout(function(){ntdFinalizarChat&&ntdFinalizarChat();},3500);
+  } else if(tipo==='buena'){
+    ntdAddMsg('nova', ntdR2H(
+      '¡Muchas gracias, **'+n+'**! 💙\n\n'
+      +'Me alegra mucho haberle podido ayudar hoy. Su confianza en **Tododrogas CIA SAS** '
+      +'es muy valiosa para nosotros. ¡Hasta pronto y que esté muy bien! 😊'
+    ));
+    setTimeout(function(){ntdFinalizarChat&&ntdFinalizarChat();},3000);
+  } else {
+    ntdAddMsg('nova',
+      ntdR2H(
+        'Entiendo perfectamente, **'+n+'**. Lo más importante es que quede completamente atendido/a. '
+        +'Permítame conectarle de inmediato con uno de nuestros asesores:'
+      )
+    );
+    setTimeout(function(){ntdEscalarAgente();},800);
+  }
+}
+
 // Activa GPT para consulta libre
 function ntdConsultaPersonalizada(){
+  NTD._preguntasLibres++;
   ntdAddMsg('nova',
     `<p>¿Sobre qué quieres consultar, <strong>${NTD.usuario?.primerNombre||''}</strong>?</p>
      <p style="font-size:11px;color:rgba(190,215,255,.5);margin-top:4px">Escribe tu pregunta y te respondo de inmediato.</p>`);
@@ -1391,10 +1660,12 @@ async function ntdFLibreDirecto(txt){
 // Radicar — lleva al formulario QR o botón directo
 function ntdIrARadicar(){
   ntdAddMsg('nova',
-    `<p>Para radicar tu solicitud PQRSFD tienes estas opciones:</p>`,
-    ntdBotonesFinales(`
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">3️⃣ &nbsp;📋 Radicar desde aquí →</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarQR()">4️⃣ &nbsp;📲 Escanear código QR</button>`));
+    `<p>Para radicar tu solicitud PQRSFD toca el botón:</p>`,
+    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">1️⃣ &nbsp;📋 Radicar mi solicitud →</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
+     </div>`);
+  ntdPreguntarResolucion();
 }
 
 function ntdMostrarQR(){
@@ -1414,13 +1685,14 @@ ntdBotonesFinales(`
 
 // Escalar a asesor — siempre de último
 function ntdEscalarAgente(){
+  var n=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
   ntdAddMsg('nova',
-    ntdR2H('Con gusto le facilito la comunicacion. **Lun-Vie 7:00-5:30pm · Sab 8:00-12:00m.**'),
+    ntdR2H('Por supuesto, **'+n+'**. Con mucho gusto le conecto con uno de nuestros asesores. Están disponibles **Lun-Vie 7:00am-5:30pm · Sáb 8:00-12:00m**:\n\nEscoja el canal que prefiera:'),
     '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
-    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px">3️⃣ &nbsp;💬 WhatsApp: 304 341 2431</button>'
-    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px">4️⃣ &nbsp;📞 PBX: 604 322 2432</button>'
-    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>'
-    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button>'
+    +'<a href="https://wa.me/573043412431" target="_blank" class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none;display:flex;align-items:center">1️⃣ &nbsp;💬 WhatsApp: 304 341 2431 →</a>'
+    +'<a href="tel:6043222432" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none;display:flex;align-items:center">2️⃣ &nbsp;📞 PBX: 604 322 2432</a>'
+    +'<a href="mailto:pqrsfd@tododrogas.com.co" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none;display:flex;align-items:center">3️⃣ &nbsp;✉️ pqrsfd@tododrogas.com.co</a>'
+    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">4️⃣ &nbsp;🏠 Menú principal</button>'
     +'</div>');
 }
 
@@ -1470,6 +1742,8 @@ async function ntdFLibre(txt){
       await ntdFetchSedes(_mun);
       if(_epsOverride) NTD.eps=_epsOriginal;
       break;}
+    case 'REQUISITOS':
+      ntdRequisitosReclamar();break;
     case 'MEDICAMENTOS':
       ntdAddMsg('nova',html);await ntdDelay(200);ntdMedicamentos();break;
     default:
@@ -1483,6 +1757,7 @@ function ntdParseAct(raw){
   let text=raw,act=null,dat=null;
   const pp=[[/\[FORMULARIO\]/,'FORMULARIO'],[/\[ESCALAR\]/,'ESCALAR'],[/\[ENCUESTA\]/,'ENCUESTA'],
     [/\[MENU\]/,'MENU'],[/\[CAMBIAR_EPS\]/,'CAMBIAR_EPS'],[/\[MEDICAMENTOS\]/,'MEDICAMENTOS'],
+    [/\[REQUISITOS\]/,'REQUISITOS'],
     [/\[CONSULTAR:([^\]]+)\]/,'CONSULTAR'],[/\[SEDES:([^\]]+)\]/,'SEDES']];
   for(const[re,a]of pp){const m=text.match(re);if(m){text=text.replace(m[0],'').trim();act=a;dat=m[1]||null;break;}}
   // Limpiar CUALQUIER tag residual que GPT haya dejado en el texto
@@ -1525,7 +1800,8 @@ async function ntdFetchRadicado(ticket){
       `<p>No encontré el radicado <strong>${ticket}</strong>.</p>
        <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.6)">Verifica que el número sea correcto (ej: TD-20260401-1234) o consulta directamente en nuestra plataforma.</p>`,
       `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
-         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">1️⃣ &nbsp;🔍 Intentar con otro número</button>
+         <a href="${NTD_C.consultaUrl}?ticket=${encodeURIComponent(ticket)}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">1️⃣ &nbsp;🔍 Consultar en plataforma →</a>
+         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">2️⃣ &nbsp;Intentar con otro número</button>
          <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">3️⃣ &nbsp;🏠 Menú principal</button>
        </div>`);return;
   }
@@ -1574,17 +1850,29 @@ function ntdCloseVal(){clearInterval(NTD._valT);ntd$('ntdValBg').classList.remov
 let ntdRecActive=false, ntdRec=null, ntdRecSecs=0, ntdRecTimer=null;
 
 function ntdShowRecUI(on){
-  var bar=ntd$('ntdRecBar'),ta=ntd$('ntdTa'),sb=ntd$('ntdSBtn'),vb=ntd$('ntdVBtn');
+  var bar=ntd$('ntdRecBar'),ta=ntd$('ntdTa'),sb=ntd$('ntdSBtn'),vb=ntd$('ntdVBtn'),lbl=ntd$('ntdMicLbl');
   if(on){
     if(bar)bar.style.display='flex';
     if(ta)ta.style.display='none';
     if(sb)sb.style.display='none';
-    if(vb){vb.style.background='#dc2626';vb.title='Detener';}
+    if(vb){
+      vb.style.background='linear-gradient(135deg,#00c39a,#059669)';
+      vb.style.boxShadow='0 0 0 4px rgba(0,195,154,.25),0 0 16px rgba(0,195,154,.4)';
+      vb.style.animation='ntdMicPulse 1s ease-in-out infinite';
+      vb.title='Presiona de nuevo para enviar';
+    }
+    if(lbl){lbl.textContent='🎙️ Grabando... presiona de nuevo para enviar';lbl.style.display='block';}
   }else{
     if(bar)bar.style.display='none';
     if(ta)ta.style.display='';
     if(sb)sb.style.display='';
-    if(vb){vb.style.background='';vb.title='Grabar';}
+    if(vb){
+      vb.style.background='';
+      vb.style.boxShadow='';
+      vb.style.animation='';
+      vb.title='Grabar';
+    }
+    if(lbl){lbl.style.display='none';}
     var rt=ntd$('ntdRecTime');if(rt)rt.textContent='0:00';
   }
 }
@@ -1674,69 +1962,11 @@ async function ntdProcesarAudio(blob){
 }
 /* FIN NOVA TD */
 
-/* ══ MODAL BIENVENIDA ══ */
-let _ntdCierreTimer = null;
-
-function ntdReset(){
-  clearTimeout(_ntdCierreTimer);_ntdCierreTimer=null;
-  NTD.fase='politica';NTD.usuario=null;NTD.eps=null;
-  NTD._ced=null;NTD._nom=null;NTD._tel=null;NTD._tipoDoc='CÉDULA DE CIUDADANÍA';
-  NTD._enMenu=false;NTD.hist=[];NTD.busy=false;NTD.vipCb=null;NTD.arrancado=false;
-  NTD.geo=null;NTD._geoLat=null;NTD._geoLng=null;
-  const m=ntd$('ntdMsgs');if(m)m.innerHTML='';
-  const q=ntd$('ntdQbar');if(q){q.innerHTML='';q.style.display='none';}
-  ntdProg(4,'Inicio');
-  const ta=ntd$('ntdTa');if(ta){ta.value='';ta.style.height='auto';ta.disabled=true;}
-  ntd$('ntdSBtn').disabled=true;
-}
-
-function openChat(){
-  clearTimeout(_ntdCierreTimer);_ntdCierreTimer=null;
-  document.getElementById('overlay').classList.add('open');
-  if(!NTD.arrancado){NTD.arrancado=true;ntdStart();}
-  if(typeof ntdResetInact==='function')ntdResetInact();
-}
-
-function openChatVoice(){
-  openChat();
-  setTimeout(()=>{if(typeof ntdToggleVoz==='function')ntdToggleVoz();},800);
-}
-
-function closeChat(){
-  document.getElementById('overlay').classList.remove('open');
-  if(NTD.arrancado){
-    clearTimeout(_ntdCierreTimer);
-    _ntdCierreTimer=setTimeout(()=>{ntdReset();},5*60*1000);
-  }
-}
-
-function onOvClick(e){
-  if(e.target===document.getElementById('overlay'))closeChat();
-}
-
-/* ══ INIT ══ */
-function updateClock(){
-  const now=new Date();const h=String(now.getHours()).padStart(2,'0');const m=String(now.getMinutes()).padStart(2,'0');
-  const el=document.getElementById('clockDisplay');if(el)el.textContent=h+':'+m;
-}
-setInterval(updateClock,1000);updateClock();
-
-document.body.style.opacity='0';document.body.style.transition='opacity .4s ease';
-setTimeout(()=>{document.body.style.opacity='1';},50);
-
-startCarousel();
-
-requestAnimationFrame(()=>{
-  requestAnimationFrame(()=>{
-    applyQRs();
-    _lastQrUrl=FORM_URL;
-    pollSupabaseConfig();
-    setInterval(pollSupabaseConfig,30000);
-  });
+/* Arranque automático */
+document.addEventListener('DOMContentLoaded', () => {
+  NTD.arrancado = true;
+  ntdStart();
 });
-
-document.getElementById('btn-radicar-main').addEventListener('click', goToForm);
-window.addEventListener('orientationchange',()=>{setTimeout(applyQRs,400);});
 </script>
 </body>
 </html>
