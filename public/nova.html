@@ -595,6 +595,16 @@ function ntdReset(){
   NTD.busy      = false;
   NTD.vipCb     = null;
   NTD.arrancado = false;
+  // Resetear métricas de sesión
+  NTD._sesionId      = null;
+  NTD._sesionInicio  = null;
+  NTD._menuUsados    = [];
+  NTD._preguntasLibres = 0;
+  NTD._calificacion  = null;
+  NTD._consultas     = 0;
+  NTD._encuestaVista = false;
+  clearTimeout(_ntdResTimer);
+  _ntdOfrecioAyuda   = false;
   // Limpiar mensajes del DOM
   const m = ntd$('ntdMsgs');
   if(m) m.innerHTML = '';
@@ -816,12 +826,9 @@ function ntdResetInact(){
 }
 
 function ntdNuevoChat(){
-  ntdReset();
-  NTD._consultas=0;
-  NTD._encuestaVista=false;
-  clearTimeout(_ntdResTimer);
-  _ntdOfrecioAyuda=false;
-  setTimeout(()=>{ ntdStart(); }, 150);
+  ntdCerrarSesion('nuevo_chat'); // cerrar sesión actual antes de reiniciar
+  ntdReset();                    // resetea TODO incluyendo _sesionId
+  setTimeout(()=>{ ntdStart(); }, 200);
 }
 
 async function ntdSend(){
@@ -999,9 +1006,56 @@ function ntdCardSede(s, badge){
   </div>`;
 }
 
+
+// ── Mapa DANE código → nombre municipio ──────────────────
+const DANE_MUNICIPIOS = {
+  '05001':'MEDELLIN','05030':'AMAGA','05031':'AMALFI','05034':'ANDES',
+  '05036':'ANGELOPOLIS','05038':'ANGOSTURA','05040':'ANORI','05044':'ANZA',
+  '05045':'APARTADO','05051':'ARBOLETES','05059':'BARBOSA','05079':'CACERES',
+  '05088':'BELMIRA','05086':'BELLO','05090':'CAMPAMENTO','05107':'BRICEÑO',
+  '05113':'CAUCASIA','05125':'CHIGORODO','05129':'CISNEROS','05138':'COCORNA',
+  '05145':'COPACABANA','05147':'DABEIBA','05154':'EL BAGRE','05172':'ENTRERIOS',
+  '05174':'ENVIGADO','05176':'FREDONIA','05177':'FRONTINO','05183':'GIRALDO',
+  '05185':'GIRARDOTA','05189':'GRANADA','05197':'HELICONIA','05206':'HISPANIA',
+  '05209':'ITAGUI','05212':'ITUANGO','05234':'JARDIN','05237':'JERICO',
+  '05240':'LA CEJA','05250':'LA ESTRELLA','05264':'LA PINTADA','05266':'LA UNION',
+  '05282':'LIBORINA','05284':'MACEO','05306':'MARINILLA','05310':'MURINDO',
+  '05313':'MUTATA','05315':'NARINO','05318':'NECOCLI','05321':'NECHI',
+  '05347':'OLAYA','05353':'PENOL','05360':'PEQUE','05376':'PUEBLORRICO',
+  '05380':'PUERTO BERRIO','05390':'PUERTO NARE','05400':'PUERTO TRIUNFO',
+  '05411':'REMEDIOS','05425':'RETIRO','05440':'RIONEGRO','05467':'SABANALARGA',
+  '05475':'SABANETA','05480':'SALGAR','05490':'SAN CARLOS','05495':'SAN FRANCISCO',
+  '05501':'SAN JERONIMO','05507':'SAN JOSE DE LA MONTANA','05509':'SAN JUAN DE URABA',
+  '05514':'SAN LUIS','05541':'SAN PEDRO DE LOS MILAGROS','05543':'SAN PEDRO DE URABA',
+  '05545':'SAN RAFAEL','05547':'SAN ROQUE','05556':'SAN VICENTE',
+  '05558':'SANTA BARBARA','05560':'SANTA ROSA DE OSOS','05562':'SANTO DOMINGO',
+  '05564':'EL SANTUARIO','05576':'SEGOVIA','05579':'SONSON','05585':'SOPETRAN',
+  '05591':'TAMESIS','05604':'TARAZA','05607':'TARSO','05615':'TITIRIBÍ',
+  '05628':'TOLEDO','05631':'TURBO','05642':'URAMITA','05647':'URRAO',
+  '05649':'VALDIVIA','05652':'VALPARAISO','05656':'VEGACHI','05658':'VENECIA',
+  '05659':'VIGIA DEL FUERTE','05664':'YALI','05667':'YARUMAL','05670':'YOLOMBO',
+  '05674':'YONDO','05679':'ZARAGOZA','05789':'TURBO','05790':'URABA',
+  '05736':'SONSON','05887':'VIGIA DEL FUERTE','05834':'SAMANA',
+  // Otros departamentos
+  '08001':'BARRANQUILLA','11001':'BOGOTA','13001':'CARTAGENA',
+  '70001':'SINCELEJO','76001':'CALI','05042':'SANTAFE DE ANTIOQUIA',
+};
+
+function daneToMunicipio(codDpto, codMun){
+  // codDpto: '05', codMun: '001' → busca '05001'
+  const key = String(codDpto).padStart(2,'0') + String(codMun).padStart(3,'0');
+  return DANE_MUNICIPIOS[key] || null;
+}
+
 async function ntdBienvenidaConSede(eps){
   const nombre=NTD.usuario.primerNombre||'';
-  const ciudadInscrita=(NTD.usuario.ciudad||'').toUpperCase().trim();
+  // Ciudad viene como nombre desde tabla_usuarios (ej: 'Medellín', 'Turbo')
+  // Normalizar: quitar tildes y pasar a mayúsculas para comparar con sedes
+  const _normMun=m=>(m||'').toUpperCase().trim().replace(/, ANTIOQUIA$/,'')
+    .replace(/[ÁÀÂÄ]/g,'A').replace(/[ÉÈÊË]/g,'E')
+    .replace(/[ÍÌÎÏ]/g,'I').replace(/[ÓÒÔÖ]/g,'O')
+    .replace(/[ÚÙÛÜ]/g,'U').replace(/Ñ/g,'N');
+  const ciudadInscrita = _normMun(NTD.usuario.ciudad || '');
 
   // Cargar sedes de Supabase (con fallback a local)
   let todasSedes=[];
@@ -1041,12 +1095,95 @@ async function ntdBienvenidaConSede(eps){
     );
   });
 
-  // Referencia de coordenadas: geoloc > ciudad inscrita > primera sede
+  // Coordenadas de todos los municipios de Antioquia (fallback si la geo falla)
+  const _COORDS_MUN={
+    'MEDELLIN':{lat:6.2518,lng:-75.5636},'BELLO':{lat:6.3367,lng:-75.5583},
+    'ITAGUI':{lat:6.1847,lng:-75.5989},'ENVIGADO':{lat:6.1728,lng:-75.5803},
+    'SABANETA':{lat:6.1519,lng:-75.6175},'LA ESTRELLA':{lat:6.1569,lng:-75.6439},
+    'CALDAS':{lat:6.0922,lng:-75.6394},'COPACABANA':{lat:6.3503,lng:-75.5103},
+    'GIRARDOTA':{lat:6.3789,lng:-75.4458},'BARBOSA':{lat:6.4383,lng:-75.3317},
+    'RIONEGRO':{lat:6.155,lng:-75.3736},'MARINILLA':{lat:6.1775,lng:-75.3336},
+    'EL PEÑOL':{lat:6.2178,lng:-75.2411},'PENOL':{lat:6.2178,lng:-75.2411},
+    'GUATAPE':{lat:6.2317,lng:-75.1572},'SAN CARLOS':{lat:6.1883,lng:-74.9996},
+    'SAN RAFAEL':{lat:6.2947,lng:-75.0336},'COCORNA':{lat:6.0636,lng:-74.6939},
+    'GRANADA':{lat:6.1553,lng:-74.8281},'SAN LUIS':{lat:6.0397,lng:-74.9961},
+    'SAN FRANCISCO':{lat:5.9964,lng:-75.1081},'ABEJORRAL':{lat:5.7917,lng:-75.4328},
+    'SONSON':{lat:5.7147,lng:-75.3067},'SONSÓN':{lat:5.7147,lng:-75.3067},
+    'ARGELIA':{lat:5.7231,lng:-75.1658},'NARIÑO':{lat:5.8208,lng:-75.1764},
+    'NARINO':{lat:5.8208,lng:-75.1764},'CAUCASIA':{lat:7.9839,lng:-75.1953},
+    'TURBO':{lat:8.0972,lng:-76.7294},'APARTADO':{lat:7.88,lng:-76.6258},
+    'CHIGORODO':{lat:7.6728,lng:-76.6836},'CAREPA':{lat:7.7586,lng:-76.6542},
+    'NECOCLI':{lat:8.4281,lng:-76.7833},'MUTATA':{lat:7.245,lng:-76.435},
+    'VIGIA DEL FUERTE':{lat:6.5733,lng:-76.8964},'DABEIBA':{lat:7.005,lng:-76.2644},
+    'FRONTINO':{lat:6.7747,lng:-76.1344},'URAMITA':{lat:6.8669,lng:-76.1747},
+    'URRAO':{lat:6.3242,lng:-76.1378},'CAICEDO':{lat:6.3933,lng:-76.0433},
+    'SANTA FE DE ANTIOQUIA':{lat:6.5558,lng:-75.8258},'SANTAFE DE ANTIOQUIA':{lat:6.5558,lng:-75.8258},
+    'GIRALDO':{lat:6.4747,lng:-75.9164},'OLAYA':{lat:6.6317,lng:-75.8583},
+    'LIBORINA':{lat:6.6897,lng:-75.8606},'SABANALARGA':{lat:6.8856,lng:-75.7128},
+    'SAN JERONIMO':{lat:6.4933,lng:-75.7136},'SOPETRAN':{lat:6.5036,lng:-75.7403},
+    'SOPETRÁN':{lat:6.5036,lng:-75.7403},'ANZA':{lat:6.3136,lng:-75.9444},
+    'YARUMAL':{lat:7.0136,lng:-75.4772},'ANGOSTURA':{lat:6.8722,lng:-75.3406},
+    'VALDIVIA':{lat:7.1656,lng:-75.4411},'ANORI':{lat:7.0714,lng:-75.1403},
+    'CAMPAMENTO':{lat:6.9683,lng:-75.2869},'CAROLINA':{lat:6.7386,lng:-75.3272},
+    'GOMEZ PLATA':{lat:6.6369,lng:-75.2014},'GUADALUPE':{lat:6.9731,lng:-75.4217},
+    'ITUANGO':{lat:7.1661,lng:-75.7628},'TOLEDO':{lat:7.3208,lng:-75.5628},
+    'BRICEÑO':{lat:7.2861,lng:-75.5233},'BRICENO':{lat:7.2861,lng:-75.5233},
+    'SEGOVIA':{lat:7.0819,lng:-74.7039},'REMEDIOS':{lat:7.0275,lng:-74.6906},
+    'YALI':{lat:6.8914,lng:-74.8672},'VEGACHI':{lat:6.8169,lng:-74.7789},
+    'AMALFI':{lat:6.9122,lng:-75.0758},'YOLOMBO':{lat:6.5975,lng:-75.0153},
+    'CISNEROS':{lat:6.5436,lng:-74.9944},'MACEO':{lat:6.5444,lng:-74.7742},
+    'SAN ROQUE':{lat:6.4817,lng:-74.9939},'ALEJANDRIA':{lat:6.3736,lng:-75.0989},
+    'CONCEPCION':{lat:6.3944,lng:-75.0617},'SAN VICENTE':{lat:6.3111,lng:-75.3394},
+    'ZARAGOZA':{lat:7.495,lng:-74.8656},'EL BAGRE':{lat:7.5917,lng:-74.8097},
+    'NECHI':{lat:8.1017,lng:-74.77},'TARAZA':{lat:7.5833,lng:-75.4},
+    'CACERES':{lat:7.5742,lng:-75.3464},'PUERTO BERRIO':{lat:6.4914,lng:-74.4083},
+    'PUERTO NARE':{lat:6.2064,lng:-74.5906},'PUERTO TRIUNFO':{lat:5.8756,lng:-74.5622},
+    'YONDO':{lat:6.7886,lng:-74.4697},'CARACOLI':{lat:6.4322,lng:-74.7825},
+    'SAMANA':{lat:5.9008,lng:-74.9956},'AMAGA':{lat:6.0386,lng:-75.7022},
+    'SANTA BARBARA':{lat:5.875,lng:-75.5714},'CIUDAD BOLIVAR':{lat:5.8597,lng:-76.0186},
+    'ANDES':{lat:5.6558,lng:-75.8786},'TAMESIS':{lat:5.67,lng:-75.7133},
+    'JERICO':{lat:5.7897,lng:-75.7792},'TARSO':{lat:5.8133,lng:-75.8203},
+    'SALGAR':{lat:5.9608,lng:-75.9872},'CONCORDIA':{lat:6.0469,lng:-75.9058},
+    'BETULIA':{lat:6.1097,lng:-75.9792},'FREDONIA':{lat:5.9272,lng:-75.6753},
+    'VENECIA':{lat:5.9686,lng:-75.7703},'HISPANIA':{lat:5.8294,lng:-75.9169},
+    'TITIRIBÍ':{lat:6.0744,lng:-75.7706},'TITIRIBÍ':{lat:6.0744,lng:-75.7706},
+    'ANGELOPOLIS':{lat:6.1122,lng:-75.7147},'HELICONIA':{lat:6.2075,lng:-75.7522},
+    'EBEJICO':{lat:6.3289,lng:-75.7733},'ARMENIA':{lat:5.7447,lng:-75.6822},
+    'PUEBLORRICO':{lat:5.7944,lng:-75.9483},'LA CEJA':{lat:6.0225,lng:-75.4303},
+    'RETIRO':{lat:6.0625,lng:-75.5053},'LA UNION':{lat:5.9747,lng:-75.3625},
+    'MONTEBELLO':{lat:5.9356,lng:-75.5022},'EL CARMEN':{lat:5.9069,lng:-75.1297},
+    'BELMIRA':{lat:6.6083,lng:-75.6672},'ENTRERRIOS':{lat:6.5558,lng:-75.5686},
+    'ENTRERIOS':{lat:6.5558,lng:-75.5686},'DON MATIAS':{lat:6.5036,lng:-75.4142},
+    'SANTA ROSA DE OSOS':{lat:6.6506,lng:-75.4583},'SANTA ROSA':{lat:6.6506,lng:-75.4583},
+  };
+
+  // Referencia: geoloc > sede en ciudad > coordenadas fijas del municipio
   let refLat=null, refLng=null;
-  if(geoPos){refLat=geoPos.lat;refLng=geoPos.lng;}
-  else if(ciudadInscrita){
-    const ref=sedesPorEps.find(s=>(s.municipio_norm||s.ciudad||'').toUpperCase().includes(ciudadInscrita));
-    if(ref&&parseFloat(ref.lat||0)!==0){refLat=parseFloat(ref.lat);refLng=parseFloat(ref.lng);}
+  if(geoPos){
+    refLat=geoPos.lat; refLng=geoPos.lng;
+  } else if(ciudadInscrita){
+    // 1. Buscar sede de la misma EPS en ese municipio
+    const ref=sedesPorEps.find(s=>{
+      // municipio_norm = Supabase, municipio = local array
+      const mn=_normMun(s.municipio_norm||s.municipio||s.ciudad||'');
+      return mn===ciudadInscrita||mn.includes(ciudadInscrita)||ciudadInscrita.includes(mn);
+    });
+    if(ref&&parseFloat(ref.lat||0)!==0){
+      refLat=parseFloat(ref.lat); refLng=parseFloat(ref.lng);
+    }
+    // 2. Fallback: coordenadas fijas del municipio
+    if(!refLat){
+      const coord=_COORDS_MUN[ciudadInscrita];
+      if(coord){refLat=coord.lat; refLng=coord.lng;}
+    }
+    // 3. Fallback: cualquier sede con coordenadas en ese municipio
+    if(!refLat){
+      const cualquier=todasSedes.find(s=>{
+        const mn=_normMun(s.municipio_norm||s.municipio||s.ciudad||'');
+        return (mn===ciudadInscrita||mn.includes(ciudadInscrita)) && parseFloat(s.lat||0)!==0;
+      });
+      if(cualquier){refLat=parseFloat(cualquier.lat); refLng=parseFloat(cualquier.lng);}
+    }
   }
 
   // Ordenar todas las sedes por distancia si tenemos referencia
@@ -1059,7 +1196,7 @@ async function ntdBienvenidaConSede(eps){
   }
 
   const sedesEnCiudad=ciudadInscrita
-    ?ordenadas.filter(s=>(s.municipio_norm||s.ciudad||'').toUpperCase().replace(/, ANTIOQUIA$/,'').includes(ciudadInscrita))
+    ?ordenadas.filter(s=>_normMun(s.municipio_norm||s.municipio||s.ciudad||'').includes(ciudadInscrita))
     :[];
 
   if(sedesEnCiudad.length){
