@@ -1,489 +1,816 @@
 <?php
 /**
- * sincronizar-correos.php — Sincronizador Graph API → Supabase
- * ─────────────────────────────────────────────────────────────
- * Reemplaza el workflow N8N F00_correos_adjuntos
+ * sincronizar-correos.php v3 — Tododrogas CIA SAS
+ * ─────────────────────────────────────────────────────────────────────
+ * CAMBIOS v3 vs v2:
+ *  - Cursor persistente en configuracion_sistema.data.sync.cursor
+ *    → nunca pierde correos aunque el cron falle varios minutos
+ *  - Cron cada minuto (en vez de 5)
+ *  - Botón "Iniciar sync" en admin activa el sistema y fija ciclo_inicio
+ *  - Botón "Nuevo ciclo" en admin genera backup JSON en Storage y limpia tablas
+ *  - Orden garantizado: receivedDateTime ASC (igual que Outlook)
+ *  - Adjuntos procesados DENTRO del loop de cada correo antes de avanzar cursor
+ *  - Fix: historial_eventos usa correos.id (UUID), no ticket_id
+ *  - Auto-cierre de tickets positivos/felicitaciones con evento 'cerrado_automatico'
+ *  - CORS restringido a tododrogas.online
  *
- * FLUJO:
- *   1. Lock de proceso (evita solapamiento de cron)
- *   2. Obtiene token Azure (client_credentials)
- *   3. Trae correos de las últimas N horas de pqrsfd@tododrogas.com.co
- *   4. Batch upsert en tabla correos (una sola llamada por lote de 20)
- *   5. Patch de estado inicial solo para correos nuevos (batch)
- *   6. Descarga y sube adjuntos con pausa entre cada uno
- *   7. Clasifica con GPT-4o-mini los correos externos sin sentimiento
- *      (separado del upsert, con pausa entre llamadas)
- *   8. Registra resumen en historial_eventos
- *   9. Libera lock
- *
- * USO:
- *   - Cron cada 5 min: * /5 * * * * php /var/www/pqr/sincronizar-correos.php >> /var/log/sync-correos.log 2>&1
- *   - Manual desde admin: GET /sincronizar-correos.php?token=ADMIN_TOKEN
- *   - Forzar ventana: GET /sincronizar-correos.php?horas=48&token=ADMIN_TOKEN
- *
- * CAMBIOS v2 (anti-lock/timeout):
- *   - Lock de archivo /tmp/sync-correos.lock para evitar ejecuciones solapadas
- *   - Upsert en lotes de 20 correos (en vez de 1 por 1) → menos conexiones
- *   - Patch de estado inicial acumulado y separado del upsert
- *   - usleep(100ms) entre upserts de lote y entre adjuntos
- *   - usleep(300ms) entre llamadas a OpenAI
- *   - Timeout de curl aumentado a 45s para queries pesadas
- *   - Clasificación IA completamente separada del loop de upsert
+ * ENDPOINTS:
+ *  - Cron cada minuto: php sincronizar-correos.php
+ *  - Iniciar sync:     GET ?accion=iniciar&token=ADMIN_TOKEN
+ *  - Nuevo ciclo:      GET ?accion=nuevo_ciclo&token=ADMIN_TOKEN
+ *  - Estado:           GET ?accion=estado&token=ADMIN_TOKEN
+ *  - Forzar ventana:   GET ?accion=sync&horas=24&token=ADMIN_TOKEN
  */
 
-// ── LOCK — evitar solapamiento de ejecuciones de cron ─────────────────
-$LOCK_FILE = '/tmp/sync-correos.lock';
-$LOCK_TTL  = 4 * 60; // 4 minutos: si el lock tiene más de esto, es un proceso muerto
-
-if (file_exists($LOCK_FILE)) {
-    $lock_age = time() - filemtime($LOCK_FILE);
-    if ($lock_age < $LOCK_TTL) {
-        // Proceso anterior sigue activo → abortar silenciosamente
-        $pid = @file_get_contents($LOCK_FILE);
-        error_log("[sync-correos] Ya hay sync corriendo (PID: $pid, hace {$lock_age}s). Abortando.");
-        exit(0);
-    }
-    // Lock viejo (proceso muerto) → lo eliminamos y continuamos
-    @unlink($LOCK_FILE);
-}
-
-// Crear lock
-file_put_contents($LOCK_FILE, getmypid());
-// Limpiar lock siempre al terminar (éxito, error o exit)
-register_shutdown_function(function () use ($LOCK_FILE) {
-    @unlink($LOCK_FILE);
-});
-
-// ── Modo de ejecución ─────────────────────────────────────────────────
-$es_web    = php_sapi_name() !== 'cli';
-$es_manual = $es_web && isset($_GET['token']);
-
-if ($es_web) {
-    header('Content-Type: application/json; charset=utf-8');
-    header('Access-Control-Allow-Origin: *');
-    $ADMIN_TOKEN = '__ADMIN_SYNC_TOKEN__';
-    if ($es_manual && ($_GET['token'] ?? '') !== $ADMIN_TOKEN) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Token inválido']);
-        exit;
-    }
-    if (!$es_manual) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Solo accesible con token o desde cron']);
-        exit;
-    }
-}
-
 date_default_timezone_set('America/Bogota');
+
+// ── CORS ──────────────────────────────────────────────────────────────
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowed_origins = ['https://tododrogas.online', 'https://www.tododrogas.online'];
+if ($origin && in_array($origin, $allowed_origins)) {
+    header('Access-Control-Allow-Origin: ' . $origin);
+}
+header('Content-Type: application/json; charset=utf-8');
 
 // ── CREDENCIALES ──────────────────────────────────────────────────────
 $SB_URL        = '__SB_URL__';
 $SB_KEY        = '__SB_KEY__';
 $OPENAI_KEY    = '__OPENAI_KEY__';
-$TENANT_ID     = '__AZURE_TENANT_ID__';
-$CLIENT_ID     = '__AZURE_CLIENT_ID__';
-$CLIENT_SECRET = '__AZURE_CLIENT_SECRET__';
 $GRAPH_MAILBOX = 'pqrsfd@tododrogas.com.co';
-$HORAS_VENTANA = (int)($_GET['horas'] ?? 12); // 12h = ventana por defecto (cron cada 5min cubre bien sin duplicar)
+$INBOX_ID      = '__INBOX_FOLDER_ID__';
+$AZURE_TENANT  = '__AZURE_TENANT_ID__';
+$AZURE_CLIENT  = '__AZURE_CLIENT_ID__';
+$AZURE_SECRET  = '__AZURE_CLIENT_SECRET__';
+$ADMIN_TOKEN   = '__ADMIN_TOKEN__';
 
-// Tamaño de lote para batch upsert — no subir de 25 en Nano
-const BATCH_SIZE = 20;
+// ── LOCK — evitar ejecuciones solapadas ──────────────────────────────
+define('LOCK_FILE', '/tmp/sync-correos-v3.lock');
+define('LOCK_MAX_AGE', 180); // 3 min — si el lock tiene más, está muerto
 
-// ── LOG ───────────────────────────────────────────────────────────────
-$log = [];
+$accion   = $_GET['accion'] ?? 'sync';
+$token_ok = isset($_GET['token']) && $_GET['token'] === $ADMIN_TOKEN;
+$es_web   = PHP_SAPI !== 'cli';
+$log      = [];
+
+// Acciones web requieren token
+if ($es_web && !$token_ok) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Token requerido']);
+    exit;
+}
+
+// ── HELPERS BÁSICOS ───────────────────────────────────────────────────
 function log_msg(string $msg): void {
     global $log;
-    $ts = date('H:i:s');
-    $log[] = "[$ts] $msg";
-    if (php_sapi_name() === 'cli') echo "[$ts] $msg\n";
+    $ts   = date('H:i:s');
+    $line = "[$ts] $msg";
+    $log[] = $line;
+    error_log("[sync-v3] $msg");
 }
 
-log_msg("=== SYNC START v2 — ventana: {$HORAS_VENTANA}h | PID: " . getmypid() . " ===");
+function finalizar(bool $ok, string $motivo, array $extra = []): void {
+    global $log, $es_web;
+    $out = array_merge(['ok' => $ok, 'motivo' => $motivo, 'log' => $log, 'ts' => date('c')], $extra);
+    if ($es_web) {
+        http_response_code($ok ? 200 : 500);
+        echo json_encode($out, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    }
+    exit;
+}
 
-// ── HELPERS ───────────────────────────────────────────────────────────
-
-/**
- * Ejecuta una petición cURL y devuelve código HTTP + body.
- */
-function curlJson(string $url, array $opts = []): array {
-    $ch = curl_init($url);
-    curl_setopt_array($ch, $opts + [
+// ── HELPERS SUPABASE ──────────────────────────────────────────────────
+function sbGet(string $endpoint): ?array {
+    global $SB_URL, $SB_KEY;
+    $ch = curl_init("$SB_URL/rest/v1/$endpoint");
+    curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 45,   // aumentado de 30 a 45s
-        CURLOPT_SSL_VERIFYPEER => true,
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $err  = curl_error($ch);
-    curl_close($ch);
-    return ['code' => $code, 'body' => $resp, 'err' => $err];
-}
-
-/**
- * GET a Supabase REST API.
- */
-function sbGet(string $SB_URL, string $SB_KEY, string $endpoint): ?array {
-    $r = curlJson("$SB_URL/rest/v1/$endpoint", [
-        CURLOPT_HTTPHEADER => [
+        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_HTTPHEADER     => [
             "apikey: $SB_KEY",
             "Authorization: Bearer $SB_KEY",
             'Accept: application/json',
         ],
     ]);
-    return ($r['code'] >= 200 && $r['code'] < 300) ? json_decode($r['body'], true) : null;
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ($code >= 200 && $code < 300) ? (json_decode($resp, true) ?? []) : null;
 }
 
-/**
- * Upsert (array de filas) en Supabase. Devuelve la respuesta cruda.
- * IMPORTANTE: siempre enviar un array, aunque sea de 1 elemento.
- */
-function sbUpsert(string $SB_URL, string $SB_KEY, string $endpoint, array $rows, string $conflict): array {
-    $r = curlJson("$SB_URL/rest/v1/$endpoint?on_conflict=$conflict", [
-        CURLOPT_POST        => true,
-        CURLOPT_POSTFIELDS  => json_encode($rows),   // array de filas
-        CURLOPT_HTTPHEADER  => [
+function sbPost(string $endpoint, array $data): array {
+    global $SB_URL, $SB_KEY;
+    $ch = curl_init("$SB_URL/rest/v1/$endpoint");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($data),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_HTTPHEADER     => [
             "apikey: $SB_KEY",
             "Authorization: Bearer $SB_KEY",
             'Content-Type: application/json',
-            'Prefer: resolution=merge-duplicates,return=representation',
+            'Prefer: return=representation',
         ],
     ]);
-    return $r;
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['code' => $code, 'body' => $resp, 'data' => json_decode($resp, true)];
 }
 
-/**
- * POST simple a Supabase (una sola fila).
- */
-function sbPost(string $SB_URL, string $SB_KEY, string $endpoint, array $data): array {
-    $r = curlJson("$SB_URL/rest/v1/$endpoint", [
-        CURLOPT_POST        => true,
-        CURLOPT_POSTFIELDS  => json_encode($data),
-        CURLOPT_HTTPHEADER  => [
-            "apikey: $SB_KEY",
-            "Authorization: Bearer $SB_KEY",
-            'Content-Type: application/json',
-            'Prefer: return=minimal',
-        ],
-    ]);
-    return $r;
-}
-
-/**
- * PATCH a Supabase sobre un filtro.
- */
-function sbPatch(string $SB_URL, string $SB_KEY, string $endpoint, string $filter, array $data): void {
-    curlJson("$SB_URL/rest/v1/$endpoint?$filter", [
-        CURLOPT_CUSTOMREQUEST => 'PATCH',
-        CURLOPT_POSTFIELDS    => json_encode($data),
-        CURLOPT_HTTPHEADER    => [
+function sbPatch(string $endpoint, string $filter, array $data): array {
+    global $SB_URL, $SB_KEY;
+    $ch = curl_init("$SB_URL/rest/v1/$endpoint?$filter");
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'PATCH',
+        CURLOPT_POSTFIELDS     => json_encode($data),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 15,
+        CURLOPT_HTTPHEADER     => [
             "apikey: $SB_KEY",
             "Authorization: Bearer $SB_KEY",
             'Content-Type: application/json',
             'Prefer: return=minimal',
         ],
     ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['code' => $code, 'body' => $resp];
 }
 
-// ── 1. TOKEN AZURE ────────────────────────────────────────────────────
-log_msg("Obteniendo token Azure...");
-$tok_r = curlJson(
-    "https://login.microsoftonline.com/{$TENANT_ID}/oauth2/v2.0/token",
-    [
-        CURLOPT_POST        => true,
-        CURLOPT_POSTFIELDS  => http_build_query([
+function sbUpsert(string $endpoint, array $rows, string $conflict): array {
+    global $SB_URL, $SB_KEY;
+    $ch = curl_init("$SB_URL/rest/v1/$endpoint");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($rows),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_HTTPHEADER     => [
+            "apikey: $SB_KEY",
+            "Authorization: Bearer $SB_KEY",
+            'Content-Type: application/json',
+            "Prefer: resolution=merge-duplicates,return=representation",
+            "on_conflict: $conflict",
+        ],
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['code' => $code, 'body' => $resp, 'data' => json_decode($resp, true) ?? []];
+}
+
+function sbDelete(string $endpoint, string $filter): array {
+    global $SB_URL, $SB_KEY;
+    $ch = curl_init("$SB_URL/rest/v1/$endpoint?$filter");
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'DELETE',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_HTTPHEADER     => [
+            "apikey: $SB_KEY",
+            "Authorization: Bearer $SB_KEY",
+            'Prefer: return=minimal',
+        ],
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['code' => $code];
+}
+
+// ── CURSOR Y CONFIG ───────────────────────────────────────────────────
+function getConfig(): array {
+    $rows = sbGet('configuracion_sistema?id=eq.main&select=data');
+    return $rows[0]['data'] ?? [];
+}
+
+function getSyncConfig(): array {
+    $cfg = getConfig();
+    return $cfg['sync'] ?? [];
+}
+
+function saveSyncConfig(array $sync_data): void {
+    $cfg        = getConfig();
+    $cfg['sync'] = array_merge($cfg['sync'] ?? [], $sync_data);
+    sbPatch('configuracion_sistema', 'id=eq.main', [
+        'data'       => $cfg,
+        'updated_at' => date('c'),
+    ]);
+}
+
+// ── TOKEN GRAPH ───────────────────────────────────────────────────────
+function getGraphToken(): ?string {
+    global $AZURE_TENANT, $AZURE_CLIENT, $AZURE_SECRET;
+    $ch = curl_init("https://login.microsoftonline.com/{$AZURE_TENANT}/oauth2/v2.0/token");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_POSTFIELDS     => http_build_query([
             'grant_type'    => 'client_credentials',
-            'client_id'     => $CLIENT_ID,
-            'client_secret' => $CLIENT_SECRET,
+            'client_id'     => $AZURE_CLIENT,
+            'client_secret' => $AZURE_SECRET,
             'scope'         => 'https://graph.microsoft.com/.default',
         ]),
-        CURLOPT_HTTPHEADER  => ['Content-Type: application/x-www-form-urlencoded'],
-        CURLOPT_TIMEOUT     => 15,
-    ]
-);
+        CURLOPT_HTTPHEADER => ['Content-Type: application/x-www-form-urlencoded'],
+    ]);
+    $resp = curl_exec($ch);
+    curl_close($ch);
+    $data = json_decode($resp, true);
+    return $data['access_token'] ?? null;
+}
 
-$tok_data     = json_decode($tok_r['body'], true);
-$access_token = $tok_data['access_token'] ?? null;
+// ══════════════════════════════════════════════════════════════════════
+// ACCIÓN: ESTADO — consultar estado del sync sin ejecutarlo
+// ══════════════════════════════════════════════════════════════════════
+if ($accion === 'estado') {
+    $sync = getSyncConfig();
+    finalizar(true, 'ok', ['sync' => $sync]);
+}
 
-if (!$access_token) {
-    log_msg("ERROR: No se pudo obtener token Azure: " . ($tok_data['error_description'] ?? $tok_r['body']));
+// ══════════════════════════════════════════════════════════════════════
+// ACCIÓN: INICIAR — activar sincronización desde este momento
+// ══════════════════════════════════════════════════════════════════════
+if ($accion === 'iniciar') {
+    $ahora = date('c');
+    // Cursor: 1 minuto atrás para no perder el primer correo
+    $cursor = date('c', strtotime('-1 minute'));
+
+    saveSyncConfig([
+        'activo'       => true,
+        'cursor'       => $cursor,
+        'ciclo_inicio' => $ahora,
+        'ciclo_id'     => 'ciclo_' . date('Y_m_d'),
+        'iniciado_en'  => $ahora,
+        'ultimo_sync'  => null,
+        'total_correos'=> 0,
+        'total_adjuntos'=> 0,
+    ]);
+
+    log_msg("✅ Sincronización iniciada. Cursor: $cursor");
+    finalizar(true, 'iniciado', ['cursor' => $cursor, 'ciclo_inicio' => $ahora]);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ACCIÓN: NUEVO CICLO — backup + limpieza + reinicio
+// ══════════════════════════════════════════════════════════════════════
+if ($accion === 'nuevo_ciclo') {
+    log_msg("=== INICIANDO NUEVO CICLO ===");
+
+    $sync     = getSyncConfig();
+    $ciclo_id = $sync['ciclo_id'] ?? 'ciclo_desconocido';
+    $ahora    = date('c');
+
+    // ── 1. EXPORTAR correos del ciclo a JSON en Storage ──────────────
+    log_msg("Exportando correos del ciclo $ciclo_id...");
+    $correos_backup = sbGet('correos?select=*&order=received_at.asc&limit=10000') ?? [];
+    $adj_backup     = sbGet('adjuntos?select=*&order=created_at.asc&limit=50000') ?? [];
+    $hist_backup    = sbGet('historial_eventos?select=*&order=created_at.asc&limit=50000') ?? [];
+
+    $backup_data = json_encode([
+        'ciclo_id'       => $ciclo_id,
+        'exported_at'    => $ahora,
+        'ciclo_inicio'   => $sync['ciclo_inicio'] ?? null,
+        'total_correos'  => count($correos_backup),
+        'total_adjuntos' => count($adj_backup),
+        'total_historial'=> count($hist_backup),
+        'correos'        => $correos_backup,
+        'adjuntos'       => $adj_backup,
+        'historial'      => $hist_backup,
+    ], JSON_UNESCAPED_UNICODE);
+
+    // Subir backup a Storage
+    global $SB_URL, $SB_KEY;
+    $backup_path = "backups/{$ciclo_id}_" . date('Ymd_His') . ".json";
+    $ch = curl_init("$SB_URL/storage/v1/object/backups-pqr/$backup_path");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $backup_data,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 120,
+        CURLOPT_HTTPHEADER     => [
+            "apikey: $SB_KEY",
+            "Authorization: Bearer $SB_KEY",
+            'Content-Type: application/json',
+            'x-upsert: true',
+        ],
+    ]);
+    $up_resp = curl_exec($ch);
+    $up_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($up_code < 200 || $up_code >= 300) {
+        log_msg("❌ ERROR subiendo backup: HTTP $up_code — " . substr($up_resp, 0, 200));
+        finalizar(false, 'backup_fallido', ['http_code' => $up_code]);
+    }
+    log_msg("✅ Backup subido: $backup_path (" . round(strlen($backup_data)/1024) . " KB)");
+
+    // ── 2. LIMPIAR adjuntos de Storage (bucket adjuntos-pqr) ─────────
+    log_msg("Limpiando adjuntos de Storage...");
+    $adj_paths = array_column($adj_backup, 'storage_path');
+    $adj_paths = array_filter($adj_paths);
+    $eliminados_storage = 0;
+
+    // Agrupar por bucket
+    $por_bucket = [];
+    foreach ($adj_backup as $adj) {
+        $bucket = str_starts_with($adj['storage_path'] ?? '', 'adjuntos/')
+            ? 'adjuntos-pqr'
+            : 'audios';
+        $por_bucket[$bucket][] = $adj['storage_path'];
+    }
+
+    foreach ($por_bucket as $bucket => $paths) {
+        // Supabase Storage delete acepta array de paths
+        // Supabase Storage bulk delete: POST /storage/v1/object/delete con array de paths
+        $ch = curl_init("$SB_URL/storage/v1/object/delete");
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => json_encode([
+                'bucket'  => $bucket,
+                'prefixes'=> array_values($paths),
+            ]),
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 60,
+            CURLOPT_HTTPHEADER     => [
+                "apikey: $SB_KEY",
+                "Authorization: Bearer $SB_KEY",
+                'Content-Type: application/json',
+            ],
+        ]);
+        $del_resp = curl_exec($ch);
+        $del_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        $eliminados_storage += count($paths);
+        log_msg("  Storage $bucket: $del_code (" . count($paths) . " archivos)");
+        usleep(500_000); // 500ms entre buckets
+    }
+
+    // ── 3. LIMPIAR tablas en orden correcto (FK) ─────────────────────
+    log_msg("Limpiando tabla historial_eventos...");
+    sbDelete('historial_eventos', 'id=not.is.null'); // Solo los que tienen correo
+    usleep(300_000);
+
+    log_msg("Limpiando tabla adjuntos...");
+    sbDelete('adjuntos', 'id=not.is.null'); // Todos (no tiene FK hacia afuera)
+    usleep(300_000);
+
+    log_msg("Limpiando tabla correos...");
+    // CUIDADO: no borrar correos con estado activo pendientes de procesar
+    // Solo borramos los del ciclo anterior (todos los actuales)
+    sbDelete('correos', 'id=not.is.null'); // Todos
+    usleep(500_000);
+
+    // ── 4. REINICIAR CURSOR ───────────────────────────────────────────
+    $nuevo_cursor    = date('c', strtotime('-1 minute'));
+    $nuevo_ciclo_id  = 'ciclo_' . date('Y_m_d_His');
+
+    saveSyncConfig([
+        'activo'        => true,
+        'cursor'        => $nuevo_cursor,
+        'ciclo_inicio'  => $ahora,
+        'ciclo_id'      => $nuevo_ciclo_id,
+        'ultimo_sync'   => null,
+        'total_correos' => 0,
+        'total_adjuntos'=> 0,
+        'ultimo_ciclo_backup' => $backup_path,
+        'ultimo_ciclo_correos'=> count($correos_backup),
+    ]);
+
+    log_msg("✅ Nuevo ciclo iniciado: $nuevo_ciclo_id");
+    finalizar(true, 'nuevo_ciclo_ok', [
+        'ciclo_anterior'     => $ciclo_id,
+        'backup_path'        => $backup_path,
+        'correos_backup'     => count($correos_backup),
+        'adjuntos_backup'    => count($adj_backup),
+        'eliminados_storage' => $eliminados_storage,
+        'nuevo_ciclo_id'     => $nuevo_ciclo_id,
+    ]);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ACCIÓN: SYNC — sincronización principal (cron cada minuto)
+// ══════════════════════════════════════════════════════════════════════
+
+// ── Verificar si el sync está activo ─────────────────────────────────
+$sync = getSyncConfig();
+
+if (empty($sync['activo'])) {
+    log_msg("Sync no activo. Usa ?accion=iniciar&token=TOKEN para activar.");
+    finalizar(true, 'inactivo');
+}
+
+// ── Lock de archivo ───────────────────────────────────────────────────
+if (file_exists(LOCK_FILE)) {
+    $pid      = (int)file_get_contents(LOCK_FILE);
+    $lock_age = time() - filemtime(LOCK_FILE);
+    if ($lock_age < LOCK_MAX_AGE && posix_kill($pid, 0)) {
+        log_msg("Ya hay sync corriendo (PID: $pid, hace {$lock_age}s). Saltando.");
+        finalizar(true, 'ya_corriendo');
+    }
+    log_msg("Lock muerto ($lock_age s). Continuando.");
+}
+file_put_contents(LOCK_FILE, getmypid());
+register_shutdown_function(fn() => @unlink(LOCK_FILE));
+
+// ── Cursor: desde dónde traer correos ────────────────────────────────
+$cursor_actual = $sync['cursor'] ?? null;
+if (!$cursor_actual) {
+    log_msg("Sin cursor. Inicia el sync con ?accion=iniciar.");
+    finalizar(false, 'sin_cursor');
+}
+
+// Convertir cursor a formato ISO para Graph API filter
+$cursor_dt  = new DateTime($cursor_actual, new DateTimeZone('UTC'));
+$cursor_iso = $cursor_dt->format('Y-m-d\TH:i:s\Z');
+
+log_msg("=== SYNC v3 === Cursor: $cursor_iso");
+
+// ── Token Graph ───────────────────────────────────────────────────────
+$token = getGraphToken();
+if (!$token) {
+    log_msg("❌ Error obteniendo token Graph.");
     finalizar(false, 'token_error');
 }
-log_msg("Token OK");
 
-// ── 2. TRAER CORREOS ──────────────────────────────────────────────────
-// Ventana: desde el inicio del día de HOY en hora Bogotá (no últimas N horas fijas)
-// Esto garantiza que SIEMPRE se traigan todos los correos del día actual sin importar la hora
-$hoy_bogota = new DateTime('today', new DateTimeZone('America/Bogota'));
-$hoy_utc    = clone $hoy_bogota;
-$hoy_utc->setTimezone(new DateTimeZone('UTC'));
-$desde = $hoy_utc->format('Y-m-d\TH:i:s\Z');
-
-// Si se pasa ?horas=N manualmente (ej: para carga histórica), usar eso en vez de "hoy"
-if (isset($_GET['horas'])) {
-    $horas_manual = (int)$_GET['horas'];
-    $desde = (new DateTime("-{$horas_manual} hours", new DateTimeZone('UTC')))->format('Y-m-d\TH:i:s\Z');
-}
-$select   = 'id,subject,from,toRecipients,ccRecipients,bccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,body,hasAttachments,isRead,isDraft,conversationId,importance,internetMessageId,categories,flag';
-// ID directo de Bandeja de entrada (más confiable que el alias 'Inbox' con 19k correos)
-$INBOX_FOLDER_ID = 'AAMkAGQ2YzJjNGI2LTMzMGEtNDU0NC04ZThmLTQyZmE3OWE3Y2Q2MQAuAAAAAACxND13kBixQbsfNf09-SJMAQDfGH-v2n7eT5N6GkJDeq_8AAAAAAEMAAA=';
-
-$filter   = urlencode("isDraft eq false and receivedDateTime ge {$desde}");
-// Usar ID de carpeta directo en vez de alias 'Inbox' — más confiable en buzones grandes
-$url_base = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/{$INBOX_FOLDER_ID}/messages";
-// Sin $orderby — puede limitar resultados en filtros sin ConsistencyLevel
-$url      = "{$url_base}?\$filter={$filter}&\$top=50&\$select={$select}";
-
-log_msg("Trayendo correos desde $desde...");
+// ── Traer correos nuevos desde el cursor, en orden ASC ───────────────
+// $orderby ASC garantiza que procesamos en orden cronológico exacto
+$filter   = urlencode("isDraft eq false and receivedDateTime gt $cursor_iso");
+$url_base = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/{$INBOX_ID}/messages"
+          . "?\$filter=$filter&\$orderby=" . urlencode('receivedDateTime asc')
+          . "&\$top=50"  // 50 por página — seguro para 1 min de correos
+          . "&\$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,bodyPreview,body,importance,isRead,conversationId,internetMessageId,flag";
 
 $todos_correos = [];
 $paginas       = 0;
+$next_link     = $url_base;
 
-while ($url) {
-    $r = curlJson($url, [
-        CURLOPT_HTTPHEADER => [
-            "Authorization: Bearer $access_token",
-            // Sin ConsistencyLevel:eventual — ese header puede causar que Graph
-            // omita mensajes recientes en índices no actualizados
-        ],
-        CURLOPT_TIMEOUT => 60,
+while ($next_link) {
+    $ch = curl_init($next_link);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token", 'ConsistencyLevel: eventual'],
     ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
 
-    if ($r['code'] !== 200) {
-        log_msg("ERROR Graph: HTTP {$r['code']} — " . substr($r['body'], 0, 200));
+    if ($code !== 200) {
+        log_msg("❌ Graph API error $code en página $paginas");
         break;
     }
 
-    $data          = json_decode($r['body'], true);
-    $correos_pag   = $data['value'] ?? [];
-    $todos_correos = array_merge($todos_correos, $correos_pag);
-    $url           = $data['@odata.nextLink'] ?? null;
+    $data          = json_decode($resp, true);
+    $pagina_items  = $data['value'] ?? [];
+    $todos_correos = array_merge($todos_correos, $pagina_items);
     $paginas++;
-    log_msg("  Página $paginas: " . count($correos_pag) . " correos (total: " . count($todos_correos) . ")");
+
+    log_msg("  Página $paginas: " . count($pagina_items) . " correos (total: " . count($todos_correos) . ")");
+
+    // Siguiente página si existe
+    $next_link = $data['@odata.nextLink'] ?? null;
+
+    // Pausa entre páginas para no saturar Graph
+    if ($next_link) usleep(200_000);
 }
 
-log_msg("Total correos a procesar: " . count($todos_correos));
+log_msg("Total correos nuevos: " . count($todos_correos));
 
 if (empty($todos_correos)) {
-    log_msg("Sin correos nuevos en la ventana. Fin.");
-    finalizar(true, 'sin_correos');
+    // Actualizar solo ultimo_sync — no mover el cursor
+    saveSyncConfig(['ultimo_sync' => date('c')]);
+    log_msg("Sin correos nuevos. Fin.");
+    finalizar(true, 'sin_correos_nuevos');
 }
 
-// ── 3. PREPARAR PAYLOADS ──────────────────────────────────────────────
-$stats    = ['insertados' => 0, 'actualizados' => 0, 'errores' => 0, 'clasificados' => 0, 'adjuntos' => 0];
-$payloads = [];  // todos los payloads para batch upsert
+// ── Procesar correos UNO A UNO — orden garantizado ───────────────────
+$stats = ['insertados' => 0, 'actualizados' => 0, 'errores' => 0,
+          'adjuntos' => 0, 'clasificados' => 0, 'auto_cerrados' => 0];
 
-// Mapa message_id → datos crudos del correo (para procesar adjuntos después)
-$map_adjuntos = []; // message_id => ['has_attachments', 'raw']
+$nuevo_cursor = $cursor_actual; // Solo avanza si el correo se procesa bien
 
 foreach ($todos_correos as $c) {
-    $msg_id      = $c['id']                ?? '';
-    $inet_msg_id = $c['internetMessageId'] ?? '';
+    $msg_id       = $c['id'] ?? '';
+    $received_raw = $c['receivedDateTime'] ?? '';
+    if (!$msg_id || !$received_raw) continue;
 
-    if (!$msg_id) continue;
+    // Construir payload para upsert
+    $from_email = strtolower($c['from']['emailAddress']['address'] ?? '');
+    $from_name  = $c['from']['emailAddress']['name'] ?? '';
+    $subject    = $c['subject'] ?? '(sin asunto)';
+    $body_cont  = $c['body']['content'] ?? $c['bodyPreview'] ?? '';
+    $body_prev  = mb_substr($c['bodyPreview'] ?? '', 0, 500);
+    $body_type  = $c['body']['contentType'] ?? 'text';
+    $has_adj    = (bool)($c['hasAttachments'] ?? false);
+    $conv_id    = $c['conversationId'] ?? null;
+    $internet_id= $c['internetMessageId'] ?? null;
+    $importance = strtolower($c['importance'] ?? 'normal');
+    $is_read    = (bool)($c['isRead'] ?? false);
+    $flag_st    = $c['flag']['flagStatus'] ?? 'notFlagged';
 
-    $payloads[] = [
-        'message_id'           => $msg_id,
-        'internet_message_id'  => $inet_msg_id ?: null,
-        'conversation_id'      => $c['conversationId']               ?? null,
-        'subject'              => $c['subject']                       ?? '',
-        'from_email'           => $c['from']['emailAddress']['address'] ?? '',
-        'from_name'            => $c['from']['emailAddress']['name']    ?? '',
-        'to_recipients'        => json_encode($c['toRecipients']        ?? []),
-        'cc_recipients'        => json_encode($c['ccRecipients']        ?? []),
-        'bcc_recipients'       => json_encode($c['bccRecipients']       ?? []),
-        'reply_to'             => json_encode($c['replyTo']             ?? []),
-        'received_at'          => $c['receivedDateTime']               ?? null,
-        'sent_at'              => $c['sentDateTime']                   ?? null,
-        'body_preview'         => mb_substr($c['bodyPreview'] ?? '', 0, 500),
-        'body_content'         => $c['body']['content']                ?? '',
-        'body_type'            => strtolower($c['body']['contentType'] ?? 'text'),
-        'has_attachments'      => (bool)($c['hasAttachments']          ?? false),
-        'is_read'              => (bool)($c['isRead']                  ?? false),
-        'is_draft'             => (bool)($c['isDraft']                 ?? false),
-        'importance'           => $c['importance']                     ?? 'normal',
-        'categories'           => json_encode($c['categories']         ?? []),
-        'flag_status'          => $c['flag']['flagStatus']             ?? 'notFlagged',
-        'raw_payload'          => json_encode($c),
-        'origen'               => (function() use ($c) {
-            $subj = $c['subject'] ?? '';
-            // Inferir canal desde el asunto del correo
-            if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subj))          return 'nova_directo';
-            if (preg_match('/NOVA\s+TD/ui', $subj))                     return 'nova_web';
-            if (preg_match('/📷\s*QR|\bQR\b/u', $subj))              return 'qr';
-            if (preg_match('/\[TD-\d{8}-\d{4}\]/u', $subj))         return 'web';
-            return 'graph_sync';
-        })(),
-        // ticket_id inferido del asunto para correos PQRSFD
-        'ticket_id'            => (function() use ($c) {
-            $subj = $c['subject'] ?? '';
-            if (preg_match('/\[?(TD-\d{8}-\d{4})\]?/u', $subj, $m)) return $m[1];
-            return null;
-        })(),
-        'canal_contacto'       => 'correo',
-        'updated_at'           => date('c'),
+    // Inferir ticket_id del asunto (correos PQRSFD radicados)
+    $ticket_id = null;
+    if (preg_match('/\[?(TD-\d{8}-\d{4})\]?/i', $subject, $m)) {
+        $ticket_id = $m[1];
+    }
+
+    // Inferir origen
+    $origen = 'graph_sync';
+    if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))    $origen = 'nova_directo';
+    elseif (preg_match('/NOVA\s+TD/ui', $subject))           $origen = 'nova_web';
+    elseif (preg_match('/📷\s*QR|\bQR\b/u', $subject))      $origen = 'qr';
+    elseif ($ticket_id)                                       $origen = 'web';
+
+    $payload = [
+        'message_id'      => $msg_id,
+        'internet_message_id' => $internet_id,
+        'conversation_id' => $conv_id,
+        'from_email'      => $from_email,
+        'from_name'       => $from_name,
+        'subject'         => $subject,
+        'body_preview'    => $body_prev,
+        'body_content'    => $body_cont,
+        'body_type'       => $body_type,
+        'has_attachments' => $has_adj,
+        'importance'      => $importance,
+        'is_read'         => $is_read,
+        'flag_status'     => $flag_st,
+        'received_at'     => $received_raw,
+        'origen'          => $origen,
+        'canal_contacto'  => 'correo',
     ];
 
-    if (!empty($c['hasAttachments'])) {
-        $map_adjuntos[$msg_id] = $c;
-    }
-}
+    // Solo setear ticket_id si lo tiene (no pisar el existente)
+    if ($ticket_id) $payload['ticket_id'] = $ticket_id;
 
-// ── 4. BATCH UPSERT EN SUPABASE ───────────────────────────────────────
-// En lugar de 1 request por correo, enviamos lotes de BATCH_SIZE.
-// Esto reduce dramaticamente las conexiones simultáneas a Postgres.
-log_msg("Iniciando batch upsert (" . count($payloads) . " correos en lotes de " . BATCH_SIZE . ")...");
-
-$lotes           = array_chunk($payloads, BATCH_SIZE);
-$correos_db_map  = []; // message_id => fila devuelta por Supabase
-
-foreach ($lotes as $idx => $lote) {
-    $r = sbUpsert($SB_URL, $SB_KEY, 'correos', $lote, 'message_id');
-
-    if ($r['code'] >= 200 && $r['code'] < 300) {
-        $inserted = json_decode($r['body'], true) ?? [];
-        foreach ($inserted as $row) {
-            $correos_db_map[$row['message_id']] = $row;
+    // Extraer cédula del body para correos radicados (ticket_id presente)
+    if ($ticket_id) {
+        $body_texto = strip_tags($body_cont ?? '');
+        // Buscar cédula en formatos comunes del correo de radicación
+        if (preg_match('/(?:C[ée]dula|Documento|C\.C\.|Doc\.?)[:\s#]*(\d{6,12})/i', $body_texto, $mc)) {
+            $payload['cedula'] = preg_replace('/\D/', '', $mc[1]);
         }
-        log_msg("  Lote " . ($idx + 1) . "/" . count($lotes) . ": OK (" . count($inserted) . " filas)");
-    } else {
-        $stats['errores'] += count($lote);
-        log_msg("  ERROR lote " . ($idx + 1) . ": HTTP {$r['code']} — " . substr($r['body'], 0, 150));
     }
 
-    // Pausa entre lotes: evitar saturar Postgres en Nano
-    if ($idx < count($lotes) - 1) {
-        usleep(150_000); // 150ms entre lotes
+    // Upsert por message_id
+    $r = sbUpsert('correos', [$payload], 'message_id');
+
+    if ($r['code'] < 200 || $r['code'] >= 300) {
+        log_msg("  ❌ Error upsert {$msg_id}: HTTP {$r['code']}");
+        $stats['errores']++;
+        continue; // NO avanzar cursor — reintentará en siguiente minuto
     }
-}
 
-// ── 5. PATCH ESTADO INICIAL + ARMAR LISTA PARA CLASIFICAR ────────────
-// Solo tocamos filas nuevas (sin sentimiento). Un PATCH por correo nuevo,
-// pero con pausa entre cada uno para no apilar locks.
-$correos_para_clasificar = [];
+    $fila    = $r['data'][0] ?? null;
+    $corr_id = $fila['id'] ?? null; // UUID real
+    $es_nuevo = empty($fila['sentimiento']);
 
-foreach ($correos_db_map as $msg_id => $row) {
-    $correo_id  = $row['id']          ?? null;
-    $es_nuevo   = empty($row['sentimiento']);
-    $tiene_adj  = (bool)($row['has_attachments'] ?? false);
-
-    if (!$correo_id) continue;
+    if (!$corr_id) {
+        log_msg("  ⚠️  Sin correo_id en respuesta para $msg_id");
+        $stats['errores']++;
+        continue;
+    }
 
     if ($es_nuevo) {
         $stats['insertados']++;
-
-        // Patch estado inicial (solo correos nuevos)
-        sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.$correo_id", [
-            'estado'     => 'pendiente',
-            'prioridad'  => 'media',
-            'created_at' => date('c'),
+        // Estado inicial solo para correos nuevos
+        sbPatch('correos', "id=eq.$corr_id", [
+            'estado'    => 'pendiente',
+            'prioridad' => 'media',
+            'created_at'=> date('c'),
         ]);
-        usleep(80_000); // 80ms entre patches para no apilar locks
-
-        // Buscar datos crudos originales para clasificación
-        $raw = null;
-        foreach ($todos_correos as $c) {
-            if (($c['id'] ?? '') === $msg_id) { $raw = $c; break; }
-        }
-
-        if ($raw) {
-            $correos_para_clasificar[] = [
-                'correo_id'  => $correo_id,
-                'msg_id'     => $msg_id,
-                'subject'    => $raw['subject'] ?? '',
-                'body'       => mb_substr($raw['body']['content'] ?? $raw['bodyPreview'] ?? '', 0, 2000),
-                'tiene_adj'  => $tiene_adj,
-                'from_email' => $raw['from']['emailAddress']['address'] ?? '',
-            ];
-        }
+        usleep(80_000);
     } else {
         $stats['actualizados']++;
     }
-}
 
-log_msg("Upsert completo — insertados: {$stats['insertados']}, actualizados: {$stats['actualizados']}, errores: {$stats['errores']}");
-
-// ── FIX ORIGEN: corregir registros con ticket_id pero origen=graph_sync ──
-// Sucede cuando radicar-pqr.php ya insertó con origen correcto pero
-// el sync lo pisó con 'graph_sync'. Restauramos el origen desde el asunto.
-$origen_fixes = [
-    'nova_directo' => 'NOVA+TD+DIRECTO',
-    'nova_web'     => 'NOVA+TD',
-    'qr'           => 'QR',
-    'web'          => 'TD-',
-];
-foreach ($correos_db_map as $msg_id => $row) {
-    $subj = $row['subject'] ?? '';
-    $id   = $row['id']      ?? null;
-    if (!$id) continue;
-    // Solo si el origen quedó como graph_sync y el asunto tiene ticket
-    if (($row['origen'] ?? '') !== 'graph_sync') continue;
-    $nuevo_origen = null;
-    if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subj))       $nuevo_origen = 'nova_directo';
-    elseif (preg_match('/NOVA\s+TD/ui', $subj))              $nuevo_origen = 'nova_web';
-    elseif (preg_match('/📷\s*QR|QR/u', $subj))         $nuevo_origen = 'qr';
-    elseif (preg_match('/\[TD-\d{8}-\d{4}\]/u', $subj))     $nuevo_origen = 'web';
-    if ($nuevo_origen) {
-        sbPatch($SB_URL, $SB_KEY, "correos?id=eq.$id", ['origen' => $nuevo_origen]);
-    }
-}
-
-// ── 6. ADJUNTOS ───────────────────────────────────────────────────────
-// Procesar adjuntos con pausa entre correos para no saturar Storage.
-if (!empty($map_adjuntos)) {
-    log_msg("Procesando adjuntos de " . count($map_adjuntos) . " correo(s)...");
-    $adj_idx = 0;
-    foreach ($map_adjuntos as $msg_id => $raw_correo) {
-        $row       = $correos_db_map[$msg_id] ?? null;
-        $correo_id = $row['id'] ?? null;
-        if (!$correo_id) continue;
-
-        $adj_count = procesarAdjuntos($correo_id, $msg_id, $access_token, $SB_URL, $SB_KEY);
+    // ── Adjuntos: procesar ANTES de avanzar cursor ────────────────────
+    if ($has_adj) {
+        $adj_count = procesarAdjuntos($corr_id, $msg_id, $token);
         $stats['adjuntos'] += $adj_count;
+    }
 
-        $adj_idx++;
-        // Pausa entre correos con adjuntos (no entre cada adjunto individual;
-        // procesarAdjuntos ya tiene su propia pausa interna)
-        if ($adj_idx < count($map_adjuntos)) {
-            usleep(200_000); // 200ms entre correos
+    // ── Clasificación IA (solo correos externos nuevos) ───────────────
+    if ($es_nuevo && $OPENAI_KEY) {
+        $clasificado = clasificarCorreo($corr_id, $subject, $body_cont, $from_email);
+        if ($clasificado) {
+            $stats['clasificados']++;
+
+            // ── AUTO-CIERRE si es positivo/felicitacion ───────────────
+            if (in_array($clasificado['sentimiento'] ?? '', ['positivo']) &&
+                in_array($clasificado['tipo_pqr'] ?? '', ['felicitacion', 'sugerencia'])) {
+
+                sbPatch('correos', "id=eq.$corr_id", [
+                    'estado'           => 'solucionado',
+                    'fecha_resolucion' => date('c'),
+                ]);
+
+                // Registrar en historial con UUID correcto
+                sbPost('historial_eventos', [
+                    'correo_id'   => $corr_id,
+                    'evento'      => 'cerrado_automatico',
+                    'descripcion' => 'Cerrado por Nova TD — mensaje positivo/felicitación. No requiere gestión.',
+                    'datos_extra' => json_encode([
+                        'sentimiento' => $clasificado['sentimiento'],
+                        'tipo_pqr'    => $clasificado['tipo_pqr'],
+                        'categoria'   => $clasificado['categoria'] ?? '',
+                    ]),
+                    'created_at'  => date('c'),
+                ]);
+
+                $stats['auto_cerrados']++;
+                log_msg("  ✅ Auto-cerrado (positivo): $corr_id");
+            }
         }
     }
-    log_msg("Adjuntos procesados: {$stats['adjuntos']}");
+
+    // ── Avanzar cursor SOLO si este correo se procesó bien ───────────
+    $nuevo_cursor = $received_raw;
+
+    log_msg("  ✅ $msg_id | " . substr($subject, 0, 50) . " | $received_raw");
+    usleep(50_000); // 50ms entre correos
 }
 
-// ── 7. CLASIFICACIÓN IA — solo correos externos nuevos ────────────────
-// Esta sección ya NO bloquea el upsert — corre después de que todo
-// está guardado en BD, con pausa generosa entre llamadas a OpenAI.
-if ($OPENAI_KEY && !empty($correos_para_clasificar)) {
-    log_msg("Clasificando " . count($correos_para_clasificar) . " correo(s) con GPT-4o-mini...");
+// ── Guardar nuevo cursor y estadísticas ──────────────────────────────
+$total_correos  = ($sync['total_correos']  ?? 0) + $stats['insertados'];
+$total_adjuntos = ($sync['total_adjuntos'] ?? 0) + $stats['adjuntos'];
 
-    foreach ($correos_para_clasificar as $item) {
-        $from_email   = strtolower($item['from_email'] ?? '');
-        $texto        = strip_tags($item['body']);
-        $texto        = preg_replace('/\s+/', ' ', $texto);
-        $texto        = mb_substr(trim($texto), 0, 1500);
+saveSyncConfig([
+    'cursor'        => $nuevo_cursor,
+    'ultimo_sync'   => date('c'),
+    'total_correos' => $total_correos,
+    'total_adjuntos'=> $total_adjuntos,
+]);
 
-        if (strlen($texto) < 10) continue;
+// ── Registrar en historial_eventos (sin correo_id — es evento del sistema) ──
+sbPost('historial_eventos', [
+    'correo_id'   => null,
+    'evento'      => 'sync_correos',
+    'descripcion' => "Sync v3 OK. Insertados: {$stats['insertados']}, Actualizados: {$stats['actualizados']}, Adjuntos: {$stats['adjuntos']}, Clasificados: {$stats['clasificados']}, Auto-cerrados: {$stats['auto_cerrados']}, Errores: {$stats['errores']}",
+    'datos_extra' => json_encode([
+        'cursor_anterior' => $cursor_actual,
+        'cursor_nuevo'    => $nuevo_cursor,
+        'stats'           => $stats,
+        'total_acumulado' => $total_correos,
+    ]),
+    'created_at'  => date('c'),
+]);
 
-        // Excluir correos del propio dominio (notificaciones internas)
-        if (str_contains($from_email, 'tododrogas.com.co') || str_contains($from_email, 'pqrsfd@')) continue;
+log_msg("=== SYNC END v3 === " . json_encode($stats));
+finalizar(true, 'ok', ['stats' => $stats, 'cursor' => $nuevo_cursor]);
 
-        $asunto_lower = strtolower($item['subject']);
-        $es_interno   = (
-            str_contains($asunto_lower, 'encuesta')                    ||
-            str_contains($item['subject'], '⭐')                       ||
-            str_contains($item['subject'], '✅')                       ||
-            str_contains($asunto_lower, 'su solicitud fue')            ||
-            str_contains($asunto_lower, 'gracias por su opinión')      ||
-            preg_match('/^\[td-\d{8}-\d{4}\]/i', $item['subject'])    ||
-            str_starts_with(trim($item['subject']), 'RV:')             ||
-            str_starts_with(trim($item['subject']), 'RE:')
+
+// ══════════════════════════════════════════════════════════════════════
+// FUNCIÓN: PROCESAR ADJUNTOS — uno a uno antes de avanzar cursor
+// ══════════════════════════════════════════════════════════════════════
+function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int {
+    global $SB_URL, $SB_KEY, $GRAPH_MAILBOX;
+
+    // Verificar adjuntos ya registrados (no duplicar)
+    $existentes     = sbGet("adjuntos?correo_id=eq.{$correo_id}&select=attachment_id");
+    $ids_existentes = array_column($existentes ?? [], 'attachment_id');
+
+    // Traer lista de adjuntos desde Graph
+    $r = curlGet(
+        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=50&\$select=id,name,contentType,size,isInline",
+        $token
+    );
+    if ($r['code'] !== 200) return 0;
+
+    $adjuntos = json_decode($r['body'], true)['value'] ?? [];
+
+    // Filtrar logos/firmas inline pequeños (Outlook auto-genera estos)
+    $adjuntos = array_filter($adjuntos, function ($adj) {
+        $ct     = strtolower($adj['contentType'] ?? '');
+        $nombre = $adj['name'] ?? '';
+        $tam    = $adj['size'] ?? 0;
+        $inline = (bool)($adj['isInline'] ?? false);
+        $es_img = str_starts_with($ct, 'image/');
+        if (!$inline) return true;
+        if ($es_img && $tam < 150_000) return false;
+        if ($es_img && preg_match('/^Outlook-[a-z0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i', $nombre)) return false;
+        if ($es_img && (!$nombre || preg_match('/^\.[a-z]+$/i', $nombre))) return false;
+        return true;
+    });
+
+    $count = 0;
+    foreach ($adjuntos as $adj) {
+        $adj_id = $adj['id'] ?? '';
+        if (!$adj_id || in_array($adj_id, $ids_existentes)) continue;
+
+        $nombre = $adj['name']        ?? 'adjunto';
+        $ct     = $adj['contentType'] ?? 'application/octet-stream';
+        $tam    = $adj['size']        ?? 0;
+        $inline = (bool)($adj['isInline'] ?? false);
+
+        if ($tam > 52_428_800) { // >50MB — omitir
+            log_msg("    ⚠️  Adjunto >50MB omitido: $nombre");
+            continue;
+        }
+
+        // Descargar bytes
+        $dl = curlGet(
+            "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments/{$adj_id}/\$value",
+            $token,
+            120
         );
-        if ($es_interno) continue;
 
-        $prompt = <<<PROMPT
-Analiza este correo recibido en una droguería colombiana. Responde SOLO JSON válido sin markdown.
+        if ($dl['code'] !== 200 || !$dl['body']) {
+            log_msg("    ❌ Error descargando adjunto $nombre: HTTP {$dl['code']}");
+            continue;
+        }
 
-ASUNTO: {$item['subject']}
+        $bytes = $dl['body'];
+
+        // Determinar bucket y ruta
+        $es_audio    = str_starts_with(strtolower($ct), 'audio/');
+        $bucket      = $es_audio ? 'audios' : 'adjuntos-pqr';
+        $safe_nombre = preg_replace('/[^a-zA-Z0-9.\-_]/', '_', $nombre);
+        $ts          = round(microtime(true) * 1000);
+        $path        = $es_audio
+            ? "$correo_id/{$ts}_{$safe_nombre}"
+            : "adjuntos/$correo_id/{$ts}_{$safe_nombre}";
+
+        // Normalizar Content-Type
+        if (in_array($ct, ['application/x-zip-compressed', 'application/x-zip'])) $ct = 'application/zip';
+        if ($ct === 'application/x-rar-compressed') $ct = 'application/octet-stream';
+
+        // Subir a Supabase Storage
+        $ch = curl_init("$SB_URL/storage/v1/object/$bucket/$path");
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $bytes,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 60,
+            CURLOPT_HTTPHEADER     => [
+                "apikey: $SB_KEY",
+                "Authorization: Bearer $SB_KEY",
+                "Content-Type: $ct",
+                'x-upsert: true',
+            ],
+        ]);
+        $up_resp = curl_exec($ch);
+        $up_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($up_code < 200 || $up_code >= 300) {
+            log_msg("    ❌ Error Storage $nombre: HTTP $up_code");
+            continue;
+        }
+
+        $public_url = "$SB_URL/storage/v1/object/public/$bucket/$path";
+
+        // Registrar en tabla adjuntos con correo_id UUID correcto
+        sbPost('adjuntos', [
+            'correo_id'      => $correo_id,   // UUID — no ticket_id
+            'attachment_id'  => $adj_id,
+            'message_id'     => $msg_id,
+            'nombre'         => $nombre,
+            'tipo_contenido' => $ct,
+            'tamano_bytes'   => $tam,
+            'es_inline'      => $inline,
+            'storage_url'    => $public_url,
+            'storage_path'   => $path,
+            'direccion'      => 'entrante',
+            'enviado_por'    => 'php-sync-v3',
+            'created_at'     => date('c'),
+        ]);
+
+        $count++;
+        log_msg("    ✅ Adjunto: $nombre ($bucket)");
+        usleep(100_000); // 100ms entre adjuntos
+    }
+
+    return $count;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// FUNCIÓN: CLASIFICAR CORREO CON GPT-4o-mini
+// ══════════════════════════════════════════════════════════════════════
+function clasificarCorreo(string $correo_id, string $subject, string $body, string $from_email): ?array {
+    global $OPENAI_KEY, $SB_URL, $SB_KEY;
+
+    // Excluir correos internos / notificaciones propias
+    $from_lower   = strtolower($from_email);
+    $subj_lower   = strtolower($subject);
+    if (str_contains($from_lower, 'tododrogas.com.co')) return null;
+    if (str_contains($subj_lower, 'su solicitud fue'))   return null;
+    if (str_contains($subj_lower, 'encuesta'))           return null;
+    if (preg_match('/^rv:|^re:/i', trim($subject)))       return null;
+    if (preg_match('/\[td-\d{8}-\d{4}\]/i', $subject))   return null;
+
+    $texto = strip_tags($body);
+    $texto = preg_replace('/\s+/', ' ', $texto);
+    $texto = mb_substr(trim($texto), 0, 1500);
+    if (strlen($texto) < 10) return null;
+
+    $prompt = <<<PROMPT
+Analiza este correo de droguería colombiana. Responde SOLO JSON válido sin markdown.
+
+ASUNTO: $subject
 TEXTO: $texto
 
 JSON requerido:
@@ -496,239 +823,94 @@ JSON requerido:
   "resumen": "máximo 100 caracteres",
   "ley": "ley colombiana aplicable o N/A",
   "horas_sla": numero entero,
-  "categoria": "descripción breve de la categoría"
+  "categoria": "descripción breve"
 }
-
 REGLAS:
-- Si el texto es positivo/agradecido → sentimiento=positivo, prioridad=baja, horas_sla=360
-- Si hay urgencia médica o riesgo de salud → sentimiento=urgente, prioridad=critica, horas_sla=4
-- Si es queja/reclamo real → prioridad=alta, horas_sla=72
-- Si es informativo/petición → prioridad=media, horas_sla=120
+- Positivo/agradecido → sentimiento=positivo, prioridad=baja, horas_sla=360
+- Urgencia médica → sentimiento=urgente, prioridad=critica, horas_sla=4
+- Queja/reclamo → prioridad=alta, horas_sla=72
+- Petición/info → prioridad=media, horas_sla=120
+- felicitacion/sugerencia → horas_sla=360
 PROMPT;
 
-        $ai_r = curlJson('https://api.openai.com/v1/chat/completions', [
-            CURLOPT_POST       => true,
-            CURLOPT_POSTFIELDS => json_encode([
-                'model'       => 'gpt-4o-mini',
-                'max_tokens'  => 300,
-                'temperature' => 0.1,
-                'messages'    => [
-                    ['role' => 'system', 'content' => 'Clasificador de correos de droguería colombiana. Responde SOLO JSON válido.'],
-                    ['role' => 'user',   'content' => $prompt],
-                ],
-            ]),
-            CURLOPT_HTTPHEADER => [
-                "Authorization: Bearer $OPENAI_KEY",
-                'Content-Type: application/json',
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_POSTFIELDS     => json_encode([
+            'model'       => 'gpt-4o-mini',
+            'max_tokens'  => 300,
+            'temperature' => 0.1,
+            'messages'    => [
+                ['role' => 'system', 'content' => 'Clasificador de correos de droguería colombiana. Solo JSON válido.'],
+                ['role' => 'user',   'content' => $prompt],
             ],
-            CURLOPT_TIMEOUT => 20,
-        ]);
+        ]),
+        CURLOPT_HTTPHEADER => [
+            "Authorization: Bearer $OPENAI_KEY",
+            'Content-Type: application/json',
+        ],
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
 
-        if ($ai_r['code'] === 200) {
-            $ai_data = json_decode($ai_r['body'], true);
-            $ai_text = $ai_data['choices'][0]['message']['content'] ?? '';
-            $ai_text = preg_replace('/```json|```/', '', $ai_text);
-            $ia      = json_decode(trim($ai_text), true);
-
-            if ($ia) {
-                $horas_sla        = intval($ia['horas_sla'] ?? 120);
-                $fecha_limite_sla = date('c', strtotime("+{$horas_sla} hours"));
-
-                $fecha_hoy = date('Ymd');
-                $rand      = str_pad(rand(1000, 9999), 4, '0', STR_PAD_LEFT);
-                $ticket_id = "EXT-{$fecha_hoy}-{$rand}";
-
-                sbPatch($SB_URL, $SB_KEY, 'correos', "id=eq.{$item['correo_id']}", [
-                    'tipo_pqr'         => $ia['tipo_pqr']     ?? 'peticion',
-                    'sentimiento'      => $ia['sentimiento']  ?? 'neutro',
-                    'datos_legales'    => json_encode(['tono' => $ia['tono'] ?? 'neutro']),
-                    'prioridad'        => $ia['prioridad']    ?? 'media',
-                    'nivel_riesgo'     => $ia['nivel_riesgo'] ?? 'bajo',
-                    'resumen_corto'    => mb_substr($ia['resumen'] ?? '', 0, 150),
-                    'ley_aplicable'    => $ia['ley']          ?? 'Ley 1755/2015',
-                    'categoria_ia'     => $ia['categoria']    ?? '',
-                    'horas_sla'        => $horas_sla,
-                    'fecha_limite_sla' => $fecha_limite_sla,
-                    'es_urgente'       => ($ia['sentimiento'] === 'urgente' || $ia['prioridad'] === 'critica'),
-                    'estado'           => 'pendiente',
-                    'ticket_id'        => $ticket_id,
-                    'updated_at'       => date('c'),
-                ]);
-
-                $stats['clasificados']++;
-                log_msg("  Clasificado {$item['correo_id']}: {$ia['sentimiento']} / {$ia['prioridad']}");
-            } else {
-                log_msg("  WARN: GPT devolvió JSON inválido para {$item['correo_id']}");
-            }
-        } else {
-            log_msg("  ERROR GPT {$item['correo_id']}: HTTP {$ai_r['code']}");
-        }
-
-        usleep(300_000); // 300ms entre llamadas a OpenAI (rate limit seguro)
+    if ($code !== 200) {
+        log_msg("  ❌ GPT error $code para $correo_id");
+        return null;
     }
+
+    $ai_data = json_decode($resp, true);
+    $ai_text = $ai_data['choices'][0]['message']['content'] ?? '';
+    $ai_text = preg_replace('/```json|```/', '', $ai_text);
+    $ia      = json_decode(trim($ai_text), true);
+
+    if (!$ia) {
+        log_msg("  ⚠️  GPT JSON inválido para $correo_id");
+        return null;
+    }
+
+    $horas_sla        = intval($ia['horas_sla'] ?? 120);
+    $fecha_limite_sla = date('c', strtotime("+{$horas_sla} hours"));
+    $fecha_hoy        = date('Ymd');
+    $rand             = str_pad(rand(1000, 9999), 4, '0', STR_PAD_LEFT);
+    $ticket_id_ext    = "EXT-{$fecha_hoy}-{$rand}";
+
+    sbPatch('correos', "id=eq.$correo_id", [
+        'tipo_pqr'         => $ia['tipo_pqr']     ?? 'peticion',
+        'sentimiento'      => $ia['sentimiento']  ?? 'neutro',
+        'datos_legales'    => json_encode(['tono' => $ia['tono'] ?? 'neutro']),
+        'prioridad'        => $ia['prioridad']    ?? 'media',
+        'nivel_riesgo'     => $ia['nivel_riesgo'] ?? 'bajo',
+        'resumen_corto'    => mb_substr($ia['resumen'] ?? '', 0, 150),
+        'ley_aplicable'    => $ia['ley']          ?? 'Ley 1755/2015',
+        'categoria_ia'     => $ia['categoria']    ?? '',
+        'horas_sla'        => $horas_sla,
+        'fecha_limite_sla' => $fecha_limite_sla,
+        'es_urgente'       => ($ia['sentimiento'] === 'urgente' || $ia['prioridad'] === 'critica'),
+        'ticket_id'        => $ticket_id_ext,
+        'updated_at'       => date('c'),
+    ]);
+
+    log_msg("  🤖 Clasificado $correo_id: {$ia['sentimiento']} / {$ia['tipo_pqr']}");
+    usleep(300_000); // 300ms entre llamadas OpenAI
+
+    return $ia;
 }
 
-// ── 8. REGISTRAR RESUMEN EN HISTORIAL ────────────────────────────────
-sbPost($SB_URL, $SB_KEY, 'historial_eventos', [
-    'evento'      => 'sync_correos',
-    'descripcion' => "Sync v2 completado. Insertados: {$stats['insertados']}, Actualizados: {$stats['actualizados']}, Adjuntos: {$stats['adjuntos']}, Clasificados: {$stats['clasificados']}, Errores: {$stats['errores']}",
-    'datos_extra' => json_encode([
-        'ventana_horas' => $HORAS_VENTANA,
-        'desde'         => $desde,
-        'total_correos' => count($todos_correos),
-        'lotes'         => count($lotes ?? []),
-        'stats'         => $stats,
-    ]),
-    'created_at' => date('c'),
-]);
-
-log_msg("=== SYNC END v2 ===");
-finalizar(true, 'ok');
-
-
 // ══════════════════════════════════════════════════════════════════════
-// FUNCIÓN: PROCESAR ADJUNTOS
+// FUNCIÓN: CURL GET con token
 // ══════════════════════════════════════════════════════════════════════
-function procesarAdjuntos(string $correo_id, string $msg_id, string $token, string $SB_URL, string $SB_KEY): int {
-    $GRAPH_MAILBOX = 'pqrsfd@tododrogas.com.co';
-
-    // Verificar adjuntos ya registrados
-    $existentes     = sbGet($SB_URL, $SB_KEY, "adjuntos?correo_id=eq.{$correo_id}&select=attachment_id");
-    $ids_existentes = array_column($existentes ?? [], 'attachment_id');
-
-    // Traer lista de adjuntos de Graph
-    $r = curlJson(
-        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=150&\$select=id,name,contentType,size,isInline",
-        [
-            CURLOPT_HTTPHEADER => ["Authorization: Bearer $token"],
-            CURLOPT_TIMEOUT    => 30,
-        ]
-    );
-
-    if ($r['code'] !== 200) return 0;
-
-    $adj_data = json_decode($r['body'], true);
-    $adjuntos = $adj_data['value'] ?? [];
-
-    // Filtrar imágenes inline pequeñas (logos, firmas HTML)
-    $adjuntos = array_filter($adjuntos, function ($adj) {
-        $ct     = strtolower($adj['contentType'] ?? '');
-        $nombre = $adj['name'] ?? '';
-        $tam    = $adj['size'] ?? 0;
-        $inline = (bool)($adj['isInline'] ?? false);
-        $es_img = str_starts_with($ct, 'image/');
-
-        if (!$inline) return true;
-        if ($es_img && $tam < 150000) return false;
-        if ($es_img && preg_match('/^Outlook-[a-z0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i', $nombre)) return false;
-        if ($es_img && (!$nombre || preg_match('/^\.[a-z]+$/i', $nombre))) return false;
-        return true;
-    });
-
-    $count = 0;
-    foreach ($adjuntos as $adj) {
-        $adj_id = $adj['id'] ?? '';
-        if (!$adj_id) continue;
-        if (in_array($adj_id, $ids_existentes)) continue;
-
-        $nombre = $adj['name']        ?? 'adjunto_sin_nombre';
-        $ct     = $adj['contentType'] ?? 'application/octet-stream';
-        $tam    = $adj['size']        ?? 0;
-        $inline = (bool)($adj['isInline'] ?? false);
-
-        // Saltar adjuntos > 50MB
-        if ($tam > 52_428_800) {
-            log_msg("  Adjunto muy grande (>50MB), omitido: $nombre");
-            continue;
-        }
-
-        // Descargar bytes
-        $download_url = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments/{$adj_id}/\$value";
-        $dl = curlJson($download_url, [
-            CURLOPT_HTTPHEADER => ["Authorization: Bearer $token"],
-            CURLOPT_TIMEOUT    => 120,
-        ]);
-
-        if ($dl['code'] !== 200 || !$dl['body']) {
-            log_msg("  ERROR descargando adjunto $nombre: HTTP {$dl['code']}");
-            continue;
-        }
-
-        $bytes = $dl['body'];
-
-        // Determinar bucket y ruta
-        $es_audio    = str_starts_with(strtolower($ct), 'audio/');
-        $bucket      = $es_audio ? 'audios' : 'adjuntos-pqr';
-        $safe_nombre = preg_replace('/[^a-zA-Z0-9.\-_]/', '_', $nombre);
-        $ts          = round(microtime(true) * 1000);
-        $folder      = $es_audio ? $correo_id : "adjuntos/$correo_id";
-        $path        = "{$folder}/{$ts}_{$safe_nombre}";
-        $storage_url = "{$SB_URL}/storage/v1/object/public/{$bucket}/{$path}";
-
-        // Normalizar Content-Type
-        if (in_array($ct, ['application/x-zip-compressed', 'application/x-zip'])) $ct = 'application/zip';
-        if ($ct === 'application/x-rar-compressed') $ct = 'application/octet-stream';
-
-        // Subir a Supabase Storage
-        $upload_r = curlJson("{$SB_URL}/storage/v1/object/{$bucket}/{$path}", [
-            CURLOPT_POST        => true,
-            CURLOPT_POSTFIELDS  => $bytes,
-            CURLOPT_HTTPHEADER  => [
-                "apikey: $SB_KEY",
-                "Authorization: Bearer $SB_KEY",
-                "Content-Type: $ct",
-                'x-upsert: true',
-            ],
-            CURLOPT_TIMEOUT => 60,
-        ]);
-
-        if ($upload_r['code'] < 200 || $upload_r['code'] >= 300) {
-            log_msg("  ERROR subiendo $nombre a Storage: HTTP {$upload_r['code']}");
-            continue;
-        }
-
-        // Registrar en tabla adjuntos
-        sbPost($SB_URL, $SB_KEY, 'adjuntos', [
-            'correo_id'      => $correo_id,
-            'attachment_id'  => $adj_id,
-            'message_id'     => $msg_id,
-            'nombre'         => $nombre,
-            'tipo_contenido' => $ct,
-            'tamano_bytes'   => $tam,
-            'es_inline'      => $inline,
-            'storage_url'    => $storage_url,
-            'storage_path'   => $path,
-            'direccion'      => 'entrante',
-            'enviado_por'    => 'php-sync-v2',
-            'created_at'     => date('c'),
-        ]);
-
-        $count++;
-        log_msg("  ✅ Adjunto subido: $nombre ($bucket)");
-
-        // Pausa entre adjuntos individuales
-        usleep(100_000); // 100ms
-    }
-
-    return $count;
-}
-
-
-// ══════════════════════════════════════════════════════════════════════
-// FINALIZAR
-// ══════════════════════════════════════════════════════════════════════
-function finalizar(bool $ok, string $motivo): void {
-    global $log, $stats, $es_web;
-    $out = [
-        'ok'     => $ok,
-        'motivo' => $motivo,
-        'stats'  => $stats ?? [],
-        'log'    => $log,
-        'ts'     => date('c'),
-    ];
-    if ($es_web) {
-        http_response_code($ok ? 200 : 500);
-        echo json_encode($out, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
-    }
-    exit;
+function curlGet(string $url, string $token, int $timeout = 30): array {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => $timeout,
+        CURLOPT_HTTPHEADER     => ["Authorization: Bearer $token"],
+    ]);
+    $body = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['code' => $code, 'body' => $body];
 }
