@@ -55,7 +55,7 @@ switch ($accion) {
             : "from_email=eq." . urlencode($correo);
 
         $correos = sb_get(
-            "/rest/v1/correos?{$filtro}&select=ticket_id,estado,prioridad,tipo_pqr,categoria_ia,sentimiento,nivel_riesgo,resumen_corto,agente_id,fecha_limite_sla,sla_vencido,created_at,updated_at,canal_contacto,nombre,correo,telefono_contacto&order=created_at.desc&limit=5",
+            "/rest/v1/correos?{$filtro}&select=id,ticket_id,estado,prioridad,tipo_pqr,categoria_ia,sentimiento,nivel_riesgo,resumen_corto,agente_id,fecha_limite_sla,sla_vencido,created_at,updated_at,canal_contacto,nombre,correo,telefono_contacto&order=created_at.desc&limit=5",
             $SB_URL, $SB_KEY
         );
 
@@ -68,7 +68,7 @@ switch ($accion) {
 
         // Obtener último evento del historial
         $eventos = sb_get(
-            "/rest/v1/historial_eventos?correo_id=eq." . $c['ticket_id'] . "&select=evento,descripcion,created_at&order=created_at.desc&limit=3",
+            "/rest/v1/historial_eventos?correo_id=eq." . $c['id'] . "&select=evento,descripcion,created_at&order=created_at.desc&limit=3",
             $SB_URL, $SB_KEY
         );
 
@@ -84,6 +84,7 @@ switch ($accion) {
 
         echo json_encode([
             'encontrado'    => true,
+            'id'            => $c['id'],
             'ticket_id'     => $c['ticket_id'],
             'estado'        => $c['estado'],
             'prioridad'     => $c['prioridad'],
@@ -371,6 +372,137 @@ switch ($accion) {
         curl_close($ch);
 
         echo json_encode(['ok' => ($c2 >= 200 && $c2 < 300), 'code' => $c2]);
+        break;
+
+    // ══════════════════════════════════════════════════════════════════
+    // 8. RADICADOS POR CÉDULA — para consulta.html
+    // ══════════════════════════════════════════════════════════════════
+    case 'radicados_cedula':
+        $cedula_q = preg_replace('/\D/', '', trim($body['cedula'] ?? ''));
+        $mes      = trim($body['mes'] ?? '');      // formato: 2026-04
+        $ticket_q = trim($body['ticket'] ?? '');   // filtro opcional TD-xxx
+
+        if (!$cedula_q) {
+            http_response_code(400);
+            echo json_encode(['error' => 'cedula requerida']);
+            exit;
+        }
+
+        // Construir filtro base por cédula
+        $filtro_base = "cedula=eq.{$cedula_q}";
+
+        // Filtro adicional por mes (received_at)
+        $filtro_mes = '';
+        if ($mes && preg_match('/^\d{4}-\d{2}$/', $mes)) {
+            $desde_mes = "{$mes}-01T00:00:00Z";
+            $hasta_mes = date('Y-m-t\T23:59:59\Z', strtotime("{$mes}-01"));
+            $filtro_mes = "&received_at=gte.{$desde_mes}&received_at=lte.{$hasta_mes}";
+        }
+
+        // Filtro adicional por ticket
+        $filtro_ticket = '';
+        if ($ticket_q) {
+            $filtro_ticket = "&ticket_id=eq.{$ticket_q}";
+        }
+
+        $correos_ced = sb_get(
+            "/rest/v1/correos?{$filtro_base}{$filtro_mes}{$filtro_ticket}"
+            . "&select=id,ticket_id,estado,prioridad,tipo_pqr,categoria_ia,sentimiento,"
+            . "resumen_corto,agente_id,fecha_limite_sla,sla_vencido,created_at,updated_at,"
+            . "canal_contacto,nombre,received_at"
+            . "&order=received_at.desc&limit=50",
+            $SB_URL, $SB_KEY
+        );
+
+        if (empty($correos_ced)) {
+            echo json_encode([
+                'encontrado' => false,
+                'total'      => 0,
+                'radicados'  => [],
+                'mensaje'    => $mes
+                    ? 'No encontramos radicados para ese mes.'
+                    : 'No encontramos radicados asociados a esa cédula.',
+            ]);
+            exit;
+        }
+
+        // Obtener meses disponibles para los filtros (únicos)
+        $meses_disponibles = [];
+        foreach ($correos_ced as $r) {
+            if (!empty($r['received_at'])) {
+                $m = substr($r['received_at'], 0, 7); // 2026-04
+                if (!in_array($m, $meses_disponibles)) $meses_disponibles[] = $m;
+            }
+        }
+        sort($meses_disponibles);
+
+        // Para cada radicado, obtener último evento del historial
+        $radicados_out = [];
+        foreach ($correos_ced as $r) {
+            $ultimo_evento = null;
+            if (!empty($r['id'])) {
+                $evs = sb_get(
+                    "/rest/v1/historial_eventos?correo_id=eq.{$r['id']}"
+                    . "&select=evento,descripcion,created_at&order=created_at.desc&limit=1",
+                    $SB_URL, $SB_KEY
+                );
+                $ultimo_evento = $evs[0] ?? null;
+            }
+
+            // Nombre agente si está asignado
+            $agente_nombre = null;
+            if (!empty($r['agente_id'])) {
+                $ag = sb_get("/rest/v1/agentes?id=eq.{$r['agente_id']}&select=nombre", $SB_URL, $SB_KEY);
+                $agente_nombre = $ag[0]['nombre'] ?? null;
+            }
+
+            // Mensaje UX especial para auto-cerrados
+            $mensaje_ux = null;
+            if ($r['estado'] === 'solucionado') {
+                $es_auto = false;
+                if (!empty($r['id'])) {
+                    $ev_auto = sb_get(
+                        "/rest/v1/historial_eventos?correo_id=eq.{$r['id']}"
+                        . "&evento=eq.cerrado_automatico&select=evento&limit=1",
+                        $SB_URL, $SB_KEY
+                    );
+                    $es_auto = !empty($ev_auto);
+                }
+                if ($es_auto) {
+                    $tipo = $r['tipo_pqr'] ?? '';
+                    $mensaje_ux = match($tipo) {
+                        'felicitacion' => '💙 Gracias por tus palabras. Tu mensaje llegó al corazón de nuestro equipo y nos inspira a seguir mejorando cada día.',
+                        'sugerencia'   => '✨ Tu sugerencia fue registrada y compartida con el equipo. Juntos construimos un mejor servicio.',
+                        default        => '✅ Tu mensaje fue recibido y gestionado exitosamente. ¡Gracias por contactarnos!',
+                    };
+                }
+            }
+
+            $radicados_out[] = [
+                'id'            => $r['id'],
+                'ticket_id'     => $r['ticket_id'],
+                'estado'        => $r['estado'],
+                'prioridad'     => $r['prioridad'],
+                'tipo'          => $r['tipo_pqr'],
+                'categoria'     => $r['categoria_ia'],
+                'resumen'       => $r['resumen_corto'],
+                'canal'         => $r['canal_contacto'],
+                'agente'        => $agente_nombre,
+                'fecha_limite'  => $r['fecha_limite_sla'],
+                'sla_vencido'   => $r['sla_vencido'],
+                'creado'        => $r['received_at'] ?? $r['created_at'],
+                'actualizado'   => $r['updated_at'],
+                'ultimo_evento' => $ultimo_evento,
+                'mensaje_ux'    => $mensaje_ux,
+            ];
+        }
+
+        echo json_encode([
+            'encontrado'        => true,
+            'total'             => count($radicados_out),
+            'radicados'         => $radicados_out,
+            'meses_disponibles' => $meses_disponibles,
+        ], JSON_UNESCAPED_UNICODE);
         break;
 
     default:
