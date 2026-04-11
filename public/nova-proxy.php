@@ -3,8 +3,18 @@
  * nova-proxy.php — Proxy seguro para OpenAI GPT-4o
  * La API key nunca se expone al navegador
  */
+
+// ── PROTECCIÓN: Solo dominios autorizados ────────────────────
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowed = ['https://tododrogas.online', 'https://www.tododrogas.online'];
+if (!in_array($origin, $allowed)) {
+    http_response_code(403);
+    echo json_encode(['error' => 'Origen no permitido']);
+    exit;
+}
+
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Origin: ' . $origin);
 header('Access-Control-Allow-Methods: POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
