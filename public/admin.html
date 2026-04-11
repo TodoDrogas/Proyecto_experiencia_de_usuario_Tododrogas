@@ -1509,7 +1509,7 @@ async function exportarExcel() {
 
     // HOJA 3 — Resumen agentes
     const h3=state.agents.map(ag=>{
-      const corr=state.emails.filter(e=>e.asignado_a===ag.id);
+      const corr=state.emails.filter(e=>e.agente_id===ag.id);
       const gA=H.filter(h=>(h.metadata?.agente_id||h.agente_id)===ag.id);
       const pend=corr.filter(e=>e.estado==='pendiente').length;
       const gest=corr.filter(e=>e.estado==='gestion').length;
@@ -1620,6 +1620,7 @@ async function loadEmails(horasVentana = 0) {
       fecha: e.received_at || e.created_at,
       estado: e.estado || 'pendiente',
       asignado_a: e.asignado_a || null,
+      agente_id: e.agente_id || null,
       prioridad: e.prioridad || '',
       es_urgente: e.es_urgente || false,
       nivel_riesgo: e.nivel_riesgo || '',
@@ -1747,7 +1748,7 @@ function renderFolderAgents() {
   const activos = state.agents.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
   const COLORS = ['#2563eb','#16a34a','#ea580c','#7c3aed','#ca8a04','#dc2626'];
   el.innerHTML = activos.map((a,i)=>{
-    const cnt = state.emails.filter(e=>e.asignado_a===a.id).length;
+    const cnt = state.emails.filter(e=>e.agente_id===a.id).length;
     const ini = (a.nombre||'?').charAt(0).toUpperCase();
     return `<div class="folder-item" onclick="setAgentFolder('${a.id}',this)" style="gap:8px">
       <div style="width:20px;height:20px;border-radius:50%;background:${COLORS[i%COLORS.length]};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${ini}</div>
@@ -1774,7 +1775,7 @@ function renderEmailList() {
   // Folder filter
   if(state.folder.startsWith('agent_')) {
     const agId = state.folder.replace('agent_','');
-    list = list.filter(e=>e.asignado_a===agId);
+    list = list.filter(e=>e.agente_id===agId||e.asignado_a===agId);
   } else if(state.folder !== 'todos') {
     list = list.filter(e=>e.estado===state.folder);
   }
@@ -2185,7 +2186,7 @@ async function assignAgent() {
   const agId = document.getElementById('mgmtAgentSelect').value;
   const agent = agId ? state.agents.find(a=>a.id===agId) : null;
   const email = state.emails.find(e=>e.id===id);
-  await sb(`correos?id=eq.${id}`, 'PATCH', {asignado_a:agId||null, estado: agId?'gestion':'pendiente'});
+  await sb(`correos?id=eq.${id}`, 'PATCH', {agente_id:agId||null, asignado_a:agId?state.agents.find(a=>a.id===agId)?.nombre||null:null, estado: agId?'gestion':'pendiente'});
   await addHistorialEvent(id, email, 'asignado_manual', {agente_id:agId,agente_nombre:agent?.nombre||'Sin asignar',por:'admin'});
   showToast(agent?`Asignado a ${agent.nombre} ✓`:'Agente removido','success');
   await loadEmails();
@@ -2905,7 +2906,7 @@ async function onDropToAgent(e, agentId, agentName) {
   e.currentTarget.classList.remove('drag-over');
   if(!_dragEmailId) return;
   const email = state.emails.find(em=>em.id===_dragEmailId);
-  await sb(`correos?id=eq.${_dragEmailId}`, 'PATCH', {asignado_a:agentId, estado:'gestion'});
+  await sb(`correos?id=eq.${_dragEmailId}`, 'PATCH', {agente_id:agentId, asignado_a:state.agents.find(a=>a.id===agentId)?.nombre||agentId, estado:'gestion'});
   await addHistorialEvent(_dragEmailId, email, 'asignado_manual', {agente_id:agentId,agente_nombre:agentName,por:'admin (drag&drop)'});
   showToast(`Asignado a ${agentName} ✓`,'success');
   _dragEmailId = null;
@@ -3167,7 +3168,7 @@ async function mpGuardarAgente() {
   try {
     await sb(`correos?id=eq.${id}`, 'PATCH', {
       agente_id: agenteId||null,
-      asignado_a: agente?.nombre||null,
+      asignado_a: agente?.nombre||null,  // nombre para display
       estado: agenteId ? 'gestion' : 'pendiente'
     });
     // Actualizar estado local
@@ -3658,7 +3659,7 @@ let _autoAsignarData = null; // guarda el resultado del preview para confirmar
 
 async function _calcularAutoAsignacion() {
   // 1. Obtener tickets pendientes sin agente (ordenados por fecha, más antiguo primero)
-  const tickets = await sb('correos?estado=eq.pendiente&agente_id=is.null&select=id,ticket_id,subject,received_at&order=received_at.asc&limit=200') || [];
+  const tickets = await sb('correos?estado=eq.pendiente&agente_id=is.null&select=id,ticket_id,subject,received_at,agente_id&order=received_at.asc&limit=200') || [];
   if(!tickets.length) return { total: 0, asignaciones: [], distribucion: [] };
 
   // 2. Obtener agentes activos ordenados por carga
@@ -3743,7 +3744,7 @@ async function confirmarAutoAsignar() {
       try {
         await sb(`correos?id=eq.${asig.correo_id}`, 'PATCH', {
           agente_id: asig.agente_id,
-          asignado_a: asig.agente_nombre,
+          asignado_a: asig.agente_nombre,  // nombre para display
           estado: 'gestion'
         });
         exitosos++;
@@ -4698,7 +4699,7 @@ async function loadAgentesMetrics(){
   };
 
   const [correos, eventos, agentes] = await Promise.all([
-    sb(qC('correos?select=id,ticket_id,subject,from_email,nombre,received_at,fecha_resolucion,estado,prioridad,asignado_a,horas_sla,sentimiento,tipo_pqr&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
+    sb(qC('correos?select=id,ticket_id,subject,from_email,nombre,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
     sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=5000','created_at')).catch(()=>[]),
     sb('agentes?select=id,nombre,email,activo&order=nombre.asc').catch(()=>[]),
   ]);
@@ -4734,6 +4735,8 @@ function renderAgentes(){
   setV('agKpiBacklog', backlog);
   setV('agKpiTResol',  avgH);
   setV('agKpiGest',    gestCount);
+  const autoCerrados = E.filter(e=>e.estado==='solucionado').length;
+  setV('agKpiAutoCerrado', autoCerrados);
   setV('agTableInfo',  `${act.length} asesores activos · ${total} tickets en el período`);
 
   // ── CHART RESUELTOS VS PENDIENTES ──
@@ -4744,9 +4747,9 @@ function renderAgentes(){
     data:{
       labels: act.map(a=>(a.nombre||'').split(' ')[0]),
       datasets:[
-        {label:'Resueltos', data:act.map(a=>E.filter(e=>e.asignado_a===a.id&&(e.estado==='solucionado'||e.estado==='gestionado')).length),
+        {label:'Resueltos', data:act.map(a=>E.filter(e=>e.agente_id===a.id&&(e.estado==='solucionado'||e.estado==='gestionado')).length),
           backgroundColor:'#dcfce7',borderColor:'#16a34a',borderWidth:2,borderRadius:4},
-        {label:'Pendientes', data:act.map(a=>E.filter(e=>e.asignado_a===a.id&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length),
+        {label:'Pendientes', data:act.map(a=>E.filter(e=>e.agente_id===a.id&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length),
           backgroundColor:'#fef9c3',borderColor:'#ca8a04',borderWidth:2,borderRadius:4},
       ]
     },
@@ -4765,7 +4768,7 @@ function renderAgentes(){
       datasets:[{
         label:'Horas promedio',
         data: act.map(a=>{
-          const r=E.filter(e=>e.asignado_a===a.id&&e.fecha_resolucion&&e.received_at);
+          const r=E.filter(e=>e.agente_id===a.id&&e.fecha_resolucion&&e.received_at);
           if(!r.length) return 0;
           return parseFloat((r.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/r.length).toFixed(1));
         }),
@@ -4796,9 +4799,9 @@ function renderAgentes(){
 
   // ── TABLA MAESTRA ──
   const COLS=['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
-  const maxC=Math.max(...act.map(a=>E.filter(e=>e.asignado_a===a.id).length),1);
+  const maxC=Math.max(...act.map(a=>E.filter(e=>e.agente_id===a.id).length),1);
   document.getElementById('agTableBody').innerHTML = act.map((a,i)=>{
-    const myE  = E.filter(e=>e.asignado_a===a.id);
+    const myE  = E.filter(e=>e.agente_id===a.id);
     const myH  = H.filter(h=>h.agente_id===a.id);
     const tot  = myE.length;
     const pend = myE.filter(e=>e.estado==='pendiente').length;
@@ -4911,7 +4914,7 @@ function exportAgentesExcel(){
 
   // Hoja 1: Resumen por asesor
   const h1 = act.map(a=>{
-    const myE = E.filter(e=>e.asignado_a===a.id);
+    const myE = E.filter(e=>e.agente_id===a.id);
     const myH = H.filter(h=>h.agente_id===a.id);
     const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
