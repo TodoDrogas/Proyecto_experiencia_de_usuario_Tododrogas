@@ -387,6 +387,22 @@ table.agents-tbl tr:hover td{background:var(--bg)}
   </nav>
   <div class="topbar-right">
     <span class="last-sync" id="lastSync">—</span>
+
+    <!-- SYNC V3 CONTROLS -->
+    <span id="sync-estado-badge" style="display:none;font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);">● SYNC ACTIVO</span>
+
+    <button id="btn-iniciar-sync" onclick="iniciarSync()"
+      style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.35);color:#10b981;padding:5px 12px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;display:none;"
+      title="Activar sincronización desde este momento">
+      ▶ Iniciar sync
+    </button>
+
+    <button id="btn-nuevo-ciclo" onclick="nuevoCiclo()"
+      style="background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.3);color:#ca8a04;padding:5px 12px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;display:none;"
+      title="Generar backup y limpiar ciclo actual">
+      ♻ Nuevo ciclo
+    </button>
+
     <select id="ventanaSync" title="Ventana de correos a mostrar"
       style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:5px 8px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;outline:none"
       onchange="syncAll()">
@@ -3786,6 +3802,96 @@ async function loadTopbarLogo() {
     }
   } catch(e) {}
 }
+// ── SYNC V3 — Iniciar / Nuevo Ciclo ──────────────────────────────────
+const SYNC_PHP = '/sincronizar-correos.php';
+const ADMIN_TOKEN_V3 = window.ADMIN_PASS || '';
+
+async function cargarEstadoSync() {
+  try {
+    const r = await fetch(`${SYNC_PHP}?accion=estado&token=${ADMIN_TOKEN_V3}`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const sync = d.sync || {};
+    const badge   = document.getElementById('sync-estado-badge');
+    const btnInic = document.getElementById('btn-iniciar-sync');
+    const btnCiclo= document.getElementById('btn-nuevo-ciclo');
+    if (!badge) return;
+
+    if (sync.activo) {
+      badge.style.display    = 'inline-flex';
+      btnInic.style.display  = 'none';
+      btnCiclo.style.display = 'inline-flex';
+      // Actualizar lastSync
+      if (sync.ultimo_sync) {
+        const ls = document.getElementById('lastSync');
+        if (ls) ls.textContent = 'Sync: ' + new Date(sync.ultimo_sync).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+      }
+    } else {
+      badge.style.display    = 'none';
+      btnInic.style.display  = 'inline-flex';
+      btnCiclo.style.display = 'none';
+    }
+  } catch(e) { /* silencioso */ }
+}
+
+async function iniciarSync() {
+  if (!confirm('¿Activar sincronización desde este momento?\n\nSolo se sincronizarán correos a partir de ahora.')) return;
+  const btn = document.getElementById('btn-iniciar-sync');
+  btn.disabled = true; btn.textContent = '⏳ Iniciando…';
+  try {
+    const r = await fetch(`${SYNC_PHP}?accion=iniciar&token=${ADMIN_TOKEN_V3}`);
+    const d = await r.json();
+    if (d.ok) {
+      showToast('✅ Sincronización iniciada. El cron comenzará a traer correos cada minuto.', 'success');
+      await cargarEstadoSync();
+    } else {
+      showToast('❌ Error al iniciar: ' + (d.motivo || 'desconocido'), 'error');
+    }
+  } catch(e) {
+    showToast('❌ Error de conexión al iniciar sync', 'error');
+  }
+  btn.disabled = false; btn.textContent = '▶ Iniciar sync';
+}
+
+async function nuevoCiclo() {
+  if (!confirm(
+    '♻ NUEVO CICLO\n\n' +
+    'Esta acción:\n' +
+    '1. Genera un backup JSON completo en Supabase Storage\n' +
+    '2. Elimina todos los correos, adjuntos e historial actuales\n' +
+    '3. Reinicia el cursor de sincronización\n\n' +
+    '¿Confirmas? Esta acción NO se puede deshacer.'
+  )) return;
+
+  const btn = document.getElementById('btn-nuevo-ciclo');
+  btn.disabled = true; btn.textContent = '⏳ Procesando…';
+  showToast('⏳ Generando backup y limpiando… puede tardar 30-60 segundos.', 'info');
+
+  try {
+    const r = await fetch(`${SYNC_PHP}?accion=nuevo_ciclo&token=${ADMIN_TOKEN_V3}`, {timeout: 120000});
+    const d = await r.json();
+    if (d.ok) {
+      showToast(
+        `✅ Ciclo reiniciado. Backup: ${d.backup_path} · ${d.correos_backup} correos archivados.`,
+        'success'
+      );
+      // Recargar página para reflejar BD limpia
+      setTimeout(() => window.location.reload(), 2000);
+    } else {
+      showToast('❌ Error en nuevo ciclo: ' + (d.motivo || 'desconocido'), 'error');
+    }
+  } catch(e) {
+    showToast('❌ Timeout o error de conexión. Verifica el log del servidor.', 'error');
+  }
+  btn.disabled = false; btn.textContent = '♻ Nuevo ciclo';
+}
+
+// Cargar estado del sync al iniciar
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(cargarEstadoSync, 2000); // Esperar a que el admin cargue
+  setInterval(cargarEstadoSync, 60000); // Verificar cada minuto
+});
+
 function logout(){sessionStorage.clear();window.location.href='login.html';}
 async function getGraphToken(){
   try{
