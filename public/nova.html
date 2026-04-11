@@ -752,8 +752,8 @@ function ntdSys(){
   s+='REGLA CONSULTAR: Si el usuario escribe ÚNICAMENTE un número de radicado (formato TD-xxxxx) o un correo electrónico para consultar estado, usa [CONSULTAR:valor]. NUNCA uses [CONSULTAR] cuando el mensaje contiene palabras como EPS, municipio, sede, piso, atención, cobertura — esos son preguntas de sedes.\n';
   s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
   s+='REGLA RADICAR: Si el usuario quiere radicar una PQRSFD, puede hacerlo con su número de cédula directamente en el formulario. Usa [FORMULARIO].\n';
-  s+='REGLA RECLAMAR ANTES: Si el usuario pregunta si puede reclamar sus medicamentos antes de la fecha asignada — responde que sí puede hacerlo entre 3 y 4 días antes de su fecha de entrega. Si esa fecha cae un domingo, debe venir el sábado o viernes anterior. Aclara que si ya se pasó de la fecha de entrega asignada NO es posible realizar la dispensación. Para conocer su caso específico indícale que se comunique: PBX 604 322 2432 / WA 304 341 2431 / pqrsfd@tododrogas.com.co. No des más información adicional.\n';
-  s+='REGLA FORMULA VENCIDA: Si el usuario pregunta si puede reclamar con una fórmula vencida o vencida hace X días — responde que la fórmula médica debe encontrarse vigente al momento de la dispensación. Para conocer su caso específico indícale que se comunique: PBX 604 322 2432 / WA 304 341 2431 / pqrsfd@tododrogas.com.co. No des más información adicional.\n';
+  s+='REGLA RECLAMAR ANTES: Si el usuario pregunta si puede reclamar sus medicamentos antes de la fecha asignada — responde de forma cordial que con gusto le informas que puede hacerlo entre 3 y 4 días antes de su fecha de entrega. Para conocer los detalles de su caso específico, invítale amablemente a comunicarse a través de los siguientes canales: PBX 604 322 2432 / WhatsApp 304 341 2431 / pqrsfd@tododrogas.com.co. No des más información adicional.\n';
+  s+='REGLA FORMULA VENCIDA: Si el usuario pregunta si puede reclamar con una fórmula vencida o vencida hace X días — responde de forma cordial y empática que la fórmula médica debe encontrarse vigente al momento de la dispensación. Luego invítale amablemente a comunicarse para conocer su caso específico a través de los siguientes canales: PBX 604 322 2432 / WhatsApp 304 341 2431 / pqrsfd@tododrogas.com.co. No des más información adicional.\n';
   s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
   return s;
 }
@@ -2122,8 +2122,11 @@ async function ntdStartRec(){
   try{
     var stream=await navigator.mediaDevices.getUserMedia({audio:true});
     ntdRecChunks=[];
-    var mime=MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/mp4';
-    ntdRec=new MediaRecorder(stream,{mimeType:mime});
+    var mimes=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'];
+    var mime=mimes.find(function(m){return MediaRecorder.isTypeSupported(m);})||'';
+    ntdRec=new MediaRecorder(stream,{
+      ...(mime?{mimeType:mime}:{}),audioBitsPerSecond:64000
+    });
     ntdRec.ondataavailable=function(e){if(e.data&&e.data.size>0)ntdRecChunks.push(e.data);};
     ntdRec.onstop=async function(){
       stream.getTracks().forEach(function(t){t.stop();});
