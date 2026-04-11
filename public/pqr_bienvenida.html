@@ -253,6 +253,45 @@ body{background:var(--ink);display:flex;min-height:100vh;}
 .ntd-val-cl{padding:8px 20px;border-radius:9px;background:rgba(239,68,68,.13);border:1px solid rgba(239,68,68,.28);color:#fca5a5;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;transition:all .16s;}
 .ntd-val-cl:hover{background:rgba(239,68,68,.22);}
 
+@keyframes btnPulse{0%,100%{box-shadow:0 6px 28px rgba(37,99,235,.6)}50%{box-shadow:0 6px 36px rgba(37,99,235,.85),0 0 0 6px rgba(37,99,235,.12)}}
+
+@media (min-width:651px) and (max-width:1100px){
+  /* Tablet / portátil pequeño: layout vertical, todo visible sin scroll */
+  html,body{overflow-x:hidden;overflow-y:auto;height:auto;}
+  .layout{flex-direction:column;min-height:100svh;}
+  .right{
+    order:1;width:100% !important;max-width:100%;
+    flex-shrink:0;height:auto;overflow-y:visible;
+    padding:16px clamp(16px,4vw,40px);
+    box-shadow:none;
+    border-bottom:1px solid var(--border);
+    flex-direction:row;
+    flex-wrap:wrap;
+    justify-content:center;
+    align-items:flex-start;
+    gap:16px;
+  }
+  /* Panel derecho en fila: título | qr encuesta | qr radicar */
+  .right > *{flex-shrink:0;}
+  .rp-eyebrow{width:100%;text-align:center;margin-bottom:0;}
+  .rp-title{font-size:clamp(22px,4vw,32px);margin-bottom:4px;width:100%;}
+  .horario-badge{margin-bottom:0;}
+  .qr-frame{padding:10px !important;margin:0 !important;}
+  #qr-encuesta,#qr-radicar{min-width:100px !important;min-height:100px !important;max-width:120px;max-height:120px;}
+  .or-div{width:auto;flex-direction:column;margin:0;gap:4px;}
+  .or-line{display:none;}
+  .left{order:2;flex:none;width:100%;overflow:visible;}
+  .agent-avatar{width:100px;height:100px;}
+  .agent-right{width:180px;}
+  .carousel-text{font-size:clamp(20px,3.5vw,36px);}
+  .carousel-section{padding:16px 20px 10px;}
+  .stats-bar{flex-wrap:wrap;}
+  .canales-grid{grid-template-columns:repeat(4,1fr);}
+  .citem{padding:8px 6px;}
+  .citem-icon{font-size:18px;}
+  .citem-label{font-size:9px;}
+}
+
 @media (max-width:900px){
   .right{width:clamp(280px,42vw,380px);padding:16px 14px;}
   .rp-title{font-size:clamp(20px,4vw,28px);}
@@ -336,8 +375,10 @@ body{background:var(--ink);display:flex;min-height:100vh;}
         </div>
         <div class="agent-divider"></div>
         <div class="agent-right">
-          <button class="btn-chat" onclick="openChat()">💬 Hablar con Nova TD</button>
-          <button class="btn-audio" onclick="openChatVoice()">🎤 No sé escribir, prefiero hablar</button>
+          <button class="btn-chat" onclick="openChat()" style="padding:14px 18px;font-size:13px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;box-shadow:0 0 24px rgba(37,99,235,.7),0 0 48px rgba(37,99,235,.3),inset 0 1px 0 rgba(255,255,255,.15);border:1px solid rgba(37,99,235,.6);animation:btnPulse 2.5s ease-in-out infinite;position:relative;overflow:hidden;width:100%;">
+            <span style="position:relative;z-index:1;">Hablar con Nova TD</span>
+            <span style="position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,.08) 0%,transparent 60%);pointer-events:none;"></span>
+          </button>
         </div>
       </div>
     </div>
@@ -696,10 +737,23 @@ function ntdSys(){
   var muns=eps&&mapa[eps]?mapa[eps]:'';
   var s='Eres Nova TD, asistente virtual de Tododrogas CIA SAS.\n';
   s+='USUARIO: '+(NTD.usuario&&NTD.usuario.nombre?NTD.usuario.nombre:'?');
-  s+=' | EPS: '+(NTD.eps||'Sin EPS');
+  s+=' | EPS: '+(NTD.eps||'Sin EPS')+' (SAVIA SALUD = SAVIA, PREVENTIVA SALUD = PREVENTIVA)\n';
   s+=' | VIP: '+(NTD.usuario&&NTD.usuario.vip?'SI':'No')+'\n';
   s+='TRATO: Siempre de USTED.\n';
   s+='COBERTURA:\n  ANGIOSUR: AMAGA, ANDES, CIUDAD BOLIVAR, EL BAGRE, MARINILLA, MEDELLIN, RIONEGRO, SANTA BARBARA, TAMESIS, YOLOMBO\n  CEM: ABEJORRAL, AMAGA, ANDES, APARTADO, CAREPA, CAUCASIA, CHIGORODO, CIUDAD BOLIVAR, EL BAGRE, MEDELLIN, PUERTO BERRIO, RIONEGRO, SANTA BARBARA, SANTA FE DE ANTIOQUIA, TAMESIS, TURBO, YARUMAL, YOLOMBO, ZARAGOZA\n  COOSALUD: ABEJORRAL, AMAGA, AMALFI, ANGOSTURA, ANORI, APARTADO, ARMENIA, BRICEÑO, CACERES, CAREPA, CAUCASIA, CHIGORODO, CIUDAD BOLIVAR, DABEIBA, EL BAGRE, FRONTINO, GIRALDO, HISPANIA, JERICO, MEDELLIN, MUTATA, NECHI, NECOCLI, PEQUE, PUEBLORRICO, PUERTO BERRIO, PUERTO NARE, REMEDIOS, RIONEGRO, SABANALARGA, SAMANA, SANTA BARBARA, SANTA FE DE ANTIOQUIA, SEGOVIA, TAMESIS, TARAZA, TURBO, URAMITA, VALDIVIA, YALI, YARUMAL, YOLOMBO, ZARAGOZA\n  NUEVA EPS: BARBOSA, CAREPA, CAUCASIA, GIRARDOTA, LA CEJA, LA UNION, RIONEGRO, SABANETA, SANTA FE DE ANTIOQUIA, TAMESIS\n  SALUD TOTAL: ABEJORRAL, AMAGA, AMALFI, ANDES, ANORI, APARTADO, CACERES, CAREPA, CAUCASIA, CHIGORODO, CIUDAD BOLIVAR, CONCORDIA, COPACABANA, EL BAGRE, FRONTINO, GIRARDOTA, MARINILLA, MEDELLIN, MUTATA, NECOCLI, PUERTO BERRIO, REMEDIOS, RIONEGRO, SANTA BARBARA, TAMESIS, TARAZA, TURBO, YARUMAL, YOLOMBO\n  SAVIA: ABEJORRAL, AMAGA, AMALFI, ANDES, ANGOSTURA, ANORI, ANZA, APARTADO, ARMENIA, BETULIA, BRICEÑO, CACERES, CAICEDO, CAREPA, CAUCASIA, CHIGORODO, CIUDAD BOLIVAR, DABEIBA, EL BAGRE, FRONTINO, GIRALDO, HISPANIA, JARDIN, LIBORINA, MEDELLIN, MUTATA, NECHI, NECOCLI, OLAYA - LLANADAS, PEQUE, PUEBLORRICO, PUERTO BERRIO, REMEDIOS, RIONEGRO, SABANALARGA, SAN JERONIMO, SANTA BARBARA, SANTA FE DE ANTIOQUIA, SEGOVIA, SOPETRAN, TAMESIS, TARAZA, TURBO, VALDIVIA, YALI, YARUMAL, YOLOMBO, ZARAGOZA\n';
+  // Generar catálogo de sedes desde NTD_SEDES_LOCAL para que el LLM tenga datos reales
+  var catalogoSedes='CATÁLOGO DE SEDES (datos reales — usa esto para responder preguntas sobre qué EPS atiende en qué sede o municipio):\n';
+  if(typeof NTD_SEDES_LOCAL!=='undefined'){
+    NTD_SEDES_LOCAL.forEach(function(sede){
+      catalogoSedes+='- '+sede.nombre+' | Municipio: '+(sede.municipio||'')+'| EPS: '+(sede.eps||[]).join(', ')+'\n';
+    });
+  }
+  s+=catalogoSedes;
+  s+='REGLA SEDES ESPECIALES MEDELLÍN: Hay DOS sedes en Medellín en la misma dirección. Consulta SIEMPRE el catálogo para saber qué EPS atiende cada una — NUNCA inventes datos. Casos:\n';
+  s+='  1. "Qué EPS atiende en BIC Piso 6 / Primer Piso" → responde con las EPS del catálogo para esa sede, sin usar [SEDES].\n';
+  s+='  2. "Me atienden en BIC Piso 6 / Primer Piso?" (usuario con EPS conocida) → verifica en catálogo si su EPS está → si SÍ confirma y usa [SEDES:MEDELLIN] → si NO indica que esa sede no atiende su EPS e indica cuál sí lo hace según catálogo, luego usa [SEDES:MEDELLIN].\n';
+  s+='  3. Pregunta general de sedes en Medellín sin mencionar sede específica → usa [SEDES:MEDELLIN] directamente.\n';
+  s+='REGLA MEDICAMENTOS Y MEDICINA: Para CUALQUIER pregunta sobre medicamentos, dosis, enfermedades, tratamientos, reacciones, interacciones — responde con tu conocimiento médico-farmacéutico general de forma clara. Si el usuario menciona medicamento malo, vencido, deteriorado, dañado, equivocado, en mal estado → di SIEMPRE primero: "No lo consuma. Por su seguridad NO utilice ese medicamento." → luego ofrece los datos de contacto: PBX 604 322 2432 / WA 304 341 2431 → luego usa [SEDES:municipio] para mostrar la sede más cercana donde reportarlo.\n';
   if(muns)s+='EPS '+eps+' cubre: '+muns+'. Municipio fuera=sin cobertura.\n';
   s+='HORARIOS SEDES: Los horarios exactos están en la ficha de cada sede. Guíate siempre por ellos.\n';
   s+='- SEDES PROPIAS (Tododrogas): Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m.\n';
@@ -712,7 +766,7 @@ function ntdSys(){
   s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
   s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
   s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, mal concentración, deteriorado o equivocado — di SIEMPRE: No lo consuma. Por su seguridad NO utilice ese medicamento. Acérquese al punto más cercano o llame al PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] o [ESCALAR].\n';
-  s+='REGLA SEDES: Usa [SEDES:municipio] cuando el usuario pregunta por sedes, dónde retirar, cobertura, o si puede reclamar en un municipio. Si hay cobertura en ese municipio → responde que SÍ tiene cobertura Y usa [SEDES:municipio] para mostrar las sedes. Si NO hay cobertura → indícalo y sugiere el municipio más cercano con cobertura. Si el usuario NO menciona municipio, PREGÚNTALE primero. Si menciona EPS diferente usa [SEDES:municipio:EPSMENCIONADA]. NUNCA respondas solo con texto cuando hay un municipio mencionado — siempre usa [SEDES:municipio].\n';
+  s+='REGLA SEDES: Usa [SEDES:municipio] cuando el usuario pregunta por sedes, dónde retirar, cobertura, o si puede reclamar en un municipio. Si hay cobertura en ese municipio → responde que SÍ tiene cobertura Y usa [SEDES:municipio] para mostrar las sedes. Si NO hay cobertura → indícalo brevemente y usa [SEDES:municipio] con EL MISMO municipio que mencionó el usuario (el sistema automáticamente mostrará las más cercanas). NUNCA cambies el municipio por otro diferente al que mencionó el usuario. Si el usuario NO menciona municipio, PREGÚNTALE primero. Si menciona EPS diferente usa [SEDES:municipio:EPSMENCIONADA]. NUNCA respondas solo con texto cuando hay un municipio mencionado — siempre usa [SEDES:municipio]. IMPORTANTE: palabras como "PISO", "BIC", "sede", "dispensario" NO son radicados — si aparecen junto a un municipio siempre usa [SEDES].\n';
   s+='REGLA CONSULTAR: Si el usuario escribe un número de radicado (ej: TD-xxxxx) o correo para consultar estado, usa SIEMPRE [CONSULTAR:valor] al final con el valor exacto que escribió.\n';
   s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
   s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
@@ -925,6 +979,7 @@ async function ntdSend(){
 
 async function ntdDispatch(txt){
   if(NTD.fase==='politica')    return ntdFPolitica(txt);
+  if(NTD.fase==='eps')         return ntdFEps(txt);
   if(NTD.fase==='ident_ced'){
     // En modo voz: convertir palabras numéricas a dígitos
     let txtCed = txt;
@@ -1667,7 +1722,7 @@ async function ntdFetchSedes(mun){
   }).join('');
 
   ntdAddMsg('nova',
-    `<p>Estas son las sedes de <strong>${eps}</strong> más cercanas a <strong>${munNorm}</strong>:</p>${sH2}`+ntdCanalesContacto(),
+    `<p>Lo sentimos, <strong>${eps}</strong> no cuenta con sede en <strong>${munNorm}</strong>. Estas son las sedes más cercanas a tu ubicación:</p>${sH2}`+ntdCanalesContacto(),
     ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button>'));
   ntdEna('Por favor escriba su respuesta...');
 }
@@ -1812,12 +1867,7 @@ function ntdHorarios(){
 function ntdFinalizarChat(){
   ntdCerrarSesion('usuario');
   ntdDis();
-  ntdAddMsg('nova',
-    `<p>¡Gracias por contactarnos, <strong>${NTD.usuario?.primerNombre||''}</strong>! 😊</p>
-     <p style="margin-top:4px">Fue un placer atenderte. Si necesitas algo más en el futuro, estaremos aquí para ayudarte.</p>`,
-    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
-       <button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()">🔄 &nbsp;Iniciar nuevo chat</button>
-     </div>`);
+  ntdMostrarEncuestaFinal(true);
 }
 
 
@@ -1919,15 +1969,19 @@ function ntdCalificar(tipo){
       +'Saber que superamos sus expectativas es el mejor reconocimiento para nuestro equipo. '
       +'En **Tododrogas CIA SAS** trabajamos cada día para brindarle la mejor experiencia. '
       +'¡Hasta pronto y que tenga un día extraordinario! ✨'
-    ));
-    setTimeout(function(){ntdFinalizarChat&&ntdFinalizarChat();},3500);
+    ),
+    '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
+    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()">🔄 &nbsp;Iniciar nuevo chat</button>'
+    +'</div>');
   } else if(tipo==='buena'){
     ntdAddMsg('nova', ntdR2H(
       '¡Muchas gracias, **'+n+'**! 💙\n\n'
       +'Me alegra mucho haberle podido ayudar hoy. Su confianza en **Tododrogas CIA SAS** '
       +'es muy valiosa para nosotros. ¡Hasta pronto y que esté muy bien! 😊'
-    ));
-    setTimeout(function(){ntdFinalizarChat&&ntdFinalizarChat();},3000);
+    ),
+    '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
+    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()">🔄 &nbsp;Iniciar nuevo chat</button>'
+    +'</div>');
   } else {
     ntdAddMsg('nova',
       ntdR2H(
@@ -2246,7 +2300,8 @@ async function ntdProcesarAudio(blob){
     var b64=await new Promise(function(res){reader.onload=function(e){res(e.target.result.split(',')[1]);};reader.readAsDataURL(blob);});
     var prx=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
     var r=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'whisper',audio_base64:b64,mime_type:blob.type||'audio/webm'})});
+      body:JSON.stringify({action:'whisper',audio_base64:b64,mime_type:blob.type||'audio/webm',
+        prompt:'EPS colombianas: COOSALUD, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, PREVENTIVA SALUD, CEM, ANGIOSUR. Municipios de Antioquia: Medellín, Rionegro, Apartadó, Turbo, Caucasia, Yarumal, Segovia, Santa Fe de Antioquia.'})});
     var d=await r.json();var txt=(d.text||'').trim();
     ntdRmSk();ntdTyping(false);
     if(txt){
