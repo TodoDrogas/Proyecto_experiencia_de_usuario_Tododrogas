@@ -62,6 +62,7 @@ jobs:
             sed -i "s|__AZURE_CLIENT_ID__|${{ secrets.AZURE_CLIENT_ID }}|g"         "$f"
             sed -i "s|__AZURE_CLIENT_SECRET__|${{ secrets.AZURE_CLIENT_SECRET }}|g" "$f"
             sed -i "s|__GRAPH_USER_ID__|${{ secrets.GRAPH_USER_ID }}|g"             "$f"
+            sed -i "s|__ADMIN_TOKEN__|${{ secrets.ADMIN_TOKEN }}|g"               "$f"
             echo "✅ $f inyectado"
           done
 
@@ -156,7 +157,7 @@ jobs:
           fi
 
           # PHP — verificar placeholders residuales en TODOS los archivos incluido nova-proxy.php
-          PLACEHOLDERS='__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_TENANT_ID__\|__AZURE_CLIENT_ID__\|__AZURE_CLIENT_SECRET__\|__GRAPH_USER_ID__'
+          PLACEHOLDERS='__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_TENANT_ID__\|__AZURE_CLIENT_ID__\|__AZURE_CLIENT_SECRET__\|__GRAPH_USER_ID__\|__ADMIN_TOKEN__'
           for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php public/sincronizar-correos.php public/nova-td-respuesta.php public/nova-proxy.php public/nova-consulta.php public/cargar-plantillas.php public/validar-paciente.php; do
             [ -f "$f" ] || continue
             if grep -q "$PLACEHOLDERS" "$f"; then
@@ -316,7 +317,7 @@ jobs:
           username: root
           key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
-            CRON_LINE="*/5 * * * * php /var/www/pqr/sincronizar-correos.php >> /var/log/sync-correos.log 2>&1"
+            CRON_LINE="* * * * * php /var/www/pqr/sincronizar-correos.php >> /var/log/sync-correos.log 2>&1"
             if ! crontab -l 2>/dev/null | grep -q "sincronizar-correos.php"; then
               (crontab -l 2>/dev/null; echo "$CRON_LINE") | crontab -
               echo "✅ Cron configurado: cada 5 min"
@@ -365,7 +366,7 @@ jobs:
             done
 
             echo "--- Placeholders residuales ---"
-            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__' \
+            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__\|__ADMIN_TOKEN__' \
               /var/www/pqr/*.php 2>/dev/null || true)
             if [ -n "$FOUND" ]; then
               echo "❌ Placeholders sin reemplazar en: $FOUND"
