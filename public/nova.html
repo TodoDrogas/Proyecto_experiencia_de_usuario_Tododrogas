@@ -952,7 +952,7 @@ async function ntdFCedula(txt){
   }
   const pn=(res.nombre||'').trim().split(/\s+/)[0];
   NTD.usuario={nombre:res.nombre||'',primerNombre:pn,cedula:NTD._ced,telefono:'',vip:!!res.vip,saludo:res.saludo||null,ciudad:res.ciudad||null,epsRegistrada:res.eps||null};
-  NTD.eps=res.eps||null; // EPS directo desde la BD — no preguntar
+  NTD.eps=(res.eps||'').replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA')||null; // EPS directo desde la BD — no preguntar
   if(res.vip&&res.saludo){NTD.vipCb=()=>ntdBienvenidaYEps();ntdShowVip(res.saludo);}
   else{ ntdBienvenidaYEps(); }
   ntdAbrirSesion(); // registrar sesión en Supabase
@@ -1073,7 +1073,7 @@ async function ntdBienvenidaConSede(eps){
   }catch(e){}
   if(!todasSedes||!todasSedes.length) todasSedes=NTD_SEDES_LOCAL;
 
-  const epsUp=eps.toUpperCase().replace('SAVIA SALUD','SAVIA');
+  const epsUp=eps.toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA');
 
   // Filtrar sedes que atienden esta EPS o "TODAS"
   const sedesPorEps=todasSedes.filter(s=>{
@@ -1081,7 +1081,7 @@ async function ntdBienvenidaConSede(eps){
     if(Array.isArray(s.eps)) arr=s.eps;
     else if(typeof s.eps==='string'){try{arr=JSON.parse(s.eps);}catch(e){arr=[s.eps];}}
     return arr.some(e=>{
-      const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA');
+      const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA');
       return en==='TODAS'||en===epsUp||en===eps.toUpperCase();
     });
   });
@@ -1469,8 +1469,8 @@ async function ntdFetchSedes(mun){
         else try{arr=JSON.parse(t);}catch(e){arr=[];}
       }
       // Normalizar: SAVIA SALUD == SAVIA, SAVIA == SAVIA SALUD
-      const epsNorm=eps.replace('SAVIA SALUD','SAVIA');
-      return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA');return en===epsNorm||en===eps;});
+      const epsNorm=eps.replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA');
+      return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA');return en===epsNorm||en===eps;});
     }catch(e){return false;}
   }):todasSedes;
 
