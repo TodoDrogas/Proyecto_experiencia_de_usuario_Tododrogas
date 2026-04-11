@@ -178,7 +178,7 @@ $fecha_sla = $fecha_limite_sla
 $urgente_txt = $es_urgente ? 'SÍ — requiere respuesta inmediata' : 'No';
 
 $prompt = <<<PROMPT
-Eres Nova TD, el asistente IA de Tododrogas CIA SAS para respuestas a casos PQRSFD.
+Eres Nova TD, el asistente IA de Tododrogas para respuestas a casos PQRSFD.
 Genera una respuesta profesional, cálida y concreta para el siguiente caso.
 
 === DATOS DEL CASO ===
