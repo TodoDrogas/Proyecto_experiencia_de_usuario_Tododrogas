@@ -72,7 +72,7 @@ if ($is_preview) {
                     'role'    => 'user',
                     'content' => [
                         ['type' => 'text',
-                         'text' => 'Transcribe EXACTAMENTE el texto escrito en esta imagen. Si hay texto escrito a mano, transcríbelo tal como está. Si no hay texto, describe brevemente la imagen. Solo devuelve el texto transcrito, sin explicaciones adicionales.'],
+                         'text' => 'Eres un asistente de transcripción para quejas y solicitudes de pacientes en farmacias de Colombia. Transcribe el texto escrito a mano en esta imagen. Si una palabra es ilegible, infiere la más probable según el contexto farmacéutico (medicamentos, fórmula médica, EPS, entrega, demanda, queja, reclamación). Si no hay texto legible, responde únicamente con: SIN_TEXTO. Solo devuelve el texto transcrito, sin explicaciones.'],
                         ['type' => 'image_url',
                          'image_url' => ['url' => "data:{$mime};base64,{$imagen_b64}"]],
                     ],
@@ -171,7 +171,7 @@ if ($OPENAI_KEY) {
             'messages'   => [[
                 'role'    => 'user',
                 'content' => [
-                    ['type'=>'text', 'text'=>'Transcribe EXACTAMENTE el texto escrito en esta imagen. Si hay texto escrito a mano, transcríbelo tal como está. Si no hay texto, describe brevemente la imagen. Solo devuelve el texto transcrito, sin explicaciones adicionales.'],
+                    ['type'=>'text', 'text'=>'Eres un asistente de transcripción para quejas y solicitudes de pacientes en farmacias de Colombia. Transcribe el texto escrito a mano en esta imagen. Si una palabra es ilegible, infiere la más probable según el contexto farmacéutico (medicamentos, fórmula médica, EPS, entrega, demanda, queja, reclamación). Si no hay texto legible, responde únicamente con: SIN_TEXTO. Solo devuelve el texto transcrito, sin explicaciones.'],
                     ['type'=>'image_url', 'image_url'=>['url'=>"data:{$mime};base64,{$imagen_b64}"]],
                 ],
             ]],
