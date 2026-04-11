@@ -392,7 +392,7 @@ table.agents-tbl tr:hover td{background:var(--bg)}
     <span id="sync-estado-badge" style="display:none;font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px;background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3);">● SYNC ACTIVO</span>
 
     <button id="btn-iniciar-sync" onclick="iniciarSync()"
-      style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.35);color:#10b981;padding:5px 12px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;display:none;"
+      style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.35);color:#10b981;padding:5px 12px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:5px;"
       title="Activar sincronización desde este momento">
       ▶ Iniciar sync
     </button>
@@ -3807,21 +3807,27 @@ const SYNC_PHP = '/sincronizar-correos.php';
 const ADMIN_TOKEN_V3 = window.ADMIN_PASS || '';
 
 async function cargarEstadoSync() {
+  const badge   = document.getElementById('sync-estado-badge');
+  const btnInic = document.getElementById('btn-iniciar-sync');
+  const btnCiclo= document.getElementById('btn-nuevo-ciclo');
+  if (!badge || !btnInic || !btnCiclo) return;
+
   try {
     const r = await fetch(`${SYNC_PHP}?accion=estado&token=${ADMIN_TOKEN_V3}`);
-    if (!r.ok) return;
+    if (!r.ok) {
+      // PHP no disponible — mostrar iniciar por defecto
+      btnInic.style.display  = 'inline-flex';
+      btnCiclo.style.display = 'none';
+      badge.style.display    = 'none';
+      return;
+    }
     const d = await r.json();
     const sync = d.sync || {};
-    const badge   = document.getElementById('sync-estado-badge');
-    const btnInic = document.getElementById('btn-iniciar-sync');
-    const btnCiclo= document.getElementById('btn-nuevo-ciclo');
-    if (!badge) return;
 
     if (sync.activo) {
       badge.style.display    = 'inline-flex';
       btnInic.style.display  = 'none';
       btnCiclo.style.display = 'inline-flex';
-      // Actualizar lastSync
       if (sync.ultimo_sync) {
         const ls = document.getElementById('lastSync');
         if (ls) ls.textContent = 'Sync: ' + new Date(sync.ultimo_sync).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
@@ -3831,7 +3837,12 @@ async function cargarEstadoSync() {
       btnInic.style.display  = 'inline-flex';
       btnCiclo.style.display = 'none';
     }
-  } catch(e) { /* silencioso */ }
+  } catch(e) {
+    // Error de red — mostrar iniciar por defecto
+    btnInic.style.display  = 'inline-flex';
+    btnCiclo.style.display = 'none';
+    badge.style.display    = 'none';
+  }
 }
 
 async function iniciarSync() {
