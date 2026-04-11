@@ -344,7 +344,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
   <tr><td style='background:#0c2d5e;padding:18px 44px'>
     <table width='100%' cellpadding='0' cellspacing='0'>
       <tr>
-        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente</td>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas<br>Experiencia de Servicio al Cliente</td>
         <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Sistema PQRSFD<br>{$ticket_enc}</td>
       </tr>
     </table>
@@ -484,7 +484,7 @@ if ($token) {
   <tr><td style='background:#0c2d5e;padding:18px 44px'>
     <table width='100%' cellpadding='0' cellspacing='0'>
       <tr>
-        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Experiencia de Servicio al Cliente &middot; Nova TD</td>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas<br>Experiencia de Servicio al Cliente &middot; Nova TD</td>
         <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Registro: {$ticket_enc}<br>ID: " . ($encuesta_id ?? 'N/A') . "</td>
       </tr>
     </table>
@@ -572,7 +572,7 @@ $resumen_indicadores = implode(', ', array_map(
 ));
 
 // ── Prompt GPT encuesta ───────────────────────────────────────────────
-$prompt_enc = "Eres el equipo de atención al cliente de Tododrogas CIA SAS, empresa colombiana de servicios farmacéuticos. Redacta un correo de seguimiento a una encuesta de satisfacción. El usuario debe sentirse como un rey o reina — su opinión es lo más valioso que existe para Tododrogas.
+$prompt_enc = "Eres el equipo de atención al cliente de Tododrogas, empresa colombiana de servicios farmacéuticos. Redacta un correo de seguimiento a una encuesta de satisfacción. El usuario debe sentirse como un rey o reina — su opinión es lo más valioso que existe para Tododrogas.
 
 DATOS DE LA ENCUESTA:
 - Nombre: {$nombre}
@@ -589,7 +589,7 @@ INSTRUCCIONES CRÍTICAS:
 4. Si el resultado es INSATISFACTORIO: pide disculpas con profunda humildad, reconoce que fallaron, comprométete a una mejora concreta en la sede {$sede_nombre} y hazle saber que su voz generó un cambio real.
 5. Si dejó comentario, refiérete a él de forma específica — no genérica.
 6. Cierra con una frase poderosa y memorable que refuerce el compromiso de Tododrogas.
-7. Firma: Equipo de Experiencia al Cliente · Tododrogas CIA SAS · Sede {$sede_nombre}
+7. Firma: Equipo de Experiencia al Cliente · Tododrogas · Sede {$sede_nombre}
 8. Tono: humano, cercano, colombiano — NUNCA robótico. SIEMPRE usar usted, NUNCA tutear.
 9. NO uses 'Estimado/a' — dirígete por nombre de forma cálida y directa.
 10. PROHIBIDO usar emojis en el texto.
@@ -608,7 +608,7 @@ curl_setopt_array($ch_gpt_enc, [
         'max_tokens'  => 500,
         'temperature' => 0.75,
         'messages'    => [
-            ['role' => 'system', 'content' => 'Eres el equipo de atención al cliente de Tododrogas CIA SAS. Redactas correos cálidos, empáticos y personalizados en español colombiano. Cada usuario es tratado como un rey o reina.'],
+            ['role' => 'system', 'content' => 'Eres el equipo de atención al cliente de Tododrogas. Redactas correos cálidos, empáticos y personalizados en español colombiano. Cada usuario es tratado como un rey o reina.'],
             ['role' => 'user', 'content' => $prompt_enc],
         ],
     ]),
@@ -650,7 +650,7 @@ $cuerpo_seg_enc = "
   <!-- HEADER -->
   <tr><td style='background:#0c2d5e;padding:32px 44px;text-align:center'>
     <img src='{$logo_enc_seg}' alt='Tododrogas' style='height:32px;max-width:180px;object-fit:contain;display:block;margin:0 auto 14px;filter:brightness(0) invert(1);opacity:.92'>
-    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Mensaje personal del equipo &middot; Tododrogas CIA SAS</p>
+    <p style='color:#6a90b8;margin:0;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;font-weight:400'>Mensaje personal del equipo &middot; Tododrogas</p>
   </td></tr>
 
   <!-- BAND TICKET -->
@@ -758,7 +758,7 @@ $cuerpo_seg_enc = "
   <tr><td style='background:#0c2d5e;padding:18px 44px'>
     <table width='100%' cellpadding='0' cellspacing='0'>
       <tr>
-        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas CIA SAS<br>Equipo de Experiencia al Cliente</td>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas<br>Equipo de Experiencia al Cliente</td>
         <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Encuesta: {$ticket_enc}</td>
       </tr>
     </table>
