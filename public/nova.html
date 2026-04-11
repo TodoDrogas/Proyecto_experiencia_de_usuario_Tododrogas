@@ -856,6 +856,7 @@ async function ntdSend(){
 async function ntdDispatch(txt){
   if(NTD.fase==='politica')    return ntdFPolitica(txt);
   if(NTD.fase==='ident_ced')   return ntdFCedula(txt);
+  if(NTD.fase==='eps')         return ntdFEps(txt);
 
   // Captura municipio para búsqueda de sedes
   if(NTD.fase==='municipio_sedes'){
@@ -1420,7 +1421,13 @@ const NTD_MUN_COORDS = {
 
 function ntdNormMun(txt){
   const t=(txt||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-  return MUNICIPIOS_MAP[t]||MUNICIPIOS_MAP[(txt||'').toLowerCase().trim()]||(txt||'').toUpperCase().trim();
+  if(MUNICIPIOS_MAP[t]) return MUNICIPIOS_MAP[t];
+  if(MUNICIPIOS_MAP[(txt||'').toLowerCase().trim()]) return MUNICIPIOS_MAP[(txt||'').toLowerCase().trim()];
+  return (txt||'').toUpperCase().trim()
+    .replace(/, ANTIOQUIA$/i,'')
+    .replace(/[\u00C1\u00C0\u00C2\u00C4]/g,'A').replace(/[\u00C9\u00C8\u00CA\u00CB]/g,'E')
+    .replace(/[\u00CD\u00CC\u00CE\u00CF]/g,'I').replace(/[\u00D3\u00D2\u00D4\u00D6]/g,'O')
+    .replace(/[\u00DA\u00D9\u00DB\u00DC]/g,'U').replace(/\u00D1/g,'N');
 }
 
 const ntdHav2=(lat1,lng1,lat2,lng2)=>{
@@ -1560,7 +1567,7 @@ async function ntdFetchSedes(mun){
   }).join('');
 
   ntdAddMsg('nova',
-    `<p>Estas son las sedes de <strong>${eps}</strong> más cercanas a <strong>${munNorm}</strong>:</p>${sH2}`+ntdCanalesContacto(),
+    `<p>Lo sentimos, <strong>${eps}</strong> no cuenta con sede en <strong>${munNorm}</strong>. Estas son las sedes más cercanas a tu ubicación:</p>${sH2}`+ntdCanalesContacto(),
     ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button>'));
   ntdEna('Por favor escriba su respuesta...');
 }
@@ -1932,11 +1939,9 @@ async function ntdFLibre(txt){
       // dat puede ser "municipio" o "municipio:EPS"
       const _partes=(dat||'').split(':');
       const _mun=_partes[0].trim();
-      const _epsOverride=_partes[1]?_partes[1].trim().toUpperCase():null;
-      const _epsOriginal=NTD.eps;
-      if(_epsOverride) NTD.eps=_epsOverride;
+      const _epsOverride=_partes[1]?_partes[1].trim().toUpperCase().replace('PREVENTIVA SALUD','PREVENTIVA').replace('SAVIA SALUD','SAVIA'):null;
+      if(_epsOverride) NTD.eps=_epsOverride; // actualizar EPS permanentemente
       await ntdFetchSedes(_mun);
-      if(_epsOverride) NTD.eps=_epsOriginal;
       break;}
     case 'REQUISITOS':
       ntdRequisitosReclamar();break;
@@ -1962,12 +1967,12 @@ function ntdParseAct(raw){
 }
 
 function ntdCambiarEps(){
-  NTD.eps=null;NTD.fase='eps';
-  var pn=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
+  NTD.eps=null;NTD.fase='cambio_eps';
+  var pn=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';;
   var labels=['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣'];
   var epsButtons='<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">';
   NTD_EPS.forEach(function(e,i){
-    epsButtons+='<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSU(\''+e.replace(/'/g,"\\'")+'\')">'+(labels[i]||'>')+' &nbsp;'+e+'</button>';
+    epsButtons+='<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetEps(\''+e.replace(/'/g,"\\'")+'\')">'+(labels[i]||'>')+' &nbsp;'+e+'</button>';
   });
   epsButtons+='</div>';
   ntdAddMsg('nova',ntdR2H('Con cual EPS desea actualizar, '+pn+'?'),epsButtons);
