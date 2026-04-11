@@ -300,32 +300,58 @@ body{background:var(--ink);display:flex;flex-direction:row;height:100vh;overflow
 
   <div style="width:100%;">
     <div class="panel-title">Consulta el estado de tu PQRSFD</div>
-    <div class="panel-sub">Ingresa tu número de radicado o correo electrónico para ver el estado y las gestiones realizadas.</div>
+    <div class="panel-sub">Ingresa tu número de cédula para ver todos tus radicados.</div>
 
     <div class="error-msg" id="error-msg">
       <span>⚠️</span><span id="error-txt"></span>
     </div>
 
-    <div class="form-group">
-      <label class="form-label">Número de radicado o correo</label>
-      <input class="form-input" id="inp-ticket" type="text"
-        placeholder="TD-20260401-XXXX o tu correo"
-        oninput="autoFormat(this)"
-        onkeydown="if(event.key==='Enter') buscar()">
+    <!-- PASO 1: Cédula -->
+    <div id="paso-cedula">
+      <div class="form-group">
+        <label class="form-label">Número de cédula</label>
+        <input class="form-input" id="inp-cedula" type="text"
+          placeholder="Ej: 1234567890"
+          inputmode="numeric"
+          oninput="this.value=this.value.replace(/\D/g,'')"
+          onkeydown="if(event.key==='Enter') buscarPorCedula()">
+      </div>
+      <button class="btn-submit" id="btn-cedula" onclick="buscarPorCedula()">
+        <span id="btn-icon-ced">🔍</span>
+        <span id="btn-txt-ced">Consultar mis radicados</span>
+      </button>
+      <div class="hint">Ley 1755/2015 · Respuesta máximo 15 días hábiles</div>
     </div>
 
-    <button class="btn-submit" id="btn-buscar" onclick="buscar()">
-      <span id="btn-icon">🔍</span>
-      <span id="btn-txt">Consultar radicado</span>
-    </button>
-    <div class="hint">Ley 1755/2015 · Respuesta máximo 15 días hábiles</div>
+    <!-- PASO 2: Lista de radicados -->
+    <div id="paso-lista" style="display:none;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+        <button onclick="volverBusqueda()" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:13px;font-weight:600;padding:0;">← Volver</button>
+        <div id="lista-nombre" style="font-size:14px;font-weight:700;color:var(--ink);"></div>
+      </div>
+
+      <!-- Filtros -->
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
+        <select id="filtro-mes" class="form-input" style="flex:1;min-width:130px;padding:8px 12px;font-size:13px;" onchange="aplicarFiltros()">
+          <option value="">Todos los meses</option>
+        </select>
+        <input id="filtro-ticket" class="form-input" type="text"
+          placeholder="TD-XXXX (opcional)"
+          style="flex:1;min-width:130px;padding:8px 12px;font-size:13px;"
+          oninput="this.value=this.value.toUpperCase()"
+          onkeydown="if(event.key==='Enter') aplicarFiltros()">
+        <button onclick="aplicarFiltros()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">Filtrar</button>
+      </div>
+
+      <div id="lista-radicados"></div>
+    </div>
 
   </div>
 
   <!-- Loading -->
   <div class="loading-wrap" id="loading-wrap">
     <div class="spinner"></div>
-    <div class="loading-txt">Consultando tu caso…</div>
+    <div class="loading-txt" id="loading-txt">Consultando…</div>
   </div>
 
   <!-- Resultado -->
@@ -477,27 +503,288 @@ function fmtDate(iso){
 }
 function setText(id,txt){const el=document.getElementById(id);if(el)el.textContent=txt||'—';}
 
+const CONSULTA_URL = window.NOVA_URL || '/nova-consulta.php';
+let _cedula_actual = '';
+let _nombre_actual = '';
+let _radicados_cache = [];
+let _meses_cache = [];
+
+// ── PASO 1: Buscar por cédula ─────────────────────────────────────────
+async function buscarPorCedula() {
+  const ced = document.getElementById('inp-cedula').value.trim().replace(/\D/g,'');
+  if (!ced) { showError('Ingresa tu número de cédula.'); return; }
+  if (ced.length < 6) { showError('La cédula debe tener al menos 6 dígitos.'); return; }
+
+  setLoading(true, 'Validando identidad…');
+  document.getElementById('error-msg').classList.remove('show');
+
+  // Paso 1a: Validar que existe en tabla_usuarios
+  try {
+    const vr = await fetch(window.VALIDAR_URL || '/validar-paciente.php', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cedula: ced})
+    });
+    const vd = await vr.json();
+    if (!vd.ok) {
+      setLoading(false);
+      showError(vd.msg || 'No encontramos tu cédula en el sistema. Verifica el número.');
+      return;
+    }
+    _nombre_actual = vd.nombre || '';
+    _cedula_actual = ced;
+  } catch(e) {
+    setLoading(false);
+    showError('Error al validar. Intenta de nuevo.');
+    return;
+  }
+
+  // Paso 1b: Traer radicados por cédula
+  await cargarRadicados('', '');
+}
+
+// ── Cargar radicados con filtros ──────────────────────────────────────
+async function cargarRadicados(mes, ticket) {
+  setLoading(true, 'Buscando tus radicados…');
+  try {
+    const r = await fetch(CONSULTA_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        accion: 'radicados_cedula',
+        cedula: _cedula_actual,
+        mes:    mes    || '',
+        ticket: ticket || '',
+      })
+    });
+    const d = await r.json();
+    setLoading(false);
+
+    _radicados_cache = d.radicados || [];
+    _meses_cache     = d.meses_disponibles || [];
+
+    // Poblar selector de meses
+    const sel = document.getElementById('filtro-mes');
+    sel.innerHTML = '<option value="">Todos los meses</option>';
+    _meses_cache.forEach(m => {
+      const [y, mo] = m.split('-');
+      const label = new Date(y, parseInt(mo)-1, 1).toLocaleDateString('es-CO',{month:'long',year:'numeric'});
+      sel.innerHTML += `<option value="${m}" ${m===mes?'selected':''}>${label}</option>`;
+    });
+    if (mes) sel.value = mes;
+
+    // Mostrar lista
+    document.getElementById('paso-cedula').style.display = 'none';
+    document.getElementById('paso-lista').style.display  = 'block';
+    document.getElementById('lista-nombre').textContent  =
+      _nombre_actual ? `Hola, ${_nombre_actual.split(' ')[0]} 👋` : '';
+
+    renderLista(d);
+  } catch(e) {
+    setLoading(false);
+    showError('Error al consultar. Intenta de nuevo.');
+  }
+}
+
+// ── Renderizar lista de radicados ─────────────────────────────────────
+function renderLista(d) {
+  const el = document.getElementById('lista-radicados');
+  if (!d.encontrado || !d.radicados.length) {
+    el.innerHTML = `<div style="text-align:center;padding:32px 0;color:var(--ink3);font-size:14px;">
+      📭 ${d.mensaje || 'No encontramos radicados con esos filtros.'}
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = d.radicados.map(r => {
+    const est = ESTADOS[r.estado] || {label: r.estado, cls:'eb-abierto'};
+    const fecha = r.creado ? fmtDate(r.creado) : '—';
+    const tipoLabel = r.tipo ? r.tipo.charAt(0).toUpperCase()+r.tipo.slice(1) : '—';
+
+    return `<div onclick="verDetalle('${r.ticket_id||r.id}')"
+      style="background:var(--surface);border:1px solid var(--border);border-radius:14px;
+             padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:box-shadow .15s;
+             display:flex;flex-direction:column;gap:6px;"
+      onmouseenter="this.style.boxShadow='0 4px 18px rgba(37,99,235,.12)'"
+      onmouseleave="this.style.boxShadow='none'">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <div style="font-size:13px;font-weight:700;color:var(--ink);font-family:'DM Mono',monospace;">
+          ${r.ticket_id || '—'}
+        </div>
+        <div class="estado-badge ${est.cls}" style="font-size:11px;">${est.label}</div>
+      </div>
+      <div style="font-size:12px;color:var(--ink3);">${tipoLabel}${r.categoria?' · '+r.categoria:''}</div>
+      <div style="font-size:11px;color:var(--ink3);">${fecha}</div>
+      ${r.resumen ? `<div style="font-size:12px;color:var(--ink2);margin-top:2px;">${r.resumen}</div>` : ''}
+      ${r.mensaje_ux ? `<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:4px;">${r.mensaje_ux}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── Ver detalle de un radicado ────────────────────────────────────────
+async function verDetalle(ticket_id) {
+  if (!ticket_id) return;
+  setLoading(true, 'Cargando detalle…');
+  document.getElementById('paso-lista').style.display = 'none';
+  document.getElementById('result-wrap').style.display = 'none';
+
+  try {
+    const r = await fetch(CONSULTA_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({accion:'radicado', ticket_id})
+    });
+    const d = await r.json();
+    setLoading(false);
+
+    if (!d.encontrado) {
+      showError('No se pudo cargar el detalle. Intenta de nuevo.');
+      document.getElementById('paso-lista').style.display = 'block';
+      return;
+    }
+
+    // Renderizar resultado igual que antes
+    renderResultado(d);
+  } catch(e) {
+    setLoading(false);
+    showError('Error al cargar detalle.');
+    document.getElementById('paso-lista').style.display = 'block';
+  }
+}
+
+// ── Aplicar filtros ───────────────────────────────────────────────────
+function aplicarFiltros() {
+  const mes    = document.getElementById('filtro-mes').value;
+  const ticket = document.getElementById('filtro-ticket').value.trim();
+  cargarRadicados(mes, ticket);
+}
+
+// ── Volver a búsqueda ─────────────────────────────────────────────────
+function volverBusqueda() {
+  document.getElementById('paso-lista').style.display   = 'none';
+  document.getElementById('result-wrap').style.display  = 'none';
+  document.getElementById('paso-cedula').style.display  = 'block';
+  document.getElementById('error-msg').classList.remove('show');
+}
+
+function volverLista() {
+  document.getElementById('result-wrap').style.display  = 'none';
+  document.getElementById('paso-lista').style.display   = 'block';
+}
+
+function setLoading(on, txt) {
+  document.getElementById('loading-wrap').style.display = on ? 'block' : 'none';
+  if (txt) document.getElementById('loading-txt').textContent = txt;
+  if (!on) document.getElementById('loading-wrap').style.display = 'none';
+}
+
+// ── Renderizar detalle (mismo diseño que antes) ───────────────────────
+async function renderResultado(d) {
+  document.getElementById('result-wrap').style.display = 'block';
+
+  const est = ESTADOS[d.estado] || {label: d.estado, cls:'eb-abierto'};
+  const badge = document.getElementById('r-badge');
+  badge.textContent = est.label;
+  badge.className   = 'estado-badge ' + est.cls;
+
+  setText('r-id', d.ticket_id);
+  setText('r-resumen', d.resumen || '');
+  setText('r-tipo', d.tipo || '—');
+  setText('r-canal', d.canal || '—');
+
+  const fl = d.fecha_limite
+    ? new Date(d.fecha_limite).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})
+    : '—';
+
+  const metaParts = [];
+  if (d.agente)  metaParts.push('👤 ' + d.agente);
+  if (d.creado)  metaParts.push('📅 ' + fmtDate(d.creado));
+  if (fl !== '—') metaParts.push('⏰ Límite: ' + fl + (d.sla_vencido ? ' ⚠️' : ''));
+  setText('r-meta', metaParts.join(' · '));
+
+  // Mensaje de estado
+  const msgEl = document.getElementById('r-msg-estado');
+  const msgData = MENSAJES_ESTADO[d.estado] || MENSAJES_ESTADO['abierto'];
+  if (msgData) {
+    msgEl.style.display     = 'block';
+    msgEl.style.background  = msgData.bg;
+    msgEl.style.color       = msgData.color;
+    msgEl.style.border      = '1px solid ' + msgData.border;
+    msgEl.textContent       = msgData.txt;
+  }
+
+  // Historial
+  // Usar historial que ya devuelve nova-consulta (d.historial) — no re-fetch
+  const eventos = d.historial || [];
+  renderTimeline(eventos, d.estado, d);
+
+  // Botón volver a lista
+  const existing = document.getElementById('btn-volver-lista');
+  if (!existing) {
+    const bv = document.createElement('button');
+    bv.id = 'btn-volver-lista';
+    bv.textContent = '← Ver todos mis radicados';
+    bv.style.cssText = 'background:none;border:none;color:var(--blue);cursor:pointer;font-size:13px;font-weight:600;padding:0;margin-bottom:12px;display:block;';
+    bv.onclick = volverLista;
+    document.getElementById('result-wrap').prepend(bv);
+  }
+}
+
+function renderTimeline(eventos, estado, c) {
+  const tl = document.getElementById('r-timeline');
+  if (!tl) return;
+  tl.innerHTML = '';
+
+  let todos = eventos.length ? [...eventos]
+    : [{evento:'creado', descripcion:'Radicado recibido en el sistema.', created_at: c?.creado}];
+
+  const estadosFinal = ['cerrado','respondido','solucionado'];
+  const yaEnGestion  = todos.some(e=>e.evento==='en_gestion'||e.evento==='asignado'||e.evento==='respondido'||e.evento==='cerrado_automatico');
+  if (!yaEnGestion && !estadosFinal.includes(estado)) {
+    todos.push({evento:'en_gestion', descripcion:'Tu caso está siendo revisado por nuestro equipo.', created_at: c?.actualizado||c?.creado, _auto:true});
+  }
+  if (estadosFinal.includes(estado) && !todos.some(e=>e.evento==='cerrado'||e.evento==='solucionado'||e.evento==='cerrado_automatico')) {
+    todos.push({evento:'solucionado', descripcion:'Tu caso fue atendido exitosamente. Gracias por contactarnos.', created_at: c?.actualizado||c?.creado, _auto:true});
+  }
+
+  setText('r-count', todos.length + ' evento' + (todos.length===1?'':'s'));
+
+  const labels = {
+    creado:'Radicado creado', en_gestion:'En gestión',
+    asignado:'Agente asignado', respondido:'Respuesta enviada',
+    cerrado:'Caso cerrado', solucionado:'✅ Solucionado',
+    escalado:'Escalado', reabierto:'Reabierto',
+    acuse_enviado:'Acuse de recibo', audio_procesado:'Audio procesado',
+    canvas_procesado:'Dibujo procesado', cerrado_automatico:'✅ Resuelto automáticamente',
+    sync_correos: null, // no mostrar eventos de sistema
+  };
+
+  todos.forEach((ev, i) => {
+    if (labels[ev.evento] === null) return; // saltar eventos sistema
+    const col   = EV_COLOR[ev.evento] || 'blue';
+    const isLast= i === todos.length - 1;
+    const lbl   = labels[ev.evento] || (ev.evento||'').replace(/_/g,' ');
+    const div   = document.createElement('div');
+    div.className = 'tl-item';
+    div.innerHTML =
+      '<div class="tl-spine">'
+        + '<div class="tl-dot ' + col + '"></div>'
+        + (isLast ? '' : '<div class="tl-line"></div>')
+      + '</div>'
+      + '<div style="flex:1;min-width:0">'
+        + '<div class="tl-ev">' + lbl + '</div>'
+        + '<div class="tl-desc">' + (ev.descripcion||'Sin descripción') + '</div>'
+        + '<div class="tl-time">' + fmt(ev.created_at) + '</div>'
+      + '</div>';
+    tl.appendChild(div);
+  });
+}
+
 function autoFormat(inp){
-  // Si parece ticket, forzar mayúsculas; si parece correo, no tocar
   if(!inp.value.includes('@')) inp.value=inp.value.toUpperCase();
 }
 
-function showError(msg){
-  document.getElementById('loading-wrap').style.display='none';
-  const em=document.getElementById('error-msg');
-  document.getElementById('error-txt').textContent=msg;
-  em.classList.add('show');
-  resetBtn();
-}
 
-function resetBtn(){
-  document.getElementById('btn-buscar').disabled=false;
-  document.getElementById('btn-icon').textContent='🔍';
-  document.getElementById('btn-txt').textContent='Consultar radicado';
-}
-
-async function buscar(){
-  const raw=document.getElementById('inp-ticket').value.trim();
   if(!raw){showError('Ingresa un número de radicado o correo electrónico.');return;}
   if(!SB_URL||!SB_ANON){showError('Sin conexión. Intenta más tarde.');return;}
 
@@ -767,10 +1054,13 @@ async function buscar(){
   }catch(e){}
 })();
 
-// Auto-buscar desde URL ?t=TD-xxx
+// Auto-buscar desde URL ?t=TD-xxx (compatibilidad links existentes)
 (()=>{
   const t=new URLSearchParams(window.location.search).get('t');
-  if(t){document.getElementById('inp-ticket').value=t.toUpperCase();buscar();}
+  if(t){
+    const el=document.getElementById('inp-cedula');
+    if(el) el.placeholder='Ingresa tu cédula para ver el radicado '+t;
+  }
 })();
 
 // Canvas fondo animado (igual que login)
