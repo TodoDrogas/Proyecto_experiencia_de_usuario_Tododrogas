@@ -1765,7 +1765,13 @@ async function toggleRecord(){
     try{
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
       audioChunks=[]; S.audioB64=null;
-      mediaRecorder=new MediaRecorder(stream,{mimeType:'audio/webm'});
+      const mimeTypes=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'];
+      const supportedMime=mimeTypes.find(m=>MediaRecorder.isTypeSupported(m))||'';
+      S.audioMime=supportedMime||'audio/webm';
+      mediaRecorder=new MediaRecorder(stream,{
+        ...(supportedMime?{mimeType:supportedMime}:{}),
+        audioBitsPerSecond:64000
+      });
       mediaRecorder.ondataavailable=e=>{if(e.data.size>0)audioChunks.push(e.data);};
       mediaRecorder.onstop=()=>{
         const blob=new Blob(audioChunks,{type:'audio/webm'});
@@ -2305,7 +2311,7 @@ async function submitPQR(){
 
     if(S.audioB64){
       fetch(WEBHOOK_AUDIO,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({pqr_id:data.pqr_id||data.radicado,audio_base64:S.audioB64,mime_type:'audio/webm',nombre_paciente:nombre})
+        body:JSON.stringify({pqr_id:data.pqr_id||data.radicado,audio_base64:S.audioB64,mime_type:S.audioMime||'audio/webm',nombre_paciente:nombre})
       }).catch(()=>{});
     }
     if(canvasB64){
