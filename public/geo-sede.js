@@ -1,5 +1,5 @@
 /**
- * geo-sede.js — Geolocalización de sede más cercana · Tododrogas CIA SAS
+ * geo-sede.js — Geolocalización de sede más cercana · Tododrogas
  * ────────────────────────────────────────────────────────────────────────
  * Uso: incluir con <script src="geo-sede.js"></script> en:
  *   - pqr_encuesta.html
