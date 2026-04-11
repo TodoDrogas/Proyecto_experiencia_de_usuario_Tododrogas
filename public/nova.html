@@ -732,13 +732,22 @@ function ntdSys(){
   s+='- SEDES PROPIAS (Tododrogas): Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m.\n';
   s+='- SEDES IN HOUSE (dentro de hospitales/IPS): Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am.\n';
   s+='TODAS las sedes abren sábados. Si el usuario pregunta por horario de sábado confirmar según el tipo de sede.\n';
-  s+='SEDES ESPECIALES POR NOMBRE:\n';
-  s+='- Servicio Farmacéutico Tododrogas Medellín BIC Piso 6 · Calle 50 # 48-03 Piso 6 · EPS: SALUD TOTAL, CEM, PREVENTIVA · Lun-Vie 7am-5:30pm | Sáb 8am-12m\n';
-  s+='- Servicio Farmacéutico Tododrogas Medellín Primer Piso · Carrera 48 # 49-57 · EPS: COOSALUD, SAVIA, ANGIOSUR, PREVENTIVA · Lun-Vie 7am-5:30pm | Sáb 8am-12m\n';
-  s+='Si pregunta por SALUD TOTAL, CEM o PREVENTIVA en Medellín → BIC Piso 6. Si es COOSALUD o SAVIA → Primer Piso. Si SAVIA o COOSALUD pregunta por el BIC Piso 6 → responde que esa sede no atiende su EPS y usa [SEDES:MEDELLIN:EPSMENCIONADA] para mostrar la sede correcta.\n';
+  // Generar catálogo de sedes desde NTD_SEDES_LOCAL para que el LLM tenga datos reales
+  var catalogoSedes='CATÁLOGO DE SEDES (datos reales — usa esto para responder preguntas sobre qué EPS atiende en qué sede o municipio):\n';
+  if(typeof NTD_SEDES_LOCAL!=='undefined'){
+    NTD_SEDES_LOCAL.forEach(function(sede){
+      catalogoSedes+='- '+sede.nombre+' | Municipio: '+(sede.municipio||'')+'| EPS: '+(sede.eps||[]).join(', ')+'\n';
+    });
+  }
+  s+=catalogoSedes;
+  s+='REGLA SEDES ESPECIALES MEDELLÍN: Hay DOS sedes en Medellín en la misma dirección. Consulta SIEMPRE el catálogo para saber qué EPS atiende cada una — NUNCA inventes datos. Casos:\n';
+  s+='  1. "Qué EPS atiende en BIC Piso 6 / Primer Piso" → responde con las EPS del catálogo para esa sede, sin usar [SEDES].\n';
+  s+='  2. "Me atienden en BIC Piso 6 / Primer Piso?" (usuario con EPS conocida) → verifica en catálogo si su EPS está → si SÍ confirma y usa [SEDES:MEDELLIN] → si NO indica que esa sede no atiende su EPS e indica cuál sí lo hace según catálogo, luego usa [SEDES:MEDELLIN].\n';
+  s+='  3. Pregunta general de sedes en Medellín sin mencionar sede específica → usa [SEDES:MEDELLIN] directamente.\n';
+  s+='REGLA MEDICAMENTOS Y MEDICINA: Para CUALQUIER pregunta sobre medicamentos, dosis, enfermedades, tratamientos, reacciones, interacciones — responde con tu conocimiento médico-farmacéutico general de forma clara. Si el usuario menciona medicamento malo, vencido, deteriorado, dañado, equivocado, en mal estado → di SIEMPRE primero: "No lo consuma. Por su seguridad NO utilice ese medicamento." → luego ofrece los datos de contacto: PBX 604 322 2432 / WA 304 341 2431 → luego usa [SEDES:municipio] para mostrar la sede más cercana donde reportarlo.\n';
   s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
   s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
-  s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, mal concentración, deteriorado o equivocado — di SIEMPRE: No lo consuma. Por su seguridad NO utilice ese medicamento. Acérquese al punto más cercano o llame al PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] o [ESCALAR].\n';
+  s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, malo, en mal estado, mal concentración, deteriorado, equivocado, dañado, defectuoso — di SIEMPRE: "No lo consuma. Por su seguridad NO utilice ese medicamento." Luego ofrece contacto: PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] si mencionó municipio, o pregúntale en qué municipio está para mostrarle la sede más cercana.\n';
   s+='REGLA SEDES: Usa [SEDES:municipio] cuando el usuario pregunta por sedes, dónde retirar, cobertura, o si puede reclamar en un municipio. Si hay cobertura en ese municipio → responde que SÍ tiene cobertura Y usa [SEDES:municipio] para mostrar las sedes. Si NO hay cobertura → indícalo brevemente y usa [SEDES:municipio] con EL MISMO municipio que mencionó el usuario (el sistema automáticamente mostrará las más cercanas). NUNCA cambies el municipio por otro diferente al que mencionó el usuario. Si el usuario NO menciona municipio, PREGÚNTALE primero. Si menciona EPS diferente usa [SEDES:municipio:EPSMENCIONADA]. NUNCA respondas solo con texto cuando hay un municipio mencionado — siempre usa [SEDES:municipio]. IMPORTANTE: palabras como "PISO", "BIC", "sede", "dispensario" NO son radicados — si aparecen junto a un municipio siempre usa [SEDES].\n';
   s+='REGLA CONSULTAR: Si el usuario escribe ÚNICAMENTE un número de radicado (formato TD-xxxxx) o un correo electrónico para consultar estado, usa [CONSULTAR:valor]. NUNCA uses [CONSULTAR] cuando el mensaje contiene palabras como EPS, municipio, sede, piso, atención, cobertura — esos son preguntas de sedes.\n';
   s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
