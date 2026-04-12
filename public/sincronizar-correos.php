@@ -439,8 +439,10 @@ if (!$token) {
 // $orderby ASC garantiza que procesamos en orden cronológico exacto
 $filter   = urlencode("isDraft eq false and receivedDateTime gt $cursor_iso");
 $url_base = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/{$INBOX_ID}/messages"
-          . "?\$filter=$filter&\$orderby=" . urlencode('receivedDateTime asc')
-          . "&\$top=50"  // 50 por página — seguro para 1 min de correos
+          . "?\$filter=$filter"
+          . "&\$orderby=" . urlencode('receivedDateTime asc')
+          . "&\$count=true"
+          . "&\$top=50"
           . "&\$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,bodyPreview,body,importance,isRead,conversationId,internetMessageId,flag";
 
 $todos_correos = [];
