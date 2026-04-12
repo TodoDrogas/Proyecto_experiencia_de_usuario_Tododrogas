@@ -721,7 +721,7 @@ function ntdSys(){
   var eps=(NTD.eps||'').toUpperCase();
   var mapa={'ANGIOSUR':'AMAGA,ANDES,CIUDAD BOLIVAR,EL BAGRE,MARINILLA,MEDELLIN,RIONEGRO,SANTA BARBARA,TAMESIS,YOLOMBO','CEM':'ABEJORRAL,AMAGA,ANDES,APARTADO,CAREPA,CAUCASIA,CHIGORODO,CIUDAD BOLIVAR,EL BAGRE,MEDELLIN,PUERTO BERRIO,RIONEGRO,SANTA BARBARA,SANTA FE DE ANTIOQUIA,TAMESIS,TURBO,YARUMAL,YOLOMBO,ZARAGOZA','COOSALUD':'ABEJORRAL,AMAGA,AMALFI,ANGOSTURA,ANORI,APARTADO,ARMENIA,BRICEÑO,CACERES,CAREPA,CAUCASIA,CHIGORODO,CIUDAD BOLIVAR,DABEIBA,EL BAGRE,FRONTINO,GIRALDO,HISPANIA,JERICO,MEDELLIN,MUTATA,NECHI,NECOCLI,PEQUE,PUEBLORRICO,PUERTO BERRIO,PUERTO NARE,REMEDIOS,RIONEGRO,SABANALARGA,SAMANA,SANTA BARBARA,SANTA FE DE ANTIOQUIA,SEGOVIA,TAMESIS,TARAZA,TURBO,URAMITA,VALDIVIA,YALI,YARUMAL,YOLOMBO,ZARAGOZA','NUEVA EPS':'BARBOSA,CAREPA,CAUCASIA,GIRARDOTA,LA CEJA,LA UNION,RIONEGRO,SABANETA,SANTA FE DE ANTIOQUIA,TAMESIS','PREVENTIVA':'MEDELLIN','SALUD TOTAL':'ABEJORRAL,AMAGA,AMALFI,ANDES,ANORI,APARTADO,CACERES,CAREPA,CAUCASIA,CHIGORODO,CIUDAD BOLIVAR,CONCORDIA,COPACABANA,EL BAGRE,FRONTINO,GIRARDOTA,MARINILLA,MEDELLIN,MUTATA,NECOCLI,PUERTO BERRIO,REMEDIOS,RIONEGRO,SANTA BARBARA,TAMESIS,TARAZA,TURBO,YARUMAL,YOLOMBO','SAVIA SALUD':'ABEJORRAL,AMAGA,AMALFI,ANDES,ANGOSTURA,ANORI,ANZA,APARTADO,ARMENIA,BETULIA,BRICEÑO,CACERES,CAICEDO,CAREPA,CAUCASIA,CHIGORODO,CIUDAD BOLIVAR,DABEIBA,EL BAGRE,FRONTINO,GIRALDO,HISPANIA,JARDIN,LIBORINA,MEDELLIN,MUTATA,NECHI,NECOCLI,OLAYA - LLANADAS,PEQUE,PUEBLORRICO,PUERTO BERRIO,REMEDIOS,RIONEGRO,SABANALARGA,SAN JERONIMO,SANTA BARBARA,SANTA FE DE ANTIOQUIA,SEGOVIA,SOPETRAN,TAMESIS,TARAZA,TURBO,VALDIVIA,YALI,YARUMAL,YOLOMBO,ZARAGOZA'};
   var muns=eps&&mapa[eps]?mapa[eps]:'';
-  var s='Eres Nova TD, asistente virtual de Tododrogas.\n';
+  var s='Eres Nova TD, asistente virtual de Tododrogas CIA SAS.\n';
   s+='USUARIO: '+(NTD.usuario&&NTD.usuario.nombre?NTD.usuario.nombre:'?');
   s+=' | EPS: '+(NTD.eps||'Sin EPS')+' (SAVIA SALUD = SAVIA, PREVENTIVA SALUD = PREVENTIVA)\n';
   s+=' | VIP: '+(NTD.usuario&&NTD.usuario.vip?'SI':'No')+'\n';
@@ -752,8 +752,6 @@ function ntdSys(){
   s+='REGLA CONSULTAR: Si el usuario escribe ÚNICAMENTE un número de radicado (formato TD-xxxxx) o un correo electrónico para consultar estado, usa [CONSULTAR:valor]. NUNCA uses [CONSULTAR] cuando el mensaje contiene palabras como EPS, municipio, sede, piso, atención, cobertura — esos son preguntas de sedes.\n';
   s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
   s+='REGLA RADICAR: Si el usuario quiere radicar una PQRSFD, puede hacerlo con su número de cédula directamente en el formulario. Usa [FORMULARIO].\n';
-  s+='REGLA RECLAMAR ANTES: Si el usuario pregunta si puede reclamar sus medicamentos antes de la fecha asignada — responde de forma cordial que con gusto le informas que puede hacerlo entre 3 y 4 días antes de su fecha de entrega. Para conocer los detalles de su caso específico, invítale amablemente a comunicarse a través de los siguientes canales: PBX 604 322 2432 / WhatsApp 304 341 2431 / pqrsfd@tododrogas.com.co. No des más información adicional.\n';
-  s+='REGLA FORMULA VENCIDA: Si el usuario pregunta si puede reclamar con una fórmula vencida o vencida hace X días — responde de forma cordial y empática que la fórmula médica debe encontrarse vigente al momento de la dispensación. Luego invítale amablemente a comunicarse para conocer su caso específico a través de los siguientes canales: PBX 604 322 2432 / WhatsApp 304 341 2431 / pqrsfd@tododrogas.com.co. No des más información adicional.\n';
   s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
   return s;
 }
@@ -890,10 +888,16 @@ async function ntdDispatch(txt){
     };
     if(opc[n]){NTD.busy=false;opc[n]();return;}
   }
-  // Si parece radicado (TD-xxxxxx o correo), consultar directo sin pasar por GPT
-  if(/^TD-[\d\-]+$/i.test(txt.trim())||/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(txt.trim())||/^\d{6,12}$/.test(txt.trim())){
+  // Si parece radicado TD- o correo, consultar directo
+  if(/^TD-[\d\-]+$/i.test(txt.trim())||/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(txt.trim())){
     ntdAddMsg('nova',ntdR2H('Consultando tu radicado...'));
     await ntdFetchRadicado(txt.trim());
+    return;
+  }
+  // Si parece cédula (solo dígitos 6-12), buscar radicados por cédula
+  if(/^\d{6,12}$/.test(txt.trim())){
+    ntdAddMsg('nova',ntdR2H('Consultando tus radicados con esa cédula...'));
+    await ntdFetchRadicadosCedula(txt.trim());
     return;
   }
   return ntdFLibre(txt);
@@ -902,7 +906,7 @@ async function ntdDispatch(txt){
 function ntdStart(){
   ntdSep();
   ntdAddMsg('nova',
-    `<p>¡Hola! 👋 Bienvenido/a a la línea de atención virtual de <strong>Tododrogas</strong>.</p>
+    `<p>¡Hola! 👋 Bienvenido/a a la línea de atención virtual de <strong>Tododrogas CIA SAS</strong>.</p>
      <p>Soy <strong>Nova TD</strong>, tu asistente. Gracias por ponerte en contacto con nosotros.</p>
      <p>Antes de iniciar, es necesario que aceptes nuestras políticas de tratamiento de datos. Si deseas conocerlas, ingresa aquí: <a href="${NTD_C.polUrl}" target="_blank" style="color:#93c5fd;text-decoration:underline">📄 Ver política</a></p>
      <p style="margin-top:6px"><strong>Para continuar elige:</strong></p>`,
@@ -974,7 +978,7 @@ async function ntdBienvenidaYEps(){
   const nombre=NTD.usuario.primerNombre||NTD.usuario.nombre||'estimado/a usuario/a';
   const eps=NTD.eps||'';
   ntdAddMsg('nova', ntdR2H(
-    `✅ **¡Bienvenido/a, ${nombre}!**\n\nEs un gusto atenderle. Soy **Nova TD**, la asistente virtual de **Tododrogas**.\n\nIdentificamos que usted está afiliado/a a **${eps}**.`
+    `✅ **¡Bienvenido/a, ${nombre}!**\n\nEs un gusto atenderle. Soy **Nova TD**, la asistente virtual de **Tododrogas CIA SAS**.\n\nIdentificamos que usted está afiliado/a a **${eps}**.`
   ));
   await ntdDelay(700);
   ntdAddMsg('nova',
@@ -1805,7 +1809,7 @@ function ntdMostrarEncuestaFinal(forzar){
   ntdAddMsg('nova',
     ntdR2H(
       'Ha sido un honor acompañarle, **'+n+'**. 🌟\n\n'
-      +'Su satisfacción es nuestra mayor motivación en **Tododrogas**. '
+      +'Su satisfacción es nuestra mayor motivación en **Tododrogas CIA SAS**. '
       +'¿Cómo calificaría la atención recibida hoy?'
     ),
     '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:6px">'
@@ -1916,7 +1920,7 @@ async function ntdFLibre(txt){
   try{
     const ntdProxy=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
     const resp=await fetch(ntdProxy,{
-      method:'POST',headers:{'Content-Type':'application/json'},
+      method:'POST',headers:{'Content-Type':'application/json','X-Nova-Token':(typeof window.NOVA_TOKEN!=='undefined'?window.NOVA_TOKEN:'__NOVA_TOKEN__')},
       body:JSON.stringify({system:ntdSys(),messages:NTD.hist.slice(-20),max_tokens:1500})
     });
     if(!resp.ok)throw new Error('HTTP '+resp.status);
@@ -1995,6 +1999,48 @@ function ntdSetEps(eps){
   ntdAddMsg('nova',ntdR2H(`EPS actualizada a **${eps}** ✅`),
     `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Ver puntos de dispensación</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button></div>`);
   ntdEna('Escribe tu mensaje...');
+}
+
+async function ntdFetchRadicadosCedula(cedula){
+  ntdTyping(true);ntdAddSk();
+  let d;
+  try{
+    const r=await fetch(NTD_C.consulta,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({accion:'radicados_cedula',cedula:cedula})});
+    d=await r.json();
+  }catch(e){d={encontrado:false};}
+  ntdRmSk();ntdTyping(false);
+  if(!d.encontrado||!d.radicados?.length){
+    ntdAddMsg('nova',
+      `<p>No encontramos radicados asociados a la cédula <strong>${cedula}</strong>.</p>
+       <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.6)">Verifica que el número sea correcto o consulta en nuestra plataforma.</p>`,
+      ntdBotonesFinales(`<a href="${NTD_C.consultaUrl}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">1️⃣ &nbsp;🔍 Consultar en plataforma →</a>`));
+    return;
+  }
+  const lista=d.radicados.slice(0,5).map((r,i)=>{
+    const est=r.estado||'pendiente';
+    const bc=est==='solucionado'?'ntd-bg':(est==='urgente'?'ntd-br':'ntd-by');
+    const tipo=r.tipo||'—';
+    const fecha=r.creado?new Date(r.creado).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    return `<div class="ntd-ir" style="cursor:pointer" onclick="ntdVerRadicado('${r.ticket_id||r.id}')">
+      <span class="ntd-il">${r.ticket_id||'Sin ticket'}</span>
+      <span class="ntd-badge ${bc}">${est.toUpperCase()}</span>
+    </div>
+    <div style="font-size:11px;color:rgba(190,215,255,.5);padding:0 4px 6px">${tipo} · ${fecha}${r.mensaje_ux?'<br><span style="color:rgba(100,220,150,.8)">'+r.mensaje_ux+'</span>':''}</div>`;
+  }).join('');
+  ntdAddMsg('nova',
+    `<p>Encontré <strong>${d.total}</strong> radicado${d.total>1?'s':''} para la cédula ${cedula}:</p>
+     <div class="ntd-ic">${lista}</div>`,
+    ntdBotonesFinales(`<a href="${NTD_C.consultaUrl}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">🔍 &nbsp;Ver detalle completo →</a>`));
+}
+
+function ntdVerRadicado(ticket_id){
+  if(!ticket_id)return;
+  ntdConsultarRadicado();
+  setTimeout(()=>{
+    const ta=document.getElementById('ntdTa');
+    if(ta){ta.value=ticket_id;ntdSend();}
+  },300);
 }
 
 async function ntdFetchRadicado(ticket){
@@ -2122,11 +2168,8 @@ async function ntdStartRec(){
   try{
     var stream=await navigator.mediaDevices.getUserMedia({audio:true});
     ntdRecChunks=[];
-    var mimes=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/ogg'];
-    var mime=mimes.find(function(m){return MediaRecorder.isTypeSupported(m);})||'';
-    ntdRec=new MediaRecorder(stream,{
-      ...(mime?{mimeType:mime}:{}),audioBitsPerSecond:64000
-    });
+    var mime=MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/mp4';
+    ntdRec=new MediaRecorder(stream,{mimeType:mime});
     ntdRec.ondataavailable=function(e){if(e.data&&e.data.size>0)ntdRecChunks.push(e.data);};
     ntdRec.onstop=async function(){
       stream.getTracks().forEach(function(t){t.stop();});
@@ -2156,7 +2199,7 @@ async function ntdProcesarAudio(blob){
     var reader=new FileReader();
     var b64=await new Promise(function(res){reader.onload=function(e){res(e.target.result.split(',')[1]);};reader.readAsDataURL(blob);});
     var prx=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
-    var r=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json'},
+    var r=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json','X-Nova-Token':(typeof window.NOVA_TOKEN!=='undefined'?window.NOVA_TOKEN:'__NOVA_TOKEN__')},
       body:JSON.stringify({action:'whisper',audio_base64:b64,mime_type:blob.type||'audio/webm',
         prompt:'EPS colombianas: COOSALUD, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, PREVENTIVA SALUD, CEM, ANGIOSUR. Municipios de Antioquia: Medellín, Rionegro, Apartadó, Turbo, Caucasia, Yarumal, Segovia, Santa Fe de Antioquia.'})});
     var d=await r.json();var txt=(d.text||'').trim();
