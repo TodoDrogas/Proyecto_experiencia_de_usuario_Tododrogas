@@ -3899,64 +3899,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(cargarEstadoSync, 60000); // Verificar cada minuto
 });
 
-// ── SYNC V3 ────────────────────────────────────────────────────────
-const SYNC_PHP = '/sincronizar-correos.php';
-const ADMIN_TOKEN_V3 = window.ADMIN_PASS || '';
-
-async function cargarEstadoSync() {
-  const badge   = document.getElementById('sync-estado-badge');
-  const btnInic = document.getElementById('btn-iniciar-sync');
-  const btnCiclo= document.getElementById('btn-nuevo-ciclo');
-  if (!badge || !btnInic || !btnCiclo) return;
-  try {
-    const r = await fetch(`${SYNC_PHP}?accion=estado&token=${ADMIN_TOKEN_V3}`);
-    if (!r.ok) { btnInic.style.display='inline-flex'; btnCiclo.style.display='none'; badge.style.display='none'; return; }
-    const d = await r.json();
-    const sync = d.sync || {};
-    if (sync.activo) {
-      badge.style.display='inline-flex'; btnInic.style.display='none'; btnCiclo.style.display='inline-flex';
-      if (sync.ultimo_sync) {
-        const ls = document.getElementById('lastSync');
-        if (ls) ls.textContent = 'Sync: ' + new Date(sync.ultimo_sync).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
-      }
-    } else {
-      badge.style.display='none'; btnInic.style.display='inline-flex'; btnCiclo.style.display='none';
-    }
-  } catch(e) { const b=document.getElementById('btn-iniciar-sync'); if(b) b.style.display='inline-flex'; }
-}
-
-async function iniciarSync() {
-  if (!confirm('¿Activar sincronización desde este momento?\n\nSolo se sincronizarán correos a partir de ahora.')) return;
-  const btn = document.getElementById('btn-iniciar-sync');
-  btn.disabled=true; btn.textContent='⏳ Iniciando…';
-  try {
-    const r = await fetch(`${SYNC_PHP}?accion=iniciar&token=${ADMIN_TOKEN_V3}`);
-    const d = await r.json();
-    if (d.ok) { showToast('✅ Sincronización iniciada. El cron comenzará cada minuto.','success'); await cargarEstadoSync(); }
-    else showToast('❌ Error: '+(d.motivo||'desconocido'),'error');
-  } catch(e) { showToast('❌ Error de conexión','error'); }
-  btn.disabled=false; btn.textContent='▶ Iniciar sync';
-}
-
-async function nuevoCiclo() {
-  if (!confirm('♻ NUEVO CICLO\n\n1. Genera backup JSON en Supabase Storage\n2. Elimina correos, adjuntos e historial\n3. Reinicia cursor\n\n¿Confirmas? NO se puede deshacer.')) return;
-  const btn = document.getElementById('btn-nuevo-ciclo');
-  btn.disabled=true; btn.textContent='⏳ Procesando…';
-  showToast('⏳ Generando backup… puede tardar 30-60 segundos.','info');
-  try {
-    const r = await fetch(`${SYNC_PHP}?accion=nuevo_ciclo&token=${ADMIN_TOKEN_V3}`);
-    const d = await r.json();
-    if (d.ok) { showToast(`✅ Ciclo reiniciado. Backup: ${d.backup_path}`, 'success'); setTimeout(()=>window.location.reload(),2000); }
-    else showToast('❌ Error: '+(d.motivo||'desconocido'),'error');
-  } catch(e) { showToast('❌ Timeout o error de conexión','error'); }
-  btn.disabled=false; btn.textContent='♻ Nuevo ciclo';
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(cargarEstadoSync, 2000);
-  setInterval(cargarEstadoSync, 60000);
-});
-
 function logout(){sessionStorage.clear();window.location.href='login.html';}
 async function getGraphToken(){
   try{
