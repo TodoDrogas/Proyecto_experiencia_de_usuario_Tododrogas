@@ -3662,10 +3662,15 @@ async function _calcularAutoAsignacion() {
   const tickets = await sb('correos?estado=eq.pendiente&agente_id=is.null&select=id,ticket_id,subject,received_at,agente_id&order=received_at.asc&limit=200') || [];
   if(!tickets.length) return { total: 0, asignaciones: [], distribucion: [] };
 
-  // 2. Obtener agentes activos ordenados por carga
-  const agentes = (await sb('agentes?activo=eq.true&select=id,nombre,email,casos_activos&order=casos_activos.asc') || [])
-    .map(a => ({ ...a, carga_actual: parseInt(a.casos_activos) || 0 }));
-  if(!agentes.length) throw new Error('No hay agentes activos en el sistema.');
+  // 2. Obtener agentes activos + contar carga REAL desde correos (no casos_activos estático)
+  const agentesRaw = await sb('agentes?activo=eq.true&select=id,nombre,email&order=nombre.asc') || [];
+  if(!agentesRaw.length) throw new Error('No hay agentes activos en el sistema.');
+  const correosActivos = await sb("correos?estado=in.(pendiente,gestion,pendiente_firma)&agente_id=not.is.null&select=agente_id") || [];
+  const cargaMap = {};
+  agentesRaw.forEach(a => cargaMap[a.id] = 0);
+  correosActivos.forEach(c => { if(cargaMap[c.agente_id]!==undefined) cargaMap[c.agente_id]++; });
+  const agentes = agentesRaw.map(a => ({ ...a, carga_actual: cargaMap[a.id] || 0 }))
+    .sort((a,b) => a.carga_actual - b.carga_actual);
 
   // 3. Algoritmo round-robin ponderado
   const cargaExtra = {};
@@ -4216,8 +4221,246 @@ function exportarEncuestasExcel() {
 
 
 let _rrData=[],_rrCat='todas',_rrLoaded=false;
-async function abrirPanelRR(){const p=document.getElementById('panelRR');if(!p)return;p.style.display='flex';if(!_rrLoaded){document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">⏳ Cargando...</div>';try{_rrData=await sb('knowledge_base?activo=eq.true&order=categoria.asc,veces_usado.desc&limit=200')||[];_rrLoaded=true;_rrRC();}catch(e){document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px">❌ Error al cargar plantillas</div>';return;}}renderRR();}
-function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p)p.style.display='none';}
+// ── RESPUESTAS RÁPIDAS v2 — Plantillas + GPT ─────────────────────────
+const RR_TIPOS = [
+  { id:'municipios_no_propios_envio',    cat:'Municipios No Propios', label:'Envío programado hoy' },
+  { id:'municipios_no_propios_compras',  cat:'Municipios No Propios', label:'Solicitado a compras' },
+  { id:'municipios_propios_traslado',    cat:'Municipios Propios',    label:'Traslado programado' },
+  { id:'municipios_propios_disponible',  cat:'Municipios Propios',    label:'Disponible en SF' },
+  { id:'formula_errada',                 cat:'Fórmula',               label:'Fórmula errada' },
+  { id:'formula_vencida',                cat:'Fórmula',               label:'Fórmula vencida' },
+  { id:'nivel1_ese',                     cat:'Nivel',                 label:'Nivel 1 — le corresponde a ESE' },
+  { id:'ruta_autoinmune',                cat:'Ruta',                  label:'Usuario en ruta AUTOINMUNE' },
+  { id:'domicilio',                      cat:'Domicilio',             label:'Envío a domicilio' },
+  { id:'agotado',                        cat:'Agotado',               label:'Medicamento agotado' },
+  { id:'sin_formula',                    cat:'Fórmula',               label:'Sin fórmula médica' },
+  { id:'no_contratado',                  cat:'Contrato',              label:'No contratado con EPS' },
+  { id:'sin_cobertura',                  cat:'Cobertura',             label:'Sin cobertura en municipio' },
+  { id:'direccionamiento_vencido',       cat:'Direccionamiento',      label:'Direccionamiento vencido' },
+  { id:'rechazado_glp1',                 cat:'GLP1',                  label:'Rechazado GLP1' },
+  { id:'cotizacion',                     cat:'Cotización',            label:'Pasa a cotización' },
+  { id:'compras_preparado',              cat:'Compras',               label:'Preparado magistral' },
+  { id:'glp1_tique',                     cat:'GLP1',                  label:'Tique GLP1 sin historial' },
+  { id:'gpt_personalizada',              cat:'IA',                    label:'✨ Generar con IA según el correo' },
+];
+
+const RR_PLANTILLAS = {
+  municipios_no_propios_envio: `Buen día,
+
+Se informa que el medicamento [MEDICAMENTO] será enviado el día de hoy para el municipio de [MUNICIPIO], para su entrega efectiva el día [FECHA] en horas de la tarde. Adjunto formato de entrega como evidencia de facturación.
+
+Quedo atenta, feliz día.`,
+  municipios_no_propios_compras: `Buen día,
+
+Se informa que el medicamento [MEDICAMENTO] fue solicitado al área de compras, tiene fecha de llegada para el día [FECHA LLEGADA], para su entrega efectiva el día [FECHA ENTREGA] en horas de la tarde. Adjunto formato de pendientes como evidencia de facturación.
+
+Quedo atenta, feliz día.`,
+  municipios_propios_traslado: `Buen día,
+
+Se informa que el medicamento [MEDICAMENTO] será enviado el día de hoy en traslado para el municipio [MUNICIPIO], para su entrega efectiva el día [FECHA] en horas de la tarde. Adjunto formato de pendientes como evidencia de facturación.
+
+Quedo atenta, feliz día.`,
+  municipios_propios_disponible: `Buen día,
+
+Se informa que el medicamento [MEDICAMENTO] ya se encuentra disponible en el servicio farmacéutico de [SEDE] listo para ser entregado al usuario. Adjunto formato de entrega como evidencia de facturación.
+
+Quedo atenta, feliz día.`,
+  formula_errada: `Buen día,
+
+Se informa que la fórmula del medicamento [MEDICAMENTO] se encuentra errada: [DESCRIPCIÓN DEL ERROR]. Por favor corregir para su respectiva gestión.
+
+Quedo atenta, feliz día.`,
+  formula_vencida: `Buen día,
+
+Se informa que la fórmula se encuentra vencida, por lo que no se puede realizar la dispensación. Por favor adjuntar fórmula vigente para su respectiva gestión.
+
+Quedo atenta, feliz día.`,
+  nivel1_ese: `Buen día,
+
+Se informa que el medicamento [MEDICAMENTO] es de nivel 1, por lo tanto, le corresponde a la ESE del municipio.
+
+Quedo atenta, feliz día.`,
+  ruta_autoinmune: `Buen día,
+
+El usuario se encuentra activo en la ruta AUTOINMUNE.
+
+Quedo atenta, feliz día.`,
+  domicilio: `Buen día,
+
+Se informa que el medicamento [MEDICAMENTO] será enviado el día de hoy a domicilio a la dirección [DIRECCIÓN]. Inmediatamente sea entregado el medicamento, el acta de entrega firmada será enviada por este mismo medio.
+
+Quedo atenta, feliz día.`,
+  agotado: `Buen día,
+
+Se informa que el medicamento [MEDICAMENTO] se encuentra agotado. Adjunto carta por parte del laboratorio.
+
+Quedo atenta, feliz día.`,
+  sin_formula: `Buen día,
+
+Se informa que no contamos con fórmula médica del usuario. Tratamos de comunicarnos al número [TELÉFONO] para brindar la información, pero no obtuvimos respuesta. Adjunto evidencia de las llamadas. Por favor compartir fórmula para su respectiva gestión.
+
+Quedo atenta, feliz día.`,
+  no_contratado: `Buen día,
+
+Se informa que el medicamento [MEDICAMENTO] no se encuentra dentro del listado de medicamentos contratados con la EPS [EPS].
+
+Quedo atenta, feliz día.`,
+  sin_cobertura: `Buen día,
+
+El usuario es del municipio [MUNICIPIO]. En el momento no contamos con cobertura al municipio. Se le informó que el SF más cercano es [SF CERCANO].
+
+Quedo atenta, feliz día.`,
+  direccionamiento_vencido: `Buen día,
+
+Se informa que el direccionamiento [NÚMERO] se encuentra vencido desde el [FECHA]. Por favor extender fecha para realizar la respectiva gestión.
+
+Quedo atenta, feliz día.`,
+  rechazado_glp1: `Buen día,
+
+Se realizó el estudio para el medicamento [MEDICAMENTO] y este fue rechazado.
+
+Quedo atenta, feliz día.`,
+  cotizacion: `Buen día,
+
+El medicamento [MEDICAMENTO] pasa a proceso de cotización dado que no se encuentra dentro del listado de medicamentos contratados con la EPS.
+
+Quedo atenta, feliz día.`,
+  compras_preparado: `Buen día,
+
+Solicito de su colaboración con la preparación del medicamento [MEDICAMENTO] para el usuario [TIPO_DOC]-[CC]-[NOMBRE] cantidad [CANTIDAD]. Adjunto fórmula médica, historia clínica.
+
+Nota: prioridad por favor
+
+Quedo atenta, feliz tarde.`,
+  glp1_tique: `Análisis QF de medicamento GLP1 PACIENTE: [NOMBRE] CC: [CC], MEDICAMENTO: [MEDICAMENTO], TEL: [TELÉFONO]`,
+};
+
+let _rrGPTLoading = false;
+
+async function abrirPanelRR(){
+  const p=document.getElementById('panelRR');
+  if(!p)return;
+  p.style.visibility='visible';p.style.opacity='1';p.style.pointerEvents='auto';
+  renderRRDropdown();
+  if(!_rrLoaded){
+    try{
+      _rrData=await sb('knowledge_base?activo=eq.true&order=categoria.asc,veces_usado.desc&limit=200')||[];
+      _rrLoaded=true;_rrRC();
+    }catch(e){}
+  }
+  renderRR();
+}
+function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p){p.style.visibility='hidden';p.style.opacity='0';p.style.pointerEvents='none';}}
+
+function renderRRDropdown(){
+  const cats=[...new Set(RR_TIPOS.map(t=>t.cat))];
+  const catEl=document.getElementById('rrCategorias');
+  if(catEl) catEl.innerHTML=cats.map(c=>
+    `<button onclick="filtrarRRCat('${c}')" style="font-size:10px;padding:3px 8px;border-radius:99px;border:1px solid #e2e8f0;background:#f8fafc;cursor:pointer;font-family:inherit">${c}</button>`
+  ).join('');
+  renderRRLista();
+}
+
+function filtrarRRCat(cat){
+  document.querySelectorAll('#rrCategorias button').forEach(b=>{
+    b.style.background=b.textContent===cat?'#2563eb':'#f8fafc';
+    b.style.color=b.textContent===cat?'#fff':'inherit';
+  });
+  renderRRLista(cat);
+}
+
+function renderRRLista(cat){
+  const lista=document.getElementById('rrLista');
+  if(!lista)return;
+  const tipos=cat?RR_TIPOS.filter(t=>t.cat===cat):RR_TIPOS;
+  lista.innerHTML=tipos.map(t=>`
+    <div onclick="seleccionarRRTipo('${t.id}')" style="padding:10px 12px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .15s"
+      onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''"  >
+      <div style="font-size:11px;color:#64748b;font-weight:600">${t.cat}</div>
+      <div style="font-size:13px;color:#0f172a;font-weight:500;margin-top:2px">${t.label}</div>
+    </div>`).join('');
+}
+
+async function seleccionarRRTipo(id){
+  if(id==='gpt_personalizada'){
+    await generarRRconGPT();
+    return;
+  }
+  const plantilla=RR_PLANTILLAS[id]||'';
+  insertarTextoEnReply(plantilla);
+  cerrarPanelRR();
+}
+
+function insertarTextoEnReply(texto){
+  if(typeof toggleReply==='function') toggleReply('reply');
+  setTimeout(()=>{
+    const ed=document.querySelector('#replyBoxArea [contenteditable]');
+    if(!ed){cerrarPanelRR();return;}
+    const html=texto
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\n/g,'<br>')
+      .replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');
+    ed.innerHTML=html;
+    ed.focus();
+    const v=ed.querySelector('span[style*="fef08a"]');
+    if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}
+  },300);
+}
+
+async function generarRRconGPT(){
+  const lista=document.getElementById('rrLista');
+  if(!lista)return;
+  if(_rrGPTLoading)return;
+  _rrGPTLoading=true;
+  lista.innerHTML='<div style="padding:24px;text-align:center"><div style="font-size:24px;margin-bottom:8px">✨</div><div style="font-size:12px;color:#64748b">Generando respuesta con IA...</div></div>';
+
+  // Obtener contexto del correo abierto
+  const asunto=document.getElementById('mpAsunto')?.textContent||document.getElementById('mgmtAsunto')?.textContent||'';
+  const remitente=document.getElementById('mpRemitente')?.textContent||document.getElementById('mgmtRemitente')?.textContent||'';
+  const cuerpo=document.querySelector('#emailBody')?.innerText||document.querySelector('#mpBody')?.innerText||'';
+  const tipo=document.getElementById('mgmtEstadoBadge')?.textContent||'';
+
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:1000,
+        system:`Eres una asesora de servicio al cliente de Tododrogas CIA SAS, una farmacia especializada en medicamentos de alto costo. 
+Tu función es redactar respuestas profesionales, cálidas y concisas a correos de PQRSFD (Peticiones, Quejas, Reclamos, Sugerencias, Felicitaciones, Denuncias).
+Usa siempre "Buen día," como saludo y "Quedo atenta, feliz día." como cierre.
+Si no tienes información específica usa [DATO] como placeholder.
+Máximo 5 líneas. Sin explicaciones adicionales. Solo el cuerpo del correo.`,
+        messages:[{role:'user',content:`Redacta una respuesta profesional para este correo:
+Asunto: ${asunto}
+De: ${remitente}
+Tipo: ${tipo}
+Contenido: ${cuerpo.substring(0,800)}`}]
+      })
+    });
+    const data=await resp.json();
+    const texto=data.content?.[0]?.text||'No se pudo generar respuesta.';
+    lista.innerHTML=`
+      <div style="padding:12px">
+        <div style="font-size:11px;color:#64748b;font-weight:600;margin-bottom:8px">✨ Respuesta generada por IA</div>
+        <div id="gptRRTexto" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-size:12px;color:#0f172a;white-space:pre-wrap;line-height:1.6">${esc(texto)}</div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="insertarTextoEnReply(document.getElementById('gptRRTexto').textContent);cerrarPanelRR();"
+            style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer">
+            ✅ Usar esta respuesta
+          </button>
+          <button onclick="seleccionarRRTipo('gpt_personalizada')"
+            style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:9px;font-size:12px;cursor:pointer">
+            🔄 Regenerar
+          </button>
+        </div>
+      </div>`;
+  }catch(e){
+    lista.innerHTML=`<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px">❌ Error al generar: ${e.message}</div>`;
+  }
+  _rrGPTLoading=false;
+}
 function _rrRC(){const cats=['todas',...new Set(_rrData.map(p=>p.categoria).filter(Boolean))];const el=document.getElementById('rrCategorias');if(!el)return;el.innerHTML=cats.map(c=>`<button class="rr-cat-btn${c===_rrCat?' active':''}" onclick="_rrSC('${c.replace(/'/g,"\\'")}')"> ${c==='todas'?'Todas':c}</button>`).join('');}
 function _rrSC(c){_rrCat=c;_rrRC();renderRR();}
 function renderRR(){const q=(document.getElementById('rrSearch')?.value||'').toLowerCase();let l=_rrData;if(_rrCat!=='todas')l=l.filter(p=>p.categoria===_rrCat);if(q)l=l.filter(p=>(p.situacion||'').toLowerCase().includes(q)||(p.categoria||'').toLowerCase().includes(q));const el=document.getElementById('rrLista');if(!el)return;if(!l.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">Sin resultados</div>';return;}el.innerHTML=l.map(p=>`<div class="rr-item" onclick="insertarRR(${p.id})"><div class="rr-cat">${esc(p.categoria||'')}${p.veces_usado?` · <span style='color:#2563eb'>${p.veces_usado}x</span>`:''}</div><div class="rr-sit">${esc(p.situacion||'')}</div><div class="rr-prev">${esc((p.respuesta_modelo||'').substring(0,100))}…</div></div>`).join('');}
@@ -4643,7 +4886,7 @@ function exportNovaExcel(){
     <input type="text" id="rrSearch" placeholder="🔍 Buscar plantilla..." oninput="renderRR()" style="width:100%;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:12px;font-family:inherit;outline:none">
     <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px"></div>
   </div>
-  <div id="rrLista" style="flex:1;overflow-y:auto;padding:8px"></div>
+  <div id="rrLista" style="flex:1;overflow-y:auto"></div>
 </div>
 
 <script>
