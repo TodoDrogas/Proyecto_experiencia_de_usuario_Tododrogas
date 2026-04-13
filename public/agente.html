@@ -2093,7 +2093,7 @@ let _acCache = null;
 async function _acCargar() {
   if(_acCache) return _acCache;
   try {
-    _acCache = await sb('contactos_frecuentes?activo=eq.true&order=frecuencia.desc&limit=500') || [];
+    _acCache = await sb('contactos_frecuentes?bloqueado=eq.false&order=nombre.asc&limit=1000') || [];
   } catch(e) { _acCache = []; }
   return _acCache;
 }
@@ -2112,8 +2112,7 @@ async function _acBuscar(q) {
   return all.filter(c =>
     _acNorm(c.nombre).includes(n) ||
     _acNorm(c.email).includes(n)  ||
-    _acNorm(c.cargo||'').includes(n) ||
-    (c.aliases||[]).some(a => _acNorm(a).includes(n))
+    _acNorm(c.telefono||'').includes(n)
   ).slice(0,8);
 }
 
@@ -2184,7 +2183,7 @@ function _acShow(inp, resultados, query) {
       <div style="min-width:0;flex:1">
         <div style="font-size:12px;font-weight:700;color:var(--ink,#1e293b);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_acHL(c.nombre||'',query)}</div>
         <div style="font-size:10px;color:var(--ink3,#94a3b8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_acHL(c.email,query)}${aliasCount?' <span style="opacity:.6">+'+aliasCount+' alias</span>':''}</div>
-        ${c.cargo?`<div style="font-size:10px;color:#3B82F6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.cargo}</div>`:''}
+        ${c.telefono?`<div style="font-size:10px;color:#3B82F6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.telefono}</div>`:''}
       </div>
       ${c.frecuencia>0?`<div style="font-size:9px;color:var(--ink3,#94a3b8);flex-shrink:0">×${c.frecuencia}</div>`:''}
     </div>`;
@@ -2214,9 +2213,7 @@ function _acSelect(el) {
   if(nextInput) nextInput.focus();
   _acHide();
   // Incrementar frecuencia (silent)
-  sb(`contactos_frecuentes?email=eq.${encodeURIComponent(email)}`)
-    .then(r => { if(r?.[0]?.id) sb(`contactos_frecuentes?id=eq.${r[0].id}`,'PATCH',{frecuencia:(r[0].frecuencia||0)+1}).catch(()=>{}); })
-    .catch(()=>{});
+  // frecuencia no existe en esta tabla — omitido
 }
 
 function _acInit(inp) {
@@ -2540,8 +2537,8 @@ async function renderMediaFormulario(email) {
 
 
 let _rrData=[],_rrCat='todas',_rrLoaded=false;
-async function abrirPanelRR(){const p=document.getElementById('panelRR');if(!p)return;p.style.display='flex';if(!_rrLoaded){document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">⏳ Cargando...</div>';try{_rrData=await sb('knowledge_base?activo=eq.true&order=categoria.asc,veces_usado.desc&limit=200')||[];_rrLoaded=true;_rrRC();}catch(e){document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px">❌ Error al cargar plantillas</div>';return;}}renderRR();}
-function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p)p.style.display='none';}
+async function abrirPanelRR(){const p=document.getElementById('panelRR');if(!p)return;p.style.display='flex';p.style.visibility='visible';p.style.opacity='1';p.style.pointerEvents='auto';if(!_rrLoaded){document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">⏳ Cargando...</div>';try{_rrData=await sb('knowledge_base?activo=eq.true&order=categoria.asc,veces_usado.desc&limit=200')||[];_rrLoaded=true;_rrRC();}catch(e){document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px">❌ Error al cargar plantillas</div>';return;}}renderRR();}
+function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p){p.style.display='none';p.style.visibility='hidden';p.style.opacity='0';p.style.pointerEvents='none';}}
 function _rrRC(){const cats=['todas',...new Set(_rrData.map(p=>p.categoria).filter(Boolean))];const el=document.getElementById('rrCategorias');if(!el)return;el.innerHTML=cats.map(c=>`<button class="rr-cat-btn${c===_rrCat?' active':''}" onclick="_rrSC('${c.replace(/'/g,"\\'")}')"> ${c==='todas'?'Todas':c}</button>`).join('');}
 function _rrSC(c){_rrCat=c;_rrRC();renderRR();}
 function renderRR(){const q=(document.getElementById('rrSearch')?.value||'').toLowerCase();let l=_rrData;if(_rrCat!=='todas')l=l.filter(p=>p.categoria===_rrCat);if(q)l=l.filter(p=>(p.situacion||'').toLowerCase().includes(q)||(p.categoria||'').toLowerCase().includes(q));const el=document.getElementById('rrLista');if(!el)return;if(!l.length){el.innerHTML='<div style="padding:24px;text-align:center;color:var(--ink3);font-size:12px">Sin resultados</div>';return;}el.innerHTML=l.map(p=>`<div class="rr-item" onclick="insertarRR(${p.id})"><div class="rr-cat">${esc(p.categoria||'')}${p.veces_usado?` · <span style='color:#2563eb'>${p.veces_usado}x</span>`:''}</div><div class="rr-sit">${esc(p.situacion||'')}</div><div class="rr-prev">${esc((p.respuesta_modelo||'').substring(0,100))}…</div></div>`).join('');}
@@ -2549,7 +2546,7 @@ async function insertarRR(id){const p=_rrData.find(x=>x.id===id);if(!p)return;if
 
 </script>
 <!-- ⚡ Panel Respuestas Rápidas -->
-<div id="panelRR" style="visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;right:0;width:380px;height:100vh;background:#fff;border-left:2px solid #e2e8f0;box-shadow:-6px 0 32px rgba(0,0,0,.15);z-index:9999;display:flex;flex-direction:column;transition:opacity .2s">
+<div id="panelRR" style="display:none;position:fixed;top:0;right:0;width:380px;height:100vh;background:#fff;border-left:2px solid #e2e8f0;box-shadow:-6px 0 32px rgba(0,0,0,.15);z-index:9999;flex-direction:column;transition:opacity .2s">
   <div style="padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;flex-shrink:0">
     <span style="font-size:16px">⚡</span>
     <span style="font-weight:700;font-size:14px;color:#0f172a">Respuestas Rápidas</span>
