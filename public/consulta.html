@@ -478,10 +478,13 @@ const SB_ANON = window.SUPABASE_KEY  || '';
 const ESTADOS = {
   abierto:    {label:'📬 Recibido',    cls:'eb-abierto'},
   pendiente:  {label:'📬 Recibido',    cls:'eb-abierto'},
-  en_gestion: {label:'⚙️ En gestión', cls:'eb-en_gestion'},
-  respondido: {label:'✅ Respondido', cls:'eb-respondido'},
-  cerrado:    {label:'🔒 Solucionado', cls:'eb-respondido'},
-  escalado:   {label:'🔺 Escalado',   cls:'eb-escalado'},
+  en_gestion:      {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
+  gestion:         {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
+  gestionado:      {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
+  respondido:      {label:'✅ Solucionado',             cls:'eb-respondido'},
+  cerrado:         {label:'✅ Solucionado',             cls:'eb-respondido'},
+  pendiente_firma: {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
+  escalado:        {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
 };
 
 const EV_COLOR = {
@@ -701,8 +704,10 @@ const MENSAJES_ESTADO = {
     reclamo:  { icon:'🔍', msg:'Tu reclamo está siendo revisado por nuestro equipo especializado.', cls:'azul' },
     default:  { icon:'🔍', msg:'Tu caso está siendo gestionado activamente por nuestro equipo.', cls:'azul' },
   },
-  respondido:      { default: { icon:'📩', msg:'Recibiste una respuesta de nuestro equipo. Revisa tu correo electrónico.', cls:'verde' } },
-  pendiente_firma: { default: { icon:'✍️', msg:'Tu caso requiere firma de cierre. Un asesor se comunicará contigo.', cls:'morado' } },
+  respondido:      { default: { icon:'✅', msg:'Tu caso fue atendido y solucionado. Gracias por comunicarte con Tododrogas.', cls:'verde' } },
+  pendiente_firma: { default: { icon:'🔍', msg:'Tu caso está en gestión prioritaria. Un agente se comunicará contigo pronto.', cls:'azul' } },
+  gestion:         { default: { icon:'🔍', msg:'Tu caso está siendo gestionado activamente por nuestro equipo especializado.', cls:'azul' } },
+  gestionado:      { default: { icon:'🔍', msg:'Tu caso está siendo gestionado activamente por nuestro equipo especializado.', cls:'azul' } },
   cerrado:         { default: { icon:'✅', msg:'Tu caso fue cerrado exitosamente.', cls:'verde' } },
   abierto:         { default: { icon:'📋', msg:'Tu solicitud está registrada en nuestro sistema.', cls:'gris' } },
 };
@@ -769,46 +774,51 @@ function renderTimeline(eventos, estado, c) {
   if (!tl) return;
   tl.innerHTML = '';
 
-  let todos = eventos.length ? [...eventos]
-    : [{evento:'creado', descripcion:'Radicado recibido en el sistema.', created_at: c?.creado}];
+  // Solo 3 pasos visibles — sin gestión interna expuesta al usuario
+  const estadosFinal = ['cerrado','respondido','solucionado','cerrado_automatico','firma_confirmada','correo_respondido'];
+  const esSolucionado = estadosFinal.includes(estado);
+  const enGestion = ['gestion','en_gestion','asignado','pendiente_firma','escalado','gestionado'].includes(estado)
+    || eventos.some(e=>['asignado','asignado_manual','en_gestion','gestion','observacion','escalado','pendiente_firma','respondido'].includes(e.evento));
 
-  const estadosFinal = ['cerrado','respondido','solucionado'];
-  const yaEnGestion  = todos.some(e=>e.evento==='en_gestion'||e.evento==='asignado'||e.evento==='respondido'||e.evento==='cerrado_automatico');
-  if (!yaEnGestion && !estadosFinal.includes(estado)) {
-    todos.push({evento:'en_gestion', descripcion:'Tu caso está siendo revisado por nuestro equipo.', created_at: c?.actualizado||c?.creado, _auto:true});
-  }
-  if (estadosFinal.includes(estado) && !todos.some(e=>e.evento==='cerrado'||e.evento==='solucionado'||e.evento==='cerrado_automatico')) {
-    todos.push({evento:'solucionado', descripcion:'Tu caso fue atendido exitosamente. Gracias por contactarnos.', created_at: c?.actualizado||c?.creado, _auto:true});
-  }
+  const pasos = [
+    {
+      col: 'blue', done: true,
+      lbl: '📩 Correo recibido',
+      desc: 'Tu solicitud fue radicada exitosamente en nuestra plataforma.',
+      fecha: c?.creado
+    },
+    {
+      col: enGestion && !esSolucionado ? 'yellow' : (esSolucionado ? 'green' : 'grey'),
+      done: enGestion || esSolucionado,
+      lbl: '🔍 En gestión',
+      desc: 'Un agente especializado está atendiendo tu caso con prioridad.',
+      fecha: (enGestion || esSolucionado) ? (c?.actualizado||c?.creado) : null
+    },
+    {
+      col: esSolucionado ? 'green' : 'grey',
+      done: esSolucionado,
+      lbl: '✅ Solucionado',
+      desc: 'Tu caso fue atendido exitosamente. Gracias por comunicarte con Tododrogas.',
+      fecha: esSolucionado ? (c?.actualizado||c?.creado) : null
+    }
+  ];
 
-  setText('r-count', todos.length + ' evento' + (todos.length===1?'':'s'));
+  setText('r-count', pasos.filter(p=>p.done).length + ' de 3 etapas completadas');
 
-  const labels = {
-    creado:'Radicado creado', en_gestion:'En gestión',
-    asignado:'Agente asignado', respondido:'Respuesta enviada',
-    cerrado:'Caso cerrado', solucionado:'✅ Solucionado',
-    escalado:'Escalado', reabierto:'Reabierto',
-    acuse_enviado:'Acuse de recibo', audio_procesado:'Audio procesado',
-    canvas_procesado:'Dibujo procesado', cerrado_automatico:'✅ Resuelto automáticamente',
-    sync_correos: null, // no mostrar eventos de sistema
-  };
-
-  todos.forEach((ev, i) => {
-    if (labels[ev.evento] === null) return; // saltar eventos sistema
-    const col   = EV_COLOR[ev.evento] || 'blue';
-    const isLast= i === todos.length - 1;
-    const lbl   = labels[ev.evento] || (ev.evento||'').replace(/_/g,' ');
-    const div   = document.createElement('div');
+  pasos.forEach((paso, i) => {
+    const isLast = i === pasos.length - 1;
+    const div = document.createElement('div');
     div.className = 'tl-item';
+    div.style.opacity = paso.done ? '1' : '0.35';
     div.innerHTML =
       '<div class="tl-spine">'
-        + '<div class="tl-dot ' + col + '"></div>'
+        + '<div class="tl-dot ' + paso.col + '"></div>'
         + (isLast ? '' : '<div class="tl-line"></div>')
       + '</div>'
       + '<div style="flex:1;min-width:0">'
-        + '<div class="tl-ev">' + lbl + '</div>'
-        + '<div class="tl-desc">' + (ev.descripcion||'Sin descripción') + '</div>'
-        + '<div class="tl-time">' + fmt(ev.created_at) + '</div>'
+        + '<div class="tl-ev">' + paso.lbl + '</div>'
+        + (paso.done ? '<div class="tl-desc">' + paso.desc + '</div>' : '')
+        + (paso.fecha ? '<div class="tl-time">' + fmt(paso.fecha) + '</div>' : '')
       + '</div>';
     tl.appendChild(div);
   });
