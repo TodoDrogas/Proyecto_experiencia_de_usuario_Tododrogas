@@ -1608,10 +1608,9 @@ async function loadEmails(horasVentana = 0) {
       desde = new Date(inicioDia.getTime() + 5 * 60 * 60 * 1000).toISOString();
     }
 
-    // Traer correos desde el inicio del día
+    // Traer correos desde el inicio del día, orden igual que Outlook (más reciente primero)
     const data = await sb(`correos?received_at=gte.${desde}&order=received_at.desc&limit=500`);
-    const merged = data;
-    const allEmails = (merged||[]).map(e=>({
+    const allEmails = (data||[]).map(e=>({
       id: e.id,
       message_id: e.message_id,
       conversation_id: e.conversation_id || null, // null = sin hilo, se muestra individual
@@ -1621,6 +1620,7 @@ async function loadEmails(horasVentana = 0) {
       fecha: e.received_at || e.created_at,
       estado: e.estado || 'pendiente',
       asignado_a: e.asignado_a || null,
+      agente_id: e.agente_id || null,
       agente_id: e.agente_id || null,
       prioridad: e.prioridad || '',
       es_urgente: e.es_urgente || false,
@@ -3663,7 +3663,7 @@ async function _calcularAutoAsignacion() {
   const tickets = await sb('correos?estado=eq.pendiente&agente_id=is.null&select=id,ticket_id,subject,received_at,agente_id&order=received_at.asc&limit=200') || [];
   if(!tickets.length) return { total: 0, asignaciones: [], distribucion: [] };
 
-  // 2. Obtener agentes activos + contar carga REAL desde correos (no casos_activos estático)
+  // 2. Carga real desde correos activos (no casos_activos estático)
   const agentesRaw = await sb('agentes?activo=eq.true&select=id,nombre,email&order=nombre.asc') || [];
   if(!agentesRaw.length) throw new Error('No hay agentes activos en el sistema.');
   const correosActivos = await sb("correos?estado=in.(pendiente,gestion,pendiente_firma)&agente_id=not.is.null&select=agente_id") || [];
@@ -3897,6 +3897,64 @@ async function nuevoCiclo() {
 document.addEventListener('DOMContentLoaded', () => {
   setTimeout(cargarEstadoSync, 2000); // Esperar a que el admin cargue
   setInterval(cargarEstadoSync, 60000); // Verificar cada minuto
+});
+
+// ── SYNC V3 ────────────────────────────────────────────────────────
+const SYNC_PHP = '/sincronizar-correos.php';
+const ADMIN_TOKEN_V3 = window.ADMIN_PASS || '';
+
+async function cargarEstadoSync() {
+  const badge   = document.getElementById('sync-estado-badge');
+  const btnInic = document.getElementById('btn-iniciar-sync');
+  const btnCiclo= document.getElementById('btn-nuevo-ciclo');
+  if (!badge || !btnInic || !btnCiclo) return;
+  try {
+    const r = await fetch(`${SYNC_PHP}?accion=estado&token=${ADMIN_TOKEN_V3}`);
+    if (!r.ok) { btnInic.style.display='inline-flex'; btnCiclo.style.display='none'; badge.style.display='none'; return; }
+    const d = await r.json();
+    const sync = d.sync || {};
+    if (sync.activo) {
+      badge.style.display='inline-flex'; btnInic.style.display='none'; btnCiclo.style.display='inline-flex';
+      if (sync.ultimo_sync) {
+        const ls = document.getElementById('lastSync');
+        if (ls) ls.textContent = 'Sync: ' + new Date(sync.ultimo_sync).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+      }
+    } else {
+      badge.style.display='none'; btnInic.style.display='inline-flex'; btnCiclo.style.display='none';
+    }
+  } catch(e) { const b=document.getElementById('btn-iniciar-sync'); if(b) b.style.display='inline-flex'; }
+}
+
+async function iniciarSync() {
+  if (!confirm('¿Activar sincronización desde este momento?\n\nSolo se sincronizarán correos a partir de ahora.')) return;
+  const btn = document.getElementById('btn-iniciar-sync');
+  btn.disabled=true; btn.textContent='⏳ Iniciando…';
+  try {
+    const r = await fetch(`${SYNC_PHP}?accion=iniciar&token=${ADMIN_TOKEN_V3}`);
+    const d = await r.json();
+    if (d.ok) { showToast('✅ Sincronización iniciada. El cron comenzará cada minuto.','success'); await cargarEstadoSync(); }
+    else showToast('❌ Error: '+(d.motivo||'desconocido'),'error');
+  } catch(e) { showToast('❌ Error de conexión','error'); }
+  btn.disabled=false; btn.textContent='▶ Iniciar sync';
+}
+
+async function nuevoCiclo() {
+  if (!confirm('♻ NUEVO CICLO\n\n1. Genera backup JSON en Supabase Storage\n2. Elimina correos, adjuntos e historial\n3. Reinicia cursor\n\n¿Confirmas? NO se puede deshacer.')) return;
+  const btn = document.getElementById('btn-nuevo-ciclo');
+  btn.disabled=true; btn.textContent='⏳ Procesando…';
+  showToast('⏳ Generando backup… puede tardar 30-60 segundos.','info');
+  try {
+    const r = await fetch(`${SYNC_PHP}?accion=nuevo_ciclo&token=${ADMIN_TOKEN_V3}`);
+    const d = await r.json();
+    if (d.ok) { showToast(`✅ Ciclo reiniciado. Backup: ${d.backup_path}`, 'success'); setTimeout(()=>window.location.reload(),2000); }
+    else showToast('❌ Error: '+(d.motivo||'desconocido'),'error');
+  } catch(e) { showToast('❌ Timeout o error de conexión','error'); }
+  btn.disabled=false; btn.textContent='♻ Nuevo ciclo';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(cargarEstadoSync, 2000);
+  setInterval(cargarEstadoSync, 60000);
 });
 
 function logout(){sessionStorage.clear();window.location.href='login.html';}
@@ -4221,219 +4279,134 @@ function exportarEncuestasExcel() {
 }
 
 
-// ══════════════════════════════════════════════════════════════
-// RESPUESTAS RÁPIDAS v3 — Categorías + Plantillas PDF + IA
-// ══════════════════════════════════════════════════════════════
-let _rrData=[],_rrCat='todas',_rrLoaded=false,_rrGPTLoading=false;
-
+let _rrData=[],_rrCat='todas',_rrLoaded=false;
+// ══ RESPUESTAS RÁPIDAS v3 ══════════════════════════════════════════
 const RR_CATS = [
-  { id:'envio',       icon:'📦', label:'Envío y Traslado' },
-  { id:'disponible',  icon:'🏥', label:'Disponibilidad' },
-  { id:'formula',     icon:'📋', label:'Fórmula' },
-  { id:'medicamento', icon:'💊', label:'Medicamento' },
-  { id:'glp1',        icon:'🔬', label:'GLP1 / Especiales' },
-  { id:'cobertura',   icon:'📍', label:'Cobertura' },
-  { id:'vencimiento', icon:'⏰', label:'Vencimientos' },
-  { id:'tiques',      icon:'🎫', label:'Tiques Internos' },
+  {id:'envio',icon:'📦',label:'Envío y Traslado'},
+  {id:'disponible',icon:'🏥',label:'Disponibilidad'},
+  {id:'formula',icon:'📋',label:'Fórmula'},
+  {id:'medicamento',icon:'💊',label:'Medicamento'},
+  {id:'glp1',icon:'🔬',label:'GLP1 / Especiales'},
+  {id:'cobertura',icon:'📍',label:'Cobertura'},
+  {id:'vencimiento',icon:'⏰',label:'Vencimientos'},
+  {id:'tiques',icon:'🎫',label:'Tiques Internos'},
 ];
-
 const RR_PLANTILLAS = [
-  // ── ENVÍO Y TRASLADO ──────────────────────────────────────
-  { cat:'envio', label:'Municipio no propio — envío hoy',
-    preview:'Medicamento será enviado hoy para municipio X...',
-    texto:`Buen día,
+  {cat:'envio',label:'Municipio no propio — envío hoy',preview:'Medicamento será enviado hoy para municipio X...',texto:'Buen día,
 
 Se informa que el medicamento [MEDICAMENTO] será enviado el día de hoy para el municipio de [MUNICIPIO], para su entrega efectiva el día [FECHA] en horas de la tarde. Adjunto formato de entrega como evidencia de facturación.
 
-Quedo atenta, feliz día.` },
-
-  { cat:'envio', label:'Municipio no propio — solicitado a compras',
-    preview:'Medicamento solicitado a compras, fecha estimada...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'envio',label:'Municipio no propio — solicitado a compras',preview:'Solicitado a compras, fecha estimada de llegada...',texto:'Buen día,
 
 Se informa que el medicamento [MEDICAMENTO] fue solicitado al área de compras, tiene fecha de llegada para el día [FECHA LLEGADA], para su entrega efectiva el día [FECHA ENTREGA] en horas de la tarde. Adjunto formato de pendientes como evidencia de facturación.
 
-Quedo atenta, feliz día.` },
-
-  { cat:'envio', label:'Municipio propio — traslado programado',
-    preview:'Medicamento en traslado para municipio X...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'envio',label:'Municipio propio — traslado programado',preview:'Medicamento en traslado para municipio X...',texto:'Buen día,
 
 Se informa que el medicamento [MEDICAMENTO] será enviado el día de hoy en traslado para el municipio [MUNICIPIO], para su entrega efectiva el día [FECHA] en horas de la tarde. Adjunto formato de pendientes como evidencia de facturación.
 
-Quedo atenta, feliz día.` },
+Quedo atenta, feliz día.'},
+  {cat:'envio',label:'Domicilio — envío a dirección',preview:'Medicamento enviado a domicilio...',texto:'Buen día,
 
-  { cat:'envio', label:'Domicilio — envío a dirección',
-    preview:'Medicamento será enviado a domicilio...',
-    texto:`Buen día,
+Se informa que el medicamento [MEDICAMENTO] será enviado el día de hoy a domicilio a la dirección [DIRECCIÓN]. Inmediatamente sea entregado, el acta de entrega firmada será enviada por este mismo medio.
 
-Se informa que el medicamento [MEDICAMENTO] será enviado el día de hoy a domicilio a la dirección [DIRECCIÓN]. Inmediatamente sea entregado el medicamento, el acta de entrega firmada será enviada por este mismo medio.
-
-Quedo atenta, feliz día.` },
-
-  // ── DISPONIBILIDAD ────────────────────────────────────────
-  { cat:'disponible', label:'Disponible en servicio farmacéutico',
-    preview:'Medicamento ya disponible en SF de X...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'disponible',label:'Disponible en servicio farmacéutico',preview:'Medicamento ya disponible en SF de X...',texto:'Buen día,
 
 Se informa que el medicamento [MEDICAMENTO] ya se encuentra disponible en el servicio farmacéutico de [SEDE] listo para ser entregado al usuario. Adjunto formato de entrega como evidencia de facturación.
 
-Quedo atenta, feliz día.` },
-
-  { cat:'disponible', label:'Medicamento agotado',
-    preview:'Medicamento agotado, adjunto carta laboratorio...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'disponible',label:'Medicamento agotado',preview:'Medicamento agotado, adjunto carta laboratorio...',texto:'Buen día,
 
 Se informa que el medicamento [MEDICAMENTO] se encuentra agotado. Adjunto carta por parte del laboratorio.
 
-Quedo atenta, feliz día.` },
-
-  { cat:'disponible', label:'Compras — solicitado con fecha estimada',
-    preview:'Solicitado a compras, fecha estimada de llegada...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'disponible',label:'Compras — fecha estimada',preview:'Solicitado a compras, orden de compra adjunta...',texto:'Buen día,
 
 El medicamento [MEDICAMENTO] fue solicitado al área de compras, tiene fecha estimada de llegada para el día [FECHA LLEGADA], para su entrega efectiva el día [FECHA ENTREGA] en horas de la tarde. Adjunto formato de pendiente y orden de compra.
 
-Quedo atenta, feliz día.` },
-
-  { cat:'disponible', label:'Preparado magistral — solicitud',
-    preview:'Solicitud preparación medicamento magistral...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'disponible',label:'Preparado magistral',preview:'Solicitud preparación medicamento magistral...',texto:'Buen día,
 
 Solicito de su colaboración con la preparación del medicamento [MEDICAMENTO] para el usuario [TIPO_DOC]-[CC]-[NOMBRE PACIENTE] cantidad [CANTIDAD]. Adjunto fórmula médica, historia clínica.
 
 Nota: prioridad por favor
 
-Quedo atenta, feliz tarde.` },
-
-  { cat:'disponible', label:'No corresponde — proveedor THE LABS',
-    preview:'Entrega no corresponde, le corresponde a THE LABS...',
-    texto:`Buen día,
+Quedo atenta, feliz tarde.'},
+  {cat:'disponible',label:'No corresponde — proveedor THE LABS',preview:'Entrega no corresponde, le corresponde a THE LABS...',texto:'Buen día,
 
 Informamos que la entrega del medicamento [MEDICAMENTO] no nos corresponde, la dispensación le corresponde al proveedor THE LABS.
 
-Quedo atenta, feliz día.` },
-
-  // ── FÓRMULA ──────────────────────────────────────────────
-  { cat:'formula', label:'Fórmula errada',
-    preview:'Fórmula del medicamento X se encuentra errada...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'formula',label:'Fórmula errada',preview:'Fórmula del medicamento X se encuentra errada...',texto:'Buen día,
 
 Se informa que la fórmula del medicamento [MEDICAMENTO] se encuentra errada: [DESCRIPCIÓN DEL ERROR]. Por favor corregir para su respectiva gestión.
 
-Quedo atenta, feliz día.` },
-
-  { cat:'formula', label:'Fórmula vencida',
-    preview:'Fórmula vencida, adjuntar fórmula vigente...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'formula',label:'Fórmula vencida',preview:'Fórmula vencida, adjuntar fórmula vigente...',texto:'Buen día,
 
 Se informa que la fórmula se encuentra vencida, por lo que no se puede realizar la dispensación. Por favor adjuntar fórmula vigente para su respectiva gestión.
 
-Quedo atenta, feliz día.` },
+Quedo atenta, feliz día.'},
+  {cat:'formula',label:'Sin fórmula médica',preview:'No contamos con fórmula, intentamos comunicarnos...',texto:'Buen día,
 
-  { cat:'formula', label:'Sin fórmula médica del usuario',
-    preview:'No contamos con fórmula, tratamos de comunicarnos...',
-    texto:`Buen día,
+Se informa que no contamos con fórmula médica del usuario. Tratamos de comunicarnos al número [TELÉFONO] pero no obtuvimos respuesta. Adjunto evidencia de llamadas. Por favor compartir fórmula para su respectiva gestión.
 
-Se informa que no contamos con fórmula médica del usuario. Tratamos de comunicarnos al número [TELÉFONO] para brindar la información, pero no obtuvimos respuesta. Adjunto evidencia de las llamadas. Por favor compartir fórmula para su respectiva gestión.
-
-Quedo atenta, feliz día.` },
-
-  // ── MEDICAMENTO ───────────────────────────────────────────
-  { cat:'medicamento', label:'No contratado con EPS',
-    preview:'Medicamento no está en listado contratado con EPS...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'medicamento',label:'No contratado con EPS',preview:'Medicamento no está en listado contratado con EPS...',texto:'Buen día,
 
 Se informa que el medicamento [MEDICAMENTO] no se encuentra dentro del listado de medicamentos contratados con la EPS [EPS].
 
-Quedo atenta, feliz día.` },
-
-  { cat:'medicamento', label:'Pasa a cotización',
-    preview:'Medicamento pasa a proceso de cotización...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'medicamento',label:'Pasa a cotización',preview:'Medicamento pasa a proceso de cotización...',texto:'Buen día,
 
 El medicamento [MEDICAMENTO] pasa a proceso de cotización dado que no se encuentra dentro del listado de medicamentos contratados con la EPS.
 
-Quedo atenta, feliz día.` },
-
-  { cat:'medicamento', label:'Nivel 1 — le corresponde a ESE del municipio',
-    preview:'Medicamento es de nivel 1, corresponde a ESE...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'medicamento',label:'Nivel 1 — ESE del municipio',preview:'Medicamento es de nivel 1, corresponde a ESE...',texto:'Buen día,
 
 Se informa que el medicamento [MEDICAMENTO] es de nivel 1, por lo tanto, le corresponde a la ESE del municipio.
 
-Quedo atenta, feliz día.` },
-
-  // ── GLP1 / ESPECIALES ─────────────────────────────────────
-  { cat:'glp1', label:'Rechazado GLP1',
-    preview:'Se realizó estudio y fue rechazado...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'glp1',label:'Rechazado GLP1',preview:'Se realizó estudio y fue rechazado...',texto:'Buen día,
 
 Se realizó el estudio para el medicamento [MEDICAMENTO] y este fue rechazado.
 
-Quedo atenta, feliz día.` },
-
-  { cat:'glp1', label:'Rechazado — hipolipemiante',
-    preview:'Medicamento hipolipemiante, estudio rechazado...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'glp1',label:'Rechazado — hipolipemiante',preview:'Medicamento hipolipemiante, estudio rechazado...',texto:'Buen día,
 
 El medicamento es HIPOLIPEMIANTE. Se realizó el estudio para el medicamento [MEDICAMENTO] y este fue rechazado.
 
-Quedo atenta, feliz día.` },
+Quedo atenta, feliz día.'},
+  {cat:'glp1',label:'Comité autoinmune — sin nivel 1',preview:'Para comité dispensamos todos los mx contratados...',texto:'Para comité dispensamos todos los medicamentos que estén contratados, sin importar si es de nivel 1, ya que ellos no manejan nivel 1. Por favor ayúdame con la dispensa y si no tienes los medicamentos ya los envío en traslado.'},
+  {cat:'glp1',label:'Tique GLP1 — sin historial Mantis',preview:'Análisis QF medicamento GLP1 PACIENTE...',texto:'Análisis QF de medicamento GLP1 PACIENTE: [NOMBRE] CC: [CC], MEDICAMENTO: [MEDICAMENTO], TEL: [TELÉFONO]'},
+  {cat:'cobertura',label:'Sin cobertura — no puede acercarse',preview:'Sin cobertura en municipio, SF más cercano...',texto:'Buen día,
 
-  { cat:'glp1', label:'Comité autoinmune — dispensar sin nivel 1',
-    preview:'Para comité dispensamos todos los mx contratados...',
-    texto:`Para comité dispensamos todos los medicamentos que estén contratados, sin importar si es de nivel 1, ya que ellos no manejan nivel 1. Por favor ayúdame con la dispensa y si no tienes los medicamentos ya los envío en traslado.` },
+El usuario es del municipio [MUNICIPIO]. En el momento no contamos con cobertura al municipio. En comunicación con el usuario le informamos que el SF más cercano es [SF CERCANO], sin embargo indica que no puede desplazarse.
 
-  { cat:'glp1', label:'Tique GLP1 — sin historial en Mantis',
-    preview:'Análisis QF medicamento GLP1 PACIENTE...',
-    texto:`Análisis QF de medicamento GLP1 PACIENTE: [NOMBRE] CC: [CC], MEDICAMENTO: [MEDICAMENTO], TEL: [TELÉFONO]` },
-
-  // ── COBERTURA ─────────────────────────────────────────────
-  { cat:'cobertura', label:'Sin cobertura — no puede acercarse',
-    preview:'No contamos con cobertura en municipio, SF más cercano...',
-    texto:`Buen día,
-
-El usuario es del municipio [MUNICIPIO]. En el momento no contamos con cobertura al municipio. En comunicación con el usuario le informamos que el SF más cercano es [SF CERCANO], sin embargo el usuario indica que no puede desplazarse.
-
-Quedo atenta, feliz día.` },
-
-  { cat:'cobertura', label:'Ruta AUTOINMUNE — SAVIA',
-    preview:'Usuario activo en ruta AUTOINMUNE...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'cobertura',label:'Ruta AUTOINMUNE — SAVIA',preview:'Usuario activo en ruta AUTOINMUNE...',texto:'Buen día,
 
 El usuario se encuentra activo en la ruta AUTOINMUNE.
 
-Quedo atenta, feliz día.` },
-
-  // ── VENCIMIENTOS ──────────────────────────────────────────
-  { cat:'vencimiento', label:'Direccionamiento vencido — solicitar ampliación',
-    preview:'Direccionamiento vencido, favor extender fecha...',
-    texto:`Buen día,
+Quedo atenta, feliz día.'},
+  {cat:'vencimiento',label:'Direccionamiento vencido — ampliar',preview:'Direccionamiento vencido, favor extender fecha...',texto:'Buen día,
 
 Se informa que el direccionamiento [NÚMERO] se encuentra vencido desde el [FECHA]. Por favor extender fecha para realizar la respectiva gestión.
 
-Quedo atenta, feliz día.` },
-
-  // ── TIQUES INTERNOS ───────────────────────────────────────
-  { cat:'tiques', label:'Autorización SAVIA-CAPITA (Don Henry)',
-    preview:'Solicito autorización para dispensar en SAVIA-CAPITA...',
-    texto:`Por favor solicito AUTORIZACIÓN PARA DISPENSAR EN SAVIA-CAPITA
+Quedo atenta, feliz día.'},
+  {cat:'tiques',label:'Autorización SAVIA-CAPITA (Don Henry)',preview:'Solicito autorización para dispensar en SAVIA-CAPITA...',texto:'Por favor solicito AUTORIZACIÓN PARA DISPENSAR EN SAVIA-CAPITA
 
 PACIENTE: [NOMBRE]
 CC: [CC]
 MEDICAMENTO: [MEDICAMENTO]
-DOSIS: [DOSIS]` },
-
-  { cat:'tiques', label:'Cotización DESACATO — COOSALUD',
-    preview:'Mandar a cotizar para COOSALUD EVENTO...',
-    texto:`Por favor mandar a cotizar para COOSALUD EVENTO-COOSALUD [MEDICAMENTO] - solicitud OPS - [NOMBRE USUARIO] CC [CC] - DESACATO COOSALUD` },
-
-  { cat:'tiques', label:'Solicitud OPS — TUTELA COOSALUD',
-    preview:'Ingresar a EVENTO-COOSALUD solicitud OPS...',
-    texto:`Por favor ingresar a EVENTO-COOSALUD [MEDICAMENTO]
-- solicitud OPS [NOMBRE USUARIO] CC [CC] - TUTELA COOSALUD` },
+DOSIS: [DOSIS]'},
+  {cat:'tiques',label:'Cotización DESACATO — COOSALUD',preview:'Mandar a cotizar COOSALUD EVENTO, DESACATO...',texto:'Por favor mandar a cotizar para COOSALUD EVENTO-COOSALUD [MEDICAMENTO] - solicitud OPS - [NOMBRE USUARIO] CC [CC] - DESACATO COOSALUD'},
+  {cat:'tiques',label:'Solicitud OPS — TUTELA COOSALUD',preview:'Ingresar EVENTO-COOSALUD solicitud OPS TUTELA...',texto:'Por favor ingresar a EVENTO-COOSALUD [MEDICAMENTO]
+- solicitud OPS [NOMBRE USUARIO] CC [CC] - TUTELA COOSALUD'},
 ];
+let _rrGPTLoading=false;
 
 function abrirPanelRR(){
   const p=document.getElementById('panelRR');
@@ -4444,67 +4417,49 @@ function abrirPanelRR(){
   renderRRCats();
   renderRRLista();
 }
-
-function cerrarPanelRR(){
-  const p=document.getElementById('panelRR');
-  if(p){p.style.visibility='hidden';p.style.opacity='0';p.style.pointerEvents='none';}
-}
-
+function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p){p.style.visibility='hidden';p.style.opacity='0';p.style.pointerEvents='none';}}
 function renderRRCats(){
-  const el=document.getElementById('rrCategorias');
-  if(!el)return;
-  el.innerHTML=`<button class="rr-cat-btn${_rrCat==='todas'?' active':''}" onclick="filtrarRR('todas')">Todas</button>`
-    +RR_CATS.map(c=>`<button class="rr-cat-btn${_rrCat===c.id?' active':''}" onclick="filtrarRR('${c.id}')">${c.icon} ${c.label}</button>`).join('');
+  const el=document.getElementById('rrCategorias');if(!el)return;
+  el.innerHTML='<button class="rr-cat-btn'+(_rrCat==='todas'?' active':'')+'" onclick="filtrarRR('todas')">Todas</button>'
+    +RR_CATS.map(c=>'<button class="rr-cat-btn'+(_rrCat===c.id?' active':'')+'" onclick="filtrarRR(''+c.id+'')">'+c.icon+' '+c.label+'</button>').join('');
 }
-
-function filtrarRR(cat){
-  _rrCat=cat;
-  renderRRCats();
-  renderRRLista();
-}
-
+function filtrarRR(cat){_rrCat=cat;renderRRCats();renderRRLista();}
 function renderRRLista(){
-  const el=document.getElementById('rrLista');
-  if(!el)return;
+  const el=document.getElementById('rrLista');if(!el)return;
   const lista=_rrCat==='todas'?RR_PLANTILLAS:RR_PLANTILLAS.filter(p=>p.cat===_rrCat);
-  if(!lista.length){el.innerHTML='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Sin plantillas en esta categoría</div>';return;}
-  // Agrupar por cat si es "todas"
+  if(!lista.length){el.innerHTML='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Sin plantillas</div>';return;}
   let html='';
   if(_rrCat==='todas'){
     const grupos={};
     lista.forEach(p=>{if(!grupos[p.cat])grupos[p.cat]=[];grupos[p.cat].push(p);});
-    Object.entries(grupos).forEach(([cat,items])=>{
+    Object.entries(grupos).forEach(function(entry){
+      const cat=entry[0],items=entry[1];
       const catInfo=RR_CATS.find(c=>c.id===cat)||{icon:'📋',label:cat};
       html+='<div style="padding:8px 14px 4px;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;background:#f8fafc;border-bottom:1px solid #f1f5f9">'+catInfo.icon+' '+catInfo.label+'</div>';
-      items.forEach(p=>{ html+=rrItemHTML(p); });
+      items.forEach(function(p){html+=rrItemHTML(p);});
     });
   } else {
-    lista.forEach(p=>{ html+=rrItemHTML(p); });
+    lista.forEach(function(p){html+=rrItemHTML(p);});
   }
   el.innerHTML=html;
 }
-
 function rrItemHTML(p){
   return '<div class="rr-item" onclick="usarPlantilla('+RR_PLANTILLAS.indexOf(p)+')">'
     +'<div class="rr-item-label">'+esc(p.label)+'</div>'
     +'<div class="rr-item-preview">'+esc(p.preview)+'</div>'
     +'</div>';
 }
-
 function usarPlantilla(idx){
-  const p=RR_PLANTILLAS[idx];
-  if(!p)return;
+  const p=RR_PLANTILLAS[idx];if(!p)return;
   insertarTextoEnReply(p.texto);
   cerrarPanelRR();
 }
-
 function insertarTextoEnReply(texto){
-  if(typeof toggleReply==='function') toggleReply('reply');
-  setTimeout(()=>{
+  if(typeof toggleReply==='function')toggleReply('reply');
+  setTimeout(function(){
     const ed=document.querySelector('#replyBoxArea [contenteditable]');
     if(!ed){cerrarPanelRR();return;}
-    const html=texto
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const html=texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/
 /g,'<br>')
       .replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');
@@ -4513,113 +4468,47 @@ function insertarTextoEnReply(texto){
     if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}
   },350);
 }
-
 async function generarRRconIA(){
   if(_rrGPTLoading)return;
   _rrGPTLoading=true;
-
   const iaDiv=document.getElementById('rrIAResult');
-  const lista=document.getElementById('rrLista');
   iaDiv.style.display='flex';iaDiv.style.flexDirection='column';
-  iaDiv.innerHTML=`<div style="padding:20px;text-align:center">
-    <div style="font-size:28px;margin-bottom:8px;animation:spin 1.5s linear infinite;display:inline-block">✨</div>
-    <div style="font-size:13px;font-weight:600;color:#7c3aed">Analizando el correo...</div>
-    <div style="font-size:11px;color:#94a3b8;margin-top:4px">Extrayendo datos del paciente y medicamento</div>
-  </div>`;
-
-  // Obtener contexto del correo abierto
-  const asunto = document.getElementById('mpAsunto')?.textContent
-    || document.querySelector('.email-subject')?.textContent
-    || document.querySelector('[id*="Asunto"]')?.textContent || '';
-  const remitente = document.getElementById('mpRemitente')?.textContent
-    || document.querySelector('[id*="Remitente"]')?.textContent || '';
-  const cuerpo = document.querySelector('#mpBody')?.innerText
-    || document.querySelector('#emailBody')?.innerText
-    || document.querySelector('.email-body-content')?.innerText || '';
-  const tipo = document.querySelector('.badge')?.textContent || '';
-
-  const systemPrompt = `Eres una asistente experta de servicio al cliente de Tododrogas CIA SAS, una farmacia especializada en medicamentos de alto costo en Colombia.
-
-Tu tarea es redactar una respuesta profesional, cálida y concisa a correos de PQRSFD usando las siguientes plantillas de respuesta del equipo:
-
-PLANTILLAS DISPONIBLES:
-- Envío municipio no propio: "Buen día, Se informa que el medicamento X será enviado el día de hoy para el municipio de X..."
-- Solicitado a compras: "Buen día, Se informa que el medicamento X fue solicitado al área de compras, tiene fecha de llegada para el día X..."
-- Traslado municipio propio: "Buen día, Se informa que el medicamento X será enviado en traslado para el municipio X..."
-- Disponible en SF: "Buen día, Se informa que el medicamento X ya se encuentra disponible en el SF de X..."
-- Fórmula errada: "Buen día, Se informa que la fórmula del medicamento X se encuentra errada: XXX..."
-- Agotado: "Buen día, Se informa que el medicamento X se encuentra agotado..."
-- No contratado: "Buen día, Se informa que el medicamento X no se encuentra dentro del listado de medicamentos contratados con la EPS X..."
-- Cotización: "Buen día, El medicamento X pasa a proceso de cotización dado que no se encuentra dentro del listado..."
-- Sin fórmula: "Buen día, Se informa que no contamos con fórmula médica del usuario..."
-- Ruta AUTOINMUNE: "Buen día, El usuario se encuentra activo en la ruta AUTOINMUNE..."
-
-REGLAS:
-1. Usa SIEMPRE "Buen día," como saludo
-2. Usa SIEMPRE "Quedo atenta, feliz día." como cierre
-3. Extrae el nombre del medicamento, paciente, EPS, municipio del correo si están disponibles
-4. Si no tienes un dato específico, usa [DATO] como placeholder resaltado
-5. Máximo 6 líneas. Solo el cuerpo del correo, sin explicaciones.
-6. Tono profesional, cálido, colombiano`;
-
+  iaDiv.innerHTML='<div style="padding:20px;text-align:center"><div style="font-size:28px;margin-bottom:8px">✨</div><div style="font-size:13px;font-weight:600;color:#7c3aed">Analizando el correo...</div></div>';
+  const asunto=document.getElementById('mpAsunto')?.textContent||document.querySelector('.email-subject')?.textContent||'';
+  const remitente=document.getElementById('mpRemitente')?.textContent||'';
+  const cuerpo=document.querySelector('#mpBody')?.innerText||document.querySelector('#emailBody')?.innerText||'';
+  const tipo=document.querySelector('.badge')?.textContent||'';
   try{
     const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:600,
-        system: systemPrompt,
-        messages:[{role:'user',content:`Redacta la respuesta apropiada para este correo de PQRSFD:
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,
+        system:'Eres asistente de Tododrogas CIA SAS. Redacta respuestas profesionales a PQRSFD farmacéuticos. Usa "Buen día," como saludo y "Quedo atenta, feliz día." como cierre. Extrae medicamento, paciente, EPS, municipio del correo. Usa [DATO] si no tienes el dato. Máximo 6 líneas. Solo el cuerpo del correo.',
+        messages:[{role:'user',content:'Redacta la respuesta para este correo de PQRSFD:
 
-ASUNTO: ${asunto}
-DE: ${remitente}
-TIPO DE CASO: ${tipo}
+ASUNTO: '+asunto+'
+DE: '+remitente+'
+TIPO: '+tipo+'
 
-CONTENIDO DEL CORREO:
-${cuerpo.substring(0,1200)}
-
-Analiza el correo, identifica el caso, elige la plantilla más apropiada y completa los datos que encuentres.`}]
-      })
+CONTENIDO:
+'+cuerpo.substring(0,1200)}]})
     });
     const data=await resp.json();
     const texto=data.content?.[0]?.text||'No se pudo generar respuesta.';
-
-    iaDiv.innerHTML=`
-      <div style="padding:12px 14px;background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(37,99,235,.08));border-bottom:1px solid #e2e8f0">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
-          <span style="font-size:14px">✨</span>
-          <span style="font-size:12px;font-weight:700;color:#7c3aed">Respuesta generada por IA</span>
-        </div>
-        <div style="font-size:10px;color:#94a3b8">Revisa y edita antes de enviar</div>
-      </div>
-      <div id="iaTextoRR" style="padding:14px;font-size:12px;color:#0f172a;line-height:1.7;white-space:pre-wrap;background:#fff;flex:1;overflow-y:auto">${esc(texto)}</div>
-      <div style="padding:10px 14px;display:flex;gap:8px;border-top:1px solid #e2e8f0;background:#f8fafc;flex-shrink:0">
-        <button onclick="usarTextoIA()" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">
-          ✅ Usar esta respuesta
-        </button>
-        <button onclick="generarRRconIA()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit" title="Regenerar">
-          🔄
-        </button>
-        <button onclick="document.getElementById('rrIAResult').style.display='none'" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit" title="Cerrar">
-          ✕
-        </button>
-      </div>`;
+    iaDiv.innerHTML='<div style="padding:12px 14px;background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(37,99,235,.08));border-bottom:1px solid #e2e8f0">'
+      +'<div style="font-size:12px;font-weight:700;color:#7c3aed">✨ Respuesta generada por IA</div>'
+      +'<div style="font-size:10px;color:#94a3b8">Revisa y edita antes de enviar</div></div>'
+      +'<div id="iaTextoRR" style="padding:14px;font-size:12px;color:#0f172a;line-height:1.7;white-space:pre-wrap;flex:1;overflow-y:auto">'+esc(texto)+'</div>'
+      +'<div style="padding:10px 14px;display:flex;gap:8px;border-top:1px solid #e2e8f0;background:#f8fafc;flex-shrink:0">'
+      +'<button onclick="usarTextoIA()" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✅ Usar</button>'
+      +'<button onclick="generarRRconIA()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit" title="Regenerar">🔄</button>'
+      +'<button onclick="document.getElementById('rrIAResult').style.display='none'" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:9px;font-size:12px;cursor:pointer">✕</button>'
+      +'</div>';
   }catch(e){
-    iaDiv.innerHTML=`<div style="padding:20px;text-align:center;color:#dc2626;font-size:12px">❌ Error: ${e.message}<br><button onclick="generarRRconIA()" style="margin-top:8px;padding:6px 12px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;font-size:11px">Reintentar</button></div>`;
+    iaDiv.innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;font-size:12px">❌ '+esc(e.message)+'</div>';
   }
   _rrGPTLoading=false;
 }
-
-function usarTextoIA(){
-  const el=document.getElementById('iaTextoRR');
-  if(!el)return;
-  insertarTextoEnReply(el.textContent);
-  cerrarPanelRR();
-}
-
-
-// insertarRR legacy — reemplazado por usarPlantilla()
+function usarTextoIA(){const el=document.getElementById('iaTextoRR');if(!el)return;insertarTextoEnReply(el.textContent);cerrarPanelRR();}
 
 // ═══════════════════════════════════════════════════
 // NOVA TD — MÉTRICAS POR CANAL (3 + Global)
@@ -5029,49 +4918,35 @@ function exportNovaExcel(){
 }
 
 </script>
-<!-- ⚡ Panel Respuestas Rápidas -->
+<!-- ⚡ Panel Respuestas Rápidas v3 -->
 <style>
-#panelRR { font-family:'Poppins',sans-serif; }
-.rr-cat-btn { padding:6px 12px;border:1.5px solid #e2e8f0;border-radius:99px;background:#f8fafc;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;color:#475569;font-family:'Poppins',sans-serif; }
-.rr-cat-btn:hover { border-color:#2563eb;color:#2563eb; }
-.rr-cat-btn.active { background:#2563eb;border-color:#2563eb;color:#fff; }
-.rr-item { padding:11px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .15s; }
-.rr-item:hover { background:#f8fafc; }
-.rr-item-cat { font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px; }
-.rr-item-label { font-size:13px;color:#0f172a;font-weight:600;margin-top:2px; }
-.rr-item-preview { font-size:11px;color:#64748b;margin-top:3px;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
-.rr-ia-btn { display:flex;align-items:center;gap:10px;padding:14px 16px;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;cursor:pointer;border:none;width:100%;text-align:left;font-family:'Poppins',sans-serif;transition:opacity .2s; }
-.rr-ia-btn:hover { opacity:.9; }
+.rr-cat-btn{padding:5px 10px;border:1.5px solid #e2e8f0;border-radius:99px;background:#f8fafc;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;color:#475569;font-family:'Poppins',sans-serif}
+.rr-cat-btn:hover{border-color:#2563eb;color:#2563eb}
+.rr-cat-btn.active{background:#2563eb;border-color:#2563eb;color:#fff}
+.rr-item{padding:11px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .15s}
+.rr-item:hover{background:#f8fafc}
+.rr-item-label{font-size:13px;color:#0f172a;font-weight:600}
+.rr-item-preview{font-size:11px;color:#64748b;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 <div id="panelRR" style="visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;right:0;width:400px;height:100vh;background:#fff;border-left:2px solid #e2e8f0;box-shadow:-8px 0 40px rgba(0,0,0,.12);z-index:9999;display:flex;flex-direction:column;transition:all .25s">
-
-  <!-- Header -->
   <div style="padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;flex-shrink:0;background:#0f172a">
     <span style="font-size:18px">⚡</span>
     <span style="font-weight:700;font-size:14px;color:#fff">Respuestas Rápidas</span>
-    <button onclick="cerrarPanelRR()" style="margin-left:auto;background:rgba(255,255,255,.1);border:none;cursor:pointer;font-size:16px;color:#fff;padding:4px 8px;border-radius:6px;line-height:1">✕</button>
+    <button onclick="cerrarPanelRR()" style="margin-left:auto;background:rgba(255,255,255,.1);border:none;cursor:pointer;font-size:16px;color:#fff;padding:4px 8px;border-radius:6px">✕</button>
   </div>
-
-  <!-- Botón IA destacado -->
-  <button class="rr-ia-btn" onclick="generarRRconIA()">
+  <button onclick="generarRRconIA()" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;cursor:pointer;border:none;width:100%;text-align:left;font-family:'Poppins',sans-serif;flex-shrink:0">
     <div style="width:36px;height:36px;background:rgba(255,255,255,.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">✨</div>
-    <div>
+    <div style="text-align:left">
       <div style="font-size:13px;font-weight:700">Generar con IA</div>
       <div style="font-size:11px;opacity:.8;margin-top:1px">Respuesta personalizada según el correo</div>
     </div>
     <div style="margin-left:auto;font-size:18px;opacity:.7">→</div>
   </button>
-
-  <!-- Categorías -->
   <div style="padding:10px 12px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
     <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">O elige una plantilla</div>
     <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:5px"></div>
   </div>
-
-  <!-- Lista plantillas -->
   <div id="rrLista" style="flex:1;overflow-y:auto"></div>
-
-  <!-- Footer IA resultado -->
   <div id="rrIAResult" style="display:none;flex-direction:column;border-top:2px solid #7c3aed;flex-shrink:0;max-height:55vh;overflow-y:auto"></div>
 </div>
 
