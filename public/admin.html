@@ -1673,9 +1673,9 @@ async function loadEmails(horasVentana = 0) {
       if (!existing) {
         hilos.set(convId, { ...email, hilo_count: 1, _conv_key: convId });
       } else {
-        // Mantener el más reciente como representante del hilo
-        const existingFecha = new Date(existing.fecha).getTime();
-        const thisFecha     = new Date(email.fecha).getTime();
+        // Mantener el más reciente como representante del hilo (usando received_at exacto con segundos)
+        const existingFecha = new Date(existing.raw?.received_at || existing.fecha).getTime();
+        const thisFecha     = new Date(email.raw?.received_at || email.fecha).getTime();
         const count         = (existing.hilo_count || 1) + 1;
         if (thisFecha > existingFecha) {
           hilos.set(convId, { ...email, hilo_count: count, _conv_key: convId });
@@ -1800,8 +1800,12 @@ function renderEmailList() {
     );
   }
 
-  // Sort — igual que Outlook: por fecha del mensaje más reciente del hilo
-  if(state.sort==='fecha') list.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  // Sort — igual que VPS/Graph: por receivedDateTime exacto (con segundos)
+  if(state.sort==='fecha') list.sort((a,b)=>{
+    const ta = new Date(b.raw?.received_at || b.fecha).getTime();
+    const tb = new Date(a.raw?.received_at || a.fecha).getTime();
+    return ta - tb;
+  });
   else if(state.sort==='prioridad') {
     const prio = {critica:0,alta:1,media:2,baja:3,'':4};
     list.sort((a,b)=>(prio[a.prioridad||'']||4)-(prio[b.prioridad||'']||4));
