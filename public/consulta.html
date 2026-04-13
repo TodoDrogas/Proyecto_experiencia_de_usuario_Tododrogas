@@ -599,7 +599,8 @@ function renderLista(d) {
   el.innerHTML = d.radicados.map(r => {
     const est = ESTADOS[r.estado] || {label: r.estado, cls:'eb-abierto'};
     const fecha = r.creado ? fmtDate(r.creado) : '—';
-    const tipoLabel = r.tipo ? r.tipo.charAt(0).toUpperCase()+r.tipo.slice(1) : '—';
+    const tipoLabel = r.tipo ? r.tipo.charAt(0).toUpperCase()+r.tipo.slice(1) : '';
+    const estadoMsg = getMensajeEstado(r.estado, r.tipo||'default');
 
     return `<div onclick="verDetalle('${r.ticket_id||r.id}')"
       style="background:var(--surface);border:1px solid var(--border);border-radius:14px;
@@ -616,7 +617,9 @@ function renderLista(d) {
       <div style="font-size:12px;color:var(--ink3);">${tipoLabel}${r.categoria?' · '+r.categoria:''}</div>
       <div style="font-size:11px;color:var(--ink3);">${fecha}</div>
       ${r.resumen ? `<div style="font-size:12px;color:var(--ink2);margin-top:2px;">${r.resumen}</div>` : ''}
-      ${r.mensaje_ux ? `<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:4px;">${r.mensaje_ux}</div>` : (r.estado && r.tipo ? `<div style="font-size:11px;color:var(--ink3);margin-top:2px">${getMensajeEstado(r.estado,r.tipo).icon} ${getMensajeEstado(r.estado,r.tipo).msg}</div>` : '')}
+      ${r.mensaje_ux 
+        ? `<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:4px;">${r.mensaje_ux}</div>` 
+        : `<div style="font-size:11px;color:var(--ink3);margin-top:4px">${estadoMsg.icon} ${estadoMsg.msg}</div>`}
     </div>`;
   }).join('');
 }
@@ -706,7 +709,8 @@ const MENSAJES_ESTADO = {
 
 function getMensajeEstado(estado, tipo) {
   const grupo = MENSAJES_ESTADO[estado] || MENSAJES_ESTADO['abierto'];
-  return grupo[tipo] || grupo['default'] || { icon:'📋', msg:'Tu solicitud está registrada.', cls:'gris' };
+  const t = tipo || 'default';
+  return grupo[t] || grupo['default'] || { icon:'📋', msg:'Tu solicitud está registrada en nuestro sistema.', cls:'gris' };
 }
 
 async function renderResultado(d) {
