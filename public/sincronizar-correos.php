@@ -560,6 +560,12 @@ foreach ($todos_correos as $c) {
     // Upsert por message_id
     $r = sbUpsert('correos', [$payload], 'message_id');
 
+    if ($r['code'] === 409) {
+        // Conflicto: ya existe con mismo message_id — avanzar cursor
+        log_msg("  ⚠️  Duplicado ignorado {$msg_id}");
+        $nuevo_cursor = $received_raw;
+        continue;
+    }
     if ($r['code'] < 200 || $r['code'] >= 300) {
         log_msg("  ❌ Error upsert {$msg_id}: HTTP {$r['code']}");
         $stats['errores']++;
@@ -595,9 +601,33 @@ foreach ($todos_correos as $c) {
         $stats['adjuntos'] += $adj_count;
     }
 
+    // ── Clasificación: extraer del asunto si viene clasificado (correos espejo) ──
+    $clasificado_asunto = null;
+    if ($es_nuevo && preg_match('/FELICIT|SUGERENCI|AGRADEC/i', $subject)) {
+        $sent = 'neutro'; $tipo = 'peticion'; $prio = 'media';
+        if (preg_match('/POSITIVO/i', $subject))  $sent = 'positivo';
+        if (preg_match('/NEGATIVO/i', $subject))  $sent = 'negativo';
+        if (preg_match('/URGENTE/i', $subject))   $sent = 'urgente';
+        if (preg_match('/FELICIT/i', $subject))   $tipo = 'felicitacion';
+        if (preg_match('/SUGERENCI/i', $subject)) $tipo = 'sugerencia';
+        if (preg_match('/BAJA/i', $subject))      $prio = 'baja';
+        if (preg_match('/ALTA/i', $subject))      $prio = 'alta';
+        $clasificado_asunto = ['sentimiento'=>$sent,'tipo_pqr'=>$tipo,'prioridad'=>$prio,
+            'categoria'=>'Extraído del asunto','resumen'=>mb_substr($subject,0,100),'horas_sla'=>360];
+        sbPatch('correos', "id=eq.$corr_id", [
+            'tipo_pqr'     => $tipo,
+            'sentimiento'  => $sent,
+            'prioridad'    => $prio,
+            'horas_sla'    => 360,
+            'resumen_corto'=> mb_substr($subject, 0, 150),
+            'updated_at'   => date('c'),
+        ]);
+        log_msg("  📋 Clasificado del asunto: $sent / $tipo");
+    }
+
     // ── Clasificación IA (solo correos externos nuevos) ───────────────
     if ($es_nuevo && $OPENAI_KEY) {
-        $clasificado = clasificarCorreo($corr_id, $subject, $body_cont, $from_email);
+        $clasificado = $clasificado_asunto ?? clasificarCorreo($corr_id, $subject, $body_cont, $from_email);
         if ($clasificado) {
             $stats['clasificados']++;
 
