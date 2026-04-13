@@ -1231,6 +1231,7 @@ const state = {
   sort: 'fecha',
   defaultActions: ['Observación añadida','Solicitud de información','Cliente contactado','Seguimiento','Escalado','En gestión','Solucionado','Correo respondido'],
   editingAgentId: null,
+  ciclo_inicio: null, // Fecha de inicio del ciclo activo — se llena desde cargarEstadoSync
 };
 
 // Chart instances
@@ -1594,21 +1595,22 @@ function showPage(page, btn) {
 // ──────────────────────────────────────────────
 async function loadEmails(horasVentana = 0) {
   try {
-    // ── Ventana: desde el inicio del día de HOY en hora Colombia ──
-    // horasVentana=0 → desde las 00:00 de hoy (default, igual que el PHP)
+    // ── Ventana: desde ciclo_inicio del sync (todos los correos del ciclo activo) ──
     // horasVentana>0 → carga histórica manual (ej: últimas 48h)
     let desde;
     if (horasVentana > 0) {
       desde = new Date(Date.now() - horasVentana * 60 * 60 * 1000).toISOString();
+    } else if (state.ciclo_inicio) {
+      // Usar la fecha de inicio del ciclo activo → muestra TODOS los correos del ciclo
+      desde = new Date(state.ciclo_inicio).toISOString();
     } else {
-      // Inicio del día en hora Colombia (UTC-5)
+      // Fallback: inicio del día en hora Colombia (UTC-5) si aún no se cargó el sync
       const ahora = new Date();
       const inicioDia = new Date(ahora.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }));
-      // Compensar offset Colombia = UTC-5
       desde = new Date(inicioDia.getTime() + 5 * 60 * 60 * 1000).toISOString();
     }
 
-    // Traer correos desde el inicio del día, orden igual que Outlook (más reciente primero)
+    // Traer correos desde el ciclo_inicio, orden igual que Outlook (más reciente primero)
     const data = await sb(`correos?received_at=gte.${desde}&order=received_at.desc&limit=500`);
     const allEmails = (data||[]).map(e=>({
       id: e.id,
@@ -3824,6 +3826,8 @@ async function cargarEstadoSync() {
       badge.style.display    = 'inline-flex';
       btnInic.style.display  = 'none';
       btnCiclo.style.display = 'inline-flex';
+      // Guardar ciclo_inicio en state para que loadEmails lo use como ventana
+      if (sync.ciclo_inicio) state.ciclo_inicio = sync.ciclo_inicio;
       if (sync.ultimo_sync) {
         const ls = document.getElementById('lastSync');
         if (ls) ls.textContent = 'Sync: ' + new Date(sync.ultimo_sync).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
@@ -3924,6 +3928,8 @@ async function getGraphToken(){
   if(sessionStorage.getItem('pqr_role')!=='admin') {
     window.location.href='login.html'; return;
   }
+  // Cargar ciclo_inicio PRIMERO para que loadEmails use la ventana correcta del ciclo
+  await cargarEstadoSync();
   await Promise.all([loadEmails(), loadAgents(), loadHistorial(), loadEncuestas()]);
   loadTopbarLogo();
   document.getElementById('lastSync').textContent=`sync ${new Date().toLocaleTimeString('es-CO')}`;
