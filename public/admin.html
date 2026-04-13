@@ -4475,21 +4475,20 @@ function renderRRLista(){
     lista.forEach(p=>{if(!grupos[p.cat])grupos[p.cat]=[];grupos[p.cat].push(p);});
     Object.entries(grupos).forEach(([cat,items])=>{
       const catInfo=RR_CATS.find(c=>c.id===cat)||{icon:'📋',label:cat};
-      html+=`<div style="padding:8px 14px 4px;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;background:#f8fafc;border-bottom:1px solid #f1f5f9">${catInfo.icon} ${catInfo.label}</div>`;
-      items.forEach((p,i)=>{ html+=rrItemHTML(p,i); });
+      html+='<div style="padding:8px 14px 4px;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;background:#f8fafc;border-bottom:1px solid #f1f5f9">'+catInfo.icon+' '+catInfo.label+'</div>';
+      items.forEach(p=>{ html+=rrItemHTML(p); });
     });
   } else {
-    lista.forEach((p,i)=>{ html+=rrItemHTML(p,i); });
+    lista.forEach(p=>{ html+=rrItemHTML(p); });
   }
   el.innerHTML=html;
 }
 
-function rrItemHTML(p,i){
-  const safeTexto=p.texto.replace(/`/g,'\`').replace(/\$/g,'\$');
-  return `<div class="rr-item" onclick="usarPlantilla(${RR_PLANTILLAS.indexOf(p)})">
-    <div class="rr-item-label">${esc(p.label)}</div>
-    <div class="rr-item-preview">${esc(p.preview)}</div>
-  </div>`;
+function rrItemHTML(p){
+  return '<div class="rr-item" onclick="usarPlantilla('+RR_PLANTILLAS.indexOf(p)+')">'
+    +'<div class="rr-item-label">'+esc(p.label)+'</div>'
+    +'<div class="rr-item-preview">'+esc(p.preview)+'</div>'
+    +'</div>';
 }
 
 function usarPlantilla(idx){
@@ -4620,7 +4619,7 @@ function usarTextoIA(){
 }
 
 
-async function insertarRR(id){const p=_rrData.find(x=>x.id===id);if(!p)return;if(typeof toggleReply==='function')toggleReply('reply');await new Promise(r=>setTimeout(r,300));const ed=document.querySelector('#replyBoxArea [contenteditable]');if(!ed){cerrarPanelRR();return;}const html=(p.respuesta_modelo||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>').replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');ed.innerHTML=html;ed.focus();const v=ed.querySelector('span[style*="fef08a"]');if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}try{await sb(`knowledge_base?id=eq.${id}`,'PATCH',{veces_usado:(p.veces_usado||0)+1});p.veces_usado=(p.veces_usado||0)+1;renderRR();}catch(e){}cerrarPanelRR();}
+// insertarRR legacy — reemplazado por usarPlantilla()
 
 // ═══════════════════════════════════════════════════
 // NOVA TD — MÉTRICAS POR CANAL (3 + Global)
