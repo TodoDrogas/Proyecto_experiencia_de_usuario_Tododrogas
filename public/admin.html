@@ -4274,8 +4274,8 @@ function abrirPanelRR(){
 function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p){p.style.visibility='hidden';p.style.opacity='0';p.style.pointerEvents='none';}}
 function renderRRCats(){
   const el=document.getElementById('rrCategorias');if(!el)return;
-  el.innerHTML='<button class="rr-cat-btn'+(_rrCat==='todas'?' active':'')+'" onclick="filtrarRR('todas')">Todas</button>'
-    +RR_CATS.map(c=>'<button class="rr-cat-btn'+(_rrCat===c.id?' active':'')+'" onclick="filtrarRR(''+c.id+'')">'+c.icon+' '+c.label+'</button>').join('');
+  el.innerHTML='<button class="rr-cat-btn'+(_rrCat==='todas'?' active':'')+'" onclick="filtrarRR(&apos;todas&apos;)">Todas</button>'
+    +RR_CATS.map(c=>'<button class="rr-cat-btn'+(_rrCat===c.id?' active':'')+'" onclick="filtrarRR(&apos;'+c.id+'&apos;)">'+c.icon+' '+c.label+'</button>').join('');
 }
 function filtrarRR(cat){_rrCat=cat;renderRRCats();renderRRLista();}
 function renderRRLista(){
@@ -4296,9 +4296,14 @@ function renderRRLista(){
     lista.forEach(function(p){html+=rrItemHTML(p);});
   }
   el.innerHTML=html;
+  // Event delegation para evitar problemas de comillas en onclick
+  el.querySelectorAll('[data-rr-idx]').forEach(function(div){
+    div.addEventListener('click',function(){usarPlantilla(parseInt(this.getAttribute('data-rr-idx')));});
+  });
 }
 function rrItemHTML(p){
-  return '<div class="rr-item" onclick="usarPlantilla('+RR_PLANTILLAS.indexOf(p)+')">'
+  const idx = RR_PLANTILLAS.indexOf(p);
+  return '<div class="rr-item" data-rr-idx="'+idx+'" style="cursor:pointer">'
     +'<div class="rr-item-label">'+esc(p.label)+'</div>'
     +'<div class="rr-item-preview">'+esc(p.preview)+'</div>'
     +'</div>';
