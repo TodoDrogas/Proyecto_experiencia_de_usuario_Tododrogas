@@ -3308,7 +3308,7 @@ let _acCache = null;
 async function _acCargar() {
   if(_acCache) return _acCache;
   try {
-    _acCache = await sb('contactos_frecuentes?activo=eq.true&order=frecuencia.desc&limit=500') || [];
+    _acCache = await sb('contactos_frecuentes?bloqueado=eq.false&order=nombre.asc&limit=1000') || [];
   } catch(e) { _acCache = []; }
   return _acCache;
 }
@@ -3327,8 +3327,7 @@ async function _acBuscar(q) {
   return all.filter(c =>
     _acNorm(c.nombre).includes(n) ||
     _acNorm(c.email).includes(n)  ||
-    _acNorm(c.cargo||'').includes(n) ||
-    (c.aliases||[]).some(a => _acNorm(a).includes(n))
+    _acNorm(c.telefono||'').includes(n)
   ).slice(0,8);
 }
 
@@ -3399,7 +3398,7 @@ function _acShow(inp, resultados, query) {
       <div style="min-width:0;flex:1">
         <div style="font-size:12px;font-weight:700;color:var(--ink,#1e293b);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_acHL(c.nombre||'',query)}</div>
         <div style="font-size:10px;color:var(--ink3,#94a3b8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_acHL(c.email,query)}${aliasCount?' <span style="opacity:.6">+'+aliasCount+' alias</span>':''}</div>
-        ${c.cargo?`<div style="font-size:10px;color:#3B82F6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.cargo}</div>`:''}
+        ${c.telefono?`<div style="font-size:10px;color:#3B82F6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.telefono}</div>`:''}
       </div>
       ${c.frecuencia>0?`<div style="font-size:9px;color:var(--ink3,#94a3b8);flex-shrink:0">×${c.frecuencia}</div>`:''}
     </div>`;
@@ -3428,10 +3427,7 @@ function _acSelect(el) {
     : document.getElementById('replyEditor');
   if(nextInput) nextInput.focus();
   _acHide();
-  // Incrementar frecuencia (silent)
-  sb(`contactos_frecuentes?email=eq.${encodeURIComponent(email)}`)
-    .then(r => { if(r?.[0]?.id) sb(`contactos_frecuentes?id=eq.${r[0].id}`,'PATCH',{frecuencia:(r[0].frecuencia||0)+1}).catch(()=>{}); })
-    .catch(()=>{});
+  // frecuencia no existe en esta tabla — omitido
 }
 
 function _acInit(inp) {
