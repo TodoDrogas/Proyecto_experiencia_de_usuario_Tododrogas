@@ -616,7 +616,7 @@ function renderLista(d) {
       <div style="font-size:12px;color:var(--ink3);">${tipoLabel}${r.categoria?' · '+r.categoria:''}</div>
       <div style="font-size:11px;color:var(--ink3);">${fecha}</div>
       ${r.resumen ? `<div style="font-size:12px;color:var(--ink2);margin-top:2px;">${r.resumen}</div>` : ''}
-      ${r.mensaje_ux ? `<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:4px;">${r.mensaje_ux}</div>` : ''}
+      ${r.mensaje_ux ? `<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:4px;">${r.mensaje_ux}</div>` : (r.estado && r.tipo ? `<div style="font-size:11px;color:var(--ink3);margin-top:2px">${getMensajeEstado(r.estado,r.tipo).icon} ${getMensajeEstado(r.estado,r.tipo).msg}</div>` : '')}
     </div>`;
   }).join('');
 }
@@ -679,6 +679,36 @@ function setLoading(on, txt) {
 }
 
 // ── Renderizar detalle (mismo diseño que antes) ───────────────────────
+// ── Mensajes por estado y tipo ──────────────────────────────────────
+const MENSAJES_ESTADO = {
+  solucionado: {
+    felicitacion: { icon:'💙', msg:'Gracias por tus palabras. Tu mensaje llegó al corazón de nuestro equipo y nos inspira a seguir mejorando cada día.', cls:'verde' },
+    sugerencia:   { icon:'🌟', msg:'Tu sugerencia fue recibida y tenida en cuenta. Nos ayudas a crecer como organización.', cls:'verde' },
+    default:      { icon:'✅', msg:'Tu solicitud fue atendida y resuelta exitosamente. Gracias por comunicarte con Tododrogas.', cls:'verde' },
+  },
+  pendiente: {
+    queja:     { icon:'⏳', msg:'Tu queja está registrada y será atendida en máximo 15 días hábiles según la Ley 1755/2015.', cls:'amarillo' },
+    reclamo:   { icon:'⏳', msg:'Tu reclamo está en revisión. Un asesor especializado lo atenderá pronto.', cls:'amarillo' },
+    peticion:  { icon:'⏳', msg:'Tu petición fue radicada y está pendiente de asignación.', cls:'amarillo' },
+    denuncia:  { icon:'🔒', msg:'Tu denuncia está siendo procesada con total confidencialidad.', cls:'amarillo' },
+    default:   { icon:'⏳', msg:'Tu solicitud está registrada y pendiente de gestión.', cls:'amarillo' },
+  },
+  gestion: {
+    queja:    { icon:'🔍', msg:'Un asesor está revisando tu caso. Te responderemos en los tiempos establecidos.', cls:'azul' },
+    reclamo:  { icon:'🔍', msg:'Tu reclamo está siendo revisado por nuestro equipo especializado.', cls:'azul' },
+    default:  { icon:'🔍', msg:'Tu caso está siendo gestionado activamente por nuestro equipo.', cls:'azul' },
+  },
+  respondido:      { default: { icon:'📩', msg:'Recibiste una respuesta de nuestro equipo. Revisa tu correo electrónico.', cls:'verde' } },
+  pendiente_firma: { default: { icon:'✍️', msg:'Tu caso requiere firma de cierre. Un asesor se comunicará contigo.', cls:'morado' } },
+  cerrado:         { default: { icon:'✅', msg:'Tu caso fue cerrado exitosamente.', cls:'verde' } },
+  abierto:         { default: { icon:'📋', msg:'Tu solicitud está registrada en nuestro sistema.', cls:'gris' } },
+};
+
+function getMensajeEstado(estado, tipo) {
+  const grupo = MENSAJES_ESTADO[estado] || MENSAJES_ESTADO['abierto'];
+  return grupo[tipo] || grupo['default'] || { icon:'📋', msg:'Tu solicitud está registrada.', cls:'gris' };
+}
+
 async function renderResultado(d) {
   document.getElementById('result-wrap').style.display = 'block';
 
@@ -704,7 +734,7 @@ async function renderResultado(d) {
 
   // Mensaje de estado
   const msgEl = document.getElementById('r-msg-estado');
-  const msgData = MENSAJES_ESTADO[d.estado] || MENSAJES_ESTADO['abierto'];
+  const msgData = getMensajeEstado(d.estado, d.tipo);
   if (msgData) {
     msgEl.style.display     = 'block';
     msgEl.style.background  = msgData.bg;
