@@ -151,7 +151,7 @@ function sbUpsert(string $endpoint, array $rows, string $conflict): array {
             "apikey: $SB_KEY",
             "Authorization: Bearer $SB_KEY",
             'Content-Type: application/json',
-            "Prefer: resolution=merge-duplicates,return=representation",
+            "Prefer: resolution=merge-duplicates,return=representation,missing=default",
             "on_conflict: $conflict",
         ],
     ]);
@@ -577,8 +577,10 @@ foreach ($todos_correos as $c) {
     $es_nuevo = empty($fila['sentimiento']);
 
     if (!$corr_id) {
-        log_msg("  ⚠️  Sin correo_id en respuesta para $msg_id");
-        $stats['errores']++;
+        // Upsert OK pero Supabase no devolvió la fila (correo ya existía).
+        // Avanzar cursor para no quedar atascados.
+        log_msg("  ⚠️  Sin correo_id en respuesta (ya existía) — avanzando cursor: {$msg_id}");
+        $nuevo_cursor = $received_raw;
         continue;
     }
 
