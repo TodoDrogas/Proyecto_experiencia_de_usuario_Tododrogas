@@ -1231,7 +1231,7 @@ const state = {
   sort: 'fecha',
   defaultActions: ['Observación añadida','Solicitud de información','Cliente contactado','Seguimiento','Escalado','En gestión','Solucionado','Correo respondido'],
   editingAgentId: null,
-  ciclo_inicio: null, // Fecha de inicio del ciclo activo — se llena desde cargarEstadoSync
+  ciclo_inicio: null,
 };
 
 // Chart instances
@@ -1595,23 +1595,31 @@ function showPage(page, btn) {
 // ──────────────────────────────────────────────
 async function loadEmails(horasVentana = 0) {
   try {
-    // ── Ventana: desde ciclo_inicio del sync (todos los correos del ciclo activo) ──
+    // ── Ventana: desde el inicio del día de HOY en hora Colombia ──
+    // horasVentana=0 → desde las 00:00 de hoy (default, igual que el PHP)
     // horasVentana>0 → carga histórica manual (ej: últimas 48h)
     let desde;
     if (horasVentana > 0) {
       desde = new Date(Date.now() - horasVentana * 60 * 60 * 1000).toISOString();
     } else if (state.ciclo_inicio) {
-      // Usar la fecha de inicio del ciclo activo → muestra TODOS los correos del ciclo
       desde = new Date(state.ciclo_inicio).toISOString();
     } else {
-      // Fallback: inicio del día en hora Colombia (UTC-5) si aún no se cargó el sync
       const ahora = new Date();
       const inicioDia = new Date(ahora.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }));
       desde = new Date(inicioDia.getTime() + 5 * 60 * 60 * 1000).toISOString();
     }
 
-    // Traer correos desde el ciclo_inicio, orden igual que Outlook (más reciente primero)
-    const data = await sb(`correos?received_at=gte.${desde}&order=received_at.desc&limit=500`);
+    // Paginación: traer TODOS los correos del ciclo sin techo de 500
+    let data = [];
+    let offset = 0;
+    const PAGE = 1000;
+    while (true) {
+      const page = await sb(`correos?received_at=gte.${desde}&order=received_at.desc&limit=${PAGE}&offset=${offset}`);
+      if (!page || page.length === 0) break;
+      data = data.concat(page);
+      if (page.length < PAGE) break;
+      offset += PAGE;
+    }
     const allEmails = (data||[]).map(e=>({
       id: e.id,
       message_id: e.message_id,
@@ -3826,7 +3834,6 @@ async function cargarEstadoSync() {
       badge.style.display    = 'inline-flex';
       btnInic.style.display  = 'none';
       btnCiclo.style.display = 'inline-flex';
-      // Guardar ciclo_inicio en state para que loadEmails lo use como ventana
       if (sync.ciclo_inicio) state.ciclo_inicio = sync.ciclo_inicio;
       if (sync.ultimo_sync) {
         const ls = document.getElementById('lastSync');
@@ -3928,7 +3935,6 @@ async function getGraphToken(){
   if(sessionStorage.getItem('pqr_role')!=='admin') {
     window.location.href='login.html'; return;
   }
-  // Cargar ciclo_inicio PRIMERO para que loadEmails use la ventana correcta del ciclo
   await cargarEstadoSync();
   await Promise.all([loadEmails(), loadAgents(), loadHistorial(), loadEncuestas()]);
   loadTopbarLogo();
