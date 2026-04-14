@@ -597,10 +597,13 @@ foreach ($todos_correos as $c) {
         $stats['actualizados']++;
     }
 
-    // ── Adjuntos: procesar ANTES de avanzar cursor ────────────────────
-    if ($has_adj) {
-        $adj_count = procesarAdjuntos($corr_id, $msg_id, $token);
-        $stats['adjuntos'] += $adj_count;
+    // ── Adjuntos: procesar SIEMPRE — Graph a veces reporta hasAttachments=false
+    // aunque tenga imágenes inline pegadas en el cuerpo
+    $adj_count = procesarAdjuntos($corr_id, $msg_id, $token);
+    $stats['adjuntos'] += $adj_count;
+    // Actualizar has_attachments si se encontraron adjuntos que Graph no reportó
+    if ($adj_count > 0 && !$has_adj) {
+        sbPatch('correos', "id=eq.$corr_id", ['has_attachments' => true]);
     }
 
     // ── Clasificación: extraer del asunto si viene clasificado (correos espejo) ──
