@@ -709,7 +709,7 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int
 
     // Traer lista de adjuntos desde Graph
     $r = curlGet(
-        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=50&\$select=id,name,contentType,size,isInline",
+        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=50&\$select=id,name,contentType,size,isInline,contentId",
         $token
     );
     if ($r['code'] !== 200) return 0;
@@ -718,12 +718,20 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int
 
     // Filtrar logos/firmas inline pequeños (Outlook auto-genera estos)
     $adjuntos = array_filter($adjuntos, function ($adj) {
-        $ct     = strtolower($adj['contentType'] ?? '');
-        $nombre = $adj['name'] ?? '';
-        $tam    = $adj['size'] ?? 0;
-        $inline = (bool)($adj['isInline'] ?? false);
-        $es_img = str_starts_with($ct, 'image/');
-        if (!$inline) return true;
+        $ct       = strtolower($adj['contentType'] ?? '');
+        $nombre   = $adj['name'] ?? '';
+        $tam      = $adj['size'] ?? 0;
+        $inline   = (bool)($adj['isInline'] ?? false);
+        $es_img   = str_starts_with($ct, 'image/');
+        $cont_id  = trim($adj['contentId'] ?? '');
+
+        if (!$inline) return true; // adjunto real → siempre procesar
+
+        // Inline con contentId → es imagen embebida en el cuerpo (firma, logo EPS, etc.)
+        // → SIEMPRE guardar para poder resolver el cid: en el admin
+        if ($es_img && $cont_id) return true;
+
+        // Inline sin contentId y pequeña → logo Outlook auto-generado → omitir
         if ($es_img && $tam < 150_000) return false;
         if ($es_img && preg_match('/^Outlook-[a-z0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i', $nombre)) return false;
         if ($es_img && (!$nombre || preg_match('/^\.[a-z]+$/i', $nombre))) return false;
@@ -739,6 +747,9 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int
         $ct     = $adj['contentType'] ?? 'application/octet-stream';
         $tam    = $adj['size']        ?? 0;
         $inline = (bool)($adj['isInline'] ?? false);
+        // contentId es el cid: que aparece en el body HTML → usarlo como attachment_id
+        $content_id = trim($adj['contentId'] ?? '');
+        $content_id = preg_replace('/^<|>$/', '', $content_id); // quitar < > si los tiene
 
         if ($tam > 52_428_800) { // >50MB — omitir
             log_msg("    ⚠️  Adjunto >50MB omitido: $nombre");
@@ -766,7 +777,10 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int
         $ts          = round(microtime(true) * 1000);
         $path        = $es_audio
             ? "$correo_id/{$ts}_{$safe_nombre}"
-            : "adjuntos/$correo_id/{$ts}_{$safe_nombre}";
+            : ($inline
+                ? "inline/$correo_id/{$ts}_{$safe_nombre}"   // imágenes del cuerpo
+                : "adjuntos/$correo_id/{$ts}_{$safe_nombre}" // adjuntos reales
+              );
 
         // Normalizar Content-Type
         if (in_array($ct, ['application/x-zip-compressed', 'application/x-zip'])) $ct = 'application/zip';
@@ -800,7 +814,7 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int
         // Registrar en tabla adjuntos con correo_id UUID correcto
         sbPost('adjuntos', [
             'correo_id'      => $correo_id,   // UUID — no ticket_id
-            'attachment_id'  => $adj_id,
+            'attachment_id'  => $content_id ?: $adj_id,  // contentId para inline, adj_id para reales
             'message_id'     => $msg_id,
             'nombre'         => $nombre,
             'tipo_contenido' => $ct,
