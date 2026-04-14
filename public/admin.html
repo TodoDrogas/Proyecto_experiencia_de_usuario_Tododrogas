@@ -404,6 +404,10 @@ table.agents-tbl tr:hover td{background:var(--bg)}
     </button>
 
 
+    <button onclick="abrirNuevoCorreo()" style="background:rgba(37,99,235,.2);border:1px solid rgba(37,99,235,.4);color:#93c5fd;padding:5px 12px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:5px;" title="Redactar nuevo correo">
+      ✉️ Nuevo correo
+    </button>
+
     <div class="topbar-user">
       <div class="topbar-user-av">A</div>
       <span class="topbar-user-name">Admin</span>
@@ -3225,6 +3229,143 @@ function mpPreviewAdjunto(url, nombre, tipo, el) {
     const w = window.open('', '_blank', 'width=860,height=700,resizable=yes,scrollbars=yes');
     if(isPDF) {
       w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659}iframe{width:100%;height:100vh;border:none}</style></head><body><iframe src="${url}#toolbar=1&navpanes=0"></iframe>
+
+<!-- ✉️ Modal Nuevo Correo -->
+<div id="modalNuevoCorreo" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:14px;width:600px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3);">
+    <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;background:#0f172a;border-radius:14px 14px 0 0">
+      <span style="font-size:18px">✉️</span>
+      <span style="font-weight:700;font-size:15px;color:#fff">Nuevo correo</span>
+      <button onclick="cerrarNuevoCorreo()" style="margin-left:auto;background:rgba(255,255,255,.1);border:none;cursor:pointer;font-size:18px;color:#fff;padding:4px 10px;border-radius:6px">✕</button>
+    </div>
+    <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;flex:1">
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Para *</label>
+        <input id="nc-para" type="email" placeholder="destinatario@ejemplo.com" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;outline:none" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">CC</label>
+        <input id="nc-cc" type="text" placeholder="cc1@ejemplo.com; cc2@ejemplo.com" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;outline:none" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Asunto *</label>
+        <input id="nc-asunto" type="text" placeholder="Asunto del correo" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;outline:none" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Mensaje *</label>
+        <div id="nc-body" contenteditable="true" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;min-height:160px;outline:none;line-height:1.6" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Adjuntos</label>
+        <div id="nc-adj-list" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:#475569;padding:6px 12px;border:1.5px dashed #e2e8f0;border-radius:8px;background:#f8fafc;width:fit-content">
+          <input type="file" id="nc-files" multiple style="display:none" onchange="ncAgregarArchivos(this.files)">
+          📎 Adjuntar archivo
+        </label>
+      </div>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end;background:#f8fafc;border-radius:0 0 14px 14px">
+      <button onclick="cerrarNuevoCorreo()" style="padding:8px 18px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#475569">Cancelar</button>
+      <button id="nc-btn-enviar" onclick="enviarNuevoCorreo()" style="padding:8px 20px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Enviar
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+let _ncFiles = [];
+
+function abrirNuevoCorreo() {
+  _ncFiles = [];
+  document.getElementById('nc-para').value = '';
+  document.getElementById('nc-cc').value = '';
+  document.getElementById('nc-asunto').value = '';
+  document.getElementById('nc-body').innerHTML = '';
+  document.getElementById('nc-adj-list').innerHTML = '';
+  document.getElementById('nc-files').value = '';
+  const m = document.getElementById('modalNuevoCorreo');
+  m.style.display = 'flex';
+  setTimeout(()=>document.getElementById('nc-para').focus(), 100);
+}
+
+function cerrarNuevoCorreo() {
+  document.getElementById('modalNuevoCorreo').style.display = 'none';
+}
+
+function ncAgregarArchivos(files) {
+  Array.from(files).forEach(f => {
+    if(_ncFiles.find(x=>x.name===f.name && x.size===f.size)) return;
+    _ncFiles.push(f);
+    const pill = document.createElement('div');
+    pill.style.cssText = 'display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:500;color:#475569';
+    pill.innerHTML = getFileIcon(f.name) + ' ' + esc(f.name) + ' <button onclick="ncQuitarAdj(''+f.name+'',''+f.size+'')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;line-height:1;padding:0 2px">✕</button>';
+    document.getElementById('nc-adj-list').appendChild(pill);
+  });
+  document.getElementById('nc-files').value = '';
+}
+
+function ncQuitarAdj(nombre, size) {
+  _ncFiles = _ncFiles.filter(f => !(f.name===nombre && String(f.size)===size));
+  const pills = document.getElementById('nc-adj-list');
+  Array.from(pills.children).forEach(p => { if(p.textContent.includes(nombre)) p.remove(); });
+}
+
+async function enviarNuevoCorreo() {
+  const para = document.getElementById('nc-para').value.trim();
+  const cc   = document.getElementById('nc-cc').value.trim();
+  const asunto = document.getElementById('nc-asunto').value.trim();
+  const body = document.getElementById('nc-body').innerHTML.trim();
+
+  if(!para)   { showToast('Escribe un destinatario','info'); return; }
+  if(!asunto) { showToast('Escribe un asunto','info'); return; }
+  if(!body || body==='<br>') { showToast('Escribe el mensaje','info'); return; }
+
+  const btn = document.getElementById('nc-btn-enviar');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Enviando…';
+
+  try {
+    const token  = await getGraphToken();
+    const userId = window.GRAPH_USER_ID || '';
+
+    const inlineFiles = _ncFiles.filter(f => f.size <= 3*1024*1024);
+    const largeFiles  = _ncFiles.filter(f => f.size >  3*1024*1024);
+
+    const attachments = [];
+    for(const f of inlineFiles) {
+      const base64 = await _fileToBase64(f);
+      attachments.push({'@odata.type':'#microsoft.graph.fileAttachment', name:f.name, contentType:f.type||'application/octet-stream', contentBytes:base64});
+    }
+
+    const payload = {
+      subject: asunto,
+      body: { contentType:'HTML', content:`<div style="font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px">${body}</div>` },
+      toRecipients: para.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}})),
+    };
+    if(cc) payload.ccRecipients = cc.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+    if(attachments.length) payload.attachments = attachments;
+
+    const r = largeFiles.length > 0
+      ? await _buildAndSendMailWithLargeAttachments(token, userId, payload, largeFiles.map(f=>({file:f,id:f.name})))
+      : await _buildAndSendMail(token, userId, payload);
+
+    if(r.ok || r.status===202 || r.status===200) {
+      showToast('Correo enviado ✓','success');
+      cerrarNuevoCorreo();
+    } else {
+      throw new Error(await r.text());
+    }
+  } catch(e) {
+    showToast('Error al enviar: '+e.message.substring(0,80),'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar';
+  }
+}
+</script>
+
 </body></html>`);
     } else {
       w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${url}" alt="${nombre}"></body></html>`);
@@ -3826,7 +3967,6 @@ async function confirmarAutoAsignar() {
           asignado_a: asig.agente_nombre,  // nombre para display
           estado: 'gestion'
         });
-        await addHistorialEvent(asig.correo_id, null, 'asignado_automatico', {agente_id: asig.agente_id, agente_nombre: asig.agente_nombre, por:'admin (autoasignación masiva)'});
         exitosos++;
       } catch { errores++; }
     }
@@ -4299,91 +4439,50 @@ function exportarEncuestasExcel() {
 
 
 let _rrData=[],_rrCat='todas',_rrLoaded=false;
-// ══ RESPUESTAS RÁPIDAS v3 ══════════════════════════════════════════
-const RR_CATS = [
-  {id:'envio',icon:'📦',label:'Envío y Traslado'},
-  {id:'disponible',icon:'🏥',label:'Disponibilidad'},
-  {id:'formula',icon:'📋',label:'Fórmula'},
-  {id:'medicamento',icon:'💊',label:'Medicamento'},
-  {id:'glp1',icon:'🔬',label:'GLP1 / Especiales'},
-  {id:'cobertura',icon:'📍',label:'Cobertura'},
-  {id:'vencimiento',icon:'⏰',label:'Vencimientos'},
-  {id:'tiques',icon:'🎫',label:'Tiques Internos'},
-];
-const RR_PLANTILLAS = [
-  {cat:'envio',label:'Municipio no propio — envío hoy',preview:'Medicamento será enviado hoy para municipio X...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] será enviado el día de hoy para el municipio de [MUNICIPIO], para su entrega efectiva el día [FECHA] en horas de la tarde. Adjunto formato de entrega como evidencia de facturación.\n\nQuedo atenta, feliz día.'},
-  {cat:'envio',label:'Municipio no propio — solicitado a compras',preview:'Solicitado a compras, fecha estimada de llegada...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] fue solicitado al área de compras, tiene fecha de llegada para el día [FECHA LLEGADA], para su entrega efectiva el día [FECHA ENTREGA] en horas de la tarde. Adjunto formato de pendientes como evidencia de facturación.\n\nQuedo atenta, feliz día.'},
-  {cat:'envio',label:'Municipio propio — traslado programado',preview:'Medicamento en traslado para municipio X...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] será enviado el día de hoy en traslado para el municipio [MUNICIPIO], para su entrega efectiva el día [FECHA] en horas de la tarde. Adjunto formato de pendientes como evidencia de facturación.\n\nQuedo atenta, feliz día.'},
-  {cat:'envio',label:'Domicilio — envío a dirección',preview:'Medicamento enviado a domicilio...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] será enviado el día de hoy a domicilio a la dirección [DIRECCIÓN]. Inmediatamente sea entregado, el acta de entrega firmada será enviada por este mismo medio.\n\nQuedo atenta, feliz día.'},
-  {cat:'disponible',label:'Disponible en servicio farmacéutico',preview:'Medicamento ya disponible en SF de X...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] ya se encuentra disponible en el servicio farmacéutico de [SEDE] listo para ser entregado al usuario. Adjunto formato de entrega como evidencia de facturación.\n\nQuedo atenta, feliz día.'},
-  {cat:'disponible',label:'Medicamento agotado',preview:'Medicamento agotado, adjunto carta laboratorio...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] se encuentra agotado. Adjunto carta por parte del laboratorio.\n\nQuedo atenta, feliz día.'},
-  {cat:'disponible',label:'Compras — fecha estimada',preview:'Solicitado a compras, orden de compra adjunta...',texto:'Buen día,\n\nEl medicamento [MEDICAMENTO] fue solicitado al área de compras, tiene fecha estimada de llegada para el día [FECHA LLEGADA], para su entrega efectiva el día [FECHA ENTREGA] en horas de la tarde. Adjunto formato de pendiente y orden de compra.\n\nQuedo atenta, feliz día.'},
-  {cat:'disponible',label:'Preparado magistral',preview:'Solicitud preparación medicamento magistral...',texto:'Buen día,\n\nSolicito de su colaboración con la preparación del medicamento [MEDICAMENTO] para el usuario [TIPO_DOC]-[CC]-[NOMBRE PACIENTE] cantidad [CANTIDAD]. Adjunto fórmula médica, historia clínica.\n\nNota: prioridad por favor\n\nQuedo atenta, feliz tarde.'},
-  {cat:'disponible',label:'No corresponde — proveedor THE LABS',preview:'Entrega no corresponde, le corresponde a THE LABS...',texto:'Buen día,\n\nInformamos que la entrega del medicamento [MEDICAMENTO] no nos corresponde, la dispensación le corresponde al proveedor THE LABS.\n\nQuedo atenta, feliz día.'},
-  {cat:'formula',label:'Fórmula errada',preview:'Fórmula del medicamento X se encuentra errada...',texto:'Buen día,\n\nSe informa que la fórmula del medicamento [MEDICAMENTO] se encuentra errada: [DESCRIPCIÓN DEL ERROR]. Por favor corregir para su respectiva gestión.\n\nQuedo atenta, feliz día.'},
-  {cat:'formula',label:'Fórmula vencida',preview:'Fórmula vencida, adjuntar fórmula vigente...',texto:'Buen día,\n\nSe informa que la fórmula se encuentra vencida, por lo que no se puede realizar la dispensación. Por favor adjuntar fórmula vigente para su respectiva gestión.\n\nQuedo atenta, feliz día.'},
-  {cat:'formula',label:'Sin fórmula médica',preview:'No contamos con fórmula, intentamos comunicarnos...',texto:'Buen día,\n\nSe informa que no contamos con fórmula médica del usuario. Tratamos de comunicarnos al número [TELÉFONO] pero no obtuvimos respuesta. Adjunto evidencia de llamadas. Por favor compartir fórmula para su respectiva gestión.\n\nQuedo atenta, feliz día.'},
-  {cat:'medicamento',label:'No contratado con EPS',preview:'Medicamento no está en listado contratado con EPS...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] no se encuentra dentro del listado de medicamentos contratados con la EPS [EPS].\n\nQuedo atenta, feliz día.'},
-  {cat:'medicamento',label:'Pasa a cotización',preview:'Medicamento pasa a proceso de cotización...',texto:'Buen día,\n\nEl medicamento [MEDICAMENTO] pasa a proceso de cotización dado que no se encuentra dentro del listado de medicamentos contratados con la EPS.\n\nQuedo atenta, feliz día.'},
-  {cat:'medicamento',label:'Nivel 1 — ESE del municipio',preview:'Medicamento es de nivel 1, corresponde a ESE...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] es de nivel 1, por lo tanto, le corresponde a la ESE del municipio.\n\nQuedo atenta, feliz día.'},
-  {cat:'glp1',label:'Rechazado GLP1',preview:'Se realizó estudio y fue rechazado...',texto:'Buen día,\n\nSe realizó el estudio para el medicamento [MEDICAMENTO] y este fue rechazado.\n\nQuedo atenta, feliz día.'},
-  {cat:'glp1',label:'Rechazado — hipolipemiante',preview:'Medicamento hipolipemiante, estudio rechazado...',texto:'Buen día,\n\nEl medicamento es HIPOLIPEMIANTE. Se realizó el estudio para el medicamento [MEDICAMENTO] y este fue rechazado.\n\nQuedo atenta, feliz día.'},
-  {cat:'glp1',label:'Comité autoinmune — sin nivel 1',preview:'Para comité dispensamos todos los mx contratados...',texto:'Para comité dispensamos todos los medicamentos que estén contratados, sin importar si es de nivel 1, ya que ellos no manejan nivel 1. Por favor ayúdame con la dispensa y si no tienes los medicamentos ya los envío en traslado.'},
-  {cat:'glp1',label:'Tique GLP1 — sin historial Mantis',preview:'Análisis QF medicamento GLP1 PACIENTE...',texto:'Análisis QF de medicamento GLP1 PACIENTE: [NOMBRE] CC: [CC], MEDICAMENTO: [MEDICAMENTO], TEL: [TELÉFONO]'},
-  {cat:'cobertura',label:'Sin cobertura — no puede acercarse',preview:'Sin cobertura en municipio, SF más cercano...',texto:'Buen día,\n\nEl usuario es del municipio [MUNICIPIO]. En el momento no contamos con cobertura al municipio. En comunicación con el usuario le informamos que el SF más cercano es [SF CERCANO], sin embargo indica que no puede desplazarse.\n\nQuedo atenta, feliz día.'},
-  {cat:'cobertura',label:'Ruta AUTOINMUNE — SAVIA',preview:'Usuario activo en ruta AUTOINMUNE...',texto:'Buen día,\n\nEl usuario se encuentra activo en la ruta AUTOINMUNE.\n\nQuedo atenta, feliz día.'},
-  {cat:'vencimiento',label:'Direccionamiento vencido — ampliar',preview:'Direccionamiento vencido, favor extender fecha...',texto:'Buen día,\n\nSe informa que el direccionamiento [NÚMERO] se encuentra vencido desde el [FECHA]. Por favor extender fecha para realizar la respectiva gestión.\n\nQuedo atenta, feliz día.'},
-  {cat:'tiques',label:'Autorización SAVIA-CAPITA (Don Henry)',preview:'Solicito autorización para dispensar en SAVIA-CAPITA...',texto:'Por favor solicito AUTORIZACIÓN PARA DISPENSAR EN SAVIA-CAPITA\n\nPACIENTE: [NOMBRE]\nCC: [CC]\nMEDICAMENTO: [MEDICAMENTO]\nDOSIS: [DOSIS]'},
-  {cat:'tiques',label:'Cotización DESACATO — COOSALUD',preview:'Mandar a cotizar COOSALUD EVENTO, DESACATO...',texto:'Por favor mandar a cotizar para COOSALUD EVENTO-COOSALUD [MEDICAMENTO] - solicitud OPS - [NOMBRE USUARIO] CC [CC] - DESACATO COOSALUD'},
-  {cat:'tiques',label:'Solicitud OPS — TUTELA COOSALUD',preview:'Ingresar EVENTO-COOSALUD solicitud OPS TUTELA...',texto:'Por favor ingresar a EVENTO-COOSALUD [MEDICAMENTO]\n- solicitud OPS [NOMBRE USUARIO] CC [CC] - TUTELA COOSALUD'},
-];
-let _rrGPTLoading=false;
 
+// ══ RESPUESTAS RÁPIDAS — carga desde knowledge_base igual que agente ══
 function abrirPanelRR(){
   const p=document.getElementById('panelRR');
   if(!p)return;
   p.style.visibility='visible';p.style.opacity='1';p.style.pointerEvents='auto';
   document.getElementById('rrIAResult').style.display='none';
-  _rrCat='todas';
-  renderRRCats();
+  if(!_rrLoaded){
+    document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">⏳ Cargando...</div>';
+    sb('knowledge_base?activo=eq.true&order=categoria.asc,veces_usado.desc&limit=200')
+      .then(rows=>{_rrData=rows||[];_rrLoaded=true;_rrRenderCats();renderRRLista();})
+      .catch(()=>{document.getElementById('rrLista').innerHTML='<div style="padding:24px;text-align:center;color:#dc2626;font-size:12px">❌ Error al cargar</div>';});
+    return;
+  }
+  _rrRenderCats();
   renderRRLista();
 }
 function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p){p.style.visibility='hidden';p.style.opacity='0';p.style.pointerEvents='none';}}
-function renderRRCats(){
+function _rrRenderCats(){
+  const cats=['todas',...new Set(_rrData.map(p=>p.categoria).filter(Boolean))];
   const el=document.getElementById('rrCategorias');if(!el)return;
-  el.innerHTML='<button class="rr-cat-btn'+(_rrCat==='todas'?' active':'')+'" onclick="filtrarRR(&apos;todas&apos;)">Todas</button>'
-    +RR_CATS.map(c=>'<button class="rr-cat-btn'+(_rrCat===c.id?' active':'')+'" onclick="filtrarRR(&apos;'+c.id+'&apos;)">'+c.icon+' '+c.label+'</button>').join('');
+  el.innerHTML=cats.map(c=>'<button class="rr-cat-btn'+(c===_rrCat?' active':'')+'" onclick="_rrSC(''+c.replace(/'/g,"\'")+'')">'+(c==='todas'?'Todas':c)+'</button>').join('');
 }
-function filtrarRR(cat){_rrCat=cat;renderRRCats();renderRRLista();}
+function _rrSC(c){_rrCat=c;_rrRenderCats();renderRRLista();}
+function filtrarRR(cat){_rrSC(cat);}
+function renderRRCats(){_rrRenderCats();}
 function renderRRLista(){
+  const q=(document.getElementById('rrSearch')?.value||'').toLowerCase();
+  let l=_rrData;
+  if(_rrCat!=='todas')l=l.filter(p=>p.categoria===_rrCat);
+  if(q)l=l.filter(p=>(p.situacion||'').toLowerCase().includes(q)||(p.categoria||'').toLowerCase().includes(q));
   const el=document.getElementById('rrLista');if(!el)return;
-  const lista=_rrCat==='todas'?RR_PLANTILLAS:RR_PLANTILLAS.filter(p=>p.cat===_rrCat);
-  if(!lista.length){el.innerHTML='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Sin plantillas</div>';return;}
-  let html='';
-  if(_rrCat==='todas'){
-    const grupos={};
-    lista.forEach(p=>{if(!grupos[p.cat])grupos[p.cat]=[];grupos[p.cat].push(p);});
-    Object.entries(grupos).forEach(function(entry){
-      const cat=entry[0],items=entry[1];
-      const catInfo=RR_CATS.find(c=>c.id===cat)||{icon:'📋',label:cat};
-      html+='<div style="padding:8px 14px 4px;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;background:#f8fafc;border-bottom:1px solid #f1f5f9">'+catInfo.icon+' '+catInfo.label+'</div>';
-      items.forEach(function(p){html+=rrItemHTML(p);});
-    });
-  } else {
-    lista.forEach(function(p){html+=rrItemHTML(p);});
-  }
-  el.innerHTML=html;
+  if(!l.length){el.innerHTML='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Sin plantillas</div>';return;}
+  el.innerHTML=l.map(p=>'<div class="rr-item" onclick="usarPlantillaRR('+p.id+')">'
+    +'<div class="rr-cat">'+esc(p.categoria||'')+(p.veces_usado?' · <span style="color:#2563eb">'+p.veces_usado+'x</span>':'')+'</div>'
+    +'<div class="rr-item-label">'+esc(p.situacion||'')+'</div>'
+    +'<div class="rr-item-preview">'+esc((p.respuesta_modelo||'').substring(0,100))+'…</div>'
+    +'</div>').join('');
 }
-function rrItemHTML(p){
-  return '<div class="rr-item" onclick="usarPlantilla('+RR_PLANTILLAS.indexOf(p)+')">'
-    +'<div class="rr-item-label">'+esc(p.label)+'</div>'
-    +'<div class="rr-item-preview">'+esc(p.preview)+'</div>'
-    +'</div>';
-}
-function usarPlantilla(idx){
-  const p=RR_PLANTILLAS[idx];if(!p)return;
-  insertarTextoEnReply(p.texto);
+async function usarPlantillaRR(id){
+  const p=_rrData.find(x=>x.id===id);if(!p)return;
+  insertarTextoEnReply(p.respuesta_modelo||'');
   cerrarPanelRR();
+  try{await sb('knowledge_base?id=eq.'+id,'PATCH',{veces_usado:(p.veces_usado||0)+1});p.veces_usado=(p.veces_usado||0)+1;}catch(e){}
 }
 function insertarTextoEnReply(texto){
   if(typeof toggleReply==='function')toggleReply('reply');
@@ -4866,7 +4965,7 @@ function exportNovaExcel(){
     <div style="margin-left:auto;font-size:18px;opacity:.7">→</div>
   </button>
   <div style="padding:10px 12px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
-    <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">O elige una plantilla</div>
+    <input type="text" id="rrSearch" placeholder="🔍 Buscar plantilla..." oninput="renderRRLista()" style="width:100%;box-sizing:border-box;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:12px;font-family:inherit;outline:none;margin-bottom:8px">
     <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:5px"></div>
   </div>
   <div id="rrLista" style="flex:1;overflow-y:auto"></div>
