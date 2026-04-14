@@ -2341,19 +2341,15 @@ async function confirmarFirma() {
         body: file,
       });
       if(uploadRes.ok) {
-        // URL firmada 10 años
-        const signRes = await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`, {
-          method:'POST',
-          headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-          body: JSON.stringify({expiresIn:315360000}),
-        });
-        const signData = signRes.ok ? await signRes.json() : {};
-        firmaUrl = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
-        // Registrar en tabla adjuntos
+        // URL pública directa (bucket adjuntos-pqr es público — no expira)
+        firmaUrl = `${SB_URL}/storage/v1/object/public/adjuntos-pqr/${storagePath}`;
+        // Registrar en tabla adjuntos incluyendo storage_path para acceso alternativo
         await sb('adjuntos','POST',{
           correo_id:id, attachment_id:`firma_${id}_${ts}`,
           nombre:file.name, tipo_contenido:file.type||'application/octet-stream',
-          tamano_bytes:file.size, es_inline:false, storage_url:firmaUrl,
+          tamano_bytes:file.size, es_inline:false,
+          storage_url:firmaUrl,
+          storage_path:storagePath,
           direccion:'firma_cierre', enviado_por:agentId,
         });
       } else {
