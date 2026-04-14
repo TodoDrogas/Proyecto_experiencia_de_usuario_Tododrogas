@@ -968,12 +968,12 @@ async function loadAttachments(correoId) {
       }).join('') + `</div>`;
   };
   const filtrar = (lista) => lista.filter(a=>{
-    // Solo mostrar adjuntos del correo entrante — excluir firmas y salientes
+    // Inline = parte del cuerpo HTML → NUNCA mostrar en adjuntos (igual que Outlook/Admin)
+    const esInline=a.es_inline===true||a.isInline===true;
+    if(esInline) return false;
+    // Solo adjuntos entrantes reales
     const dir = a.direccion||'';
     if(dir && dir !== 'entrante') return false;
-    const esInline=a.es_inline===true||a.isInline===true;
-    const esImagen=(a.tipo_contenido||a.contentType||'').toLowerCase().startsWith('image/');
-    if(esInline&&esImagen&&(a.tamano_bytes||a.size||0)<10000) return false;
     return true;
   });
   try {
@@ -1842,11 +1842,12 @@ async function abrirPreviewCorreo(id) {
       }).join('') + `</div>`;
   };
   const _mpFiltrarAdjs = (lista) => lista.filter(a=>{
+    // Inline = parte del cuerpo HTML → NUNCA mostrar en adjuntos (igual que Outlook/Admin)
+    const esInline=a.es_inline===true||a.isInline===true;
+    if(esInline) return false;
+    // Solo adjuntos entrantes reales
     const dir = a.direccion||'';
     if(dir && dir !== 'entrante') return false;
-    const esInline=a.es_inline===true||a.isInline===true;
-    const esImagen=(a.tipo_contenido||a.contentType||'').toLowerCase().startsWith('image/');
-    if(esInline&&esImagen&&(a.tamano_bytes||a.size||0)<10000) return false;
     return true;
   });
   adjBar.style.display='none';
