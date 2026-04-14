@@ -2643,13 +2643,11 @@ const RR_PLANTILLAS = [
   {cat:'tiques',label:'Cotización DESACATO — COOSALUD',preview:'Mandar a cotizar COOSALUD EVENTO, DESACATO...',texto:'Por favor mandar a cotizar para COOSALUD EVENTO-COOSALUD [MEDICAMENTO] - solicitud OPS - [NOMBRE USUARIO] CC [CC] - DESACATO COOSALUD'},
   {cat:'tiques',label:'Solicitud OPS — TUTELA COOSALUD',preview:'Ingresar EVENTO-COOSALUD solicitud OPS TUTELA...',texto:'Por favor ingresar a EVENTO-COOSALUD [MEDICAMENTO]\n- solicitud OPS [NOMBRE USUARIO] CC [CC] - TUTELA COOSALUD'},
 ];
-let _rrGPTLoading=false;
 
 function abrirPanelRR(){
   const p=document.getElementById('panelRR');
   if(!p)return;
   p.style.visibility='visible';p.style.opacity='1';p.style.pointerEvents='auto';
-  document.getElementById('rrIAResult').style.display='none';
   _rrCat='todas';
   renderRRCats();
   renderRRLista();
@@ -2704,40 +2702,8 @@ function insertarTextoEnReply(texto){
     if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}
   },350);
 }
-async function generarRRconIA(){
-  if(_rrGPTLoading)return;
-  _rrGPTLoading=true;
-  const iaDiv=document.getElementById('rrIAResult');
-  iaDiv.style.display='flex';iaDiv.style.flexDirection='column';
-  iaDiv.innerHTML='<div style="padding:20px;text-align:center"><div style="font-size:28px;margin-bottom:8px">✨</div><div style="font-size:13px;font-weight:600;color:#7c3aed">Analizando el correo...</div></div>';
-  const asunto=document.querySelector('.ev-subject')?.textContent||document.getElementById('mpAsunto')?.textContent||'';
-  const remitente=document.querySelector('.meta-chip')?.textContent||'';
-  const cuerpo=document.querySelector('#evBodyContent')?.innerText||document.querySelector('#mpBody')?.innerText||'';
-  const tipo=document.querySelector('.badge')?.textContent||'';
-  try{
-    const resp=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,
-        system:'Eres asistente de Tododrogas CIA SAS. Redacta respuestas profesionales a PQRSFD farmacéuticos. Usa "Buen día," como saludo y "Quedo atenta, feliz día." como cierre. Extrae medicamento, paciente, EPS, municipio del correo. Usa [DATO] si no tienes el dato. Máximo 6 líneas. Solo el cuerpo del correo.',
-        messages:[{role:'user',content:'Redacta la respuesta para este correo de PQRSFD:\n\nASUNTO: '+asunto+'\nDE: '+remitente+'\nTIPO: '+tipo+'\n\nCONTENIDO:\n'+cuerpo.substring(0,1200)}]})
-    });
-    const data=await resp.json();
-    const texto=data.content?.[0]?.text||'No se pudo generar respuesta.';
-    iaDiv.innerHTML='<div style="padding:12px 14px;background:linear-gradient(135deg,rgba(124,58,237,.08),rgba(37,99,235,.08));border-bottom:1px solid #e2e8f0">'
-      +'<div style="font-size:12px;font-weight:700;color:#7c3aed">✨ Respuesta generada por IA</div>'
-      +'<div style="font-size:10px;color:#94a3b8">Revisa y edita antes de enviar</div></div>'
-      +'<div id="iaTextoRR" style="padding:14px;font-size:12px;color:#0f172a;line-height:1.7;white-space:pre-wrap;flex:1;overflow-y:auto">'+esc(texto)+'</div>'
-      +'<div style="padding:10px 14px;display:flex;gap:8px;border-top:1px solid #e2e8f0;background:#f8fafc;flex-shrink:0">'
-      +'<button onclick="usarTextoIA()" style="flex:1;background:#2563eb;color:#fff;border:none;border-radius:8px;padding:9px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">✅ Usar</button>'
-      +'<button onclick="generarRRconIA()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:9px;font-size:12px;cursor:pointer;font-family:inherit" title="Regenerar">🔄</button>'
-      +'<button onclick="document.getElementById(\'rrIAResult\').style.display=\'none\'" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:9px;font-size:12px;cursor:pointer">✕</button>'
-      +'</div>';
-  }catch(e){
-    iaDiv.innerHTML='<div style="padding:20px;text-align:center;color:#dc2626;font-size:12px">❌ '+esc(e.message)+'</div>';
-  }
-  _rrGPTLoading=false;
-}
-function usarTextoIA(){const el=document.getElementById('iaTextoRR');if(!el)return;insertarTextoEnReply(el.textContent);cerrarPanelRR();}
+
+
 
 </script>
 <!-- ⚡ Panel Respuestas Rápidas v3 — igual que Admin -->
@@ -2756,20 +2722,12 @@ function usarTextoIA(){const el=document.getElementById('iaTextoRR');if(!el)retu
     <span style="font-weight:700;font-size:14px;color:#fff">Respuestas Rápidas</span>
     <button onclick="cerrarPanelRR()" style="margin-left:auto;background:rgba(255,255,255,.1);border:none;cursor:pointer;font-size:16px;color:#fff;padding:4px 8px;border-radius:6px">✕</button>
   </div>
-  <button onclick="generarRRconIA()" style="display:flex;align-items:center;gap:10px;padding:14px 16px;background:linear-gradient(135deg,#7c3aed,#2563eb);color:#fff;cursor:pointer;border:none;width:100%;text-align:left;font-family:'Poppins',sans-serif;flex-shrink:0">
-    <div style="width:36px;height:36px;background:rgba(255,255,255,.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">✨</div>
-    <div style="text-align:left">
-      <div style="font-size:13px;font-weight:700">Generar con IA</div>
-      <div style="font-size:11px;opacity:.8;margin-top:1px">Respuesta personalizada según el correo</div>
-    </div>
-    <div style="margin-left:auto;font-size:18px;opacity:.7">→</div>
-  </button>
+
   <div style="padding:10px 12px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
-    <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">O elige una plantilla</div>
+
     <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:5px"></div>
   </div>
   <div id="rrLista" style="flex:1;overflow-y:auto"></div>
-  <div id="rrIAResult" style="display:none;flex-direction:column;border-top:2px solid #7c3aed;flex-shrink:0;max-height:55vh;overflow-y:auto"></div>
 </div>
 </body>
 </html>
