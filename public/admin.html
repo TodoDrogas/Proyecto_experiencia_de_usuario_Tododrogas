@@ -1090,8 +1090,8 @@ table.agents-tbl tr:hover td{background:var(--bg)}
 <div class="modal-backdrop" id="modalGestion" onclick="if(event.target===this)closeModal('modalGestion')">
   <div class="gestion-modal-wide">
     <div class="gm-header">
-      <h3>Añadir gestión</h3>
-      <div class="modal-sub">Una vez guardada, la gestión no puede ser editada (garantía de trazabilidad)</div>
+      <h3 id="gModalTitulo">Añadir gestión</h3>
+      <div class="modal-sub" id="gModalSub">Una vez guardada, la gestión no puede ser editada (garantía de trazabilidad)</div>
     </div>
     <div class="gm-body">
 
@@ -1131,11 +1131,11 @@ table.agents-tbl tr:hover td{background:var(--bg)}
       </div>
 
       <!-- ── BLOQUE 2: DATOS DEL PACIENTE ── -->
-      <div class="gm-section">
+      <div class="gm-section" id="secPaciente">
         <div class="gm-section-header" onclick="gmToggle(this)">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
           DATOS DEL PACIENTE
-          <span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:6px">(se autocompleta al ingresar cédula)</span>
+          <span id="secPacienteTag" style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:6px">(se autocompleta al ingresar cédula)</span>
           <span class="gm-arrow">▼</span>
         </div>
         <div class="gm-section-body collapsed" id="secPacienteBody">
@@ -1144,11 +1144,23 @@ table.agents-tbl tr:hover td{background:var(--bg)}
             <select class="gm-input" id="gTipoDoc">
               <option value="">— Seleccionar —</option>
               <option value="CÉDULA DE CIUDADANÍA">Cédula de ciudadanía</option>
+              <option value="CEDULA DE CIUDADANIA">Cédula de ciudadanía (sin tilde)</option>
               <option value="TARJETA DE IDENTIDAD">Tarjeta de identidad</option>
-              <option value="CEDULA DE EXTRANJERIA">Cédula de extranjería</option>
+              <option value="CÉDULA DE EXTRANJERÍA">Cédula de extranjería</option>
+              <option value="TARJETA DE EXTRANJERÍA">Tarjeta de extranjería</option>
               <option value="PASAPORTE">Pasaporte</option>
+              <option value="PASAPORTE DE LA ONU">Pasaporte de la ONU</option>
               <option value="NIT">NIT</option>
-              <option value="OTRO">Otro</option>
+              <option value="REGISTRO CIVIL DE NACIMIENTO">Registro civil de nacimiento</option>
+              <option value="CERTIFICADO DE NACIDO VIVO">Certificado de nacido vivo</option>
+              <option value="SALVOCONDUCTO">Salvoconducto</option>
+              <option value="PERMISO DE PROTENCCION TEMPORAL">Permiso de protección temporal</option>
+              <option value="PERMANENCIA ESPECIAL">Permanencia especial</option>
+              <option value="CARNE DIPLOMATICO">Carné diplomático</option>
+              <option value="TIPO DE DOCUMENTO EXTRANJERO">Tipo de documento extranjero</option>
+              <option value="ADULTO SIN IDENTIFICAR">Adulto sin identificar</option>
+              <option value="MENOR SIN IDENTIFICAR">Menor sin identificar</option>
+              <option value="INFORMACIÓN EXOGENA">Información exógena</option>
             </select>
           </div>
           <div class="gm-field">
@@ -1181,7 +1193,7 @@ table.agents-tbl tr:hover td{background:var(--bg)}
       </div>
 
       <!-- ── BLOQUE 3: EPS, ORIGEN Y CLASIFICACIÓN ── -->
-      <div class="gm-section">
+      <div class="gm-section" id="secEps">
         <div class="gm-section-header" onclick="gmToggle(this)">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
           EPS, ORIGEN Y CLASIFICACIÓN
@@ -1205,12 +1217,14 @@ table.agents-tbl tr:hover td{background:var(--bg)}
             <label class="gm-label">Origen</label>
             <select class="gm-input" id="gOrigen">
               <option value="">— Seleccionar —</option>
-              <option value="correo">Correo electrónico</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="telefono">Teléfono / Conmutador</option>
-              <option value="web">Formulario web</option>
-              <option value="qr">QR punto de atención</option>
-              <option value="presencial">Presencial / Buzón</option>
+              <option value="CORREO ELECTRONICO">Correo electrónico</option>
+              <option value="WHATSAPP">WhatsApp</option>
+              <option value="CONMUTADOR (TELEFONO)">Conmutador (teléfono)</option>
+              <option value="PAGINA WEB">Página web</option>
+              <option value="CODIGO QR">Código QR</option>
+              <option value="NOVA TD">Nova TD</option>
+              <option value="BUZON DE SUGERENCIAS FISICO">Buzón de sugerencias físico</option>
+              <option value="VERBAL">Verbal</option>
             </select>
           </div>
           <div class="gm-field">
@@ -1257,6 +1271,8 @@ table.agents-tbl tr:hover td{background:var(--bg)}
               <option value="TODODROGAS">Tododrogas</option>
               <option value="PROVEEDOR">Proveedor</option>
               <option value="USUARIO EXTERNO">Usuario externo</option>
+              <option value="COLABORADOR">Colaborador</option>
+              <option value="ENTE DE CONTROL">Ente de control</option>
             </select>
           </div>
           <div class="gm-field">
@@ -2649,12 +2665,7 @@ let _gestionEvidenciaFile = null;
 let _gTutela = null;
 let _gMedCount = 0;
 
-// Catálogos locales para buscadores
-const G_DETALLES = [
-  'PENDIENTE','FORMULA ERRADA','FORMULA VENCIDA','SIN FORMULA',
-  'AUTORIZACION PENDIENTE','MEDICAMENTO AGOTADO','ENTREGA PARCIAL',
-  'CAMBIO DE MEDICAMENTO','DEVOLUCION','OTRO'
-];
+// Catálogos locales para buscadores — definidos más abajo junto a G_NOMBRES_SOL
 
 // ── Secciones colapsables ─────────────────────
 function gmToggle(header) {
@@ -2704,12 +2715,31 @@ function gLimpiarEPS() {
 
 // ── Catálogo Nombre Solicitud (padre) ────────
 const G_NOMBRES_SOL = {
-  'PETICIÓN':    ['PENDIENTE','AUTORIZACION PENDIENTE','OTRO'],
-  'QUEJA':       ['FORMULA ERRADA','FORMULA VENCIDA','SIN FORMULA','ENTREGA PARCIAL','CAMBIO DE MEDICAMENTO','OTRO'],
-  'RECLAMO':     ['FORMULA ERRADA','FORMULA VENCIDA','SIN FORMULA','MEDICAMENTO AGOTADO','DEVOLUCION','OTRO'],
-  'SUGERENCIA':  ['OTRO'],
+  'PETICIÓN':                     ['PENDIENTE','APLICACIÓN ONCOLÓGICA','APLICACIÓN VACUNA','ATENCIÓN','CITA MEDICA','EPS NO CONTRATADA','FORMULA ERRADA','FORMULA VENCIDA','INFRAESTRUCTURA','MIPRES NO DIRECCIONADO','MUNICIPIO NO CONTRATADO','MX AGOTADO','MX NO AUTORIZADO (GLP-1, COTIZACIÓN, ETC)','MX NO CONTRATADO','NIVEL 1','SIN DIRECCIONAMIENTO','SIN FORMULA','SIN RADICADO','USUARIO ACTIVO EN RIAS','USUARIO CON PORTABILIDAD','USUARIO NO RECLAMA','USUARIO QUIBDÓ','USUARIO YA RECLAMÓ','VIÁTICOS'],
+  'QUEJA':                        ['PENDIENTE','ATENCIÓN','FORMULA ERRADA','FORMULA VENCIDA','INFRAESTRUCTURA','MX AGOTADO','MX NO AUTORIZADO (GLP-1, COTIZACIÓN, ETC)','MX NO CONTRATADO','SIN FORMULA','USUARIO NO RECLAMA'],
+  'RECLAMO':                      ['PENDIENTE','EPS NO CONTRATADA','FORMULA ERRADA','FORMULA VENCIDA','MX AGOTADO','MX NO CONTRATADO','SIN FORMULA','MUNICIPIO NO CONTRATADO'],
+  'SUGERENCIA':                   ['PENDIENTE','ATENCIÓN','INFRAESTRUCTURA'],
+  'TUTELA':                       ['PENDIENTE','INCIDENTE DESACATO','SIN RADICADO'],
+  'INFORMACIÓN':                  ['PENDIENTE','ATENCIÓN','CITA MEDICA','MUNICIPIO NO CONTRATADO'],
+  'SOLICITUD':                    ['PENDIENTE','APLICACIÓN ONCOLÓGICA','APLICACIÓN VACUNA','MIPRES NO DIRECCIONADO','VIÁTICOS'],
+  'FELICITACIÓN':                 ['PENDIENTE','ATENCIÓN'],
+  'DENUNCIA':                     ['PENDIENTE'],
+  'REQUERIMIENTO PREVIO':         ['PENDIENTE','INCIDENTE DESACATO'],
+  'FALLO/SENTENCIA':              ['PENDIENTE','INCIDENTE DESACATO'],
+  'INCIDENTE DESACATO':           ['PENDIENTE','INCIDENTE DESACATO'],
+  'SANCIÓN INCIDENTE DESACATO':   ['PENDIENTE','INCIDENTE DESACATO'],
 };
 
+// Lista plana de todos los detalles (fallback si no hay nombre seleccionado)
+const G_DETALLES = [
+  'APLICACIÓN ONCOLÓGICA','APLICACIÓN VACUNA','ATENCIÓN','CITA MEDICA',
+  'EPS NO CONTRATADA','FORMULA ERRADA','FORMULA VENCIDA','INFRAESTRUCTURA',
+  'MIPRES NO DIRECCIONADO','MUNICIPIO NO CONTRATADO','MX AGOTADO',
+  'MX NO AUTORIZADO (GLP-1, COTIZACIÓN, ETC)','MX NO CONTRATADO','NIVEL 1',
+  'PENDIENTE','SIN DIRECCIONAMIENTO','SIN FORMULA','SIN RADICADO',
+  'USUARIO ACTIVO EN RIAS','USUARIO CON PORTABILIDAD','USUARIO NO RECLAMA',
+  'USUARIO QUIBDÓ','USUARIO YA RECLAMÓ','VIÁTICOS','INCIDENTE DESACATO',
+];
 function gFiltrarNombreSol(q) {
   const dd = document.getElementById('gNombreSolDropdown');
   const nombres = Object.keys(G_NOMBRES_SOL);
@@ -3007,86 +3037,105 @@ function openGestionModal(mode) {
   _gTutela = null;
   _gMedCount = 0;
 
-  // Reset evidencia
+  const email = state.emails.find(e=>e.id===state.selectedId);
+  const numGestiones = email?.num_gestiones || 0;
+  const esPrimera = numGestiones === 0;
+
+  // ── Título y subtítulo dinámico ──
+  const tituloEl = document.getElementById('gModalTitulo');
+  const subEl    = document.getElementById('gModalSub');
+  if(esPrimera) {
+    tituloEl.textContent = 'Añadir gestión — #1 (registro completo)';
+    subEl.innerHTML = '<span style="color:var(--blue);font-weight:600">Primera gestión:</span> completa todos los campos para registrar el caso en el SIGI.';
+  } else {
+    tituloEl.textContent = `Añadir gestión — #${numGestiones + 1}`;
+    subEl.innerHTML = `<span style="background:var(--blue-l);color:var(--blue);border-radius:99px;padding:2px 8px;font-weight:700;font-size:11px">${numGestiones} gestión${numGestiones>1?'es':''} registrada${numGestiones>1?'s':''}</span>&nbsp; Solo Gestión es obligatoria. Los demás campos ya quedaron en la primera.`;
+  }
+
+  // ── Mostrar/ocultar bloques según si es primera gestión ──
+  const secPaciente = document.getElementById('secPaciente');
+  const secEps      = document.getElementById('secEps');
+  const secMed      = document.querySelector('#secMedBody')?.closest('.gm-section');
+
+  if(esPrimera) {
+    // Primera: mostrar todo, expandir bloque paciente y EPS
+    if(secPaciente) { secPaciente.style.display=''; }
+    if(secEps)      { secEps.style.display=''; }
+    // Expandir automáticamente paciente y EPS
+    const pacBody = document.getElementById('secPacienteBody');
+    const epsBody = document.getElementById('secEpsBody');
+    if(pacBody) { pacBody.classList.remove('collapsed'); const arr=pacBody.previousElementSibling?.querySelector('.gm-arrow'); if(arr) arr.textContent='▼'; }
+    if(epsBody) { epsBody.classList.remove('collapsed'); const arr=epsBody.previousElementSibling?.querySelector('.gm-arrow'); if(arr) arr.textContent='▼'; }
+  } else {
+    // Segunda+: ocultar bloques de paciente y EPS
+    if(secPaciente) secPaciente.style.display='none';
+    if(secEps)      secEps.style.display='none';
+  }
+
+  // ── Reset evidencia ──
   const preview = document.getElementById('gestionEvidenciaPreview');
   if(preview) preview.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Clic aquí o arrastra un archivo';
 
-  // Poblar acciones
+  // ── Poblar acciones ──
   const sel = document.getElementById('gestionAccion');
   sel.innerHTML = '<option value="">— Seleccionar acción —</option>' +
     state.defaultActions.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');
   if(_gestionForSolucionado) sel.value = 'Solucionado';
 
-  // Reset observaciones
+  // ── Reset observaciones ──
   document.getElementById('gestionObs').value = '';
 
-  // Precargar datos del correo actual
-  const email = state.emails.find(e=>e.id===state.selectedId);
-  if(email) {
-    // Datos básicos desde el correo
-    document.getElementById('gEmail').value = email.from_email||email.remitente||'';
-    document.getElementById('gNombre').value = email.nombre||email.from_name||'';
+  // ── Precargar datos del correo (solo si es primera y hay datos) ──
+  if(email && esPrimera) {
+    document.getElementById('gEmail').value    = email.from_email||email.remitente||'';
+    document.getElementById('gNombre').value   = email.nombre||email.from_name||'';
     document.getElementById('gTelefono').value = email.telefono_contacto||'';
-    // Origen preseleccionado
     if(email.origen) {
       const origSel = document.getElementById('gOrigen');
-      for(let op of origSel.options) { if(op.value===email.origen){op.selected=true;break;} }
+      for(let op of origSel.options){ if(op.value===email.origen){op.selected=true;break;} }
     }
-    // Categoría
     if(email.categoria_sigi||email.categoria_ia) {
       const catSel = document.getElementById('gCategoria');
       const catVal = email.categoria_sigi||email.categoria_ia||'';
-      for(let op of catSel.options) { if(op.value===catVal){op.selected=true;break;} }
+      for(let op of catSel.options){ if(op.value===catVal){op.selected=true;break;} }
     }
-    // Tutela
-    if(email.tiene_tutela===true) gSetTutela(true);
+    if(email.tiene_tutela===true)  gSetTutela(true);
     else if(email.tiene_tutela===false) gSetTutela(false);
-    // EPS
     if(email.eps_id && state.epsCatalogo) {
       const eps = state.epsCatalogo.find(e=>e.id===email.eps_id);
       if(eps) gSelectEPS(eps.id, eps.nombre, eps.nit||'');
     }
-    // Detalle solicitud
     if(email.nombre_solicitud) {
       document.getElementById('gNombreSolSearch').value = email.nombre_solicitud;
-      document.getElementById('gNombreSolVal').value = email.nombre_solicitud;
-      window._gDetallesActivos = G_NOMBRES_SOL[email.nombre_solicitud] || null;
+      document.getElementById('gNombreSolVal').value    = email.nombre_solicitud;
+      window._gDetallesActivos = G_NOMBRES_SOL[email.nombre_solicitud]||null;
     }
     if(email.detalle_solicitud) {
       document.getElementById('gDetalleSearch').value = email.detalle_solicitud;
-      document.getElementById('gDetalleVal').value = email.detalle_solicitud;
+      document.getElementById('gDetalleVal').value    = email.detalle_solicitud;
     }
-    // Departamento / Ciudad
     if(email.departamento_paciente) {
       document.getElementById('gDeptoSearch').value = email.departamento_paciente;
-      document.getElementById('gDeptoVal').value = email.departamento_paciente;
+      document.getElementById('gDeptoVal').value    = email.departamento_paciente;
     }
     if(email.ciudad_paciente) {
       document.getElementById('gCiudadSearch').value = email.ciudad_paciente;
-      document.getElementById('gCiudadVal').value = email.ciudad_paciente;
+      document.getElementById('gCiudadVal').value    = email.ciudad_paciente;
     }
-    // Tipo doc + cédula
     if(email.tipo_documento) {
       const tdSel = document.getElementById('gTipoDoc');
       for(let op of tdSel.options){ if(op.value===email.tipo_documento){op.selected=true;break;} }
     }
-    if(email.cedula_paciente) {
-      document.getElementById('gCedula').value = email.cedula_paciente;
-    }
-    if(email.direccion_paciente) document.getElementById('gDireccion').value = email.direccion_paciente;
+    if(email.cedula_paciente)     document.getElementById('gCedula').value    = email.cedula_paciente;
+    if(email.direccion_paciente)  document.getElementById('gDireccion').value = email.direccion_paciente;
   }
 
-  // Reset lista medicamentos
+  // ── Reset lista medicamentos ──
   document.getElementById('gMedLista').innerHTML = '';
 
-  // Cargar catálogo EPS si no está en state
-  if(!state.epsCatalogo) {
-    sb('eps_catalogo?order=nombre.asc').then(d=>{ state.epsCatalogo=d||[]; }).catch(()=>{});
-  }
-  // Cargar sedes si no están
-  if(!state.sedes || !state.sedes.length) {
-    sb('sedes?order=nombre.asc').then(d=>{ state.sedes=d||[]; }).catch(()=>{});
-  }
+  // ── Cargar catálogos si faltan ──
+  if(!state.epsCatalogo) sb('eps_catalogo?order=nombre.asc').then(d=>{ state.epsCatalogo=d||[]; }).catch(()=>{});
+  if(!state.sedes||!state.sedes.length) sb('sedes?order=nombre.asc').then(d=>{ state.sedes=d||[]; }).catch(()=>{});
 
   document.getElementById('modalGestion').classList.add('show');
 }
@@ -3095,40 +3144,35 @@ async function saveGestion() {
   const id = state.selectedId;
   if(!id) return;
 
-  // ── Lectura de campos ──
-  const accion   = document.getElementById('gestionAccion').value;
-  const obs      = document.getElementById('gestionObs').value.trim();
+  const email     = state.emails.find(e=>e.id===id);
+  const numGest   = email?.num_gestiones || 0;
+  const esPrimera = numGest === 0;
+
+  // ── Lectura campos siempre obligatorios ──
+  const accion = document.getElementById('gestionAccion').value;
+  const obs    = document.getElementById('gestionObs').value.trim();
   if(!obs) { showToast('Las observaciones son obligatorias','error'); return; }
 
-  const email    = state.emails.find(e=>e.id===id);
-  const _rawAgId = sessionStorage.getItem('pqr_agent_id')||'';
-  const _uuidRe  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const agentId  = _uuidRe.test(_rawAgId) ? _rawAgId : null;
-  const agentName= 'Admin';
+  // ── Validación extra en primera gestión ──
+  if(esPrimera) {
+    if(!document.getElementById('gEpsId')?.value)         { showToast('EPS es obligatoria en la primera gestión','error'); return; }
+    if(!document.getElementById('gOrigen')?.value)        { showToast('Origen es obligatorio en la primera gestión','error'); return; }
+    if(!document.getElementById('gNombreSolVal')?.value)  { showToast('Nombre Solicitud es obligatorio en la primera gestión','error'); return; }
+    if(!document.getElementById('gCategoria')?.value)     { showToast('Categoría es obligatoria en la primera gestión','error'); return; }
+  }
 
-  // Campos SIGI verdes
-  const tipoDoc    = document.getElementById('gTipoDoc')?.value||'';
-  const cedula     = document.getElementById('gCedula')?.value?.trim()||'';
-  const nombre     = document.getElementById('gNombre')?.value?.trim()||'';
-  const direccion  = document.getElementById('gDireccion')?.value?.trim()||'';
-  const telefono   = document.getElementById('gTelefono')?.value?.trim()||'';
-  const epsId      = document.getElementById('gEpsId')?.value||null;
-  const origen     = document.getElementById('gOrigen')?.value||'';
-  const nombreSol  = document.getElementById('gNombreSolVal')?.value||'';
-  const detalle    = document.getElementById('gDetalleVal')?.value||'';
-  const depto      = document.getElementById('gDeptoVal')?.value||'';
-  const ciudad     = document.getElementById('gCiudadVal')?.value||'';
-  const categoria  = document.getElementById('gCategoria')?.value||'';
-  const tieneTutela= _gTutela; // true / false / null
-  const meds       = gRecolectarMeds();
+  const _rawAgId  = sessionStorage.getItem('pqr_agent_id')||'';
+  const _uuidRe   = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const agentId   = _uuidRe.test(_rawAgId) ? _rawAgId : null;
+  const agentName = 'Admin';
+  const meds      = gRecolectarMeds();
 
-  // ── Deshabilitar botón ──
   const btn = document.getElementById('btnSaveGestion');
   btn.disabled = true; btn.textContent = 'Guardando…';
 
   try {
-    // ═══ OPERACIÓN 1: Subir evidencia si hay ═══
-    const metadata = { agente_id:agentId, agente_nombre:agentName, por:'admin', observaciones:obs };
+    // ═══ OPERACIÓN 1: Evidencia ═══
+    const metadata = { agente_id:agentId, agente_nombre:agentName, por:'admin', observaciones:obs, num_gestion: numGest+1 };
     if(_gestionEvidenciaFile) {
       try {
         const ts=Date.now();
@@ -3146,27 +3190,43 @@ async function saveGestion() {
             body:JSON.stringify({expiresIn:315360000}),
           });
           const signData=signRes.ok?await signRes.json():{};
-          metadata.evidencia_url = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
+          metadata.evidencia_url    = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
           metadata.evidencia_nombre = _gestionEvidenciaFile.name;
         }
       } catch(e){ console.warn('[evidencia]', e.message); }
     }
 
-    // ═══ OPERACIÓN 2: PATCH correos — campos SIGI verdes ═══
-    const patchCorreo = {};
-    if(tipoDoc)    patchCorreo.tipo_documento        = tipoDoc;
-    if(cedula)     patchCorreo.cedula_paciente        = cedula;
-    if(nombre)     patchCorreo.nombre                 = nombre;
-    if(direccion)  patchCorreo.direccion_paciente     = direccion;
-    if(telefono)   patchCorreo.telefono_contacto      = telefono;
-    if(epsId)      patchCorreo.eps_id                 = epsId;
-    if(origen)     patchCorreo.origen                 = origen;
-    if(nombreSol)  patchCorreo.nombre_solicitud       = nombreSol;
-    if(detalle)    patchCorreo.detalle_solicitud      = detalle;
-    if(depto)      patchCorreo.departamento_paciente  = depto;
-    if(ciudad)     patchCorreo.ciudad_paciente        = ciudad;
-    if(categoria)  patchCorreo.categoria_sigi         = categoria;
-    if(tieneTutela!==null) patchCorreo.tiene_tutela   = tieneTutela;
+    // ═══ OPERACIÓN 2: PATCH correos ═══
+    const patchCorreo = { num_gestiones: numGest + 1 };
+
+    // Solo primera gestión: campos SIGI verdes
+    if(esPrimera) {
+      const tipoDoc   = document.getElementById('gTipoDoc')?.value||'';
+      const cedula    = document.getElementById('gCedula')?.value?.trim()||'';
+      const nombre    = document.getElementById('gNombre')?.value?.trim()||'';
+      const direccion = document.getElementById('gDireccion')?.value?.trim()||'';
+      const telefono  = document.getElementById('gTelefono')?.value?.trim()||'';
+      const epsId     = document.getElementById('gEpsId')?.value||null;
+      const origen    = document.getElementById('gOrigen')?.value||'';
+      const nombreSol = document.getElementById('gNombreSolVal')?.value||'';
+      const detalle   = document.getElementById('gDetalleVal')?.value||'';
+      const depto     = document.getElementById('gDeptoVal')?.value||'';
+      const ciudad    = document.getElementById('gCiudadVal')?.value||'';
+      const categoria = document.getElementById('gCategoria')?.value||'';
+      if(tipoDoc)   patchCorreo.tipo_documento       = tipoDoc;
+      if(cedula)    patchCorreo.cedula_paciente       = cedula;
+      if(nombre)    patchCorreo.nombre                = nombre;
+      if(direccion) patchCorreo.direccion_paciente    = direccion;
+      if(telefono)  patchCorreo.telefono_contacto     = telefono;
+      if(epsId)     patchCorreo.eps_id                = epsId;
+      if(origen)    patchCorreo.origen                = origen;
+      if(nombreSol) patchCorreo.nombre_solicitud      = nombreSol;
+      if(detalle)   patchCorreo.detalle_solicitud     = detalle;
+      if(depto)     patchCorreo.departamento_paciente = depto;
+      if(ciudad)    patchCorreo.ciudad_paciente       = ciudad;
+      if(categoria) patchCorreo.categoria_sigi        = categoria;
+      if(_gTutela!==null) patchCorreo.tiene_tutela   = _gTutela;
+    }
 
     // Estado del ticket
     if(_gestionForSolucionado) {
@@ -3176,23 +3236,21 @@ async function saveGestion() {
       patchCorreo.estado = 'gestion';
     }
 
-    if(Object.keys(patchCorreo).length) {
-      await sb(`correos?id=eq.${id}`, 'PATCH', patchCorreo);
-    }
+    await sb(`correos?id=eq.${id}`, 'PATCH', patchCorreo);
 
     // ═══ OPERACIÓN 3: POST historial_eventos ═══
     await addHistorialEvent(id, email, accion||'Gestión registrada', metadata);
 
-    // ═══ OPERACIÓN 4: POST gestiones_medicamentos (una fila por med) ═══
+    // ═══ OPERACIÓN 4: POST gestiones_medicamentos ═══
     for(const med of meds) {
-      try {
-        await sb('gestiones_medicamentos', 'POST', { correo_id:id, ...med });
-      } catch(e) { console.warn('[med]', e.message); }
+      try { await sb('gestiones_medicamentos', 'POST', { correo_id:id, ...med }); }
+      catch(e) { console.warn('[med]', e.message); }
     }
 
-    // ── Toast y cierre ──
+    // ── Toast ──
+    const label = esPrimera ? 'Gestión #1 registrada ✓' : `Gestión #${numGest+1} registrada ✓`;
     if(_gestionForSolucionado) showToast('Ticket solucionado ✓','success');
-    else showToast(`Gestión registrada${meds.length?' + '+meds.length+' med.':''} ✓`,'success');
+    else showToast(`${label}${meds.length?' + '+meds.length+' med.':''}`, 'success');
 
   } catch(e) {
     showToast('Error al guardar: '+e.message.substring(0,60),'error');
