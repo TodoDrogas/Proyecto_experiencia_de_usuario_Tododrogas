@@ -599,7 +599,7 @@ foreach ($todos_correos as $c) {
 
     // ── Adjuntos: procesar SIEMPRE — Graph a veces reporta hasAttachments=false
     // aunque tenga imágenes inline pegadas en el cuerpo
-    $adj_count = procesarAdjuntos($corr_id, $msg_id, $token);
+    $adj_count = procesarAdjuntos($corr_id, $msg_id, $token, $body_cont);
     $stats['adjuntos'] += $adj_count;
     // Actualizar has_attachments si se encontraron adjuntos que Graph no reportó
     if ($adj_count > 0 && !$has_adj) {
@@ -703,7 +703,7 @@ finalizar(true, 'ok', ['stats' => $stats, 'cursor' => $nuevo_cursor]);
 // ══════════════════════════════════════════════════════════════════════
 // FUNCIÓN: PROCESAR ADJUNTOS — uno a uno antes de avanzar cursor
 // ══════════════════════════════════════════════════════════════════════
-function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int {
+function procesarAdjuntos(string $correo_id, string $msg_id, string $token, string $body_html = ''): int {
     global $SB_URL, $SB_KEY, $GRAPH_MAILBOX;
 
     // Verificar adjuntos ya registrados (no duplicar)
@@ -753,6 +753,22 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int
         // contentId es el cid: que aparece en el body HTML → usarlo como attachment_id
         $content_id = trim($adj['contentId'] ?? '');
         $content_id = preg_replace('/[<>]/', '', $content_id); // quitar < > en cualquier posición
+
+        // Si es inline pero contentId vino vacío, buscarlo en el HTML del body
+        // Graph a veces no lo devuelve en el listado pero sí está en el src="cid:..."
+        if ($inline && !$content_id && $body_html) {
+            preg_match_all('/src=["\']cid:([^"\'>\s]+)["\']/', $body_html, $cid_matches);
+            if (!empty($cid_matches[1])) {
+                foreach ($cid_matches[1] as $cid_candidate) {
+                    $cid_candidate = preg_replace('/[<>]/', '', trim($cid_candidate));
+                    if ($cid_candidate) {
+                        $content_id = $cid_candidate;
+                        log_msg("    🔗 contentId extraído del body HTML: $content_id");
+                        break;
+                    }
+                }
+            }
+        }
         log_msg("    🔍 adj: $nombre | inline=" . ($inline?'si':'no') . " | contentId=$content_id");
 
         if ($tam > 52_428_800) { // >50MB — omitir
