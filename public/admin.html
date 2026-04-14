@@ -556,6 +556,7 @@ table.agents-tbl tr:hover td{background:var(--bg)}
           <button class="mtab" onclick="showMTab('nova',this)">🤖 Nova TD</button>
           <button class="mtab" onclick="showMTab('global',this)">🌐 Global</button>
           <button class="mtab" onclick="showMTab('asesores',this)">👥 Asesores</button>
+          <button class="mtab" onclick="showMTab('sigi',this)" style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border-radius:6px;font-weight:800;letter-spacing:.3px">📋 SIGI</button>
         </div>
       </div>
 
@@ -947,6 +948,91 @@ table.agents-tbl tr:hover td{background:var(--bg)}
           </div>
 
         </div><!-- /mtab-asesores -->
+
+        <!-- ══ TAB: SIGI ══ -->
+        <div class="mtab-page" id="mtab-sigi">
+
+          <!-- FILTRO PERÍODO -->
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 18px;margin-bottom:18px">
+            <span style="font-size:11px;font-weight:700;color:#166534;letter-spacing:.5px">PERÍODO SIGI</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <label style="font-size:11px;color:#16a34a">Desde</label>
+              <input type="date" id="sigiDesde" style="border:1px solid #bbf7d0;border-radius:6px;padding:4px 8px;font-size:11px;font-family:inherit;color:#0f172a">
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <label style="font-size:11px;color:#16a34a">Hasta</label>
+              <input type="date" id="sigiHasta" style="border:1px solid #bbf7d0;border-radius:6px;padding:4px 8px;font-size:11px;font-family:inherit;color:#0f172a">
+            </div>
+            <button onclick="loadSigiMetrics()" style="background:#15803d;color:#fff;border:none;border-radius:6px;padding:6px 16px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit">🔍 Filtrar</button>
+            <button onclick="exportarSIGI()" id="btnExportarSIGI" style="background:#16a34a;color:#fff;border:none;border-radius:6px;padding:6px 18px;font-size:11px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;box-shadow:0 2px 8px rgba(22,163,74,.25)">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Descargar SIGI (.xlsx)
+            </button>
+            <span id="sigiLastUpdate" style="margin-left:auto;font-size:10px;color:#16a34a;font-style:italic"></span>
+          </div>
+
+          <!-- KPIs SIGI -->
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">
+            <div class="kpi"><div class="kpi-label">Total casos</div><div class="kpi-val" id="sigiKpiTotal">—</div><div class="kpi-sub">Con al menos 1 gestión</div><div class="kpi-accent" style="background:#16a34a"></div></div>
+            <div class="kpi"><div class="kpi-label">Total gestiones</div><div class="kpi-val" id="sigiKpiGest">—</div><div class="kpi-sub">Suma de todas las gestiones</div><div class="kpi-accent" style="background:#2563eb"></div></div>
+            <div class="kpi"><div class="kpi-label">Prom. gestiones/caso</div><div class="kpi-val" id="sigiKpiProm">—</div><div class="kpi-sub">Gestiones promedio</div><div class="kpi-accent" style="background:#7c3aed"></div></div>
+            <div class="kpi"><div class="kpi-label">Con tutela</div><div class="kpi-val warn" id="sigiKpiTutela">—</div><div class="kpi-sub">Casos con tutela activa</div><div class="kpi-accent" style="background:#dc2626"></div></div>
+            <div class="kpi"><div class="kpi-label">Cerrados</div><div class="kpi-val ok" id="sigiKpiCerrados">—</div><div class="kpi-sub">Estado solucionado</div><div class="kpi-accent" style="background:#0891b2"></div></div>
+          </div>
+
+          <!-- GRÁFICOS SIGI -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+              <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR NOMBRE SOLICITUD</div>
+              <canvas id="sigiChartNombre" height="180"></canvas>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+              <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR CATEGORÍA</div>
+              <canvas id="sigiChartCategoria" height="180"></canvas>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+              <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR EPS (TOP 7)</div>
+              <canvas id="sigiChartEps" height="180"></canvas>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+              <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR DEPARTAMENTO</div>
+              <canvas id="sigiChartDepto" height="160"></canvas>
+            </div>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+              <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">GESTIONES POR DÍA</div>
+              <canvas id="sigiChartTendencia" height="160"></canvas>
+            </div>
+          </div>
+
+          <!-- TABLA RESUMEN -->
+          <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+            <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">ÚLTIMOS CASOS CON GESTIÓN</div>
+            <div style="overflow-x:auto">
+              <table style="width:100%;border-collapse:collapse;font-size:11px">
+                <thead>
+                  <tr style="background:#f8fafc">
+                    <th style="padding:7px 8px;text-align:left;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700">Ticket</th>
+                    <th style="padding:7px 8px;text-align:left;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700">Paciente</th>
+                    <th style="padding:7px 8px;text-align:left;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700">EPS</th>
+                    <th style="padding:7px 8px;text-align:left;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700">Nombre Solicitud</th>
+                    <th style="padding:7px 8px;text-align:left;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700">Detalle</th>
+                    <th style="padding:7px 8px;text-align:center;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700"># Gest.</th>
+                    <th style="padding:7px 8px;text-align:center;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700">Tutela</th>
+                    <th style="padding:7px 8px;text-align:left;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700">Categoría</th>
+                    <th style="padding:7px 8px;text-align:left;border-bottom:1px solid #e2e8f0;color:#64748b;font-weight:700">Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="sigiTablaBody">
+                  <tr><td colspan="9" style="padding:20px;text-align:center;color:#94a3b8">Filtra un período para cargar los datos</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div><!-- /mtab-sigi -->
       </div><!-- /metrics-content -->
     </div>
   </div>
@@ -1144,7 +1230,6 @@ table.agents-tbl tr:hover td{background:var(--bg)}
             <select class="gm-input" id="gTipoDoc">
               <option value="">— Seleccionar —</option>
               <option value="CÉDULA DE CIUDADANÍA">Cédula de ciudadanía</option>
-              <option value="CEDULA DE CIUDADANIA">Cédula de ciudadanía (sin tilde)</option>
               <option value="TARJETA DE IDENTIDAD">Tarjeta de identidad</option>
               <option value="CÉDULA DE EXTRANJERÍA">Cédula de extranjería</option>
               <option value="TARJETA DE EXTRANJERÍA">Tarjeta de extranjería</option>
@@ -1473,6 +1558,312 @@ function showMTab(tab, el) {
 function renderMTab(tab){
   if(tab==='web' || tab==='qr' || tab==='nova' || tab==='global') loadNovaMetrics();
   if(tab==='asesores') loadAgentesMetrics();
+  if(tab==='sigi') { initSigiFechas(); loadSigiMetrics(); }
+}
+
+// ══════════════════════════════════════════════════
+// TAB SIGI — funciones
+// ══════════════════════════════════════════════════
+let _sigiChartNombre=null, _sigiChartCategoria=null, _sigiChartEps=null,
+    _sigiChartDepto=null,  _sigiChartTendencia=null;
+
+function initSigiFechas() {
+  if(document.getElementById('sigiDesde').value) return;
+  const hoy   = new Date();
+  const desde = new Date(hoy); desde.setDate(1); desde.setMonth(hoy.getMonth()-1);
+  document.getElementById('sigiDesde').value = desde.toISOString().slice(0,10);
+  document.getElementById('sigiHasta').value = hoy.toISOString().slice(0,10);
+}
+
+async function loadSigiMetrics() {
+  const desde = document.getElementById('sigiDesde').value;
+  const hasta = document.getElementById('sigiHasta').value;
+  if(!desde||!hasta) return;
+
+  document.getElementById('sigiLastUpdate').textContent = 'Cargando…';
+
+  try {
+    // Traer correos con gestiones en el período
+    const correos = await sb(
+      `correos?num_gestiones=gt.0&created_at=gte.${desde}T00:00:00&created_at=lte.${hasta}T23:59:59` +
+      `&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente,created_at` +
+      `&order=created_at.desc&limit=500`
+    ) || [];
+
+    // Traer EPS catálogo para cruzar
+    if(!state.epsCatalogo) {
+      state.epsCatalogo = await sb('eps_catalogo?order=nombre.asc') || [];
+    }
+
+    // ── KPIs ──
+    const totalCasos    = correos.length;
+    const totalGest     = correos.reduce((s,c)=>s+(c.num_gestiones||0),0);
+    const promGest      = totalCasos ? (totalGest/totalCasos).toFixed(1) : '—';
+    const conTutela     = correos.filter(c=>c.tiene_tutela===true).length;
+    const cerrados      = correos.filter(c=>c.estado==='solucionado'||c.estado==='gestionado').length;
+
+    document.getElementById('sigiKpiTotal').textContent    = totalCasos;
+    document.getElementById('sigiKpiGest').textContent     = totalGest;
+    document.getElementById('sigiKpiProm').textContent     = promGest;
+    document.getElementById('sigiKpiTutela').textContent   = conTutela;
+    document.getElementById('sigiKpiCerrados').textContent = cerrados;
+
+    // ── Helpers de gráficos ──
+    function contar(arr, campo) {
+      return arr.reduce((m,c)=>{ const k=c[campo]||'Sin dato'; m[k]=(m[k]||0)+1; return m; },{});
+    }
+    function topN(obj,n){ return Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n); }
+
+    const PALETA = ['#16a34a','#2563eb','#7c3aed','#dc2626','#ca8a04','#0891b2','#ea580c','#64748b'];
+
+    function dibujarBar(canvasId, datos, refChart, horizontal=false) {
+      const ctx = document.getElementById(canvasId)?.getContext('2d');
+      if(!ctx) return refChart;
+      if(refChart) refChart.destroy();
+      return new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: datos.map(d=>d[0]),
+          datasets: [{ data: datos.map(d=>d[1]), backgroundColor: PALETA.slice(0,datos.length), borderRadius:4, borderSkipped:false }]
+        },
+        options: {
+          indexAxis: horizontal ? 'y' : 'x',
+          plugins: { legend:{display:false} },
+          scales: { x:{grid:{display:false}}, y:{grid:{color:'#f1f5f9'}} },
+          responsive:true, maintainAspectRatio:false
+        }
+      });
+    }
+
+    // Por nombre solicitud
+    const porNombre = topN(contar(correos,'nombre_solicitud'),7);
+    _sigiChartNombre = dibujarBar('sigiChartNombre', porNombre, _sigiChartNombre, true);
+
+    // Por categoría
+    const porCat = topN(contar(correos,'categoria_sigi'),6);
+    _sigiChartCategoria = dibujarBar('sigiChartCategoria', porCat, _sigiChartCategoria, true);
+
+    // Por EPS (cruzar eps_id con catálogo)
+    const epsMap = {};
+    correos.forEach(c=>{
+      const eps = state.epsCatalogo?.find(e=>e.id===c.eps_id);
+      const nombre = eps?.nombre || 'Sin EPS';
+      epsMap[nombre] = (epsMap[nombre]||0)+1;
+    });
+    const porEps = topN(epsMap,7);
+    _sigiChartEps = dibujarBar('sigiChartEps', porEps, _sigiChartEps, true);
+
+    // Por departamento
+    const porDepto = topN(contar(correos,'departamento_paciente'),8);
+    _sigiChartDepto = dibujarBar('sigiChartDepto', porDepto, _sigiChartDepto, true);
+
+    // Tendencia de gestiones por día
+    const porDia = {};
+    correos.forEach(c=>{
+      const dia = (c.created_at||'').slice(0,10);
+      if(dia) porDia[dia] = (porDia[dia]||0)+(c.num_gestiones||0);
+    });
+    const diasOrden = Object.keys(porDia).sort();
+    const ctxT = document.getElementById('sigiChartTendencia')?.getContext('2d');
+    if(ctxT) {
+      if(_sigiChartTendencia) _sigiChartTendencia.destroy();
+      _sigiChartTendencia = new Chart(ctxT, {
+        type:'line',
+        data:{
+          labels: diasOrden.map(d=>new Date(d+'T12:00:00').toLocaleDateString('es-CO',{day:'2-digit',month:'short'})),
+          datasets:[{ data:diasOrden.map(d=>porDia[d]), borderColor:'#16a34a', backgroundColor:'rgba(22,163,74,.08)',
+            tension:0.4, fill:true, pointRadius:3, pointBackgroundColor:'#16a34a' }]
+        },
+        options:{ plugins:{legend:{display:false}}, scales:{x:{grid:{display:false}},y:{grid:{color:'#f1f5f9'},beginAtZero:true}},
+          responsive:true, maintainAspectRatio:false }
+      });
+    }
+
+    // ── Tabla ──
+    const tbody = document.getElementById('sigiTablaBody');
+    if(correos.length===0) {
+      tbody.innerHTML='<tr><td colspan="9" style="padding:20px;text-align:center;color:#94a3b8">Sin casos con gestiones en este período</td></tr>';
+    } else {
+      const BADGE = {
+        solucionado:'background:#dcfce7;color:#16a34a', gestion:'background:#eff4ff;color:#2563eb',
+        gestionado:'background:#fff7ed;color:#ea580c',  pendiente:'background:#fef9c3;color:#ca8a04',
+        pendiente_firma:'background:#f5f3ff;color:#7c3aed'
+      };
+      tbody.innerHTML = correos.slice(0,50).map(c=>{
+        const eps   = state.epsCatalogo?.find(e=>e.id===c.eps_id)?.nombre||'—';
+        const badge = BADGE[c.estado]||'background:#f1f5f9;color:#64748b';
+        return `<tr style="border-bottom:1px solid #f1f5f9">
+          <td style="padding:6px 8px;font-family:'DM Mono',monospace;font-size:10px;color:#2563eb">${esc(c.ticket_id||'—')}</td>
+          <td style="padding:6px 8px">${esc(c.nombre||'—')}</td>
+          <td style="padding:6px 8px;font-size:10px">${esc(eps)}</td>
+          <td style="padding:6px 8px">${esc(c.nombre_solicitud||'—')}</td>
+          <td style="padding:6px 8px;font-size:10px;color:#64748b">${esc(c.detalle_solicitud||'—')}</td>
+          <td style="padding:6px 8px;text-align:center;font-weight:700;color:#2563eb">${c.num_gestiones||0}</td>
+          <td style="padding:6px 8px;text-align:center">${c.tiene_tutela===true?'<span style="color:#dc2626;font-weight:700">SÍ</span>':'<span style="color:#94a3b8">NO</span>'}</td>
+          <td style="padding:6px 8px;font-size:10px">${esc(c.categoria_sigi||'—')}</td>
+          <td style="padding:6px 8px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;${badge}">${(c.estado||'').toUpperCase()}</span></td>
+        </tr>`;
+      }).join('');
+    }
+
+    document.getElementById('sigiLastUpdate').textContent = 'Act. ' + new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+
+  } catch(e) {
+    console.error('[SIGI metrics]', e);
+    document.getElementById('sigiLastUpdate').textContent = 'Error al cargar';
+  }
+}
+
+async function exportarSIGI() {
+  const btn   = document.getElementById('btnExportarSIGI');
+  const orig  = btn.innerHTML;
+  btn.innerHTML = '⏳ Generando SIGI…'; btn.disabled = true;
+
+  const desde = document.getElementById('sigiDesde').value;
+  const hasta = document.getElementById('sigiHasta').value;
+
+  try {
+    // ── Cargar datos ──
+    const correos = await sb(
+      `correos?num_gestiones=gt.0&created_at=gte.${desde}T00:00:00&created_at=lte.${hasta}T23:59:59` +
+      `&order=created_at.asc&limit=5000`
+    ) || [];
+
+    const epsCat = state.epsCatalogo || await sb('eps_catalogo?order=nombre.asc') || [];
+    const agentes = state.agents || [];
+    const meds    = await sb(`gestiones_medicamentos?order=created_at.asc&limit=5000`) || [];
+    const hist    = await sb(`historial_eventos?order=created_at.asc&limit=10000`) || [];
+
+    const wb = XLSX.utils.book_new();
+
+    // ══ HOJA 1: INFORME SIGI (38 columnas) ══
+    const VERDE = { fgColor:{rgb:'92D050'} };
+    const AZUL  = { fgColor:{rgb:'BDD7EE'} };
+
+    const h1 = correos.map(c=>{
+      const eps     = epsCat.find(e=>e.id===c.eps_id);
+      const ag      = agentes.find(a=>a.id===c.agente_id);
+      const histC   = hist.filter(h=>h.correo_id===c.id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+      const pg      = histC.find(h=>!['creacion','asignacion_automatica','encuesta_recibida'].includes(h.evento));
+      const fSol    = c.created_at   ? new Date(c.created_at).toLocaleDateString('es-CO')  : '';
+      const fReal   = pg?.created_at ? new Date(pg.created_at).toLocaleDateString('es-CO') : '';
+      const fCierre = c.fecha_resolucion ? new Date(c.fecha_resolucion).toLocaleDateString('es-CO') : '';
+      return {
+        'Tipo Documento':          c.tipo_documento||'',
+        'Documento':               c.cedula_paciente||c.cedula||'',
+        'Nombre y Apellidos':      c.nombre||'',
+        'Dirección':               c.direccion_paciente||'',
+        'Email':                   c.from_email||c.correo||'',
+        'Teléfono':                c.telefono_contacto||'',
+        'NIT EPS':                 eps?.nit||'',
+        'EPS':                     eps?.nombre||'',
+        'Origen':                  c.origen||'',
+        'Fecha Solicitud':         fSol,
+        'Fecha Realización':       fReal,
+        'Código Solicitud':        c.ticket_id||'',
+        'Nombre Solicitud':        c.nombre_solicitud||c.tipo_pqr||'',
+        'Detalle Solicitud':       c.detalle_solicitud||'',
+        'Estado Solicitud':        c.estado||'',
+        'Fecha Asignación':        fSol,
+        'Fecha Asig. Usuario':     fSol,
+        'Doc. Usuario Asignado':   ag?.cedula||'',
+        'Nombre Usuario Asignado': ag?.nombre||'',
+        'Fecha Respuesta':         fReal,
+        'Fecha Resp. Usuario':     fReal,
+        'Respuesta Asignación':    pg?.descripcion||'',
+        'Fecha PQRS Cerrada':      fCierre,
+        'Departamento':            c.departamento_paciente||'',
+        'Ciudad':                  c.ciudad_paciente||'',
+        'Código Medicamento':      meds.filter(m=>m.correo_id===c.id).map(m=>m.codigo).join(' | ')||'',
+        'Descripción Medicamento': meds.filter(m=>m.correo_id===c.id).map(m=>m.descripcion).join(' | ')||'',
+        'Descripción Escrita':     meds.filter(m=>m.correo_id===c.id).map(m=>m.descripcion_escrita).join(' | ')||'',
+        'Cantidad':                meds.filter(m=>m.correo_id===c.id).map(m=>m.cantidad).join(' | ')||'',
+        'PBS':                     meds.filter(m=>m.correo_id===c.id).map(m=>m.pbs).join(' | ')||'',
+        'Observación':             histC.map(h=>{ try{ return JSON.parse(h.datos_extra||'{}').observaciones||h.descripcion||''; }catch{return h.descripcion||'';} }).filter(Boolean).join(' | ')||'',
+        'Gestión Compra':          c.gestion_compra||'',
+        'Usuario Gestión Compra':  c.usuario_gestion_compra||'',
+        'Gestión Us. Integrales':  c.gestion_usuarios_integ||'',
+        'Usuarios Integrales':     c.usuarios_integrales||'',
+        'Código PQR':              c.ticket_id||'',
+        '# Gestiones':             c.num_gestiones||0,
+        'Tiene Tutela':            c.tiene_tutela===true?'SI':c.tiene_tutela===false?'NO':'',
+        'Categoría':               c.categoria_sigi||c.categoria_ia||'',
+      };
+    });
+
+    const ws1 = XLSX.utils.json_to_sheet(h1.length ? h1 : [{'Sin datos':'No hay casos con gestiones en el período'}]);
+    // Anchos de columna
+    ws1['!cols'] = [
+      {wch:18},{wch:14},{wch:26},{wch:22},{wch:26},{wch:14},{wch:13},{wch:30},{wch:20},
+      {wch:13},{wch:13},{wch:13},{wch:16},{wch:22},{wch:13},{wch:13},{wch:13},{wch:13},
+      {wch:26},{wch:13},{wch:13},{wch:30},{wch:13},{wch:16},{wch:16},{wch:13},{wch:28},
+      {wch:22},{wch:10},{wch:10},{wch:30},{wch:18},{wch:18},{wch:18},{wch:18},{wch:13},
+      {wch:10},{wch:10},{wch:16},
+    ];
+    XLSX.utils.book_append_sheet(wb, ws1, 'INFORME_SIGI');
+
+    // ══ HOJA 2: MEDICAMENTOS ══
+    const h2 = meds.filter(m=> correos.some(c=>c.id===m.correo_id)).map(m=>{
+      const c = correos.find(cc=>cc.id===m.correo_id);
+      return {
+        'Código PQR':   c?.ticket_id||'',
+        'Paciente':     c?.nombre||'',
+        'Código Med.':  m.codigo||'',
+        'Descripción':  m.descripcion||'',
+        'Desc. Escrita':m.descripcion_escrita||'',
+        'Cantidad':     m.cantidad||'',
+        'PBS':          m.pbs||'',
+        'Fecha':        m.created_at?new Date(m.created_at).toLocaleDateString('es-CO'):'',
+      };
+    });
+    const ws2 = XLSX.utils.json_to_sheet(h2.length?h2:[{'Sin datos':'Sin medicamentos'}]);
+    ws2['!cols']=[{wch:13},{wch:26},{wch:13},{wch:30},{wch:22},{wch:10},{wch:10},{wch:13}];
+    XLSX.utils.book_append_sheet(wb, ws2, 'MEDICAMENTOS');
+
+    // ══ HOJA 3: RESUMEN AGENTES ══
+    const h3 = agentes.map(ag=>{
+      const asig  = correos.filter(c=>c.agente_id===ag.id);
+      const sol   = asig.filter(c=>c.estado==='solucionado'||c.estado==='gestionado').length;
+      const tGest = asig.reduce((s,c)=>s+(c.num_gestiones||0),0);
+      const tutela= asig.filter(c=>c.tiene_tutela===true).length;
+      return {
+        'Agente':             ag.nombre||'',
+        'Total Casos':        asig.length,
+        'Solucionados':       sol,
+        'Backlog':            asig.length-sol,
+        'Total Gestiones':    tGest,
+        'Prom. Gest./Caso':   asig.length?(tGest/asig.length).toFixed(1):'0',
+        'Casos con Tutela':   tutela,
+        '% Resolución':       asig.length?Math.round(sol/asig.length*100)+'%':'0%',
+        'Estado':             ag.activo?'Activo':'Inactivo',
+      };
+    });
+    const ws3 = XLSX.utils.json_to_sheet(h3.length?h3:[{'Sin datos':'Sin agentes'}]);
+    ws3['!cols']=[{wch:28},{wch:12},{wch:13},{wch:10},{wch:14},{wch:15},{wch:15},{wch:13},{wch:10}];
+    XLSX.utils.book_append_sheet(wb, ws3, 'RESUMEN_AGENTES');
+
+    // ══ HOJA 4: EPS CATÁLOGO ══
+    const epsConConteo = epsCat.map(e=>({
+      'NIT':       e.nit||'',
+      'Nombre EPS':e.nombre||'',
+      'Total PQR': correos.filter(c=>c.eps_id===e.id).length,
+      'Activa':    e.activa?'SI':'NO',
+    }));
+    const ws4 = XLSX.utils.json_to_sheet(epsConConteo.length?epsConConteo:[{'Sin datos':'Sin EPS'}]);
+    ws4['!cols']=[{wch:14},{wch:38},{wch:11},{wch:8}];
+    XLSX.utils.book_append_sheet(wb, ws4, 'EPS_CATALOGO');
+
+    // ── Descargar ──
+    const fecha = `${desde}_${hasta}`.replace(/-/g,'');
+    XLSX.writeFile(wb, `SIGI_${fecha}.xlsx`);
+    showToast('SIGI exportado ✓','success');
+
+  } catch(e) {
+    showToast('Error al exportar SIGI: '+e.message.substring(0,60),'error');
+    console.error('[exportarSIGI]', e);
+  } finally {
+    btn.innerHTML = orig; btn.disabled = false;
+  }
 }
 
 // ── Entry point ─────────────────────────────
