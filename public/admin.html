@@ -1055,36 +1055,239 @@ table.agents-tbl tr:hover td{background:var(--bg)}
 </div>
 
 <!-- ══ MODAL: AÑADIR GESTIÓN ══ -->
+<style>
+.gestion-modal-wide{background:var(--surface);border-radius:16px;padding:0;width:620px;max-width:97vw;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
+.gm-header{padding:20px 24px 0;flex-shrink:0}
+.gm-header h3{font-size:16px;font-weight:700;margin-bottom:3px}
+.gm-header .modal-sub{font-size:11px;color:var(--ink3);margin-bottom:14px}
+.gm-body{overflow-y:auto;padding:0 24px 16px;flex:1}
+.gm-body::-webkit-scrollbar{width:6px}
+.gm-body::-webkit-scrollbar-track{background:var(--bg2)}
+.gm-body::-webkit-scrollbar-thumb{background:#b0b8cc;border-radius:3px}
+.gm-section{border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden}
+.gm-section-header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg2);cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--ink2);letter-spacing:.3px}
+.gm-section-header:hover{background:var(--bg)}
+.gm-section-header .gm-arrow{margin-left:auto;font-size:10px;transition:transform .2s;color:var(--ink3)}
+.gm-section-body{padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gm-section-body.collapsed{display:none}
+.gm-section-body.full{grid-template-columns:1fr}
+.gm-field{display:flex;flex-direction:column;gap:4px}
+.gm-field.span2{grid-column:1/-1}
+.gm-label{font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.4px;text-transform:uppercase}
+.gm-input{background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r2);padding:8px 10px;font-size:12px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;transition:all .15s;width:100%}
+.gm-input:focus{border-color:var(--blue);background:#fff}
+.gm-input[readonly]{color:var(--ink3);cursor:default;background:var(--bg2)}
+.gm-toggle-row{display:flex;gap:6px}
+.gm-toggle-btn{flex:1;padding:7px 4px;border-radius:6px;border:1.5px solid var(--border);background:var(--bg);font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;color:var(--ink3);transition:all .15s;text-align:center}
+.gm-toggle-btn.active-si{background:#dcfce7;border-color:#16a34a;color:#16a34a}
+.gm-toggle-btn.active-no{background:#fee2e2;border-color:#dc2626;color:#dc2626}
+.gm-footer{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;background:var(--surface)}
+.gm-search-wrap{position:relative}
+.gm-search-wrap input{padding-right:28px}
+.gm-search-wrap .gm-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink3);font-size:14px;line-height:1;padding:0;display:none}
+.gm-search-wrap input:not(:placeholder-shown) ~ .gm-clear{display:block}
+</style>
 <div class="modal-backdrop" id="modalGestion" onclick="if(event.target===this)closeModal('modalGestion')">
-  <div class="gestion-modal">
-    <h3>Añadir gestión</h3>
-    <div class="modal-sub">Una vez guardada, la gestión no puede ser editada (garantía de trazabilidad)</div>
-    <div class="form-field">
-      <label class="form-label">Acción</label>
-      <select class="form-input" id="gestionAccion">
-        <option value="">— Seleccionar acción —</option>
-      </select>
+  <div class="gestion-modal-wide">
+    <div class="gm-header">
+      <h3>Añadir gestión</h3>
+      <div class="modal-sub">Una vez guardada, la gestión no puede ser editada (garantía de trazabilidad)</div>
     </div>
-    <div class="form-field">
-      <label class="form-label">Observaciones <span style="color:var(--red)">*</span></label>
-      <textarea class="form-input" id="gestionObs" rows="4" placeholder="Describe la gestión realizada..." style="resize:vertical;min-height:90px"></textarea>
-    </div>
-    <div class="form-field">
-      <label class="form-label">Evidencia <span style="font-weight:400;color:var(--ink3)">(opcional — foto, PDF, captura)</span></label>
-      <div id="gestionEvidenciaZone" style="border:1.5px dashed var(--border);border-radius:var(--r2);padding:10px 12px;background:var(--bg);transition:background .15s;cursor:pointer"
-           ondragover="event.preventDefault();this.style.background='#EFF6FF';this.style.borderColor='var(--blue)'"
-           ondragleave="this.style.background='var(--bg)';this.style.borderColor='var(--border)'"
-           ondrop="event.preventDefault();this.style.background='var(--bg)';this.style.borderColor='var(--border)';gestionEvidenciaAdd(event.dataTransfer.files[0])"
-           onclick="document.getElementById('gestionFiles').click()">
-        <div id="gestionEvidenciaPreview" style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink3)">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          Clic aquí o arrastra un archivo
+    <div class="gm-body">
+
+      <!-- ── BLOQUE 1: ACCIÓN Y OBSERVACIONES ── -->
+      <div class="gm-section">
+        <div class="gm-section-header" onclick="gmToggle(this)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          GESTIÓN
+          <span class="gm-arrow">▼</span>
+        </div>
+        <div class="gm-section-body full">
+          <div class="gm-field">
+            <label class="gm-label">Acción</label>
+            <select class="gm-input" id="gestionAccion">
+              <option value="">— Seleccionar acción —</option>
+            </select>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Observaciones <span style="color:var(--red)">*</span></label>
+            <textarea class="gm-input" id="gestionObs" rows="3" placeholder="Describe la gestión realizada..." style="resize:vertical;min-height:80px"></textarea>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Evidencia <span style="font-weight:400;color:var(--ink3)">(opcional)</span></label>
+            <div id="gestionEvidenciaZone" style="border:1.5px dashed var(--border);border-radius:var(--r2);padding:9px 12px;background:var(--bg);cursor:pointer;transition:background .15s"
+                 ondragover="event.preventDefault();this.style.background='#EFF6FF';this.style.borderColor='var(--blue)'"
+                 ondragleave="this.style.background='var(--bg)';this.style.borderColor='var(--border)'"
+                 ondrop="event.preventDefault();this.style.background='var(--bg)';this.style.borderColor='var(--border)';gestionEvidenciaAdd(event.dataTransfer.files[0])"
+                 onclick="document.getElementById('gestionFiles').click()">
+              <div id="gestionEvidenciaPreview" style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink3)">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                Clic aquí o arrastra un archivo
+              </div>
+            </div>
+            <input type="file" id="gestionFiles" style="display:none" accept="*/*" onchange="gestionEvidenciaAdd(this.files[0]);this.value=''">
+          </div>
         </div>
       </div>
-      <input type="file" id="gestionFiles" style="display:none" accept="*/*"
-             onchange="gestionEvidenciaAdd(this.files[0]);this.value=''">
-    </div>
-    <div class="modal-actions">
+
+      <!-- ── BLOQUE 2: DATOS DEL PACIENTE ── -->
+      <div class="gm-section">
+        <div class="gm-section-header" onclick="gmToggle(this)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          DATOS DEL PACIENTE
+          <span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:6px">(se autocompleta al ingresar cédula)</span>
+          <span class="gm-arrow">▼</span>
+        </div>
+        <div class="gm-section-body collapsed" id="secPacienteBody">
+          <div class="gm-field">
+            <label class="gm-label">Tipo de documento</label>
+            <select class="gm-input" id="gTipoDoc">
+              <option value="">— Seleccionar —</option>
+              <option value="CÉDULA DE CIUDADANÍA">Cédula de ciudadanía</option>
+              <option value="TARJETA DE IDENTIDAD">Tarjeta de identidad</option>
+              <option value="CEDULA DE EXTRANJERIA">Cédula de extranjería</option>
+              <option value="PASAPORTE">Pasaporte</option>
+              <option value="NIT">NIT</option>
+              <option value="OTRO">Otro</option>
+            </select>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">N° Documento <span style="color:var(--ink3);font-weight:400;text-transform:none;font-size:9px">→ autocompleta</span></label>
+            <div style="display:flex;gap:6px">
+              <input class="gm-input" id="gCedula" type="text" placeholder="Ej: 1020304050" oninput="gBuscarPaciente(this.value)" style="flex:1">
+              <div id="gBuscandoSpinner" style="display:none;align-items:center;padding:0 6px;color:var(--ink3)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              </div>
+            </div>
+          </div>
+          <div class="gm-field span2">
+            <label class="gm-label">Nombre y apellidos</label>
+            <input class="gm-input" id="gNombre" type="text" placeholder="Se autocompleta…">
+          </div>
+          <div class="gm-field span2">
+            <label class="gm-label">Dirección</label>
+            <input class="gm-input" id="gDireccion" type="text" placeholder="Se autocompleta…">
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Teléfono <span style="color:var(--ink3);font-weight:400;text-transform:none;font-size:9px">cel 10 dig / fijo 7 dig</span></label>
+            <input class="gm-input" id="gTelefono" type="text" placeholder="Se autocompleta…" oninput="gValidarTel(this)">
+            <span id="gTelError" style="font-size:10px;color:var(--red);display:none">Debe tener 7 o 10 dígitos</span>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Email</label>
+            <input class="gm-input" id="gEmail" type="text" placeholder="Se autocompleta…" readonly>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── BLOQUE 3: EPS, ORIGEN Y CLASIFICACIÓN ── -->
+      <div class="gm-section">
+        <div class="gm-section-header" onclick="gmToggle(this)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          EPS, ORIGEN Y CLASIFICACIÓN
+          <span class="gm-arrow">▼</span>
+        </div>
+        <div class="gm-section-body collapsed" id="secEpsBody">
+          <div class="gm-field span2">
+            <label class="gm-label">EPS <span style="color:var(--red)">*</span></label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gEpsSearch" type="text" placeholder="Escribir para buscar EPS…" oninput="gFiltrarEPS(this.value)" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarEPS()">×</button>
+            </div>
+            <input type="hidden" id="gEpsId">
+            <div id="gEpsDropdown" style="display:none;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r2) var(--r2);background:#fff;max-height:140px;overflow-y:auto;font-size:12px;z-index:10;position:relative"></div>
+            <div style="display:flex;gap:6px;margin-top:4px">
+              <span style="font-size:10px;color:var(--ink3)">NIT:</span>
+              <span id="gNitEps" style="font-size:10px;color:var(--ink2);font-family:'DM Mono',monospace">—</span>
+            </div>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Origen</label>
+            <select class="gm-input" id="gOrigen">
+              <option value="">— Seleccionar —</option>
+              <option value="correo">Correo electrónico</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="telefono">Teléfono / Conmutador</option>
+              <option value="web">Formulario web</option>
+              <option value="qr">QR punto de atención</option>
+              <option value="presencial">Presencial / Buzón</option>
+            </select>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Nombre solicitud</label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gNombreSolSearch" type="text" placeholder="Buscar nombre solicitud…" oninput="gFiltrarNombreSol(this.value)" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarNombreSol()">×</button>
+            </div>
+            <input type="hidden" id="gNombreSolVal">
+            <div id="gNombreSolDropdown" style="display:none;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r2) var(--r2);background:#fff;max-height:130px;overflow-y:auto;font-size:12px;position:relative;z-index:11"></div>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Detalle solicitud</label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gDetalleSearch" type="text" placeholder="Buscar detalle…" oninput="gFiltrarDetalle(this.value)" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarDetalle()">×</button>
+            </div>
+            <input type="hidden" id="gDetalleVal">
+            <div id="gDetalleDropdown" style="display:none;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r2) var(--r2);background:#fff;max-height:130px;overflow-y:auto;font-size:12px;position:relative;z-index:10"></div>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Departamento</label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gDeptoSearch" type="text" placeholder="Buscar departamento…" oninput="gFiltrarDepto(this.value)" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarDepto()">×</button>
+            </div>
+            <input type="hidden" id="gDeptoVal">
+            <div id="gDeptoDropdown" style="display:none;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r2) var(--r2);background:#fff;max-height:130px;overflow-y:auto;font-size:12px;position:relative;z-index:9"></div>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Ciudad</label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gCiudadSearch" type="text" placeholder="Buscar ciudad…" oninput="gFiltrarCiudad(this.value)" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarCiudad()">×</button>
+            </div>
+            <input type="hidden" id="gCiudadVal">
+            <div id="gCiudadDropdown" style="display:none;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r2) var(--r2);background:#fff;max-height:130px;overflow-y:auto;font-size:12px;position:relative;z-index:8"></div>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Categoría</label>
+            <select class="gm-input" id="gCategoria">
+              <option value="">— Seleccionar —</option>
+              <option value="EPS">EPS</option>
+              <option value="TODODROGAS">Tododrogas</option>
+              <option value="PROVEEDOR">Proveedor</option>
+              <option value="USUARIO EXTERNO">Usuario externo</option>
+            </select>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">¿Tiene tutela?</label>
+            <div class="gm-toggle-row">
+              <button class="gm-toggle-btn" id="gTutelaSi" onclick="gSetTutela(true)">SÍ</button>
+              <button class="gm-toggle-btn" id="gTutelaNo" onclick="gSetTutela(false)">NO</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── BLOQUE 4: MEDICAMENTOS (colapsable) ── -->
+      <div class="gm-section">
+        <div class="gm-section-header" onclick="gmToggle(this)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.5 20H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v3"/><circle cx="18" cy="18" r="3"/><path d="M22 22l-1.5-1.5"/></svg>
+          MEDICAMENTOS
+          <span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:6px">(opcional)</span>
+          <span class="gm-arrow">▶</span>
+        </div>
+        <div class="gm-section-body collapsed full" id="secMedBody">
+          <div id="gMedLista" style="display:flex;flex-direction:column;gap:10px"></div>
+          <button onclick="gAgregarMed()" style="align-self:flex-start;margin-top:4px;background:var(--blue-l);color:var(--blue);border:1.5px solid var(--blue-m);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;display:flex;align-items:center;gap:5px">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            Añadir medicamento
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /gm-body -->
+    <div class="gm-footer">
       <button class="btn btn-ghost" onclick="closeModal('modalGestion')">Cancelar</button>
       <button class="btn btn-primary" id="btnSaveGestion" onclick="saveGestion()">Guardar gestión</button>
     </div>
@@ -1232,6 +1435,8 @@ const state = {
   defaultActions: ['Observación añadida','Solicitud de información','Cliente contactado','Seguimiento','Escalado','En gestión','Solucionado','Correo respondido'],
   editingAgentId: null,
   ciclo_inicio: null,
+  epsCatalogo: null,
+  sedes: [],
 };
 
 // Chart instances
@@ -2436,8 +2641,296 @@ async function addHistorialEvent(correoId, email, evento, metadata={}) {
 // ──────────────────────────────────────────────
 // GESTIÓN MODAL
 // ──────────────────────────────────────────────
+// ──────────────────────────────────────────────
+// ESTADO GLOBAL DEL MODAL GESTIÓN
+// ──────────────────────────────────────────────
 let _gestionForSolucionado = false;
 let _gestionEvidenciaFile = null;
+let _gTutela = null;
+let _gMedCount = 0;
+
+// Catálogos locales para buscadores
+const G_DETALLES = [
+  'PENDIENTE','FORMULA ERRADA','FORMULA VENCIDA','SIN FORMULA',
+  'AUTORIZACION PENDIENTE','MEDICAMENTO AGOTADO','ENTREGA PARCIAL',
+  'CAMBIO DE MEDICAMENTO','DEVOLUCION','OTRO'
+];
+
+// ── Secciones colapsables ─────────────────────
+function gmToggle(header) {
+  const body = header.nextElementSibling;
+  const arrow = header.querySelector('.gm-arrow');
+  const collapsed = body.classList.toggle('collapsed');
+  if(arrow) arrow.textContent = collapsed ? '▶' : '▼';
+}
+
+// ── Tutela toggle ─────────────────────────────
+function gSetTutela(val) {
+  _gTutela = val;
+  document.getElementById('gTutelaSi').className = 'gm-toggle-btn' + (val===true?' active-si':'');
+  document.getElementById('gTutelaNo').className = 'gm-toggle-btn' + (val===false?' active-no':'');
+}
+
+// ── Búsqueda EPS ──────────────────────────────
+function gFiltrarEPS(q) {
+  const dd = document.getElementById('gEpsDropdown');
+  const epsList = state.epsCatalogo || [];
+  const matches = q.length < 1 ? epsList : epsList.filter(e =>
+    e.nombre.toLowerCase().includes(q.toLowerCase()) || (e.nit||'').includes(q)
+  );
+  if(!matches.length) { dd.style.display='none'; return; }
+  dd.style.display = 'block';
+  dd.innerHTML = matches.slice(0,12).map(e =>
+    `<div onclick="gSelectEPS('${e.id}','${esc(e.nombre)}','${e.nit||''}')"
+      style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='var(--blue-l)'" onmouseout="this.style.background=''">
+      <div style="font-weight:600;font-size:12px">${esc(e.nombre)}</div>
+      <div style="font-size:10px;color:var(--ink3)">NIT: ${e.nit||'—'}</div>
+    </div>`
+  ).join('');
+}
+function gSelectEPS(id, nombre, nit) {
+  document.getElementById('gEpsSearch').value = nombre;
+  document.getElementById('gEpsId').value = id;
+  document.getElementById('gNitEps').textContent = nit || '—';
+  document.getElementById('gEpsDropdown').style.display = 'none';
+}
+function gLimpiarEPS() {
+  document.getElementById('gEpsSearch').value = '';
+  document.getElementById('gEpsId').value = '';
+  document.getElementById('gNitEps').textContent = '—';
+  document.getElementById('gEpsDropdown').style.display = 'none';
+}
+
+// ── Catálogo Nombre Solicitud (padre) ────────
+const G_NOMBRES_SOL = {
+  'PETICIÓN':    ['PENDIENTE','AUTORIZACION PENDIENTE','OTRO'],
+  'QUEJA':       ['FORMULA ERRADA','FORMULA VENCIDA','SIN FORMULA','ENTREGA PARCIAL','CAMBIO DE MEDICAMENTO','OTRO'],
+  'RECLAMO':     ['FORMULA ERRADA','FORMULA VENCIDA','SIN FORMULA','MEDICAMENTO AGOTADO','DEVOLUCION','OTRO'],
+  'SUGERENCIA':  ['OTRO'],
+};
+
+function gFiltrarNombreSol(q) {
+  const dd = document.getElementById('gNombreSolDropdown');
+  const nombres = Object.keys(G_NOMBRES_SOL);
+  const matches = q.length < 1 ? nombres : nombres.filter(n => n.toLowerCase().includes(q.toLowerCase()));
+  if(!matches.length) { dd.style.display='none'; return; }
+  dd.style.display = 'block';
+  dd.innerHTML = matches.map(n =>
+    `<div onclick="gSelectNombreSol('${esc(n)}')"
+      style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='var(--blue-l)'" onmouseout="this.style.background=''">
+      ${esc(n)}
+    </div>`
+  ).join('');
+}
+function gSelectNombreSol(val) {
+  document.getElementById('gNombreSolSearch').value = val;
+  document.getElementById('gNombreSolVal').value = val;
+  document.getElementById('gNombreSolDropdown').style.display = 'none';
+  // Filtrar detalles según nombre elegido
+  const detalles = G_NOMBRES_SOL[val] || G_DETALLES;
+  // Redefinir G_DETALLES_ACTIVOS para que gFiltrarDetalle los use
+  window._gDetallesActivos = detalles;
+  // Limpiar detalle actual si no aplica
+  const detalleActual = document.getElementById('gDetalleVal').value;
+  if(detalleActual && !detalles.includes(detalleActual)) {
+    document.getElementById('gDetalleSearch').value = '';
+    document.getElementById('gDetalleVal').value = '';
+  }
+}
+function gLimpiarNombreSol() {
+  document.getElementById('gNombreSolSearch').value = '';
+  document.getElementById('gNombreSolVal').value = '';
+  document.getElementById('gNombreSolDropdown').style.display = 'none';
+  window._gDetallesActivos = null;
+}
+
+// ── Búsqueda Detalle solicitud ────────────────
+function gFiltrarDetalle(q) {
+  const dd = document.getElementById('gDetalleDropdown');
+  const lista = window._gDetallesActivos || G_DETALLES;
+  const matches = q.length < 1 ? lista : lista.filter(d => d.toLowerCase().includes(q.toLowerCase()));
+  if(!matches.length) { dd.style.display='none'; return; }
+  dd.style.display = 'block';
+  dd.innerHTML = matches.map(d =>
+    `<div onclick="gSelectDetalle('${esc(d)}')"
+      style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='var(--blue-l)'" onmouseout="this.style.background=''">
+      ${esc(d)}
+    </div>`
+  ).join('');
+}
+function gSelectDetalle(val) {
+  document.getElementById('gDetalleSearch').value = val;
+  document.getElementById('gDetalleVal').value = val;
+  document.getElementById('gDetalleDropdown').style.display = 'none';
+}
+function gLimpiarDetalle() {
+  document.getElementById('gDetalleSearch').value = '';
+  document.getElementById('gDetalleVal').value = '';
+  document.getElementById('gDetalleDropdown').style.display = 'none';
+}
+
+// ── Búsqueda Departamento / Ciudad (desde sedes) ──
+function gGetDeptos() {
+  const sedes = state.sedes || [];
+  return [...new Set(sedes.map(s => s.ciudad?.split('/')[1]?.trim() || s.ciudad || '').filter(Boolean))].sort();
+}
+function gGetCiudadesByDepto(depto) {
+  const sedes = state.sedes || [];
+  return [...new Set(sedes.filter(s => !depto || (s.ciudad||'').toLowerCase().includes(depto.toLowerCase())).map(s=>s.ciudad||'').filter(Boolean))].sort();
+}
+function gFiltrarDepto(q) {
+  const dd = document.getElementById('gDeptoDropdown');
+  const deptos = [...new Set((state.sedes||[]).map(s=>s.ciudad||'').filter(Boolean))].sort();
+  const matches = q.length < 1 ? deptos : deptos.filter(d => d.toLowerCase().includes(q.toLowerCase()));
+  if(!matches.length) { dd.style.display='none'; return; }
+  dd.style.display='block';
+  dd.innerHTML = matches.slice(0,15).map(d=>
+    `<div onclick="gSelectDepto('${esc(d)}')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='var(--blue-l)'" onmouseout="this.style.background=''">${esc(d)}</div>`
+  ).join('');
+}
+function gSelectDepto(val) {
+  document.getElementById('gDeptoSearch').value = val;
+  document.getElementById('gDeptoVal').value = val;
+  document.getElementById('gDeptoDropdown').style.display = 'none';
+  document.getElementById('gCiudadSearch').value = '';
+  document.getElementById('gCiudadVal').value = '';
+}
+function gLimpiarDepto() {
+  document.getElementById('gDeptoSearch').value='';
+  document.getElementById('gDeptoVal').value='';
+  document.getElementById('gDeptoDropdown').style.display='none';
+}
+function gFiltrarCiudad(q) {
+  const dd = document.getElementById('gCiudadDropdown');
+  const deptoVal = document.getElementById('gDeptoVal').value;
+  const sedes = state.sedes||[];
+  let ciudades = [...new Set(sedes.map(s=>s.nombre||'').filter(Boolean))].sort();
+  if(q.length>0) ciudades = ciudades.filter(c=>c.toLowerCase().includes(q.toLowerCase()));
+  if(!ciudades.length) { dd.style.display='none'; return; }
+  dd.style.display='block';
+  dd.innerHTML = ciudades.slice(0,15).map(c=>
+    `<div onclick="gSelectCiudad('${esc(c)}')" style="padding:7px 10px;cursor:pointer;border-bottom:1px solid var(--border)"
+      onmouseover="this.style.background='var(--blue-l)'" onmouseout="this.style.background=''">${esc(c)}</div>`
+  ).join('');
+}
+function gSelectCiudad(val) {
+  document.getElementById('gCiudadSearch').value=val;
+  document.getElementById('gCiudadVal').value=val;
+  document.getElementById('gCiudadDropdown').style.display='none';
+}
+function gLimpiarCiudad() {
+  document.getElementById('gCiudadSearch').value='';
+  document.getElementById('gCiudadVal').value='';
+  document.getElementById('gCiudadDropdown').style.display='none';
+}
+
+// ── Búsqueda paciente por cédula ──────────────
+async function gBuscarPaciente(cedula) {
+  if(cedula.length < 4) return;
+  document.getElementById('gBuscandoSpinner').style.display='flex';
+  try {
+    const data = await sb(`tabla_usuarios?Cedula Paciente=eq.${encodeURIComponent(cedula)}&limit=1`);
+    if(data && data.length) {
+      const p = data[0];
+      document.getElementById('gNombre').value = p['Nombre Paciente']||'';
+      document.getElementById('gDireccion').value = p['Direccion']||'';
+      document.getElementById('gTelefono').value = p['Telefono']||'';
+      document.getElementById('gEmail').value = p['Email']||state.emails.find(e=>e.id===state.selectedId)?.from_email||'';
+    }
+  } catch(e) { /* silencioso */ }
+  document.getElementById('gBuscandoSpinner').style.display='none';
+}
+
+// ── Validación teléfono ───────────────────────
+function gValidarTel(input) {
+  const v = input.value.replace(/\D/g,'');
+  const err = document.getElementById('gTelError');
+  if(v.length && v.length !== 7 && v.length !== 10) {
+    err.style.display='block'; input.style.borderColor='var(--red)';
+  } else {
+    err.style.display='none'; input.style.borderColor='';
+  }
+}
+
+// ── Medicamentos dinámicos ────────────────────
+function gAgregarMed() {
+  _gMedCount++;
+  const idx = _gMedCount;
+  const wrap = document.createElement('div');
+  wrap.id = `gMed_${idx}`;
+  wrap.style.cssText = 'background:var(--bg2);border-radius:8px;padding:10px 12px;position:relative';
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:700;color:var(--ink3)">MEDICAMENTO #${idx}</span>
+      <button onclick="document.getElementById('gMed_${idx}').remove()" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:13px;line-height:1">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="gm-field">
+        <label class="gm-label">Código</label>
+        <input class="gm-input" id="gMedCod_${idx}" type="text" placeholder="Código del med." oninput="gBuscarMedicamento(this.value,${idx})">
+      </div>
+      <div class="gm-field">
+        <label class="gm-label">PBS</label>
+        <select class="gm-input" id="gMedPbs_${idx}">
+          <option value="">—</option>
+          <option value="SI">Sí</option>
+          <option value="NO">No</option>
+          <option value="PARCIAL">Parcial</option>
+        </select>
+      </div>
+      <div class="gm-field" style="grid-column:1/-1">
+        <label class="gm-label">Descripción (desde catálogo)</label>
+        <input class="gm-input" id="gMedDesc_${idx}" type="text" placeholder="Nombre del medicamento">
+      </div>
+      <div class="gm-field" style="grid-column:1/-1">
+        <label class="gm-label">Descripción escrita / artículo</label>
+        <input class="gm-input" id="gMedDescEsc_${idx}" type="text" placeholder="Descripción libre">
+      </div>
+      <div class="gm-field">
+        <label class="gm-label">Cantidad</label>
+        <input class="gm-input" id="gMedCant_${idx}" type="number" min="0" placeholder="0">
+      </div>
+    </div>`;
+  document.getElementById('gMedLista').appendChild(wrap);
+}
+
+// ── Autocompletar PBS y descripción desde tabla medicamentos ──
+async function gBuscarMedicamento(codigo, idx) {
+  if(!codigo || codigo.length < 3) return;
+  try {
+    const data = await sb(`medicamentos?codigo=eq.${encodeURIComponent(codigo)}&limit=1`);
+    if(data && data.length) {
+      const med = data[0];
+      const descEl = document.getElementById(`gMedDesc_${idx}`);
+      const pbsEl  = document.getElementById(`gMedPbs_${idx}`);
+      if(descEl && med.descripcion) descEl.value = med.descripcion;
+      if(pbsEl  && med.pbs) {
+        for(let op of pbsEl.options) {
+          if(op.value === med.pbs) { op.selected = true; break; }
+        }
+      }
+    }
+  } catch(e) { /* silencioso — tabla medicamentos puede no existir aún */ }
+}
+
+function gRecolectarMeds() {
+  const meds = [];
+  for(let i=1; i<=_gMedCount; i++) {
+    const el = document.getElementById(`gMed_${i}`);
+    if(!el) continue;
+    const cod  = document.getElementById(`gMedCod_${i}`)?.value?.trim()||'';
+    const desc = document.getElementById(`gMedDesc_${i}`)?.value?.trim()||'';
+    const descE= document.getElementById(`gMedDescEsc_${i}`)?.value?.trim()||'';
+    const cant = document.getElementById(`gMedCant_${i}`)?.value||'';
+    const pbs  = document.getElementById(`gMedPbs_${i}`)?.value||'';
+    if(cod||desc||descE) meds.push({codigo:cod,descripcion:desc,descripcion_escrita:descE,cantidad:cant?parseFloat(cant):null,pbs});
+  }
+  return meds;
+}
 
 function gestionEvidenciaAdd(file) {
   if(!file) return;
@@ -2511,69 +3004,201 @@ async function generarConNovaTD(correoId) {
 function openGestionModal(mode) {
   _gestionForSolucionado = mode==='solucionado';
   _gestionEvidenciaFile = null;
+  _gTutela = null;
+  _gMedCount = 0;
+
+  // Reset evidencia
   const preview = document.getElementById('gestionEvidenciaPreview');
   if(preview) preview.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Clic aquí o arrastra un archivo';
+
+  // Poblar acciones
   const sel = document.getElementById('gestionAccion');
   sel.innerHTML = '<option value="">— Seleccionar acción —</option>' +
     state.defaultActions.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');
   if(_gestionForSolucionado) sel.value = 'Solucionado';
+
+  // Reset observaciones
   document.getElementById('gestionObs').value = '';
+
+  // Precargar datos del correo actual
+  const email = state.emails.find(e=>e.id===state.selectedId);
+  if(email) {
+    // Datos básicos desde el correo
+    document.getElementById('gEmail').value = email.from_email||email.remitente||'';
+    document.getElementById('gNombre').value = email.nombre||email.from_name||'';
+    document.getElementById('gTelefono').value = email.telefono_contacto||'';
+    // Origen preseleccionado
+    if(email.origen) {
+      const origSel = document.getElementById('gOrigen');
+      for(let op of origSel.options) { if(op.value===email.origen){op.selected=true;break;} }
+    }
+    // Categoría
+    if(email.categoria_sigi||email.categoria_ia) {
+      const catSel = document.getElementById('gCategoria');
+      const catVal = email.categoria_sigi||email.categoria_ia||'';
+      for(let op of catSel.options) { if(op.value===catVal){op.selected=true;break;} }
+    }
+    // Tutela
+    if(email.tiene_tutela===true) gSetTutela(true);
+    else if(email.tiene_tutela===false) gSetTutela(false);
+    // EPS
+    if(email.eps_id && state.epsCatalogo) {
+      const eps = state.epsCatalogo.find(e=>e.id===email.eps_id);
+      if(eps) gSelectEPS(eps.id, eps.nombre, eps.nit||'');
+    }
+    // Detalle solicitud
+    if(email.nombre_solicitud) {
+      document.getElementById('gNombreSolSearch').value = email.nombre_solicitud;
+      document.getElementById('gNombreSolVal').value = email.nombre_solicitud;
+      window._gDetallesActivos = G_NOMBRES_SOL[email.nombre_solicitud] || null;
+    }
+    if(email.detalle_solicitud) {
+      document.getElementById('gDetalleSearch').value = email.detalle_solicitud;
+      document.getElementById('gDetalleVal').value = email.detalle_solicitud;
+    }
+    // Departamento / Ciudad
+    if(email.departamento_paciente) {
+      document.getElementById('gDeptoSearch').value = email.departamento_paciente;
+      document.getElementById('gDeptoVal').value = email.departamento_paciente;
+    }
+    if(email.ciudad_paciente) {
+      document.getElementById('gCiudadSearch').value = email.ciudad_paciente;
+      document.getElementById('gCiudadVal').value = email.ciudad_paciente;
+    }
+    // Tipo doc + cédula
+    if(email.tipo_documento) {
+      const tdSel = document.getElementById('gTipoDoc');
+      for(let op of tdSel.options){ if(op.value===email.tipo_documento){op.selected=true;break;} }
+    }
+    if(email.cedula_paciente) {
+      document.getElementById('gCedula').value = email.cedula_paciente;
+    }
+    if(email.direccion_paciente) document.getElementById('gDireccion').value = email.direccion_paciente;
+  }
+
+  // Reset lista medicamentos
+  document.getElementById('gMedLista').innerHTML = '';
+
+  // Cargar catálogo EPS si no está en state
+  if(!state.epsCatalogo) {
+    sb('eps_catalogo?order=nombre.asc').then(d=>{ state.epsCatalogo=d||[]; }).catch(()=>{});
+  }
+  // Cargar sedes si no están
+  if(!state.sedes || !state.sedes.length) {
+    sb('sedes?order=nombre.asc').then(d=>{ state.sedes=d||[]; }).catch(()=>{});
+  }
+
   document.getElementById('modalGestion').classList.add('show');
 }
 
 async function saveGestion() {
   const id = state.selectedId;
   if(!id) return;
-  const accion = document.getElementById('gestionAccion').value;
-  const obs = document.getElementById('gestionObs').value.trim();
+
+  // ── Lectura de campos ──
+  const accion   = document.getElementById('gestionAccion').value;
+  const obs      = document.getElementById('gestionObs').value.trim();
   if(!obs) { showToast('Las observaciones son obligatorias','error'); return; }
-  const email = state.emails.find(e=>e.id===id);
-  const _rawAgId2 = sessionStorage.getItem('pqr_agent_id')||'';
-  const _uuidRe2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const agentId = _uuidRe2.test(_rawAgId2) ? _rawAgId2 : null;
-  const agentName = 'Admin';
 
-  const metadata = {
-    agente_id:agentId,
-    agente_nombre:agentName,
-    por:'admin',
-    observaciones:obs,
-  };
+  const email    = state.emails.find(e=>e.id===id);
+  const _rawAgId = sessionStorage.getItem('pqr_agent_id')||'';
+  const _uuidRe  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const agentId  = _uuidRe.test(_rawAgId) ? _rawAgId : null;
+  const agentName= 'Admin';
 
-  // Subir evidencia a Storage si la hay
-  if(_gestionEvidenciaFile) {
-    try {
-      const ts=Date.now();
-      const safeName=_gestionEvidenciaFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-      const storagePath=`evidencias/${id}/${ts}_${safeName}`;
-      const uploadRes=await fetch(`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`,{
-        method:'POST',
-        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':_gestionEvidenciaFile.type||'application/octet-stream','x-upsert':'true'},
-        body:_gestionEvidenciaFile,
-      });
-      if(uploadRes.ok) {
-        const signRes=await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`,{
+  // Campos SIGI verdes
+  const tipoDoc    = document.getElementById('gTipoDoc')?.value||'';
+  const cedula     = document.getElementById('gCedula')?.value?.trim()||'';
+  const nombre     = document.getElementById('gNombre')?.value?.trim()||'';
+  const direccion  = document.getElementById('gDireccion')?.value?.trim()||'';
+  const telefono   = document.getElementById('gTelefono')?.value?.trim()||'';
+  const epsId      = document.getElementById('gEpsId')?.value||null;
+  const origen     = document.getElementById('gOrigen')?.value||'';
+  const nombreSol  = document.getElementById('gNombreSolVal')?.value||'';
+  const detalle    = document.getElementById('gDetalleVal')?.value||'';
+  const depto      = document.getElementById('gDeptoVal')?.value||'';
+  const ciudad     = document.getElementById('gCiudadVal')?.value||'';
+  const categoria  = document.getElementById('gCategoria')?.value||'';
+  const tieneTutela= _gTutela; // true / false / null
+  const meds       = gRecolectarMeds();
+
+  // ── Deshabilitar botón ──
+  const btn = document.getElementById('btnSaveGestion');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+
+  try {
+    // ═══ OPERACIÓN 1: Subir evidencia si hay ═══
+    const metadata = { agente_id:agentId, agente_nombre:agentName, por:'admin', observaciones:obs };
+    if(_gestionEvidenciaFile) {
+      try {
+        const ts=Date.now();
+        const safeName=_gestionEvidenciaFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+        const storagePath=`evidencias/${id}/${ts}_${safeName}`;
+        const uploadRes=await fetch(`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`,{
           method:'POST',
-          headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-          body:JSON.stringify({expiresIn:315360000}),
+          headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':_gestionEvidenciaFile.type||'application/octet-stream','x-upsert':'true'},
+          body:_gestionEvidenciaFile,
         });
-        const signData=signRes.ok?await signRes.json():{};
-        metadata.evidencia_url = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
-        metadata.evidencia_nombre = _gestionEvidenciaFile.name;
-      }
-    } catch(e){ console.warn('[evidencia]', e.message); }
-  }
-
-  await addHistorialEvent(id, email, accion||'Observación añadida', metadata);
-
-  if(_gestionForSolucionado) {
-    await sb(`correos?id=eq.${id}`, 'PATCH', {estado:'solucionado', fecha_resolucion:new Date().toISOString()});
-    showToast('Ticket solucionado ✓','success');
-  } else {
-    if(email?.estado==='pendiente') {
-      await sb(`correos?id=eq.${id}`, 'PATCH', {estado:'gestion'});
+        if(uploadRes.ok) {
+          const signRes=await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`,{
+            method:'POST',
+            headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+            body:JSON.stringify({expiresIn:315360000}),
+          });
+          const signData=signRes.ok?await signRes.json():{};
+          metadata.evidencia_url = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
+          metadata.evidencia_nombre = _gestionEvidenciaFile.name;
+        }
+      } catch(e){ console.warn('[evidencia]', e.message); }
     }
-    showToast('Gestión registrada ✓','success');
+
+    // ═══ OPERACIÓN 2: PATCH correos — campos SIGI verdes ═══
+    const patchCorreo = {};
+    if(tipoDoc)    patchCorreo.tipo_documento        = tipoDoc;
+    if(cedula)     patchCorreo.cedula_paciente        = cedula;
+    if(nombre)     patchCorreo.nombre                 = nombre;
+    if(direccion)  patchCorreo.direccion_paciente     = direccion;
+    if(telefono)   patchCorreo.telefono_contacto      = telefono;
+    if(epsId)      patchCorreo.eps_id                 = epsId;
+    if(origen)     patchCorreo.origen                 = origen;
+    if(nombreSol)  patchCorreo.nombre_solicitud       = nombreSol;
+    if(detalle)    patchCorreo.detalle_solicitud      = detalle;
+    if(depto)      patchCorreo.departamento_paciente  = depto;
+    if(ciudad)     patchCorreo.ciudad_paciente        = ciudad;
+    if(categoria)  patchCorreo.categoria_sigi         = categoria;
+    if(tieneTutela!==null) patchCorreo.tiene_tutela   = tieneTutela;
+
+    // Estado del ticket
+    if(_gestionForSolucionado) {
+      patchCorreo.estado           = 'solucionado';
+      patchCorreo.fecha_resolucion = new Date().toISOString();
+    } else if(email?.estado==='pendiente') {
+      patchCorreo.estado = 'gestion';
+    }
+
+    if(Object.keys(patchCorreo).length) {
+      await sb(`correos?id=eq.${id}`, 'PATCH', patchCorreo);
+    }
+
+    // ═══ OPERACIÓN 3: POST historial_eventos ═══
+    await addHistorialEvent(id, email, accion||'Gestión registrada', metadata);
+
+    // ═══ OPERACIÓN 4: POST gestiones_medicamentos (una fila por med) ═══
+    for(const med of meds) {
+      try {
+        await sb('gestiones_medicamentos', 'POST', { correo_id:id, ...med });
+      } catch(e) { console.warn('[med]', e.message); }
+    }
+
+    // ── Toast y cierre ──
+    if(_gestionForSolucionado) showToast('Ticket solucionado ✓','success');
+    else showToast(`Gestión registrada${meds.length?' + '+meds.length+' med.':''} ✓`,'success');
+
+  } catch(e) {
+    showToast('Error al guardar: '+e.message.substring(0,60),'error');
+    console.error('[saveGestion]', e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar gestión';
   }
 
   closeModal('modalGestion');
