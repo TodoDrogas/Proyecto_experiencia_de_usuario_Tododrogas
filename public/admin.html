@@ -1462,7 +1462,7 @@ async function exportarExcel() {
 
     // HOJA 1 — Gestiones detalle
     const h1=H.map(ev=>{
-      const meta=ev.datos_extra||ev.metadata||{}, f=ev.created_at||ev.fecha||'';
+      const meta=_parseMeta(ev.datos_extra||ev.metadata), f=ev.created_at||ev.fecha||'';
       const fo=f?new Date(f):null;
       const email=state.emails.find(e=>e.id===ev.correo_id);
       const ag=state.agents.find(a=>a.id===meta.agente_id);
@@ -2123,7 +2123,7 @@ function renderTimeline(events, container) {
     const color = getColor(ev);
     const fecha = ev.created_at||ev.fecha||'';
     const accion = ev.evento||ev.accion||'Evento';
-    const meta = ev.datos_extra||ev.metadata||{};
+    const meta = _parseMeta(ev.datos_extra||ev.metadata);
     const agente = meta.agente_nombre||ev.agente_nombre||'';
     const obs = meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
     return `<div class="timeline-item" onclick="openTlDetail(${i})" data-idx="${i}">
@@ -2146,7 +2146,7 @@ function openTlDetail(idx) {
   const events = el._events;
   if(!events||!events[idx]) return;
   const ev = events[idx];
-  const meta = ev.datos_extra||ev.metadata||{};
+  const meta = _parseMeta(ev.datos_extra||ev.metadata);
   const fecha = ev.created_at||ev.fecha||'';
 
   let adjuntosHTML = '';
@@ -2343,7 +2343,7 @@ async function confirmarFirma() {
       if(uploadRes.ok) {
         // URL pública directa (bucket adjuntos-pqr es público — no expira)
         firmaUrl = `${SB_URL}/storage/v1/object/public/adjuntos-pqr/${storagePath}`;
-        // Registrar en tabla adjuntos incluyendo storage_path para acceso alternativo
+        // Registrar en tabla adjuntos incluyendo storage_path
         await sb('adjuntos','POST',{
           correo_id:id, attachment_id:`firma_${id}_${ts}`,
           nombre:file.name, tipo_contenido:file.type||'application/octet-stream',
@@ -3011,6 +3011,7 @@ function closeModal(id) { document.getElementById(id).classList.remove('show'); 
 
 function _arr(v){if(!v)return[];if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch(e){return[];}}
 
+function _parseMeta(v){if(!v)return{};if(typeof v==='object')return v;try{return JSON.parse(v);}catch(e){return{};}}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function getFileIcon(n=''){
   const e=(n.split('.').pop()||'').toLowerCase();
@@ -3173,7 +3174,7 @@ async function _mpLoadTimeline(correoId) {
     el.innerHTML=evs.map((ev,i)=>{
       const color=getC(ev), fecha=ev.created_at||ev.fecha||'';
       const accion=ev.evento||ev.accion||'Evento';
-      const meta=ev.datos_extra||ev.metadata||{};
+      const meta=_parseMeta(ev.datos_extra||ev.metadata);
       const agente=meta.agente_nombre||ev.agente_nombre||'';
       const obs=meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
       return `<div class="timeline-item" onclick="mpOpenTlDetail(${i})" style="cursor:pointer">
@@ -3194,7 +3195,7 @@ function mpOpenTlDetail(idx) {
   const el = document.getElementById('mpTimeline');
   const events = el?._events;
   if(!events||!events[idx]) return;
-  const ev=events[idx], meta=ev.datos_extra||ev.metadata||{};
+  const ev=events[idx], meta=_parseMeta(ev.datos_extra||ev.metadata);
   const fecha=ev.created_at||ev.fecha||'';
   let adjHTML='';
   if(meta.firma_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
