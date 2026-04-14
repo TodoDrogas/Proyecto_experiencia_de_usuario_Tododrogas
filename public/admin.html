@@ -2190,25 +2190,11 @@ async function loadAttachments(correoId, messageId) {
   //   Excepciones para imágenes inline GRANDES (>150KB y no son logos Outlook) → mostrar
   const filtrar = (lista) => lista.filter(a => {
     const esInline = a.es_inline === true || a.isInline === true;
-    // No inline = siempre adjunto real → mostrar
-    if (!esInline) return true;
-    // Inline: aplicar mismas reglas que el PHP
-    const ct     = (a.tipo_contenido || a.contentType || '').toLowerCase();
-    const nombre = a.nombre || a.name || '';
-    const tam    = a.tamano_bytes || a.size || 0;
-    const esImg  = ct.startsWith('image/');
-    // Imágenes inline pequeñas = logos/firmas del cuerpo → NO mostrar
-    if (esImg && tam < 150000) return false;
-    // Logos Outlook auto-generados → NO mostrar
-    if (esImg && /^Outlook-[a-z0-9]+\.(png|gif|jpg|jpeg|bmp|webp)$/i.test(nombre)) return false;
-    // GIFs inline = firmas corporativas → NO mostrar
-    if (ct === 'image/gif') return false;
-    // Imágenes sin nombre real → NO mostrar
-    if (esImg && (!nombre || /^\.[a-z]+$/i.test(nombre))) return false;
-    // Solo excluir adjuntos de firma de cierre
+    // Inline = parte del cuerpo HTML → NUNCA mostrar en sección adjuntos (igual que Outlook)
+    if (esInline) return false;
+    // No inline = adjunto real → mostrar siempre
     const dir = a.direccion || '';
     if (dir && dir !== 'entrante') return false;
-    // Imágenes inline GRANDES (>150KB) = pueden ser adjuntos reales embebidos → mostrar
     return true;
   });
   // ── Renderizar lista de adjuntos con visor tipo Outlook (reutiliza mpPreviewAdjunto)
