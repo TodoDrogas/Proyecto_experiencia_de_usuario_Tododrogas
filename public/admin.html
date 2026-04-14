@@ -404,7 +404,6 @@ table.agents-tbl tr:hover td{background:var(--bg)}
     </button>
 
 
-    <button onclick="abrirNuevoCorreo()" style="background:rgba(37,99,235,.2);border:1px solid rgba(37,99,235,.4);color:#93c5fd;padding:5px 12px;border-radius:7px;font-size:11px;font-family:'Poppins',sans-serif;font-weight:700;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:5px;" title="Redactar nuevo correo">✉️ Nuevo correo</button>
     <div class="topbar-user">
       <div class="topbar-user-av">A</div>
       <span class="topbar-user-name">Admin</span>
@@ -3226,124 +3225,6 @@ function mpPreviewAdjunto(url, nombre, tipo, el) {
     const w = window.open('', '_blank', 'width=860,height=700,resizable=yes,scrollbars=yes');
     if(isPDF) {
       w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659}iframe{width:100%;height:100vh;border:none}</style></head><body><iframe src="${url}#toolbar=1&navpanes=0"></iframe>
-
-<!-- ✉️ Modal Nuevo Correo -->
-<div id="modalNuevoCorreo" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10000;align-items:center;justify-content:center">
-  <div style="background:#fff;border-radius:14px;width:600px;max-width:95vw;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:10px;background:#0f172a;border-radius:14px 14px 0 0">
-      <span style="font-size:18px">✉️</span>
-      <span style="font-weight:700;font-size:15px;color:#fff">Nuevo correo</span>
-      <button onclick="cerrarNuevoCorreo()" style="margin-left:auto;background:rgba(255,255,255,.1);border:none;cursor:pointer;font-size:18px;color:#fff;padding:4px 10px;border-radius:6px">✕</button>
-    </div>
-    <div style="padding:18px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;flex:1">
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Para *</label>
-        <input id="nc-para" type="email" placeholder="destinatario@ejemplo.com" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;outline:none" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">CC</label>
-        <input id="nc-cc" type="text" placeholder="cc1@ejemplo.com; cc2@ejemplo.com" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;outline:none" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Asunto *</label>
-        <input id="nc-asunto" type="text" placeholder="Asunto del correo" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;outline:none" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px">
-        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Mensaje *</label>
-        <div id="nc-body" contenteditable="true" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:inherit;min-height:160px;outline:none;line-height:1.6" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'"></div>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px">Adjuntos</label>
-        <div id="nc-adj-list" style="display:flex;flex-wrap:wrap;gap:5px"></div>
-        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;font-weight:600;color:#475569;padding:6px 12px;border:1.5px dashed #e2e8f0;border-radius:8px;background:#f8fafc;width:fit-content">
-          <input type="file" id="nc-files" multiple style="display:none" onchange="ncAgregarArchivos(this.files)">
-          📎 Adjuntar archivo
-        </label>
-      </div>
-    </div>
-    <div style="padding:14px 20px;border-top:1px solid #e2e8f0;display:flex;gap:8px;justify-content:flex-end;background:#f8fafc;border-radius:0 0 14px 14px">
-      <button onclick="cerrarNuevoCorreo()" style="padding:8px 18px;border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;color:#475569">Cancelar</button>
-      <button id="nc-btn-enviar" onclick="enviarNuevoCorreo()" style="padding:8px 20px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        Enviar
-      </button>
-    </div>
-  </div>
-</div>
-<script>
-var _ncFiles=[];
-function abrirNuevoCorreo(){
-  _ncFiles=[];
-  document.getElementById('nc-para').value='';
-  document.getElementById('nc-cc').value='';
-  document.getElementById('nc-asunto').value='';
-  document.getElementById('nc-body').innerHTML='';
-  document.getElementById('nc-adj-list').innerHTML='';
-  document.getElementById('nc-files').value='';
-  var m=document.getElementById('modalNuevoCorreo');
-  m.style.display='flex';
-  setTimeout(function(){document.getElementById('nc-para').focus();},100);
-}
-function cerrarNuevoCorreo(){document.getElementById('modalNuevoCorreo').style.display='none';}
-function ncAgregarArchivos(files){
-  Array.from(files).forEach(function(f){
-    if(_ncFiles.find(function(x){return x.name===f.name&&x.size===f.size;}))return;
-    _ncFiles.push(f);
-    var pill=document.createElement('div');
-    pill.style.cssText='display:inline-flex;align-items:center;gap:5px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:500;color:#475569';
-    pill.setAttribute('data-fname',f.name);
-    pill.setAttribute('data-fsize',String(f.size));
-    pill.innerHTML=getFileIcon(f.name)+' '+esc(f.name)+' <button onclick="ncQuitarAdj(this)" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;line-height:1;padding:0 2px">✕</button>';
-    document.getElementById('nc-adj-list').appendChild(pill);
-  });
-  document.getElementById('nc-files').value='';
-}
-function ncQuitarAdj(btn){
-  var pill=btn.parentElement;
-  _ncFiles=_ncFiles.filter(function(f){return !(f.name===pill.getAttribute('data-fname')&&String(f.size)===pill.getAttribute('data-fsize'));});
-  pill.remove();
-}
-async function enviarNuevoCorreo(){
-  var para=document.getElementById('nc-para').value.trim();
-  var cc=document.getElementById('nc-cc').value.trim();
-  var asunto=document.getElementById('nc-asunto').value.trim();
-  var body=document.getElementById('nc-body').innerHTML.trim();
-  if(!para){showToast('Escribe un destinatario','info');return;}
-  if(!asunto){showToast('Escribe un asunto','info');return;}
-  if(!body||body==='<br>'){showToast('Escribe el mensaje','info');return;}
-  var btn=document.getElementById('nc-btn-enviar');
-  btn.disabled=true;
-  btn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Enviando…';
-  try{
-    var token=await getGraphToken();
-    var userId=window.GRAPH_USER_ID||'';
-    var inlineFiles=_ncFiles.filter(function(f){return f.size<=3*1024*1024;});
-    var largeFiles=_ncFiles.filter(function(f){return f.size>3*1024*1024;});
-    var attachments=[];
-    for(var i=0;i<inlineFiles.length;i++){
-      var b64=await _fileToBase64(inlineFiles[i]);
-      attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:inlineFiles[i].name,contentType:inlineFiles[i].type||'application/octet-stream',contentBytes:b64});
-    }
-    var payload={
-      subject:asunto,
-      body:{contentType:'HTML',content:'<div style="font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px">'+body+'</div>'},
-      toRecipients:para.split(';').map(function(s){return {emailAddress:{address:s.trim()}};}).filter(function(r){return r.emailAddress.address;})
-    };
-    if(cc)payload.ccRecipients=cc.split(';').map(function(s){return {emailAddress:{address:s.trim()}};}).filter(function(r){return r.emailAddress.address;});
-    if(attachments.length)payload.attachments=attachments;
-    var r=largeFiles.length>0
-      ?await _buildAndSendMailWithLargeAttachments(token,userId,payload,largeFiles.map(function(f){return {file:f,id:f.name};}))
-      :await _buildAndSendMail(token,userId,payload);
-    if(r.ok||r.status===202||r.status===200){showToast('Correo enviado ✓','success');cerrarNuevoCorreo();}
-    else throw new Error(await r.text());
-  }catch(e){showToast('Error al enviar: '+e.message.substring(0,80),'error');}
-  finally{
-    btn.disabled=false;
-    btn.innerHTML='<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar';
-  }
-}
-</script>
-
 </body></html>`);
     } else {
       w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${url}" alt="${nombre}"></body></html>`);
@@ -3945,6 +3826,7 @@ async function confirmarAutoAsignar() {
           asignado_a: asig.agente_nombre,  // nombre para display
           estado: 'gestion'
         });
+        await addHistorialEvent(asig.correo_id, null, 'asignado_automatico', {agente_id: asig.agente_id, agente_nombre: asig.agente_nombre, por:'admin (autoasignación masiva)'});
         exitosos++;
       } catch { errores++; }
     }
