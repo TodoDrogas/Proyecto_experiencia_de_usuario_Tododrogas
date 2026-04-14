@@ -1039,16 +1039,10 @@ async function confirmarFirma() {
       body:file,
     });
     if(!uploadRes.ok) throw new Error('Error subiendo firma: '+await uploadRes.text());
-    // 2. URL firmada 10 años
-    const signRes=await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`,{
-      method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-      body:JSON.stringify({expiresIn:315360000}),
-    });
-    const signData=signRes.ok?await signRes.json():{};
-    const firmaUrl=signData.signedURL?`${SB_URL}/storage/v1${signData.signedURL}`:`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
-    // 3. Registrar en tabla adjuntos
-    await sb('adjuntos','POST',{correo_id:id,attachment_id:`firma_${id}_${Date.now()}`,nombre:file.name,tipo_contenido:file.type||'application/octet-stream',tamano_bytes:file.size,es_inline:false,storage_url:firmaUrl,direccion:'firma_cierre',enviado_por:AGENT_ID});
+    // 2. URL pública directa (bucket adjuntos-pqr es público — no expira)
+    const firmaUrl=`${SB_URL}/storage/v1/object/public/adjuntos-pqr/${storagePath}`;
+    // 3. Registrar en tabla adjuntos incluyendo storage_path
+    await sb('adjuntos','POST',{correo_id:id,attachment_id:`firma_${id}_${Date.now()}`,nombre:file.name,tipo_contenido:file.type||'application/octet-stream',tamano_bytes:file.size,es_inline:false,storage_url:firmaUrl,storage_path:storagePath,direccion:'firma_cierre',enviado_por:AGENT_ID});
     // 4. Cambiar estado a solucionado
     await sb(`correos?id=eq.${id}`,'PATCH',{estado:'solucionado',fecha_resolucion:new Date().toISOString()});
     // 5. Historial
