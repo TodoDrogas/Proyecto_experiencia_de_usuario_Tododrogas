@@ -1931,15 +1931,11 @@ async function selectEmail(id) {
     <div class="adj-section" style="margin-bottom:14px;display:none" id="mediaFormulario" style="display:none"></div>
       <div id="adjSection"><div class="adj-title">📎 Adjuntos</div><div class="adj-grid" id="adjGrid"></div></div>
     <div class="ev-body" id="evBody">
-      ${email.body_type==='html'
-        ? `<iframe
-            srcdoc="${esc(email.body_content||'')}"
-            sandbox="allow-same-origin allow-popups"
-            referrerpolicy="no-referrer"
-            style="width:100%;height:100%;min-height:400px;border:none;display:block"
-            onload="this.style.height=(this.contentDocument?.body?.scrollHeight||400)+'px'"
-          ></iframe>`
-        : `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`}
+      <div id="evBodyContent" style="width:100%;height:100%">
+        ${email.body_type!=='html'
+          ? `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`
+          : '<div style="padding:12px;color:var(--ink3);font-size:12px">Cargando...</div>'}
+      </div>
     </div>
   `;
 
@@ -2002,82 +1998,85 @@ async function selectEmail(id) {
   // Siempre intentar cargar adjuntos — no depender solo de has_attachments
   loadAttachments(id, email.message_id);
 
-  // ── Reemplazar cid: en el iframe por URLs reales ─────────────────────
+  // ── Renderizar cuerpo del correo resolviendo cid: antes de construir el iframe ──
   if(email.body_type === 'html') {
-    injectCidImages(id, email.message_id);
+    renderEmailBody(id, email.message_id, email.body_content || '');
   }
 }
 
-// Reemplaza cid:xxx en el iframe del cuerpo con URLs reales (Supabase o Graph via proxy)
-async function injectCidImages(correoId, messageId) {
+// Resuelve cid: en el HTML ANTES de construir el iframe — igual que Outlook
+async function renderEmailBody(correoId, messageId, bodyHtml) {
+  const container = document.getElementById('evBodyContent');
+  if(!container) return;
+
   try {
     const cidMap = {};
 
-    // 1. Primero buscar en Supabase (adjuntos inline ya guardados)
-    const adjs = await sb(`adjuntos?correo_id=eq.${correoId}&es_inline=eq.true&select=attachment_id,storage_url,tipo_contenido`) || [];
+    // 1. Buscar en Supabase (adjuntos inline guardados por el sync PHP)
+    const adjs = await sb(`adjuntos?correo_id=eq.${correoId}&es_inline=eq.true&select=attachment_id,storage_url`) || [];
     adjs.forEach(a => {
       if(a.attachment_id && a.storage_url) {
-        const cid = a.attachment_id.replace(/^cid:/i, '').replace(/[<>]/g,'').trim();
+        const cid = a.attachment_id.replace(/^cid:/i,'').replace(/[<>]/g,'').trim();
         cidMap[cid] = a.storage_url;
       }
     });
 
-    // 2. Fallback: listar adjuntos inline desde Graph y servir via adj-proxy.php
+    // 2. Fallback: Graph API — lista inline con contentId y sirve via adj-proxy.php
     if(!Object.keys(cidMap).length && messageId) {
-      const token = await getGraphToken();
-      const userId = window.GRAPH_USER_ID || '';
-      if(token && userId) {
-        const listResp = await fetch(
-          `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(messageId)}/attachments?$select=id,name,contentType,isInline,contentId`,
-          { headers: { Authorization: 'Bearer ' + token } }
-        );
-        if(listResp.ok) {
-          const listData = await listResp.json();
-          (listData.value || []).filter(a => a.isInline && a.contentId).forEach(a => {
-            const cid = a.contentId.replace(/^cid:/i, '').replace(/[<>]/g,'').trim();
-            const graphUrl = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(messageId)}/attachments/${a.id}/$value`;
-            cidMap[cid] = `/adj-proxy.php?url=${encodeURIComponent(graphUrl)}&token=${encodeURIComponent(token)}`;
-          });
+      try {
+        const token = await getGraphToken();
+        const userId = window.GRAPH_USER_ID || '';
+        if(token && userId) {
+          const r = await fetch(
+            `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(messageId)}/attachments?$select=id,contentType,isInline,contentId`,
+            { headers: { Authorization: 'Bearer ' + token } }
+          );
+          if(r.ok) {
+            const d = await r.json();
+            (d.value || []).filter(a => a.isInline && a.contentId).forEach(a => {
+              const cid = a.contentId.replace(/^cid:/i,'').replace(/[<>]/g,'').trim();
+              const graphUrl = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(messageId)}/attachments/${a.id}/$value`;
+              cidMap[cid] = `/adj-proxy.php?url=${encodeURIComponent(graphUrl)}&token=${encodeURIComponent(token)}`;
+            });
+          }
         }
-      }
+      } catch(e) { console.warn('[renderEmailBody] Graph fallback:', e); }
     }
 
-    if(!Object.keys(cidMap).length) return;
+    // 3. Reemplazar cid: directamente en el string HTML antes de srcdoc
+    let html = bodyHtml;
+    if(Object.keys(cidMap).length) {
+      html = html.replace(/src=["']cid:([^"'>\s]+)["']/gi, (match, cid) => {
+        const clean = cid.replace(/[<>]/g,'').trim();
+        // Exact match
+        if(cidMap[clean]) return `src="${cidMap[clean]}"`;
+        // Fuzzy match por parte antes del @
+        const short = clean.split('@')[0];
+        const found = Object.keys(cidMap).find(k => k.split('@')[0] === short);
+        if(found) return `src="${cidMap[found]}"`;
+        return match; // sin cambio si no se encuentra
+      });
+    }
 
-    // 3. Inyectar en el iframe
-    const iframe = document.querySelector('#evBody iframe');
-    if(!iframe) return;
-
-    const tryInject = () => {
+    // 4. Construir iframe con el HTML ya resuelto
+    const iframe = document.createElement('iframe');
+    iframe.sandbox = 'allow-same-origin allow-popups';
+    iframe.referrerPolicy = 'no-referrer';
+    iframe.style.cssText = 'width:100%;min-height:400px;border:none;display:block';
+    iframe.srcdoc = html;
+    iframe.onload = () => {
       try {
-        const doc = iframe.contentDocument;
-        if(!doc || !doc.body) return;
-        doc.querySelectorAll('img').forEach(img => {
-          const rawSrc = img.getAttribute('src') || '';
-          if(!rawSrc.toLowerCase().startsWith('cid:')) return;
-          const cid = rawSrc.replace(/^cid:/i, '').replace(/[<>]/g,'').trim();
-          if(cidMap[cid]) {
-            img.src = cidMap[cid];
-          } else {
-            // Fuzzy: parte antes del @
-            const cidShort = cid.split('@')[0];
-            const match = Object.keys(cidMap).find(k => k.includes(cidShort) || cidShort.includes(k.split('@')[0]));
-            if(match) img.src = cidMap[match];
-          }
-        });
-        setTimeout(() => {
-          iframe.style.height = (doc.body.scrollHeight || 400) + 'px';
-        }, 400);
+        const h = iframe.contentDocument?.body?.scrollHeight;
+        if(h) iframe.style.height = h + 'px';
       } catch(e) {}
     };
+    container.innerHTML = '';
+    container.appendChild(iframe);
 
-    if(iframe.contentDocument?.readyState === 'complete') {
-      tryInject();
-    } else {
-      iframe.addEventListener('load', tryInject, { once: true });
-    }
   } catch(err) {
-    console.warn('[injectCidImages]', err);
+    console.warn('[renderEmailBody]', err);
+    // Fallback: mostrar sin resolver cid
+    container.innerHTML = `<iframe srcdoc="${bodyHtml.replace(/"/g,'&quot;')}" sandbox="allow-same-origin allow-popups" style="width:100%;min-height:400px;border:none;display:block"></iframe>`;
   }
 }
 
