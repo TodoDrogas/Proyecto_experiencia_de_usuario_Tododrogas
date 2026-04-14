@@ -764,32 +764,42 @@ async function renderResultado(d) {
     divAdj.style.display = 'none';
     divAdj.innerHTML = '';
     if(estadosSolucion.includes(d.estado) && d.ticket_id && SB_URL && SB_ANON) {
-      // Buscar correo_id por ticket_id, luego sus adjuntos salientes
+      // Buscar correo_id por ticket_id, luego sus adjuntos salientes Y firma de cierre
       fetch(SB_URL+'/rest/v1/correos?ticket_id=eq.'+encodeURIComponent(d.ticket_id)+'&select=id&limit=1',
         {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}})
         .then(r=>r.json())
         .then(rows=>{
           const cid = rows&&rows[0]&&rows[0].id;
           if(!cid) return;
-          return fetch(SB_URL+'/rest/v1/adjuntos?correo_id=eq.'+cid+'&direccion=eq.saliente&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido&order=created_at.desc&limit=10',
-            {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
+          // Traer adjuntos salientes + firma_cierre en paralelo
+          const hdr = {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}};
+          return Promise.all([
+            fetch(SB_URL+'/rest/v1/adjuntos?correo_id=eq.'+cid+'&direccion=eq.saliente&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion&order=created_at.desc&limit=10', hdr).then(r=>r.json()).catch(()=>[]),
+            fetch(SB_URL+'/rest/v1/adjuntos?correo_id=eq.'+cid+'&direccion=eq.firma_cierre&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion&order=created_at.desc&limit=5', hdr).then(r=>r.json()).catch(()=>[])
+          ]);
         })
-        .then(r=>r&&r.json())
-        .then(adjs=>{
-          if(!adjs) return;
-          if(!adjs||!adjs.length) return;
-          const items = adjs.map(a=>{
+        .then(results=>{
+          if(!results) return;
+          const [salientes, firmas] = results;
+          const todosAdjs = [...(salientes||[]), ...(firmas||[])];
+          if(!todosAdjs.length) return;
+          const items = todosAdjs.map(a=>{
             const bytes = a.tamano_bytes||0;
             const size  = bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':bytes>=1024?Math.round(bytes/1024)+' KB':bytes+' B';
             const ext   = (a.nombre||'').split('.').pop().toLowerCase();
             const icon  = ['pdf'].includes(ext)?'📄':['png','jpg','jpeg','gif','webp'].includes(ext)?'🖼️':['mp3','ogg','wav','m4a'].includes(ext)?'🎵':['zip','rar'].includes(ext)?'🗜️':'📎';
-            return '<a href="'+a.storage_url+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:9px;padding:8px 14px;text-decoration:none;color:#15803d;font-size:12px;font-weight:600;margin:3px">'
-              +icon+' '+a.nombre+' <span style="color:#4ade80;font-size:11px">('+size+')</span>'
+            const esFirma = a.direccion==='firma_cierre';
+            const bg    = esFirma?'#faf5ff':'#f0fdf4';
+            const bdr   = esFirma?'#ddd6fe':'#86efac';
+            const color = esFirma?'#7c3aed':'#15803d';
+            const badge = esFirma?'<span style="font-size:10px;background:#ede9fe;color:#7c3aed;border-radius:4px;padding:1px 5px;font-weight:700">FIRMA</span> ':'';
+            return '<a href="'+a.storage_url+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:7px;background:'+bg+';border:1.5px solid '+bdr+';border-radius:9px;padding:8px 14px;text-decoration:none;color:'+color+';font-size:12px;font-weight:600;margin:3px">'
+              +icon+' '+badge+a.nombre+' <span style="opacity:.6;font-size:11px">('+size+')</span>'
               +'<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>'
               +'</a>';
           }).join('');
           divAdj.innerHTML = '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px 14px">'
-            +'<div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">📎 Documentos de respuesta</div>'
+            +'<div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">📎 Documentos de cierre</div>'
             +'<div style="display:flex;flex-wrap:wrap;gap:4px">'+items+'</div>'
             +'</div>';
           divAdj.style.display = 'block';
