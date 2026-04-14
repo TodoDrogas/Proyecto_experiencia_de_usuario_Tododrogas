@@ -709,7 +709,7 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int
 
     // Traer lista de adjuntos desde Graph
     $r = curlGet(
-        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=50&\$select=id,name,contentType,size,isInline,contentId",
+        "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/messages/" . urlencode($msg_id) . "/attachments?\$top=50",
         $token
     );
     if ($r['code'] !== 200) return 0;
@@ -749,7 +749,8 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token): int
         $inline = (bool)($adj['isInline'] ?? false);
         // contentId es el cid: que aparece en el body HTML → usarlo como attachment_id
         $content_id = trim($adj['contentId'] ?? '');
-        $content_id = preg_replace('/^<|>$/', '', $content_id); // quitar < > si los tiene
+        $content_id = preg_replace('/[<>]/', '', $content_id); // quitar < > en cualquier posición
+        log_msg("    🔍 adj: $nombre | inline=" . ($inline?'si':'no') . " | contentId=$content_id");
 
         if ($tam > 52_428_800) { // >50MB — omitir
             log_msg("    ⚠️  Adjunto >50MB omitido: $nombre");
