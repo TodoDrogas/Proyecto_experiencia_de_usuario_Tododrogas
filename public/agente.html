@@ -260,11 +260,23 @@ html[data-theme="lava"] input,html[data-theme="lava"] textarea,html[data-theme="
 html[data-theme="lava"] .btn-primary{background:linear-gradient(135deg,#ef4444,#b91c1c)!important}
 
 html[data-theme="purple"]     { --blue:#7c3aed!important;--blue-l:#ede9fe!important;--bg:#f5f3ff!important;--surface:#faf5ff!important;--border:#ddd6fe!important;--ink:#1e1b4b!important;--ink2:#3730a3!important;--ink3:#6d28d9!important; }
+html[data-theme="purple"] body,html[data-theme="purple"] .folders-panel,html[data-theme="purple"] .email-list-panel,html[data-theme="purple"] .mgmt-right,html[data-theme="purple"] .email-detail-outer{background:var(--bg)!important;color:var(--ink)!important}
+html[data-theme="purple"] .email-item,html[data-theme="purple"] .gestion-modal,html[data-theme="purple"] .gestion-modal-wide,html[data-theme="purple"] .tl-modal{background:var(--surface)!important;color:var(--ink)!important}
 html[data-theme="ocean"]      { --blue:#0891b2!important;--blue-l:#cffafe!important;--bg:#f0fdfe!important;--surface:#ecfeff!important;--border:#a5f3fc!important;--ink:#0c1a1f!important;--ink2:#155e75!important;--ink3:#0e7490!important; }
+html[data-theme="ocean"] body,html[data-theme="ocean"] .folders-panel,html[data-theme="ocean"] .email-list-panel,html[data-theme="ocean"] .mgmt-right,html[data-theme="ocean"] .email-detail-outer{background:var(--bg)!important;color:var(--ink)!important}
+html[data-theme="ocean"] .email-item,html[data-theme="ocean"] .gestion-modal,html[data-theme="ocean"] .gestion-modal-wide,html[data-theme="ocean"] .tl-modal{background:var(--surface)!important;color:var(--ink)!important}
 html[data-theme="rose"]       { --blue:#e11d48!important;--blue-l:#ffe4e6!important;--bg:#fef2f2!important;--surface:#fff1f2!important;--border:#fecdd3!important;--ink:#1c0a0a!important;--ink2:#9f1239!important;--ink3:#be123c!important; }
+html[data-theme="rose"] body,html[data-theme="rose"] .folders-panel,html[data-theme="rose"] .email-list-panel,html[data-theme="rose"] .mgmt-right,html[data-theme="rose"] .email-detail-outer{background:var(--bg)!important;color:var(--ink)!important}
+html[data-theme="rose"] .email-item,html[data-theme="rose"] .gestion-modal,html[data-theme="rose"] .gestion-modal-wide,html[data-theme="rose"] .tl-modal{background:var(--surface)!important;color:var(--ink)!important}
 html[data-theme="forest"]     { --blue:#15803d!important;--blue-l:#dcfce7!important;--bg:#f7fee7!important;--surface:#f0fdf4!important;--border:#bbf7d0!important;--ink:#052e16!important;--ink2:#166534!important;--ink3:#15803d!important; }
+html[data-theme="forest"] body,html[data-theme="forest"] .folders-panel,html[data-theme="forest"] .email-list-panel,html[data-theme="forest"] .mgmt-right,html[data-theme="forest"] .email-detail-outer{background:var(--bg)!important;color:var(--ink)!important}
+html[data-theme="forest"] .email-item,html[data-theme="forest"] .gestion-modal,html[data-theme="forest"] .gestion-modal-wide,html[data-theme="forest"] .tl-modal{background:var(--surface)!important;color:var(--ink)!important}
 html[data-theme="arctic"]     { --blue:#38bdf8!important;--blue-l:#e0f2fe!important;--bg:#e0f2fe!important;--surface:#f0f9ff!important;--border:#bae6fd!important;--ink:#0c4a6e!important;--ink2:#075985!important;--ink3:#0369a1!important; }
+html[data-theme="arctic"] body,html[data-theme="arctic"] .folders-panel,html[data-theme="arctic"] .email-list-panel,html[data-theme="arctic"] .mgmt-right,html[data-theme="arctic"] .email-detail-outer{background:var(--bg)!important;color:var(--ink)!important}
+html[data-theme="arctic"] .email-item,html[data-theme="arctic"] .gestion-modal,html[data-theme="arctic"] .gestion-modal-wide,html[data-theme="arctic"] .tl-modal{background:var(--surface)!important;color:var(--ink)!important}
 html[data-theme="sunset"]     { --blue:#f97316!important;--blue-l:#ffedd5!important;--bg:#fffbf5!important;--surface:#fff7ed!important;--border:#fed7aa!important;--ink:#431407!important;--ink2:#9a3412!important;--ink3:#c2410c!important; }
+html[data-theme="sunset"] body,html[data-theme="sunset"] .folders-panel,html[data-theme="sunset"] .email-list-panel,html[data-theme="sunset"] .mgmt-right,html[data-theme="sunset"] .email-detail-outer{background:var(--bg)!important;color:var(--ink)!important}
+html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,html[data-theme="sunset"] .gestion-modal-wide,html[data-theme="sunset"] .tl-modal{background:var(--surface)!important;color:var(--ink)!important}
 
 </style>
 </head>
@@ -1974,7 +1986,7 @@ async function generarConNovaTD(correoId) {
 
 async function openGestionModal(mode) {
   if (!state.selectedId) {
-    toast('Selecciona un correo primero', 'error');
+    showToast('Selecciona un correo primero', 'error');
     return;
   }
   _gestionForSolucionado = mode==='solucionado';
@@ -2111,6 +2123,42 @@ document.addEventListener('mousedown', function(e) {
   }
 });
 
+// ──────────────────────────────────────────────
+// HISTORIAL EVENTOS
+// ──────────────────────────────────────────────
+async function addHistorialEvent(correoId, email, evento, metadata={}) {
+  // Extraer agente_id del metadata y validar UUID
+  const rawAid = metadata.agente_id || null;
+  const uuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const agId   = rawAid && uuidRx.test(String(rawAid)) ? rawAid : null;
+
+  // Construir payload limpio — solo campos que existen en la tabla
+  const payload = {
+    correo_id:   correoId,
+    evento:      evento,
+    descripcion: metadata.observaciones || metadata.agente_nombre || evento,
+    from_email:  email?.remitente || email?.from_email || null,
+    subject:     email?.asunto    || email?.subject    || null,
+    datos_extra: JSON.stringify(metadata),
+  };
+  // Solo incluir agente_id si es UUID válido (evita FK violation)
+  if (agId) payload.agente_id = agId;
+
+  try {
+    await sb('historial_eventos', 'POST', payload);
+  } catch(e) {
+    console.error('[historial_eventos] ERROR:', e?.message||e);
+    // Intentar sin datos_extra (por si la columna no acepta el valor)
+    try {
+      const payloadMin = { correo_id:correoId, evento, descripcion:payload.descripcion };
+      if(agId) payloadMin.agente_id = agId;
+      await sb('historial_eventos', 'POST', payloadMin);
+    } catch(e2) {
+      console.error('[historial_eventos] MINIMAL ALSO FAILED:', e2?.message);
+    }
+  }
+}
+
 async function saveGestion() {
   const id = state.selectedId;
   if(!id) return;
@@ -2152,7 +2200,7 @@ async function saveGestion() {
   const _rawAgId  = sessionStorage.getItem('pqr_agent_id')||'';
   const _uuidRe   = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const agentId   = _uuidRe.test(_rawAgId) ? _rawAgId : null;
-  const agentName = 'Admin';
+  const agentName = AGENT_NAME;
   const meds      = gRecolectarMeds();
 
   const btn = document.getElementById('btnSaveGestion');
@@ -2160,7 +2208,7 @@ async function saveGestion() {
 
   try {
     // ═══ OPERACIÓN 1: Evidencia ═══
-    const metadata = { agente_id:agentId, agente_nombre:agentName, por:'admin', observaciones:obs, num_gestion: numGest+1 };
+    const metadata = { agente_id:agentId, agente_nombre:agentName, por:'agente', observaciones:obs, num_gestion: numGest+1 };
     if(_gestionEvidenciaFile) {
       try {
         const ts=Date.now();
