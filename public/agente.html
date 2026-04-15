@@ -1234,6 +1234,23 @@ async function renderEmailBody(correoId, messageId, bodyHtml, containerId) {
       });
     }
     // 4. Construir iframe con HTML ya resuelto
+    // Inyectar estilos de legibilidad según tema activo
+    const _darkThemes = ['dark','midnight','lava','futurista'];
+    const _temaActual = document.documentElement.getAttribute('data-theme') || 'default';
+    if (_darkThemes.includes(_temaActual)) {
+      const _iframeStyle = '<style>html,body{background:#1e293b!important;color:#e2e8f0!important}' +
+        'p,span,div,td,th,li,a,h1,h2,h3,h4,h5,h6,b,strong,i,em,u{color:#e2e8f0!important}' +
+        'table{background:#1e293b!important}' +
+        'a{color:#93c5fd!important}' +
+        '*[style*="color:#000"],*[style*="color: #000"],*[style*="color:black"],*[style*="color:rgb(0,0,0)"]{color:#e2e8f0!important}' +
+        '*[style*="background:#fff"],*[style*="background: #fff"],*[style*="background:white"],*[style*="background-color:#fff"],*[style*="background-color:white"]{background:#1e293b!important}' +
+        '</style>';
+      if (html.includes('</head>')) {
+        html = html.replace('</head>', _iframeStyle + '</head>');
+      } else {
+        html = _iframeStyle + html;
+      }
+    }
     const iframe = document.createElement('iframe');
     iframe.sandbox = 'allow-same-origin allow-popups';
     iframe.referrerPolicy = 'no-referrer';
@@ -3819,6 +3836,26 @@ function setTema(t) {
   localStorage.setItem('ag_tema_' + (AGENT_ID || 'x'), t);
   document.querySelectorAll('#temaGrid [data-t]').forEach(function(el) {
     el.style.boxShadow = el.dataset.t === t ? '0 0 0 3px #fff, 0 0 0 5px #2563eb' : 'none';
+  });
+  // Re-renderizar iframes del cuerpo del correo para aplicar tema
+  var _darkTs = ['dark','midnight','lava','futurista'];
+  document.querySelectorAll('.ev-body iframe').forEach(function(fr) {
+    try {
+      var doc = fr.contentDocument;
+      if (!doc) return;
+      var existing = doc.getElementById('_tema_style');
+      if (existing) existing.remove();
+      if (_darkTs.includes(t)) {
+        var st = doc.createElement('style');
+        st.id = '_tema_style';
+        st.textContent = 'html,body{background:#1e293b!important;color:#e2e8f0!important}' +
+          'p,span,div,td,th,li,h1,h2,h3,h4,h5,h6,b,strong,i,em,u{color:#e2e8f0!important}' +
+          'table{background:#1e293b!important}a{color:#93c5fd!important}' +
+          '*[style*="color:#000"],*[style*="color:black"]{color:#e2e8f0!important}' +
+          '*[style*="background:#fff"],*[style*="background:white"],*[style*="background-color:#fff"]{background:#1e293b!important}';
+        (doc.head || doc.documentElement).appendChild(st);
+      }
+    } catch(e) {}
   });
 }
 
