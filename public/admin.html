@@ -5823,19 +5823,19 @@ async function loadNovaMetrics(){
     encQr,
     sesNovaWeb, sesNovaDir, sesNovaBv,
   ] = await Promise.all([
-    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
-    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
-    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
-    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
-    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
+    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
+    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
+    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.qr&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_web&select=id,created_at,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_bienvenida&select=id,created_at,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_web&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_bienvenida&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
   ]);
 
   novaDatos={
@@ -6150,27 +6150,11 @@ async function exportNovaExcel(){
   const fmt = d => d ? new Date(d).toLocaleString('es-CO') : '';
   const fmtD = d => d ? new Date(d).toLocaleDateString('es-CO') : '';
 
-  // ── Enriquecer correos Web y QR con cedula, eps, sede, canal ─────────
-  // Los correos de novaDatos solo traen: id, received_at, ticket_id, tipo_pqr, nombre
-  // Necesitamos: cedula, from_email, sentimiento, prioridad, estado, canal_contacto, sede del agente
+  // ── correos ya enriquecidos directamente desde novaDatos ────────────
+  // loadNovaMetrics ahora incluye todos los campos necesarios en el select
   let correoMap = {};
-  try {
-    const ids = [
-      ...D.radWeb.map(r=>r.id),
-      ...D.radQr.map(r=>r.id),
-    ].filter(Boolean);
-    if (ids.length && SB_URL && SB_KEY) {
-      const chunkSize = 100;
-      for (let i = 0; i < ids.length; i += chunkSize) {
-        const chunk = ids.slice(i, i + chunkSize);
-        const rows = await fetch(
-          `${SB_URL}/rest/v1/correos?id=in.(${chunk.join(',')})&select=id,ticket_id,nombre,from_email,cedula,tipo_pqr,sentimiento,prioridad,estado,canal_contacto,origen,received_at`,
-          sbH
-        ).then(r=>r.json()).catch(()=>[]);
-        (rows||[]).forEach(r => correoMap[r.id] = r);
-      }
-    }
-  } catch(e) { console.warn('[exportNovaExcel] correoMap:', e.message); }
+  D.radWeb.forEach(r => correoMap[r.id] = r);
+  D.radQr.forEach(r => correoMap[r.id] = r);
 
   // ── Enriquecer encuestas Web y QR con datos_extra del historial ──────
   // state.encuestas ya está cargado desde historial_eventos (loadEncuestas)
@@ -6232,21 +6216,20 @@ async function exportNovaExcel(){
   // EPS | Correo | Ticket | Tipo PQR | Sentimiento | Prioridad | Estado
   // ─────────────────────────────────────────────────────────────────────
   const h_wRad = D.radWeb.map(r => {
-    const c = correoMap[r.id] || r;
-    const ag = agsMap[c.agente_id || c.asignado_a] || {};
+    const ag = agsMap[r.agente_id] || {};
     return {
       'Fecha':       fmtD(r.received_at),
       'Hora':        r.received_at ? new Date(r.received_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-      'Sede_Agente': ag.sede        || '',
-      'Cédula':      c.cedula       || '',
-      'Nombre':      c.nombre       || r.nombre || '',
-      'Correo':      c.from_email   || '',
-      'Ticket':      r.ticket_id    || c.ticket_id || '',
-      'Tipo_PQR':    c.tipo_pqr     || r.tipo_pqr || '',
-      'Sentimiento': c.sentimiento  || '',
-      'Prioridad':   c.prioridad    || '',
-      'Estado':      c.estado       || '',
-      'Canal':       c.canal_contacto || c.origen || 'web',
+      'Sede_Agente': ag.sede           || '',
+      'Cédula':      r.cedula          || '',
+      'Nombre':      r.nombre          || '',
+      'Correo':      r.from_email      || '',
+      'Ticket':      r.ticket_id       || '',
+      'Tipo_PQR':    r.tipo_pqr        || '',
+      'Sentimiento': r.sentimiento     || '',
+      'Prioridad':   r.prioridad       || '',
+      'Estado':      r.estado          || '',
+      'Canal':       r.canal_contacto  || r.origen || 'web',
       'Accion':      'Radicado',
     };
   });
@@ -6294,36 +6277,23 @@ async function exportNovaExcel(){
   // ─────────────────────────────────────────────────────────────────────
   // HOJA 4 — QR_RADICACIÓN
   // ─────────────────────────────────────────────────────────────────────
-  const correoMapQR = {};
-  try {
-    const idsQR = D.radQr.map(r=>r.id).filter(Boolean);
-    if (idsQR.length && SB_URL && SB_KEY) {
-      for (let i = 0; i < idsQR.length; i += 100) {
-        const chunk = idsQR.slice(i, i+100);
-        const rows = await fetch(
-          `${SB_URL}/rest/v1/correos?id=in.(${chunk.join(',')})&select=id,ticket_id,nombre,from_email,cedula,tipo_pqr,sentimiento,prioridad,estado,canal_contacto,origen,agente_id`,
-          sbH
-        ).then(r=>r.json()).catch(()=>[]);
-        (rows||[]).forEach(r => correoMapQR[r.id] = r);
-      }
-    }
-  } catch(e) { console.warn('[exportNovaExcel] correoMapQR:', e.message); }
+  // QR ya en correoMap (cargado arriba desde novaDatos)
+  const correoMapQR = correoMap;
 
   const h_qRad = D.radQr.map(r => {
-    const c = correoMapQR[r.id] || r;
-    const ag = agsMap[c.agente_id] || {};
+    const ag = agsMap[r.agente_id] || {};
     return {
       'Fecha':       fmtD(r.received_at),
       'Hora':        r.received_at ? new Date(r.received_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-      'Sede_Agente': ag.sede        || '',
-      'Cédula':      c.cedula       || '',
-      'Nombre':      c.nombre       || r.nombre || '',
-      'Correo':      c.from_email   || '',
-      'Ticket':      r.ticket_id    || c.ticket_id || '',
-      'Tipo_PQR':    c.tipo_pqr     || r.tipo_pqr || '',
-      'Sentimiento': c.sentimiento  || '',
-      'Prioridad':   c.prioridad    || '',
-      'Estado':      c.estado       || '',
+      'Sede_Agente': ag.sede           || '',
+      'Cédula':      r.cedula          || '',
+      'Nombre':      r.nombre          || '',
+      'Correo':      r.from_email      || '',
+      'Ticket':      r.ticket_id       || '',
+      'Tipo_PQR':    r.tipo_pqr        || '',
+      'Sentimiento': r.sentimiento     || '',
+      'Prioridad':   r.prioridad       || '',
+      'Estado':      r.estado          || '',
       'Canal':       'QR',
       'Accion':      'Radicado',
     };
@@ -6786,9 +6756,9 @@ async function loadAgentesMetrics(){
   };
 
   const [correos, eventos, agentes] = await Promise.all([
-    sb(qC('correos?select=id,ticket_id,subject,from_email,nombre,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
+    sb(qC('correos?select=id,ticket_id,subject,from_email,nombre,cedula,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
     sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=5000','created_at')).catch(()=>[]),
-    sb('agentes?select=id,nombre,email,activo&order=nombre.asc').catch(()=>[]),
+    sb('agentes?select=id,nombre,email,activo,sede&order=nombre.asc').catch(()=>[]),
   ]);
 
   _agDatos = {
