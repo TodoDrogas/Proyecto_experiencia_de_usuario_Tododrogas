@@ -1980,6 +1980,32 @@ async function generarConNovaTD(correoId) {
   }
 }
 
+async function addHistorialEvent(correoId, email, evento, metadata={}) {
+  const rawAid = metadata.agente_id || null;
+  const uuidRx = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const agId   = rawAid && uuidRx.test(String(rawAid)) ? rawAid : null;
+  const payload = {
+    correo_id:   correoId,
+    evento:      evento,
+    descripcion: metadata.observaciones || metadata.agente_nombre || evento,
+    from_email:  email?.remitente || email?.from_email || null,
+    subject:     email?.asunto    || email?.subject    || null,
+    datos_extra: JSON.stringify(metadata),
+  };
+  if (agId) payload.agente_id = agId;
+  try {
+    await sb('historial_eventos', 'POST', payload);
+  } catch(e) {
+    console.error('[historial_eventos] ERROR:', e?.message||e);
+    try {
+      const p2 = { correo_id:correoId, evento, descripcion:payload.descripcion };
+      if(agId) p2.agente_id = agId;
+      await sb('historial_eventos', 'POST', p2);
+    } catch(e2) { console.error('[historial_min]', e2?.message); }
+  }
+}
+
+
 async function openGestionModal(mode) {
   _gestionForSolucionado = mode==='solucionado';
   _gestionEvidenciaFile = null;
