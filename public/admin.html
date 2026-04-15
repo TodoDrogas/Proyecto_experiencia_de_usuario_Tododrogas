@@ -3237,58 +3237,105 @@ function gLimpiarDetalle() {
   document.getElementById('gDetalleDropdown').style.display = 'none';
 }
 
-// ── Búsqueda Departamento / Ciudad (desde sedes) ──
-function gGetDeptos() {
-  const sedes = state.sedes || [];
-  return [...new Set(sedes.map(s => s.ciudad?.split('/')[1]?.trim() || s.ciudad || '').filter(Boolean))].sort();
-}
-function gGetCiudadesByDepto(depto) {
-  const sedes = state.sedes || [];
-  return [...new Set(sedes.filter(s => !depto || (s.ciudad||'').toLowerCase().includes(depto.toLowerCase())).map(s=>s.ciudad||'').filter(Boolean))].sort();
-}
+// ── Departamentos y ciudades de Colombia (lista estática) ──
+// Se autocompletan desde tabla_usuarios via RPC buscar_paciente
+// El agente puede editar manualmente con este buscador
+const G_DEPTOS_CO = [
+  'AMAZONAS','ANTIOQUIA','ARAUCA','ATLÁNTICO','BOLÍVAR','BOYACÁ','CALDAS',
+  'CAQUETÁ','CASANARE','CAUCA','CESAR','CHOCÓ','CÓRDOBA','CUNDINAMARCA',
+  'GUAINÍA','GUAVIARE','HUILA','LA GUAJIRA','MAGDALENA','META','NARIÑO',
+  'NORTE DE SANTANDER','PUTUMAYO','QUINDÍO','RISARALDA','SAN ANDRÉS Y PROVIDENCIA',
+  'SANTANDER','SUCRE','TOLIMA','VALLE DEL CAUCA','VAUPÉS','VICHADA',
+  'BOGOTÁ D.C.'
+];
+
+// Ciudades principales por departamento
+const G_CIUDADES_CO = {
+  'ANTIOQUIA': ['MEDELLÍN','BELLO','ITAGÜÍ','ENVIGADO','SABANETA','LA ESTRELLA','COPACABANA','GIRARDOTA','BARBOSA','CALDAS','RIONEGRO','APARTADÓ','TURBO','CAUCASIA','YARUMAL'],
+  'BOGOTÁ D.C.': ['BOGOTÁ'],
+  'VALLE DEL CAUCA': ['CALI','BUENAVENTURA','PALMIRA','TULUÁ','BUGA','CARTAGO','YUMBO','JAMUNDÍ','FLORIDA','PRADERA'],
+  'ATLÁNTICO': ['BARRANQUILLA','SOLEDAD','MALAMBO','SABANALARGA','BARANOA'],
+  'BOLÍVAR': ['CARTAGENA','MAGANGUÉ','MOMPÓS','EL CARMEN DE BOLÍVAR'],
+  'SANTANDER': ['BUCARAMANGA','FLORIDABLANCA','GIRÓN','PIEDECUESTA','BARRANCABERMEJA','SAN GIL','SOCORRO'],
+  'CUNDINAMARCA': ['SOACHA','FACATATIVÁ','ZIPAQUIRÁ','CHÍA','CAJICÁ','MOSQUERA','MADRID','FUNZA','GIRARDOT','FUSAGASUGÁ'],
+  'CÓRDOBA': ['MONTERÍA','TIERRALTA','SAHAGÚN','CERETÉ','LORICA','MONTELÍBANO'],
+  'NARIÑO': ['PASTO','TUMACO','IPIALES','TÚQUERRES'],
+  'RISARALDA': ['PEREIRA','DOSQUEBRADAS','SANTA ROSA DE CABAL','LA VIRGINIA'],
+  'QUINDÍO': ['ARMENIA','CALARCÁ','MONTENEGRO','QUIMBAYA'],
+  'CALDAS': ['MANIZALES','VILLAMARÍA','CHINCHINÁ','RIOSUCIO','SALAMINA'],
+  'TOLIMA': ['IBAGUÉ','ESPINAL','MELGAR','HONDA','LÍBANO','GIRARDOT'],
+  'HUILA': ['NEIVA','PITALITO','GARZÓN','LA PLATA'],
+  'CAUCA': ['POPAYÁN','SANTANDER DE QUILICHAO','PUERTO TEJADA'],
+  'CESAR': ['VALLEDUPAR','AGUACHICA','CODAZZI'],
+  'MAGDALENA': ['SANTA MARTA','CIÉNAGA','FUNDACIÓN'],
+  'BOYACÁ': ['TUNJA','DUITAMA','SOGAMOSO','CHIQUINQUIRÁ'],
+  'META': ['VILLAVICENCIO','ACACÍAS','GRANADA'],
+  'NORTE DE SANTANDER': ['CÚCUTA','OCAÑA','PAMPLONA','VILLA DEL ROSARIO'],
+  'LA GUAJIRA': ['RIOHACHA','MAICAO','URIBIA'],
+  'SUCRE': ['SINCELEJO','COROZAL','SAMPUÉS'],
+  'CASANARE': ['YOPAL','AGUAZUL','VILLANUEVA'],
+  'ARAUCA': ['ARAUCA','ARAUQUITA','TAME'],
+  'CAQUETÁ': ['FLORENCIA','SAN VICENTE DEL CAGUÁN'],
+  'PUTUMAYO': ['MOCOA','PUERTO ASÍS','ORITO'],
+  'CHOCÓ': ['QUIBDÓ','ISTMINA'],
+  'VICHADA': ['PUERTO CARREÑO'],
+  'GUAINÍA': ['INÍRIDA'],
+  'GUAVIARE': ['SAN JOSÉ DEL GUAVIARE'],
+  'VAUPÉS': ['MITÚ'],
+  'AMAZONAS': ['LETICIA'],
+  'SAN ANDRÉS Y PROVIDENCIA': ['SAN ANDRÉS','PROVIDENCIA'],
+};
+
 function gFiltrarDepto(q) {
   const dd = document.getElementById('gDeptoDropdown');
-  const deptos = [...new Set((state.sedes||[]).map(s=>s.ciudad||'').filter(Boolean))].sort();
-  const matches = q.length < 1 ? deptos : deptos.filter(d => d.toLowerCase().includes(q.toLowerCase()));
+  const matches = q.length < 1
+    ? G_DEPTOS_CO
+    : G_DEPTOS_CO.filter(d => d.toLowerCase().includes(q.toLowerCase()));
   if(!matches.length) { dd.style.display='none'; return; }
   dd.style.display='block';
-  dd.innerHTML = matches.slice(0,15).map(d=>
-    `<div class="gm-dd-item" onclick="gSelectDepto('${esc(d)}')}">${esc(d)}</div>`
+  dd.innerHTML = matches.map(d=>
+    `<div class="gm-dd-item" onclick="gSelectDepto('${esc(d)}')">${esc(d)}</div>`
   ).join('');
 }
 function gSelectDepto(val) {
   document.getElementById('gDeptoSearch').value = val;
-  document.getElementById('gDeptoVal').value = val;
+  document.getElementById('gDeptoVal').value    = val;
   document.getElementById('gDeptoDropdown').style.display = 'none';
+  // Limpiar ciudad al cambiar departamento
   document.getElementById('gCiudadSearch').value = '';
-  document.getElementById('gCiudadVal').value = '';
+  document.getElementById('gCiudadVal').value    = '';
 }
 function gLimpiarDepto() {
-  document.getElementById('gDeptoSearch').value='';
-  document.getElementById('gDeptoVal').value='';
-  document.getElementById('gDeptoDropdown').style.display='none';
+  document.getElementById('gDeptoSearch').value = '';
+  document.getElementById('gDeptoVal').value    = '';
+  document.getElementById('gDeptoDropdown').style.display = 'none';
 }
 function gFiltrarCiudad(q) {
-  const dd = document.getElementById('gCiudadDropdown');
-  const deptoVal = document.getElementById('gDeptoVal').value;
-  const sedes = state.sedes||[];
-  let ciudades = [...new Set(sedes.map(s=>s.nombre||'').filter(Boolean))].sort();
-  if(q.length>0) ciudades = ciudades.filter(c=>c.toLowerCase().includes(q.toLowerCase()));
+  const dd       = document.getElementById('gCiudadDropdown');
+  const depto    = document.getElementById('gDeptoVal').value;
+  // Si hay departamento seleccionado, filtrar sus ciudades; si no, buscar en todas
+  let ciudades;
+  if(depto && G_CIUDADES_CO[depto]) {
+    ciudades = G_CIUDADES_CO[depto];
+  } else {
+    ciudades = Object.values(G_CIUDADES_CO).flat().sort();
+  }
+  if(q.length > 0) ciudades = ciudades.filter(c => c.toLowerCase().includes(q.toLowerCase()));
   if(!ciudades.length) { dd.style.display='none'; return; }
   dd.style.display='block';
-  dd.innerHTML = ciudades.slice(0,15).map(c=>
-    `<div class="gm-dd-item" onclick="gSelectCiudad('${esc(c)}')}">${esc(c)}</div>`
+  dd.innerHTML = ciudades.slice(0,20).map(c=>
+    `<div class="gm-dd-item" onclick="gSelectCiudad('${esc(c)}')">${esc(c)}</div>`
   ).join('');
 }
 function gSelectCiudad(val) {
-  document.getElementById('gCiudadSearch').value=val;
-  document.getElementById('gCiudadVal').value=val;
-  document.getElementById('gCiudadDropdown').style.display='none';
+  document.getElementById('gCiudadSearch').value = val;
+  document.getElementById('gCiudadVal').value    = val;
+  document.getElementById('gCiudadDropdown').style.display = 'none';
 }
 function gLimpiarCiudad() {
-  document.getElementById('gCiudadSearch').value='';
-  document.getElementById('gCiudadVal').value='';
-  document.getElementById('gCiudadDropdown').style.display='none';
+  document.getElementById('gCiudadSearch').value = '';
+  document.getElementById('gCiudadVal').value    = '';
+  document.getElementById('gCiudadDropdown').style.display = 'none';
 }
 
 // ── Búsqueda paciente por cédula ──────────────
@@ -3296,52 +3343,47 @@ async function gBuscarPaciente(cedula) {
   if(cedula.length < 4) return;
   document.getElementById('gBuscandoSpinner').style.display='flex';
   try {
-    // Usar la misma RPC que usa validar-paciente.php — ya existe en Supabase
-    // RPC: buscar_paciente(p_cedula) → devuelve filas de tabla_usuarios
-    const data = await sb('rpc/buscar_paciente', 'POST', { p_cedula: cedula });
-    const rows = Array.isArray(data) ? data : (data ? [data] : []);
-    if(rows.length) {
-      const p = rows[0];
-      // Nombres exactos confirmados en validar-paciente.php
-      document.getElementById('gNombre').value    = p['Nombre Paciente'] || '';
-      document.getElementById('gDireccion').value = p['Direccion']       || '';
-      document.getElementById('gTelefono').value  = p['Telefono']        || '';
+    // Llamar admin-buscar-paciente.php (mismo servidor) — evita CORS y RLS
+    const res  = await fetch('admin-buscar-paciente.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cedula }),
+    });
+    const data = await res.json();
+    if(data.ok) {
+      // Autocompletar — todos los campos quedan EDITABLES
+      document.getElementById('gNombre').value    = data.nombre      || '';
+      document.getElementById('gDireccion').value = data.direccion   || '';
+      document.getElementById('gTelefono').value  = data.telefono    || '';
       document.getElementById('gEmail').value     =
         state.emails.find(e=>e.id===state.selectedId)?.from_email || '';
-      if(p['Departamento']) {
-        document.getElementById('gDeptoSearch').value = p['Departamento'];
-        document.getElementById('gDeptoVal').value    = p['Departamento'];
+      if(data.departamento) {
+        document.getElementById('gDeptoSearch').value = data.departamento;
+        document.getElementById('gDeptoVal').value    = data.departamento;
       }
-      if(p['Ciudad']) {
-        document.getElementById('gCiudadSearch').value = p['Ciudad'];
-        document.getElementById('gCiudadVal').value    = p['Ciudad'];
+      if(data.ciudad) {
+        document.getElementById('gCiudadSearch').value = data.ciudad;
+        document.getElementById('gCiudadVal').value    = data.ciudad;
       }
-      // Tipo De Documento — el PHP confirma el nombre exacto
-      const tipoDoc = p['Tipo De Documento'] || '';
+      // Tipo de documento — mapear abreviatura a valor del select
+      const tipoDoc = data.tipo_documento || '';
       if(tipoDoc) {
+        const mapa = {
+          'CC':'CÉDULA DE CIUDADANÍA','CÉDULA DE CIUDADANÍA':'CÉDULA DE CIUDADANÍA',
+          'TI':'TARJETA DE IDENTIDAD', 'TARJETA DE IDENTIDAD':'TARJETA DE IDENTIDAD',
+          'CE':'CÉDULA DE EXTRANJERÍA','CÉDULA DE EXTRANJERÍA':'CÉDULA DE EXTRANJERÍA',
+          'RC':'REGISTRO CIVIL DE NACIMIENTO',
+          'PA':'PASAPORTE','PASAPORTE':'PASAPORTE',
+          'NIT':'NIT'
+        };
+        const val = mapa[tipoDoc.toUpperCase()] || tipoDoc;
         const tdSel = document.getElementById('gTipoDoc');
-        // Intentar match exacto primero, luego parcial
-        let matched = false;
         for(let op of tdSel.options) {
-          if(op.value === tipoDoc) { op.selected=true; matched=true; break; }
-        }
-        if(!matched) {
-          // CC, TI, RC, etc. → mapear a valores del select
-          const mapa = {
-            'CC':'CÉDULA DE CIUDADANÍA','TI':'TARJETA DE IDENTIDAD',
-            'CE':'CÉDULA DE EXTRANJERÍA','RC':'REGISTRO CIVIL DE NACIMIENTO',
-            'PA':'PASAPORTE','NIT':'NIT'
-          };
-          const mapped = mapa[tipoDoc.toUpperCase()];
-          if(mapped) {
-            for(let op of tdSel.options) {
-              if(op.value === mapped) { op.selected=true; break; }
-            }
-          }
+          if(op.value === val) { op.selected=true; break; }
         }
       }
     } else {
-      console.info('[gBuscarPaciente] No encontrado:', cedula);
+      console.info('[gBuscarPaciente] No encontrado:', cedula, data.razon);
     }
   } catch(e) { console.warn('[gBuscarPaciente] Error:', e.message); }
   document.getElementById('gBuscandoSpinner').style.display='none';
@@ -3404,21 +3446,21 @@ function gAgregarMed() {
 async function gBuscarMedicamento(codigo, idx) {
   if(!codigo || codigo.length < 3) return;
   try {
-    // medicamentos: columnas exactas "Codigo","Nombre","Articulo_PBS"
-    // Usar sb() con select=* — RLS habilitado, la anon key tiene acceso
-    const data = await sb(`medicamentos?select=*&Codigo=eq.${encodeURIComponent(codigo)}&limit=1`);
-    const rows = Array.isArray(data) ? data : [];
-    if(rows.length) {
-      const med    = rows[0];
+    // Llamar admin-buscar-medicamento.php (mismo servidor)
+    const res  = await fetch('admin-buscar-medicamento.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codigo }),
+    });
+    const data = await res.json();
+    if(data.ok) {
       const descEl = document.getElementById(`gMedDesc_${idx}`);
       const pbsEl  = document.getElementById(`gMedPbs_${idx}`);
-      // Columnas exactas — todos EDITABLES tras autocompletar
-      if(descEl) descEl.value = med['Nombre'] || med.Nombre || '';
-      const pbsRaw = med['Articulo_PBS'] || med.Articulo_PBS || '';
-      if(pbsEl && pbsRaw) {
-        const pbsVal = pbsRaw.toUpperCase().startsWith('S') ? 'SI' : 'NO';
+      // Autocompletar — todos EDITABLES
+      if(descEl) descEl.value = data.nombre || '';
+      if(pbsEl && data.pbs) {
         for(let op of pbsEl.options) {
-          if(op.value === pbsVal) { op.selected = true; break; }
+          if(op.value === data.pbs) { op.selected = true; break; }
         }
       }
     } else {
