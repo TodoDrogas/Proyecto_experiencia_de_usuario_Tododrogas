@@ -3296,26 +3296,16 @@ async function gBuscarPaciente(cedula) {
   if(cedula.length < 4) return;
   document.getElementById('gBuscandoSpinner').style.display='flex';
   try {
-    // select=* y leer columnas con nombres EXACTOS de Supabase
-    // Columnas reales: "Cedula Pacientes","Nombre Paciente","Tipo De Documento",
-    //                  "Direccion","Telefono","Departamento","Ciudad","EPS"
-    const cedEnc = encodeURIComponent(cedula);
-    const url = `${SB_URL}/rest/v1/tabla_usuarios?select=*&"Cedula Pacientes"=eq.${cedEnc}&limit=1`;
-    const res = await fetch(url, {
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
-    });
-    if(!res.ok) {
-      console.warn('[gBuscarPaciente] Error:', res.status, await res.text());
-      document.getElementById('gBuscandoSpinner').style.display='none';
-      return;
-    }
-    const data = await res.json();
-    if(data && data.length) {
-      const p = data[0];
-      // Leer con nombres exactos de columna — todos quedan EDITABLES
-      document.getElementById('gNombre').value    = p['Nombre Paciente']    || '';
-      document.getElementById('gDireccion').value = p['Direccion']          || '';
-      document.getElementById('gTelefono').value  = p['Telefono']           || '';
+    // Usar la misma RPC que usa validar-paciente.php — ya existe en Supabase
+    // RPC: buscar_paciente(p_cedula) → devuelve filas de tabla_usuarios
+    const data = await sb('rpc/buscar_paciente', 'POST', { p_cedula: cedula });
+    const rows = Array.isArray(data) ? data : (data ? [data] : []);
+    if(rows.length) {
+      const p = rows[0];
+      // Nombres exactos confirmados en validar-paciente.php
+      document.getElementById('gNombre').value    = p['Nombre Paciente'] || '';
+      document.getElementById('gDireccion').value = p['Direccion']       || '';
+      document.getElementById('gTelefono').value  = p['Telefono']        || '';
       document.getElementById('gEmail').value     =
         state.emails.find(e=>e.id===state.selectedId)?.from_email || '';
       if(p['Departamento']) {
@@ -3326,10 +3316,28 @@ async function gBuscarPaciente(cedula) {
         document.getElementById('gCiudadSearch').value = p['Ciudad'];
         document.getElementById('gCiudadVal').value    = p['Ciudad'];
       }
-      if(p['Tipo De Documento']) {
+      // Tipo De Documento — el PHP confirma el nombre exacto
+      const tipoDoc = p['Tipo De Documento'] || '';
+      if(tipoDoc) {
         const tdSel = document.getElementById('gTipoDoc');
+        // Intentar match exacto primero, luego parcial
+        let matched = false;
         for(let op of tdSel.options) {
-          if(op.value === p['Tipo De Documento']) { op.selected=true; break; }
+          if(op.value === tipoDoc) { op.selected=true; matched=true; break; }
+        }
+        if(!matched) {
+          // CC, TI, RC, etc. → mapear a valores del select
+          const mapa = {
+            'CC':'CÉDULA DE CIUDADANÍA','TI':'TARJETA DE IDENTIDAD',
+            'CE':'CÉDULA DE EXTRANJERÍA','RC':'REGISTRO CIVIL DE NACIMIENTO',
+            'PA':'PASAPORTE','NIT':'NIT'
+          };
+          const mapped = mapa[tipoDoc.toUpperCase()];
+          if(mapped) {
+            for(let op of tdSel.options) {
+              if(op.value === mapped) { op.selected=true; break; }
+            }
+          }
         }
       }
     } else {
@@ -3396,24 +3404,19 @@ function gAgregarMed() {
 async function gBuscarMedicamento(codigo, idx) {
   if(!codigo || codigo.length < 3) return;
   try {
-    // select=* y leer columnas con nombres EXACTOS: "Codigo","Nombre","Articulo_PBS"
-    const url = `${SB_URL}/rest/v1/medicamentos?select=*&"Codigo"=eq.${encodeURIComponent(codigo)}&limit=1`;
-    const res = await fetch(url, {
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
-    });
-    if(!res.ok) {
-      console.warn('[gBuscarMedicamento] Error:', res.status, await res.text());
-      return;
-    }
-    const data = await res.json();
-    if(data && data.length) {
-      const med    = data[0];
+    // medicamentos: columnas exactas "Codigo","Nombre","Articulo_PBS"
+    // Usar sb() con select=* — RLS habilitado, la anon key tiene acceso
+    const data = await sb(`medicamentos?select=*&Codigo=eq.${encodeURIComponent(codigo)}&limit=1`);
+    const rows = Array.isArray(data) ? data : [];
+    if(rows.length) {
+      const med    = rows[0];
       const descEl = document.getElementById(`gMedDesc_${idx}`);
       const pbsEl  = document.getElementById(`gMedPbs_${idx}`);
-      // Leer con nombres exactos — todos EDITABLES
-      if(descEl) descEl.value = med['Nombre'] || '';
-      if(pbsEl && med['Articulo_PBS']) {
-        const pbsVal = med['Articulo_PBS'].toUpperCase().startsWith('S') ? 'SI' : 'NO';
+      // Columnas exactas — todos EDITABLES tras autocompletar
+      if(descEl) descEl.value = med['Nombre'] || med.Nombre || '';
+      const pbsRaw = med['Articulo_PBS'] || med.Articulo_PBS || '';
+      if(pbsEl && pbsRaw) {
+        const pbsVal = pbsRaw.toUpperCase().startsWith('S') ? 'SI' : 'NO';
         for(let op of pbsEl.options) {
           if(op.value === pbsVal) { op.selected = true; break; }
         }
