@@ -1157,6 +1157,8 @@ table.agents-tbl tr:hover td{background:var(--bg)}
 .gm-section-body{padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .gm-section-body.collapsed{display:none}
 .gm-section-body.full{grid-template-columns:1fr}
+.gm-input.field-error{border-color:var(--red)!important;background:#fff5f5!important;animation:shake .3s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 .gm-field{display:flex;flex-direction:column;gap:4px;position:relative}
 .gm-field.span2{grid-column:1/-1}
 .gm-label{font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.4px;text-transform:uppercase}
@@ -3725,7 +3727,25 @@ async function saveGestion() {
   // ── Lectura campos siempre obligatorios ──
   const accion = document.getElementById('gestionAccion').value;
   const obs    = document.getElementById('gestionObs').value.trim();
-  if(!obs) { showToast('Las observaciones son obligatorias','error'); return; }
+  if(!obs) {
+    showToast('Las observaciones son obligatorias','error');
+    const obsEl = document.getElementById('gestionObs');
+    if(obsEl) {
+      // Asegura que la sección GESTIÓN esté expandida
+      const gestBody = obsEl.closest('.gm-section-body');
+      if(gestBody && gestBody.classList.contains('collapsed')) {
+        gestBody.classList.remove('collapsed');
+        const arr = gestBody.previousElementSibling?.querySelector('.gm-arrow');
+        if(arr) arr.textContent = '▼';
+      }
+      // Scroll al campo y enfoca
+      obsEl.classList.add('field-error');
+      obsEl.addEventListener('input', () => obsEl.classList.remove('field-error'), { once: true });
+      obsEl.scrollIntoView({ behavior:'smooth', block:'center' });
+      setTimeout(() => obsEl.focus(), 300);
+    }
+    return;
+  }
 
   // ── Validación extra en primera gestión ──
   if(esPrimera) {
