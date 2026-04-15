@@ -2087,16 +2087,16 @@ async function openGestionModal(mode) {
 
   // ── Cargar catálogos si faltan ──
   // Cargar EPS y esperar antes de mostrar el modal para que el buscador funcione
+  // Abrir modal inmediatamente — no esperar carga de catálogos
+  document.getElementById('modalGestion').classList.add('show');
+  
+  // Cargar catálogos en paralelo sin bloquear
   if(!state.epsCatalogo || !state.epsCatalogo.length) {
-    try {
-      state.epsCatalogo = await sb('eps_catalogo?order=nombre.asc') || [];
-    } catch(e) { state.epsCatalogo = []; }
+    sb('eps_catalogo?order=nombre.asc').then(d=>{ state.epsCatalogo=d||[]; }).catch(()=>{ state.epsCatalogo=[]; });
   }
   if(!state.sedes||!state.sedes.length) {
     sb('sedes?order=nombre.asc').then(d=>{ state.sedes=d||[]; }).catch(()=>{});
   }
-
-  document.getElementById('modalGestion').classList.add('show');
 }
 
 // Cerrar dropdowns al hacer clic fuera
