@@ -6141,48 +6141,535 @@ function renderNovaMetrics(){
   });
 }
 
-function exportNovaExcel(){
-  const D=novaDatos;
-  const wb=XLSX.utils.book_new();
-  const fR=arr=>(arr||[]).map(r=>({Fecha:r.received_at?new Date(r.received_at).toLocaleString('es-CO'):'',Ticket:r.ticket_id||'',Nombre:r.nombre||'',Tipo:r.tipo_pqr||''}));
-  const fE=arr=>(arr||[]).map(e=>({Fecha:e.created_at?new Date(e.created_at).toLocaleString('es-CO'):'',Calificacion:e.calificacion||''}));
-  const fS=arr=>(arr||[]).map(s=>({Fecha:s.created_at?new Date(s.created_at).toLocaleString('es-CO'):'',Turnos:s.turnos||0,Motivo:s.motivo_cierre||''}));
+async function exportNovaExcel(){
+  const D = novaDatos;
+  const wb = XLSX.utils.book_new();
+  const SB_URL = (window.SUPABASE_URL||'').replace(/\/$/,'');
+  const SB_KEY = window.SUPABASE_KEY||'';
+  const sbH = {headers:{apikey:SB_KEY,'Authorization':'Bearer '+SB_KEY}};
+  const fmt = d => d ? new Date(d).toLocaleString('es-CO') : '';
+  const fmtD = d => d ? new Date(d).toLocaleDateString('es-CO') : '';
 
-  // Hoja Web
-  const h1=[...fR(D.radWeb).map(r=>({...r,Accion:'Radicado'})),...fE(D.encWeb).map(e=>({...e,Accion:'Encuesta'}))];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'Sin datos'}]),'🖥️ Web');
+  // ── Enriquecer correos Web y QR con cedula, eps, sede, canal ─────────
+  // Los correos de novaDatos solo traen: id, received_at, ticket_id, tipo_pqr, nombre
+  // Necesitamos: cedula, from_email, sentimiento, prioridad, estado, canal_contacto, sede del agente
+  let correoMap = {};
+  try {
+    const ids = [
+      ...D.radWeb.map(r=>r.id),
+      ...D.radQr.map(r=>r.id),
+    ].filter(Boolean);
+    if (ids.length && SB_URL && SB_KEY) {
+      const chunkSize = 100;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunk = ids.slice(i, i + chunkSize);
+        const rows = await fetch(
+          `${SB_URL}/rest/v1/correos?id=in.(${chunk.join(',')})&select=id,ticket_id,nombre,from_email,cedula,tipo_pqr,sentimiento,prioridad,estado,canal_contacto,origen,received_at`,
+          sbH
+        ).then(r=>r.json()).catch(()=>[]);
+        (rows||[]).forEach(r => correoMap[r.id] = r);
+      }
+    }
+  } catch(e) { console.warn('[exportNovaExcel] correoMap:', e.message); }
 
-  // Hoja QR
-  const h2=[...fR(D.radQr).map(r=>({...r,Accion:'Radicado'})),...fE(D.encQr).map(e=>({...e,Accion:'Encuesta'}))];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'Sin datos'}]),'📷 QR');
+  // ── Enriquecer encuestas Web y QR con datos_extra del historial ──────
+  // state.encuestas ya está cargado desde historial_eventos (loadEncuestas)
+  // Tiene: datos_extra con nombre, correo, sede_nombre, sede_ciudad, cedula,
+  //        instalaciones, atencion, tiempos, medicamentos, recomendacion, promedio
+  const encAll = state.encuestas || [];
+  const encByCanal = canal => encAll.filter(e => {
+    const c = e.canal || (e.datos_extra||{}).canal || 'web';
+    return c === canal;
+  });
 
-  // Hoja Nova TD
-  const h3=[
-    ...fR(D.radNovaWeb).map(r=>({...r,Canal:'Nova Web',Accion:'Radicado'})),
-    ...fR(D.radNovaDir).map(r=>({...r,Canal:'Nova Directo',Accion:'Radicado'})),
-    ...fE(D.encNovaWeb).map(e=>({...e,Canal:'Nova Web',Accion:'Encuesta'})),
-    ...fE(D.encNovaDir).map(e=>({...e,Canal:'Nova Directo',Accion:'Encuesta'})),
-    ...fS(D.sesNovaWeb).map(s=>({...s,Canal:'Nova Web',Accion:'Sesión'})),
-    ...fS(D.sesNovaDir).map(s=>({...s,Canal:'Nova Directo',Accion:'Sesión'})),
+  // ── Cargar agentes para cruzar sede ──────────────────────────────────
+  const agsMap = {};
+  (state.agents||[]).forEach(a => agsMap[a.id] = a);
+
+  // ─────────────────────────────────────────────────────────────────────
+  // HOJA 1 — WEB_ENCUESTA
+  // Fecha | Sede | Municipio | Cédula | Nombre | Teléfono | EPS | Correo |
+  // Resultado | Instalaciones y Cal | Atención y Cal | Tiempos y Cal |
+  // Medicamentos y Cal | Recomendación y Cal | Comentario
+  // ─────────────────────────────────────────────────────────────────────
+  const wEncuestas = encByCanal('web');
+  const h_wEnc = wEncuestas.map(e => {
+    const ex = e.datos_extra || {};
+    const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
+    return {
+      'Fecha':             fmtD(e.created_at),
+      'Hora':              e.created_at ? new Date(e.created_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
+      'Sede':              ex.sede_nombre   || '',
+      'Municipio':         ex.sede_ciudad   || '',
+      'Cédula':            ex.cedula        || ex.documento || '',
+      'Nombre':            ex.nombre        || '',
+      'Teléfono':          ex.telefono      || '',
+      'EPS':               ex.eps           || '',
+      'Correo':            ex.correo        || '',
+      'Resultado':         e.calificacion>=3?'SATISFACTORIO':e.calificacion>=2?'NEUTRO':'INSATISFACTORIO',
+      'Promedio':          ex.promedio      || '',
+      'Instalaciones':     ex.instalaciones || '',
+      'Cal_Instalaciones': calLabel(ex.instalaciones),
+      'Atencion':          ex.atencion      || '',
+      'Cal_Atencion':      calLabel(ex.atencion),
+      'Tiempos':           ex.tiempos       || '',
+      'Cal_Tiempos':       calLabel(ex.tiempos),
+      'Medicamentos':      ex.medicamentos  || '',
+      'Cal_Medicamentos':  calLabel(ex.medicamentos),
+      'Recomendacion':     ex.recomendacion || '',
+      'Cal_Recomendacion': calLabel(ex.recomendacion),
+      'Comentario':        e.comentario || ex.comentario || '',
+      'Canal':             'Web',
+    };
+  });
+  const ws_wEnc = XLSX.utils.json_to_sheet(h_wEnc.length ? h_wEnc : [{'Sin_datos':'Sin encuestas Web'}]);
+  ws_wEnc['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:18},{wch:13},{wch:26},{wch:13},{wch:16},{wch:28},{wch:16},{wch:9},{wch:13},{wch:16},{wch:10},{wch:12},{wch:8},{wch:11},{wch:13},{wch:16},{wch:13},{wch:18},{wch:40},{wch:8}];
+  XLSX.utils.book_append_sheet(wb, ws_wEnc, 'WEB_Encuesta');
+
+  // ─────────────────────────────────────────────────────────────────────
+  // HOJA 2 — WEB_RADICACIÓN
+  // Fecha | Sede del agente | Municipio | Cédula | Nombre | Teléfono |
+  // EPS | Correo | Ticket | Tipo PQR | Sentimiento | Prioridad | Estado
+  // ─────────────────────────────────────────────────────────────────────
+  const h_wRad = D.radWeb.map(r => {
+    const c = correoMap[r.id] || r;
+    const ag = agsMap[c.agente_id || c.asignado_a] || {};
+    return {
+      'Fecha':       fmtD(r.received_at),
+      'Hora':        r.received_at ? new Date(r.received_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
+      'Sede_Agente': ag.sede        || '',
+      'Cédula':      c.cedula       || '',
+      'Nombre':      c.nombre       || r.nombre || '',
+      'Correo':      c.from_email   || '',
+      'Ticket':      r.ticket_id    || c.ticket_id || '',
+      'Tipo_PQR':    c.tipo_pqr     || r.tipo_pqr || '',
+      'Sentimiento': c.sentimiento  || '',
+      'Prioridad':   c.prioridad    || '',
+      'Estado':      c.estado       || '',
+      'Canal':       c.canal_contacto || c.origen || 'web',
+      'Accion':      'Radicado',
+    };
+  });
+  const ws_wRad = XLSX.utils.json_to_sheet(h_wRad.length ? h_wRad : [{'Sin_datos':'Sin radicados Web'}]);
+  ws_wRad['!cols'] = [{wch:12},{wch:8},{wch:22},{wch:13},{wch:26},{wch:28},{wch:20},{wch:16},{wch:13},{wch:11},{wch:14},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws_wRad, 'WEB_Radicacion');
+
+  // ─────────────────────────────────────────────────────────────────────
+  // HOJA 3 — QR_ENCUESTA
+  // ─────────────────────────────────────────────────────────────────────
+  const qrEncuestas = encByCanal('qr');
+  const h_qEnc = qrEncuestas.map(e => {
+    const ex = e.datos_extra || {};
+    const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
+    return {
+      'Fecha':             fmtD(e.created_at),
+      'Hora':              e.created_at ? new Date(e.created_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
+      'Sede':              ex.sede_nombre   || '',
+      'Municipio':         ex.sede_ciudad   || '',
+      'Cédula':            ex.cedula        || ex.documento || '',
+      'Nombre':            ex.nombre        || '',
+      'Teléfono':          ex.telefono      || '',
+      'EPS':               ex.eps           || '',
+      'Correo':            ex.correo        || '',
+      'Resultado':         e.calificacion>=3?'SATISFACTORIO':e.calificacion>=2?'NEUTRO':'INSATISFACTORIO',
+      'Promedio':          ex.promedio      || '',
+      'Instalaciones':     ex.instalaciones || '',
+      'Cal_Instalaciones': calLabel(ex.instalaciones),
+      'Atencion':          ex.atencion      || '',
+      'Cal_Atencion':      calLabel(ex.atencion),
+      'Tiempos':           ex.tiempos       || '',
+      'Cal_Tiempos':       calLabel(ex.tiempos),
+      'Medicamentos':      ex.medicamentos  || '',
+      'Cal_Medicamentos':  calLabel(ex.medicamentos),
+      'Recomendacion':     ex.recomendacion || '',
+      'Cal_Recomendacion': calLabel(ex.recomendacion),
+      'Comentario':        e.comentario || ex.comentario || '',
+      'Canal':             'QR',
+    };
+  });
+  const ws_qEnc = XLSX.utils.json_to_sheet(h_qEnc.length ? h_qEnc : [{'Sin_datos':'Sin encuestas QR'}]);
+  ws_qEnc['!cols'] = ws_wEnc['!cols'];
+  XLSX.utils.book_append_sheet(wb, ws_qEnc, 'QR_Encuesta');
+
+  // ─────────────────────────────────────────────────────────────────────
+  // HOJA 4 — QR_RADICACIÓN
+  // ─────────────────────────────────────────────────────────────────────
+  const correoMapQR = {};
+  try {
+    const idsQR = D.radQr.map(r=>r.id).filter(Boolean);
+    if (idsQR.length && SB_URL && SB_KEY) {
+      for (let i = 0; i < idsQR.length; i += 100) {
+        const chunk = idsQR.slice(i, i+100);
+        const rows = await fetch(
+          `${SB_URL}/rest/v1/correos?id=in.(${chunk.join(',')})&select=id,ticket_id,nombre,from_email,cedula,tipo_pqr,sentimiento,prioridad,estado,canal_contacto,origen,agente_id`,
+          sbH
+        ).then(r=>r.json()).catch(()=>[]);
+        (rows||[]).forEach(r => correoMapQR[r.id] = r);
+      }
+    }
+  } catch(e) { console.warn('[exportNovaExcel] correoMapQR:', e.message); }
+
+  const h_qRad = D.radQr.map(r => {
+    const c = correoMapQR[r.id] || r;
+    const ag = agsMap[c.agente_id] || {};
+    return {
+      'Fecha':       fmtD(r.received_at),
+      'Hora':        r.received_at ? new Date(r.received_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
+      'Sede_Agente': ag.sede        || '',
+      'Cédula':      c.cedula       || '',
+      'Nombre':      c.nombre       || r.nombre || '',
+      'Correo':      c.from_email   || '',
+      'Ticket':      r.ticket_id    || c.ticket_id || '',
+      'Tipo_PQR':    c.tipo_pqr     || r.tipo_pqr || '',
+      'Sentimiento': c.sentimiento  || '',
+      'Prioridad':   c.prioridad    || '',
+      'Estado':      c.estado       || '',
+      'Canal':       'QR',
+      'Accion':      'Radicado',
+    };
+  });
+  const ws_qRad = XLSX.utils.json_to_sheet(h_qRad.length ? h_qRad : [{'Sin_datos':'Sin radicados QR'}]);
+  ws_qRad['!cols'] = ws_wRad['!cols'];
+  XLSX.utils.book_append_sheet(wb, ws_qRad, 'QR_Radicacion');
+
+  // ─────────────────────────────────────────────────────────────────────
+  // HOJA 5 — NOVA_TD
+  // Enfocado en sesiones: sede, municipio, sesiones, turnos, preguntas
+  // frecuentes, usuarios frecuentes, preguntas abiertas, pasó a asesor
+  // ─────────────────────────────────────────────────────────────────────
+  const sesAll = [...(D.sesNovaWeb||[]), ...(D.sesNovaDir||[]), ...(D.sesNovaBv||[])];
+
+  // Detalle por sesión
+  const h_nova_det = sesAll.map(s => ({
+    'Fecha':            fmtD(s.created_at),
+    'Hora':             s.created_at ? new Date(s.created_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
+    'Canal':            s.origen === 'nova_directo' ? 'Nova Directo' : s.origen === 'nova_bienvenida' ? 'Nova Bienvenida' : 'Nova Web',
+    'Municipio':        s.municipio      || '',
+    'EPS':              s.eps_paciente   || s.eps || '',
+    'Cédula':           s.cedula         || '',
+    'Nombre':           s.nombre         || '',
+    'Turnos':           s.turnos         || 0,
+    'Consultas':        s.consultas_count|| 0,
+    'Preguntas_Libres': s.preguntas_libres || 0,
+    'Motivo_Cierre':    s.motivo_cierre  || '',
+    'Paso_Asesor':      (s.motivo_cierre||'').toLowerCase().includes('asesor') ? 'Sí' : 'No',
+    'Calificacion':     s.calificacion   || '',
+    'Menu_Elegido':     s.menu_elegido   || '',
+    'Duracion_seg':     s.duracion_seg   || '',
+    'VIP':              s.es_vip ? 'Sí' : 'No',
+  }));
+
+  // Resumen por municipio/sede
+  const byMuni = {};
+  sesAll.forEach(s => {
+    const k = s.municipio || '(Sin municipio)';
+    if (!byMuni[k]) byMuni[k] = {sesiones:0, turnos:0, preguntas_libres:0, consultas:0, paso_asesor:0, eps_set:new Set(), cedulas:[], vip:0};
+    byMuni[k].sesiones++;
+    byMuni[k].turnos      += s.turnos||0;
+    byMuni[k].preguntas_libres += s.preguntas_libres||0;
+    byMuni[k].consultas   += s.consultas_count||0;
+    if ((s.motivo_cierre||'').toLowerCase().includes('asesor')) byMuni[k].paso_asesor++;
+    if (s.eps_paciente||s.eps) byMuni[k].eps_set.add(s.eps_paciente||s.eps);
+    if (s.cedula) byMuni[k].cedulas.push(s.cedula);
+    if (s.es_vip) byMuni[k].vip++;
+  });
+
+  const h_nova_sede = Object.entries(byMuni)
+    .sort((a,b)=>b[1].sesiones-a[1].sesiones)
+    .map(([muni, v]) => {
+      // Usuario más frecuente por cédula
+      const cedFreq = {};
+      v.cedulas.forEach(c=>{cedFreq[c]=(cedFreq[c]||0)+1;});
+      const topCed = Object.entries(cedFreq).sort((a,b)=>b[1]-a[1])[0];
+      return {
+        'Municipio':           muni,
+        'Total_Sesiones':      v.sesiones,
+        'Total_Turnos':        v.turnos,
+        'Prom_Turnos_Sesion':  v.sesiones ? (v.turnos/v.sesiones).toFixed(1) : 0,
+        'Total_Consultas':     v.consultas,
+        'Preguntas_Libres':    v.preguntas_libres,
+        'Paso_A_Asesor':       v.paso_asesor,
+        'Pct_Paso_Asesor':     v.sesiones ? Math.round(v.paso_asesor/v.sesiones*100)+'%' : '0%',
+        'EPS_Presentes':       [...v.eps_set].join(', '),
+        'Usuarios_Unicos':     new Set(v.cedulas).size,
+        'Usuario_Mas_Frecuente': topCed ? topCed[0]+' ('+topCed[1]+'x)' : '',
+        'Usuarios_VIP':        v.vip,
+      };
+    });
+
+  // Preguntas frecuentes (menu_elegido)
+  const menuFreq = {};
+  sesAll.forEach(s => { if(s.menu_elegido) menuFreq[s.menu_elegido] = (menuFreq[s.menu_elegido]||0)+1; });
+  const h_nova_menu = Object.entries(menuFreq)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([menu, cnt]) => ({
+      'Opcion_Menu':    menu,
+      'Veces_Elegida':  cnt,
+      'Porcentaje':     sesAll.length ? Math.round(cnt/sesAll.length*100)+'%' : '0%',
+    }));
+
+  // Usuarios más frecuentes
+  const userFreq = {};
+  sesAll.forEach(s => {
+    if (!s.cedula) return;
+    if (!userFreq[s.cedula]) userFreq[s.cedula] = {nombre:s.nombre||'',eps:s.eps_paciente||s.eps||'',sesiones:0,vip:s.es_vip||false};
+    userFreq[s.cedula].sesiones++;
+  });
+  const h_nova_users = Object.entries(userFreq)
+    .sort((a,b)=>b[1].sesiones-a[1].sesiones)
+    .slice(0, 50)
+    .map(([ced, v]) => ({
+      'Cédula':   ced,
+      'Nombre':   v.nombre,
+      'EPS':      v.eps,
+      'Sesiones': v.sesiones,
+      'VIP':      v.vip ? 'Sí' : 'No',
+    }));
+
+  // Escribir hoja Nova TD con múltiples secciones separadas
+  const ws_nova = XLSX.utils.json_to_sheet(h_nova_det.length ? h_nova_det : [{'Sin_datos':'Sin sesiones'}]);
+  ws_nova['!cols'] = [{wch:12},{wch:8},{wch:14},{wch:18},{wch:16},{wch:13},{wch:26},{wch:7},{wch:10},{wch:16},{wch:22},{wch:12},{wch:12},{wch:18},{wch:13},{wch:5}];
+  XLSX.utils.book_append_sheet(wb, ws_nova, 'NOVA_TD_Detalle');
+
+  const ws_nova_sede = XLSX.utils.json_to_sheet(h_nova_sede.length ? h_nova_sede : [{'Sin_datos':'Sin datos por municipio'}]);
+  ws_nova_sede['!cols'] = [{wch:20},{wch:15},{wch:13},{wch:18},{wch:16},{wch:16},{wch:14},{wch:16},{wch:30},{wch:15},{wch:22},{wch:13}];
+  XLSX.utils.book_append_sheet(wb, ws_nova_sede, 'NOVA_TD_Por_Sede');
+
+  const ws_nova_menu = XLSX.utils.json_to_sheet(h_nova_menu.length ? h_nova_menu : [{'Sin_datos':'Sin datos de menú'}]);
+  ws_nova_menu['!cols'] = [{wch:36},{wch:14},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws_nova_menu, 'NOVA_TD_Preguntas');
+
+  const ws_nova_users = XLSX.utils.json_to_sheet(h_nova_users.length ? h_nova_users : [{'Sin_datos':'Sin usuarios frecuentes'}]);
+  ws_nova_users['!cols'] = [{wch:15},{wch:28},{wch:16},{wch:9},{wch:5}];
+  XLSX.utils.book_append_sheet(wb, ws_nova_users, 'NOVA_TD_Usuarios');
+
+  // ─────────────────────────────────────────────────────────────────────
+  // HOJA 6 — GLOBAL
+  // Por canal y sede — resumen consolidado detallado
+  // ─────────────────────────────────────────────────────────────────────
+  const totalRad = D.radWeb.length + D.radQr.length + D.radNovaWeb.length + D.radNovaDir.length;
+  const totalEnc = D.encWeb.length + D.encQr.length + D.encNovaWeb.length + D.encNovaDir.length;
+  const totalSes = (D.sesNovaWeb||[]).length + (D.sesNovaDir||[]).length + (D.sesNovaBv||[]).length;
+
+  const encPromedio = arr => {
+    const valid = arr.filter(e=>e.calificacion>0);
+    return valid.length ? (valid.reduce((a,e)=>a+(e.calificacion||0),0)/valid.length).toFixed(2) : '';
+  };
+  const encSat = arr => arr.filter(e=>e.calificacion>=3).length;
+  const encInsat = arr => arr.filter(e=>e.calificacion<=1).length;
+
+  const h_global = [
+    {
+      'Canal':            '🖥️ Web',
+      'Radicados':        D.radWeb.length,
+      'Encuestas':        D.encWeb.length,
+      'Prom_Calificacion':encPromedio(encByCanal('web')),
+      'Satisfechos':      encSat(encByCanal('web')),
+      'Insatisfechos':    encInsat(encByCanal('web')),
+      'Sesiones_Nova':    '',
+      'Total_Interacciones': D.radWeb.length + D.encWeb.length,
+    },
+    {
+      'Canal':            '📷 QR',
+      'Radicados':        D.radQr.length,
+      'Encuestas':        D.encQr.length,
+      'Prom_Calificacion':encPromedio(encByCanal('qr')),
+      'Satisfechos':      encSat(encByCanal('qr')),
+      'Insatisfechos':    encInsat(encByCanal('qr')),
+      'Sesiones_Nova':    '',
+      'Total_Interacciones': D.radQr.length + D.encQr.length,
+    },
+    {
+      'Canal':            '🤖 Nova Web',
+      'Radicados':        D.radNovaWeb.length,
+      'Encuestas':        D.encNovaWeb.length,
+      'Prom_Calificacion':encPromedio(D.encNovaWeb),
+      'Satisfechos':      encSat(D.encNovaWeb),
+      'Insatisfechos':    encInsat(D.encNovaWeb),
+      'Sesiones_Nova':    (D.sesNovaWeb||[]).length,
+      'Total_Interacciones': D.radNovaWeb.length + D.encNovaWeb.length + (D.sesNovaWeb||[]).length,
+    },
+    {
+      'Canal':            '🤖 Nova Directo',
+      'Radicados':        D.radNovaDir.length,
+      'Encuestas':        D.encNovaDir.length,
+      'Prom_Calificacion':encPromedio(D.encNovaDir),
+      'Satisfechos':      encSat(D.encNovaDir),
+      'Insatisfechos':    encInsat(D.encNovaDir),
+      'Sesiones_Nova':    (D.sesNovaDir||[]).length,
+      'Total_Interacciones': D.radNovaDir.length + D.encNovaDir.length + (D.sesNovaDir||[]).length,
+    },
+    {
+      'Canal':            '🤖 Nova Bienvenida',
+      'Radicados':        0,
+      'Encuestas':        0,
+      'Prom_Calificacion':'',
+      'Satisfechos':      '',
+      'Insatisfechos':    '',
+      'Sesiones_Nova':    (D.sesNovaBv||[]).length,
+      'Total_Interacciones': (D.sesNovaBv||[]).length,
+    },
+    {
+      'Canal':            '📊 TOTAL GLOBAL',
+      'Radicados':        totalRad,
+      'Encuestas':        totalEnc,
+      'Prom_Calificacion':encPromedio([...encByCanal('web'),...encByCanal('qr'),...D.encNovaWeb,...D.encNovaDir]),
+      'Satisfechos':      encSat([...encByCanal('web'),...encByCanal('qr'),...D.encNovaWeb,...D.encNovaDir]),
+      'Insatisfechos':    encInsat([...encByCanal('web'),...encByCanal('qr'),...D.encNovaWeb,...D.encNovaDir]),
+      'Sesiones_Nova':    totalSes,
+      'Total_Interacciones': totalRad + totalEnc + totalSes,
+    },
   ];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin datos'}]),'🤖 Nova TD');
 
-  // Hoja Global resumen
-  const h4=[
-    {Canal:'🖥️ Web',          Radicados:D.radWeb.length,   Encuestas:D.encWeb.length,   Total:D.radWeb.length+D.encWeb.length},
-    {Canal:'📷 QR',            Radicados:D.radQr.length,    Encuestas:D.encQr.length,    Total:D.radQr.length+D.encQr.length},
-    {Canal:'🤖 Nova Web',      Radicados:D.radNovaWeb.length,Encuestas:D.encNovaWeb.length,Total:D.radNovaWeb.length+D.encNovaWeb.length},
-    {Canal:'🤖 Nova Directo',  Radicados:D.radNovaDir.length,Encuestas:D.encNovaDir.length,Total:D.radNovaDir.length+D.encNovaDir.length},
-    {Canal:'TOTAL GLOBAL',
-      Radicados:D.radWeb.length+D.radQr.length+D.radNovaWeb.length+D.radNovaDir.length,
-      Encuestas:D.encWeb.length+D.encQr.length+D.encNovaWeb.length+D.encNovaDir.length,
-      Total:(D.radWeb.length+D.radQr.length+D.radNovaWeb.length+D.radNovaDir.length)+
-            (D.encWeb.length+D.encQr.length+D.encNovaWeb.length+D.encNovaDir.length)},
-  ];
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h4),'🌐 Global');
+  // Resumen por sede (de encuestas — que tienen sede_nombre)
+  const bySede = {};
+  encAll.forEach(e => {
+    const ex = e.datos_extra || {};
+    const k = ex.sede_nombre || '(Sin sede)';
+    const ciudad = ex.sede_ciudad || '';
+    if (!bySede[k]) bySede[k] = {ciudad, total:0, suma:0, sat:0, insat:0, canales:new Set()};
+    bySede[k].total++;
+    bySede[k].suma += e.calificacion||0;
+    if ((e.calificacion||0)>=3) bySede[k].sat++;
+    if ((e.calificacion||0)<=1) bySede[k].insat++;
+    bySede[k].canales.add(e.canal||'web');
+  });
 
-  const desde=D.desde||'inicio', hasta=D.hasta||'hoy';
-  XLSX.writeFile(wb,`Metricas_${desde}_${hasta}.xlsx`);
+  const h_global_sede = Object.entries(bySede)
+    .sort((a,b)=>b[1].total-a[1].total)
+    .map(([sede, v]) => ({
+      'Sede':             sede,
+      'Ciudad':           v.ciudad,
+      'Total_Encuestas':  v.total,
+      'Promedio':         v.total ? (v.suma/v.total).toFixed(2) : '',
+      'Satisfechos':      v.sat,
+      'Pct_Satisfechos':  v.total ? Math.round(v.sat/v.total*100)+'%' : '0%',
+      'Insatisfechos':    v.insat,
+      'Canales':          [...v.canales].join(', '),
+    }));
+
+  const ws_global = XLSX.utils.json_to_sheet(h_global);
+  ws_global['!cols'] = [{wch:20},{wch:11},{wch:10},{wch:17},{wch:13},{wch:14},{wch:14},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws_global, 'GLOBAL_Canal');
+
+  const ws_global_sede = XLSX.utils.json_to_sheet(h_global_sede.length ? h_global_sede : [{'Sin_datos':'Sin datos por sede'}]);
+  ws_global_sede['!cols'] = [{wch:36},{wch:18},{wch:15},{wch:10},{wch:13},{wch:15},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws_global_sede, 'GLOBAL_Sede');
+
+  // ─────────────────────────────────────────────────────────────────────
+  // HOJA 7 — ASESORES (productividad enriquecida)
+  // Cédula | Asesor | Sede | Gestiones | Casos | Tipo PQR | Canal |
+  // Fecha Asignación | Fecha Solución | Pendientes Firma | En Gestión | EPS
+  // ─────────────────────────────────────────────────────────────────────
+  const { correos:agE, eventos:agH, agentes:agentes_list } = _agDatos;
+  const act = (agentes_list||[]).filter(a=>a.activo===true||a.activo===1||a.activo==='true');
+  const agMap2 = {}; (agentes_list||[]).forEach(a=>agMap2[a.id]=a);
+  const cMap2  = {}; (agE||[]).forEach(c=>cMap2[c.id]=c);
+
+  // Cargar EPS catálogo si está disponible
+  const epsMap2 = {};
+  try {
+    const epsCat = state.epsCatalogo || await sb('eps_catalogo?select=id,nombre&order=nombre.asc').catch(()=>[]) || [];
+    epsCat.forEach(e => epsMap2[e.id] = e.nombre);
+  } catch(e) {}
+
+  // Resumen por asesor
+  const h_asesores = act.map(a => {
+    const myE = (agE||[]).filter(e=>e.agente_id===a.id);
+    const myH = (agH||[]).filter(h=>h.agente_id===a.id && !['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento));
+    const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
+    const avgH = res.length>0
+      ? (res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000; return s+(h>0?h:0);},0)/res.length).toFixed(1)
+      : '';
+    const sol  = myE.filter(e=>['solucionado','gestionado'].includes(e.estado)).length;
+    const pfirma = myE.filter(e=>e.estado==='pendiente_firma').length;
+    const engest = myE.filter(e=>e.estado==='gestion').length;
+    const pend   = myE.filter(e=>e.estado==='pendiente').length;
+
+    // Tipos PQR desglosados
+    const tipoCnts = {};
+    myE.forEach(e=>{ if(e.tipo_pqr){ tipoCnts[e.tipo_pqr]=(tipoCnts[e.tipo_pqr]||0)+1; }});
+    const quejas    = myE.filter(e=>e.tipo_pqr==='queja').length;
+    const peticion  = myE.filter(e=>e.tipo_pqr==='peticion').length;
+    const reclamo   = myE.filter(e=>e.tipo_pqr==='reclamo').length;
+    const felicit   = myE.filter(e=>e.tipo_pqr==='felicitacion').length;
+
+    // Canal más frecuente
+    const canalCnt = {};
+    myE.forEach(e=>{ const c=e.canal_contacto||e.origen||''; if(c) canalCnt[c]=(canalCnt[c]||0)+1; });
+    const topCanal = Object.entries(canalCnt).sort((a,b)=>b[1]-a[1])[0]?.[0] || '';
+
+    // EPS más frecuente
+    const epsCnt = {};
+    myE.forEach(e=>{ const ep=epsMap2[e.eps_id]||''; if(ep) epsCnt[ep]=(epsCnt[ep]||0)+1; });
+    const topEps = Object.entries(epsCnt).sort((a,b)=>b[1]-a[1])[0]?.[0] || '';
+
+    return {
+      'Asesor':              a.nombre      || '',
+      'Email':               a.email       || '',
+      'Sede':                a.sede        || '',
+      'Total_Casos':         myE.length,
+      'Num_Gestiones':       myH.length,
+      'Prom_Gest_Caso':      myE.length ? (myH.length/myE.length).toFixed(1) : 0,
+      'Quejas':              quejas,
+      'Peticiones':          peticion,
+      'Reclamos':            reclamo,
+      'Felicitaciones':      felicit,
+      'Pendientes':          pend,
+      'En_Gestion':          engest,
+      'Pendientes_Firma':    pfirma,
+      'Resueltos':           sol,
+      'Pct_Resolucion':      myE.length ? Math.round(sol/myE.length*100)+'%' : '0%',
+      'T_Prom_Resolucion_h': avgH,
+      'Canal_Principal':     topCanal,
+      'EPS_Principal':       topEps,
+      'Respuestas_Enviadas': myH.filter(h=>h.evento==='correo_respondido').length,
+      'Firmas_Confirmadas':  myH.filter(h=>h.evento==='firma_confirmada').length,
+      'Alta_Sin_Resolver':   myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
+    };
+  }).sort((a,b)=>b['Total_Casos']-a['Total_Casos']);
+
+  // Detalle de tickets por asesor
+  const h_tickets = (agE||[]).filter(c=>c.agente_id).map(c => {
+    const ag = agMap2[c.agente_id] || {};
+    // Primera y última gestión
+    const myH = (agH||[]).filter(h=>h.correo_id===c.id&&h.agente_id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+    const primeraGest = myH[0]?.created_at || '';
+    const ultimaGest  = myH[myH.length-1]?.created_at || '';
+    return {
+      'Ticket':            c.ticket_id    || '',
+      'Cédula_Paciente':   c.cedula       || '',
+      'Nombre_Paciente':   c.nombre       || c.from_email || '',
+      'Asesor':            ag.nombre      || '',
+      'Sede_Asesor':       ag.sede        || '',
+      'EPS':               epsMap2[c.eps_id] || '',
+      'Tipo_PQR':          c.tipo_pqr     || '',
+      'Sentimiento':       c.sentimiento  || '',
+      'Prioridad':         c.prioridad    || '',
+      'Estado':            c.estado       || '',
+      'Canal':             c.canal_contacto || c.origen || '',
+      'Fecha_Recibido':    fmtD(c.received_at),
+      'Fecha_Asignacion':  primeraGest ? fmtD(primeraGest) : '',
+      'Fecha_Solucion':    c.fecha_resolucion ? fmtD(c.fecha_resolucion) : '',
+      'T_Resolucion_h':    (c.fecha_resolucion&&c.received_at) ? ((new Date(c.fecha_resolucion)-new Date(c.received_at))/3600000).toFixed(1) : '',
+      'Num_Gestiones':     myH.length,
+      'Pendiente_Firma':   c.estado==='pendiente_firma' ? 'Sí' : 'No',
+    };
+  });
+
+  const ws_ases = XLSX.utils.json_to_sheet(h_asesores.length ? h_asesores : [{'Sin_datos':'Sin asesores'}]);
+  ws_ases['!cols'] = [{wch:24},{wch:28},{wch:16},{wch:12},{wch:14},{wch:14},{wch:8},{wch:11},{wch:10},{wch:14},{wch:14},{wch:12},{wch:17},{wch:12},{wch:15},{wch:18},{wch:16},{wch:16},{wch:18},{wch:18},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws_ases, 'ASESORES_Resumen');
+
+  const ws_tick = XLSX.utils.json_to_sheet(h_tickets.length ? h_tickets : [{'Sin_datos':'Sin tickets'}]);
+  ws_tick['!cols'] = [{wch:20},{wch:14},{wch:26},{wch:22},{wch:14},{wch:16},{wch:14},{wch:13},{wch:11},{wch:14},{wch:14},{wch:13},{wch:16},{wch:14},{wch:15},{wch:13},{wch:15}];
+  XLSX.utils.book_append_sheet(wb, ws_tick, 'ASESORES_Tickets');
+
+  // ── Guardar ──────────────────────────────────────────────────────────
+  const desde = D.desde || 'inicio';
+  const hasta  = D.hasta  || 'hoy';
+  XLSX.writeFile(wb, `Metricas_${desde}_${hasta}.xlsx`);
+  showToast('Informe generado ✓','success');
 }
 
 </script>
