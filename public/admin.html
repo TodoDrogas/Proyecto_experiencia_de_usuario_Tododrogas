@@ -972,18 +972,18 @@ table.agents-tbl tr:hover td{background:var(--bg)}
           </div>
 
           <!-- KPIs SIGI -->
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">
-            <div class="kpi"><div class="kpi-label">Total casos</div><div class="kpi-val" id="sigiKpiTotal">—</div><div class="kpi-sub">Con al menos 1 gestión</div><div class="kpi-accent" style="background:#16a34a"></div></div>
-            <div class="kpi"><div class="kpi-label">Total gestiones</div><div class="kpi-val" id="sigiKpiGest">—</div><div class="kpi-sub">Suma de todas las gestiones</div><div class="kpi-accent" style="background:#2563eb"></div></div>
-            <div class="kpi"><div class="kpi-label">Prom. gestiones/caso</div><div class="kpi-val" id="sigiKpiProm">—</div><div class="kpi-sub">Gestiones promedio</div><div class="kpi-accent" style="background:#7c3aed"></div></div>
-            <div class="kpi"><div class="kpi-label">Con tutela</div><div class="kpi-val warn" id="sigiKpiTutela">—</div><div class="kpi-sub">Casos con tutela activa</div><div class="kpi-accent" style="background:#dc2626"></div></div>
-            <div class="kpi"><div class="kpi-label">Cerrados</div><div class="kpi-val ok" id="sigiKpiCerrados">—</div><div class="kpi-sub">Estado solucionado</div><div class="kpi-accent" style="background:#0891b2"></div></div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
+            <div class="kpi" style="border-left:3px solid #16a34a"><div class="kpi-label">Total casos</div><div class="kpi-val" id="sigiKpiTotal">—</div><div class="kpi-sub">Con al menos 1 gestión</div></div>
+            <div class="kpi" style="border-left:3px solid #2563eb"><div class="kpi-label">Total gestiones</div><div class="kpi-val" id="sigiKpiGest">—</div><div class="kpi-sub">Suma acumulada</div></div>
+            <div class="kpi" style="border-left:3px solid #7c3aed"><div class="kpi-label">Prom. gest./caso</div><div class="kpi-val" id="sigiKpiProm">—</div><div class="kpi-sub">Promedio</div></div>
+            <div class="kpi" style="border-left:3px solid #dc2626"><div class="kpi-label">Con tutela</div><div class="kpi-val warn" id="sigiKpiTutela">—</div><div class="kpi-sub">Casos activos</div></div>
+            <div class="kpi" style="border-left:3px solid #0891b2"><div class="kpi-label">Cerrados</div><div class="kpi-val ok" id="sigiKpiCerrados">—</div><div class="kpi-sub">Solucionados</div></div>
           </div>
 
           <!-- GRÁFICOS SIGI -->
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
-              <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR NOMBRE SOLICITUD</div>
+              <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">TIPO DE SOLICITUD</div>
               <div style="position:relative;height:180px"><canvas id="sigiChartNombre"></canvas></div>
             </div>
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
@@ -1002,7 +1002,7 @@ table.agents-tbl tr:hover td{background:var(--bg)}
               <div style="position:relative;height:160px"><canvas id="sigiChartDepto"></canvas></div>
             </div>
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
-              <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">GESTIONES POR DÍA</div>
+              <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">TENDENCIA DIARIA</div>
               <div style="position:relative;height:160px"><canvas id="sigiChartTendencia"></canvas></div>
             </div>
           </div>
@@ -1744,7 +1744,11 @@ async function exportarSIGI() {
     const epsCat  = state.epsCatalogo || await sb('eps_catalogo?order=nombre.asc') || [];
     const agentes = state.agents || [];
     const meds    = await sb(`gestiones_medicamentos?order=created_at.asc&limit=5000`) || [];
-    const hist    = await sb(`historial_eventos?order=created_at.asc&limit=10000`) || [];
+    // Traer historial solo de los correos del período para no exceder límites
+    const correoIds = correos.map(c=>c.id).join(',');
+    const hist = correoIds
+      ? await sb(`historial_eventos?correo_id=in.(${correoIds})&order=created_at.asc&limit=10000`) || []
+      : [];
 
     // ── Cargar tabla_usuarios cruzando por cédulas de los correos ──
     // Extraer cédulas únicas del lote actual
@@ -1783,13 +1787,21 @@ async function exportarSIGI() {
     // ══ HOJA 1: INFORME SIGI (38 columnas) ══
     const h1 = correos.map(c=>{
       const eps     = epsCat.find(e=>e.id===c.eps_id);
-      const ag      = agentes.find(a=>a.id===c.agente_id);
       const pac     = getPaciente(c);  // datos reales de tabla_usuarios
       const histC   = hist.filter(h=>h.correo_id===c.id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
-      const pg      = histC.find(h=>!['creacion','asignacion_automatica','encuesta_recibida'].includes(h.evento));
-      const fSol    = c.created_at   ? new Date(c.created_at).toLocaleDateString('es-CO')  : '';
-      const fReal   = pg?.created_at ? new Date(pg.created_at).toLocaleDateString('es-CO') : '';
-      const fCierre = c.fecha_resolucion ? new Date(c.fecha_resolucion).toLocaleDateString('es-CO') : '';
+      // Primera gestión real = primer historial que NO sea evento de sistema
+      const EVENTOS_SISTEMA = ['creacion','asignacion_automatica','encuesta_recibida','sync_correos','pqr_recibida','audio_procesado','nova_td_generado'];
+      const pg      = histC.find(h=>!EVENTOS_SISTEMA.includes(h.evento));
+      const fSol    = c.created_at        ? new Date(c.created_at).toLocaleDateString('es-CO')        : '';
+      const fReal   = pg?.created_at      ? new Date(pg.created_at).toLocaleDateString('es-CO')       : '';
+      const fCierre = c.fecha_resolucion  ? new Date(c.fecha_resolucion).toLocaleDateString('es-CO')  : '';
+      // Observaciones de todas las gestiones del historial
+      const obsTexto = histC
+        .filter(h=>!EVENTOS_SISTEMA.includes(h.evento))
+        .map(h=>{ try{ return JSON.parse(h.datos_extra||'{}').observaciones||h.descripcion||''; }catch{ return h.descripcion||''; } })
+        .filter(Boolean).join(' | ');
+      // Agente asignado
+      const ag = agentes.find(a=>a.id===c.agente_id);
       return {
         '# Gestiones':             c.num_gestiones||0,
         'Código PQR':              c.ticket_id||'',
@@ -1824,7 +1836,7 @@ async function exportarSIGI() {
         'Descripción Escrita':     meds.filter(m=>m.correo_id===c.id).map(m=>m.descripcion_escrita).join(' | ')||'',
         'Cantidad':                meds.filter(m=>m.correo_id===c.id).map(m=>m.cantidad).join(' | ')||'',
         'PBS':                     meds.filter(m=>m.correo_id===c.id).map(m=>m.pbs).join(' | ')||'',
-        'Observación':             histC.map(h=>{ try{ return JSON.parse(h.datos_extra||'{}').observaciones||h.descripcion||''; }catch{return h.descripcion||'';} }).filter(Boolean).join(' | ')||'',
+        'Observación':             obsTexto,
         'Gestión Compra':          c.gestion_compra||'',
         'Usuario Gestión Compra':  c.usuario_gestion_compra||'',
         'Gestión Us. Integrales':  c.gestion_usuarios_integ||'',
@@ -3731,8 +3743,13 @@ async function saveGestion() {
   const id = state.selectedId;
   if(!id) return;
 
-  const email     = state.emails.find(e=>e.id===id);
-  const numGest   = email?.num_gestiones || 0;
+  const email = state.emails.find(e=>e.id===id);
+  // Leer num_gestiones fresco desde Supabase para no depender del estado local
+  let numGest = email?.num_gestiones || 0;
+  try {
+    const fresh = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
+    if(fresh && fresh.length) numGest = fresh[0].num_gestiones || 0;
+  } catch(e) { /* usar valor local */ }
   const esPrimera = numGest === 0;
 
   // ── Lectura campos siempre obligatorios ──
