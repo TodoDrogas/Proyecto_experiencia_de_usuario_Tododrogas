@@ -212,6 +212,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .ac-cargo{font-size:10px;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rr-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:all .15s}.rr-item:hover{border-color:#7c3aed;background:#f5f3ff}.rr-item .rr-cat{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--ink3);margin-bottom:3px}.rr-item .rr-sit{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:4px}.rr-item .rr-prev{font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rr-cat-btn{background:var(--bg2);border:1px solid var(--border);border-radius:99px;padding:2px 10px;font-size:10px;font-weight:600;cursor:pointer;color:var(--ink2);white-space:nowrap}.rr-cat-btn.active{background:#7c3aed;color:#fff;border-color:#7c3aed}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 
@@ -268,6 +269,12 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       Urgentes
       <span class="folder-cnt" id="fc-urgente">0</span>
+    </div>
+    <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border)">
+      <div class="folder-item" onclick="abrirMetricasAgente()" id="btnMetricasAg">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
+        Mis métricas
+      </div>
     </div>
   </div>
 
@@ -2705,6 +2712,151 @@ function insertarTextoEnReply(texto){
 
 
 
+
+// ══════════════════════════════════════════════
+// MÉTRICAS SIGI — AGENTE (solo sus casos)
+// ══════════════════════════════════════════════
+let _agCharts = {};
+
+function abrirMetricasAgente() {
+  const modal = document.getElementById('modalMetricasAg');
+  modal.style.display = 'flex';
+  // Fechas por defecto: mes actual
+  const hoy   = new Date();
+  const desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1).toISOString().split('T')[0];
+  const hasta = hoy.toISOString().split('T')[0];
+  document.getElementById('agMDesde').value = desde;
+  document.getElementById('agMHasta').value = hasta;
+  cargarMetricasAgente();
+}
+
+function cerrarMetricasAgente() {
+  document.getElementById('modalMetricasAg').style.display = 'none';
+}
+
+async function cargarMetricasAgente() {
+  if(!AGENT_ID) return;
+  const desde = document.getElementById('agMDesde').value;
+  const hasta = document.getElementById('agMHasta').value;
+
+  document.getElementById('agMetricasSubtitle').textContent =
+    `${AGENT_NAME} · ${desde} → ${hasta}`;
+
+  // Traer solo correos del agente con gestión en el período
+  const correos = await sb(
+    `correos?agente_id=eq.${AGENT_ID}&num_gestiones=gt.0` +
+    `&created_at=gte.${desde}T00:00:00&created_at=lte.${hasta}T23:59:59` +
+    `&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,` +
+    `tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente,created_at` +
+    `&order=created_at.desc&limit=500`
+  ) || [];
+
+  // Traer catálogo EPS
+  const epsCat = await sb('eps_catalogo?select=id,nombre,nit&order=nombre.asc') || [];
+  const epsMap = Object.fromEntries(epsCat.map(e=>[e.id, e.nombre]));
+
+  // KPIs
+  const total      = correos.length;
+  const totalGest  = correos.reduce((s,c)=>s+(c.num_gestiones||0),0);
+  const prom       = total ? (totalGest/total).toFixed(1) : '0';
+  const tutelas    = correos.filter(c=>c.tiene_tutela===true).length;
+  const cerrados   = correos.filter(c=>['solucionado','gestionado'].includes(c.estado)).length;
+
+  document.getElementById('agKpiCasos').textContent    = total;
+  document.getElementById('agKpiGest').textContent     = totalGest;
+  document.getElementById('agKpiProm').textContent     = prom;
+  document.getElementById('agKpiTutela').textContent   = tutelas;
+  document.getElementById('agKpiCerrados').textContent = cerrados;
+
+  // Helper contar
+  const contar = (arr, key) => arr.reduce((acc,c)=>{
+    const v = c[key]||'Sin dato'; acc[v]=(acc[v]||0)+1; return acc;
+  },{});
+  const topN = (obj, n) => Object.entries(obj).sort((a,b)=>b[1]-a[1]).slice(0,n);
+  const PALETA = ['#16a34a','#2563eb','#7c3aed','#dc2626','#ca8a04','#0891b2','#ea580c','#64748b'];
+
+  function dibujar(canvasId, datos, refKey, horizontal=false) {
+    const ctx = document.getElementById(canvasId)?.getContext('2d');
+    if(!ctx) return;
+    if(_agCharts[refKey]) _agCharts[refKey].destroy();
+    _agCharts[refKey] = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: datos.map(d=>d[0]),
+        datasets:[{data:datos.map(d=>d[1]),backgroundColor:PALETA.slice(0,datos.length),borderRadius:4,borderSkipped:false}]
+      },
+      options:{
+        indexAxis: horizontal?'y':'x',
+        plugins:{legend:{display:false}},
+        scales:{x:{grid:{display:false}},y:{grid:{color:'#f1f5f9'}}},
+        responsive:true, maintainAspectRatio:false
+      }
+    });
+  }
+
+  dibujar('agChartTipo',  topN(contar(correos,'nombre_solicitud'),7), 'tipo', true);
+  dibujar('agChartCat',   topN(contar(correos,'categoria_sigi'),6),   'cat',  true);
+
+  // EPS con nombre del catálogo
+  const porEpsId = contar(correos,'eps_id');
+  const porEpsNom = Object.entries(porEpsId).map(([id,cnt])=>[epsMap[id]||'Sin EPS',cnt])
+    .sort((a,b)=>b[1]-a[1]).slice(0,7);
+  dibujar('agChartEps',   porEpsNom, 'eps', true);
+  dibujar('agChartDepto', topN(contar(correos,'departamento_paciente'),8), 'depto', true);
+
+  // Tendencia diaria
+  const porDia = {};
+  correos.forEach(c=>{
+    const dia = c.created_at?.split('T')[0]; if(dia) porDia[dia]=(porDia[dia]||0)+(c.num_gestiones||0);
+  });
+  const diasOrd = Object.keys(porDia).sort();
+  const ctxT = document.getElementById('agChartTend')?.getContext('2d');
+  if(ctxT) {
+    if(_agCharts['tend']) _agCharts['tend'].destroy();
+    _agCharts['tend'] = new Chart(ctxT,{
+      type:'line',
+      data:{
+        labels:diasOrd.map(d=>{const p=d.split('-'); return `${parseInt(p[2])} de ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(p[1])-1]}`;}),
+        datasets:[{data:diasOrd.map(d=>porDia[d]),borderColor:'#16a34a',backgroundColor:'rgba(22,163,74,.08)',tension:.3,pointBackgroundColor:'#16a34a',pointRadius:4,fill:true}]
+      },
+      options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:'#f1f5f9'},beginAtZero:true}},responsive:true,maintainAspectRatio:false}
+    });
+  }
+
+  // Tabla
+  const tbody = document.getElementById('agTablaBody');
+  if(!correos.length) {
+    tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:20px;color:#94a3b8">Sin casos en el período</td></tr>';
+    return;
+  }
+  tbody.innerHTML = correos.slice(0,50).map(c=>{
+    const eps = epsMap[c.eps_id]||'—';
+    const badge = c.estado==='solucionado'||c.estado==='gestionado'
+      ? 'background:#dcfce7;color:#16a34a'
+      : 'background:#dbeafe;color:#2563eb';
+    return `<tr style="border-bottom:1px solid #f1f5f9">
+      <td style="padding:7px 10px;font-size:11px">
+        ${c.ticket_id?`<a href="#" style="color:#2563eb;text-decoration:none;font-weight:600">${c.ticket_id}</a>`:'—'}
+      </td>
+      <td style="padding:7px 10px">${c.nombre||'—'}</td>
+      <td style="padding:7px 10px;font-size:10px">${eps}</td>
+      <td style="padding:7px 10px">${c.nombre_solicitud||'—'}</td>
+      <td style="padding:7px 10px;color:#64748b;font-size:10px">${c.detalle_solicitud||'—'}</td>
+      <td style="padding:7px 10px;text-align:center;font-weight:700;color:#2563eb">${c.num_gestiones||0}</td>
+      <td style="padding:7px 10px;text-align:center;font-size:10px;font-weight:600;color:${c.tiene_tutela===true?'#dc2626':'#94a3b8'}">${c.tiene_tutela===true?'SÍ':'NO'}</td>
+      <td style="padding:7px 10px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;${badge}">${(c.estado||'').toUpperCase()}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// Cerrar modal métricas al clic fuera
+document.addEventListener('DOMContentLoaded', function() {
+  const m = document.getElementById('modalMetricasAg');
+  if(m) m.addEventListener('click', function(e) {
+    if(e.target === this) cerrarMetricasAgente();
+  });
+});
+
 </script>
 <!-- ⚡ Panel Respuestas Rápidas v3 — igual que Admin -->
 <style>
@@ -2729,5 +2881,109 @@ function insertarTextoEnReply(texto){
   </div>
   <div id="rrLista" style="flex:1;overflow-y:auto"></div>
 </div>
+
+<!-- ══ MODAL MÉTRICAS SIGI AGENTE ══ -->
+<div id="modalMetricasAg" class="modal-backdrop" style="display:none;align-items:flex-start;padding:24px;overflow-y:auto">
+  <div style="background:var(--surface);border-radius:16px;width:100%;max-width:1100px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,.2);overflow:hidden">
+    <!-- Header -->
+    <div style="background:#0f172a;padding:18px 24px;display:flex;align-items:center;gap:12px">
+      <svg width="20" height="20" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
+      <div>
+        <div style="color:#fff;font-size:15px;font-weight:700">Mis Métricas SIGI</div>
+        <div style="color:#94a3b8;font-size:11px" id="agMetricasSubtitle">Cargando...</div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <input type="date" id="agMDesde" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif">
+        <input type="date" id="agMHasta" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif">
+        <button onclick="cargarMetricasAgente()" style="background:#22c55e;color:#fff;border:none;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">Filtrar</button>
+        <button onclick="cerrarMetricasAgente()" style="background:rgba(255,255,255,.1);border:none;cursor:pointer;color:#fff;font-size:16px;padding:4px 8px;border-radius:6px">✕</button>
+      </div>
+    </div>
+
+    <div style="padding:20px 24px">
+      <!-- KPIs -->
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-left:3px solid #16a34a">
+          <div style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:.4px;text-transform:uppercase">Mis casos</div>
+          <div style="font-size:28px;font-weight:800;color:#0f172a;margin:4px 0" id="agKpiCasos">—</div>
+          <div style="font-size:10px;color:#94a3b8">Con gestión activa</div>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-left:3px solid #2563eb">
+          <div style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:.4px;text-transform:uppercase">Mis gestiones</div>
+          <div style="font-size:28px;font-weight:800;color:#0f172a;margin:4px 0" id="agKpiGest">—</div>
+          <div style="font-size:10px;color:#94a3b8">Total acumulado</div>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-left:3px solid #7c3aed">
+          <div style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:.4px;text-transform:uppercase">Prom. gest./caso</div>
+          <div style="font-size:28px;font-weight:800;color:#0f172a;margin:4px 0" id="agKpiProm">—</div>
+          <div style="font-size:10px;color:#94a3b8">Promedio</div>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-left:3px solid #dc2626">
+          <div style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:.4px;text-transform:uppercase">Con tutela</div>
+          <div style="font-size:28px;font-weight:800;color:#dc2626;margin:4px 0" id="agKpiTutela">—</div>
+          <div style="font-size:10px;color:#94a3b8">Casos activos</div>
+        </div>
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-left:3px solid #0891b2">
+          <div style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:.4px;text-transform:uppercase">Cerrados</div>
+          <div style="font-size:28px;font-weight:800;color:#0891b2;margin:4px 0" id="agKpiCerrados">—</div>
+          <div style="font-size:10px;color:#94a3b8">Solucionados</div>
+        </div>
+      </div>
+
+      <!-- Gráficos row 1 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+          <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">TIPO DE SOLICITUD</div>
+          <div style="position:relative;height:180px"><canvas id="agChartTipo"></canvas></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+          <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR CATEGORÍA</div>
+          <div style="position:relative;height:180px"><canvas id="agChartCat"></canvas></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+          <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR EPS</div>
+          <div style="position:relative;height:180px"><canvas id="agChartEps"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Gráficos row 2 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+          <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR DEPARTAMENTO</div>
+          <div style="position:relative;height:160px"><canvas id="agChartDepto"></canvas></div>
+        </div>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+          <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">TENDENCIA DIARIA</div>
+          <div style="position:relative;height:160px"><canvas id="agChartTend"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Tabla últimos casos -->
+      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px">
+        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:12px">MIS ÚLTIMOS CASOS CON GESTIÓN</div>
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:11px">
+            <thead>
+              <tr style="border-bottom:2px solid #e2e8f0">
+                <th style="text-align:left;padding:8px 10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Ticket</th>
+                <th style="text-align:left;padding:8px 10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Paciente</th>
+                <th style="text-align:left;padding:8px 10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.3px">EPS</th>
+                <th style="text-align:left;padding:8px 10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Tipo Solicitud</th>
+                <th style="text-align:left;padding:8px 10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Detalle</th>
+                <th style="text-align:center;padding:8px 10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.3px"># Gest.</th>
+                <th style="text-align:center;padding:8px 10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Tutela</th>
+                <th style="text-align:left;padding:8px 10px;color:#64748b;font-weight:700;text-transform:uppercase;letter-spacing:.3px">Estado</th>
+              </tr>
+            </thead>
+            <tbody id="agTablaBody">
+              <tr><td colspan="8" style="text-align:center;padding:20px;color:#94a3b8">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
