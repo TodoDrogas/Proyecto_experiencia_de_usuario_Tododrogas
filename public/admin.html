@@ -3296,34 +3296,60 @@ async function gBuscarPaciente(cedula) {
   if(cedula.length < 4) return;
   document.getElementById('gBuscandoSpinner').style.display='flex';
   try {
-    // Supabase REST: columnas con espacios → usar fetch directo con header correcto
-    const url = `${SB_URL}/rest/v1/tabla_usuarios?` +
-      `%22Cedula%20Paciente%22=eq.${encodeURIComponent(cedula)}&limit=1`;
+    // tabla_usuarios tiene columnas con espacios — usar select con alias
+    // y filtrar con id en dos pasos: primero buscar por cedula con ilike
+    // Supabase acepta: select=col1,col2&col_sin_espacios=eq.valor
+    // Para cols con espacios usamos select=* y filtramos en JS
+    // O mejor: usar la función de búsqueda con select renombrando
+    const selectCols = [
+      '"Cedula Paciente":cedula_p',
+      '"Nombre Paciente":nombre_p',
+      '"Tipo De Documento":tipo_doc',
+      '"Direccion":direccion',
+      '"Telefono":telefono',
+      '"Departamento":departamento',
+      '"Ciudad":ciudad',
+      '"EPS":eps'
+    ].join(',');
+    // El filtro en columna con espacios va como parámetro con comillas en la KEY
+    const params = new URLSearchParams();
+    params.set('select', selectCols);
+    params.set('limit', '1');
+    // Para columnas con espacios Supabase acepta el filtro con comillas dobles en la clave
+    const url = `${SB_URL}/rest/v1/tabla_usuarios?${params.toString()}&"Cedula Paciente"=eq.${encodeURIComponent(cedula)}`;
     const res = await fetch(url, {
-      headers: {
-        'apikey': SB_KEY,
-        'Authorization': 'Bearer ' + SB_KEY,
-        'Content-Type': 'application/json',
-      }
+      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
     });
     const data = res.ok ? await res.json() : [];
     if(data && data.length) {
       const p = data[0];
-      // Autocompletar — todos los campos quedan editables para correcciones
-      document.getElementById('gNombre').value    = p['Nombre Paciente']||'';
-      document.getElementById('gDireccion').value = p['Direccion']||'';
-      document.getElementById('gTelefono').value  = p['Telefono']||'';
-      document.getElementById('gEmail').value     = p['Email']||
-        state.emails.find(e=>e.id===state.selectedId)?.from_email||'';
+      // Autocompletar — todos editables para correcciones manuales
+      document.getElementById('gNombre').value    = p.nombre_p    || '';
+      document.getElementById('gDireccion').value = p.direccion   || '';
+      document.getElementById('gTelefono').value  = p.telefono    || '';
+      document.getElementById('gEmail').value     =
+        state.emails.find(e=>e.id===state.selectedId)?.from_email || '';
+      // Departamento y Ciudad desde tabla_usuarios
+      if(p.departamento) {
+        document.getElementById('gDeptoSearch').value = p.departamento;
+        document.getElementById('gDeptoVal').value    = p.departamento;
+      }
+      if(p.ciudad) {
+        document.getElementById('gCiudadSearch').value = p.ciudad;
+        document.getElementById('gCiudadVal').value    = p.ciudad;
+      }
       // Tipo de documento
-      if(p['Tipo De Documento']) {
+      if(p.tipo_doc) {
         const tdSel = document.getElementById('gTipoDoc');
         for(let op of tdSel.options) {
-          if(op.value === p['Tipo De Documento']) { op.selected=true; break; }
+          if(op.value === p.tipo_doc) { op.selected=true; break; }
         }
       }
+    } else {
+      // No encontrado — dejar campos editables vacíos
+      console.info('[gBuscarPaciente] Cédula no encontrada en tabla_usuarios:', cedula);
     }
-  } catch(e) { console.warn('[gBuscarPaciente]', e.message); }
+  } catch(e) { console.warn('[gBuscarPaciente] Error:', e.message); }
   document.getElementById('gBuscandoSpinner').style.display='none';
 }
 
@@ -3384,9 +3410,11 @@ function gAgregarMed() {
 async function gBuscarMedicamento(codigo, idx) {
   if(!codigo || codigo.length < 3) return;
   try {
-    // Columnas reales de tabla medicamentos: "Codigo", "Nombre", "Articulo_PBS"
-    const url = `${SB_URL}/rest/v1/medicamentos?` +
-      `%22Codigo%22=eq.${encodeURIComponent(codigo)}&limit=1`;
+    // medicamentos: columnas "Codigo","Nombre","Articulo_PBS" (con mayúsculas)
+    // Supabase REST acepta comillas dobles LITERALES en la URL para case-sensitive
+    // select con alias para normalizar nombres
+    const selectCols = '"Codigo":cod,"Nombre":nombre,"Articulo_PBS":pbs';
+    const url = `${SB_URL}/rest/v1/medicamentos?select=${encodeURIComponent(selectCols)}&"Codigo"=eq.${encodeURIComponent(codigo)}&limit=1`;
     const res = await fetch(url, {
       headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
     });
@@ -3395,18 +3423,19 @@ async function gBuscarMedicamento(codigo, idx) {
       const med    = data[0];
       const descEl = document.getElementById(`gMedDesc_${idx}`);
       const pbsEl  = document.getElementById(`gMedPbs_${idx}`);
-      // Autocompletar descripción — editable por si hay corrección
-      if(descEl) descEl.value = med['Nombre'] || med['nombre'] || med['descripcion'] || '';
+      // Autocompletar descripción — siempre editable
+      if(descEl) descEl.value = med.nombre || '';
       // Autocompletar PBS — editable
-      const pbsRaw = med['Articulo_PBS'] || med['pbs'] || '';
-      if(pbsEl && pbsRaw) {
-        const pbsVal = pbsRaw.toUpperCase().startsWith('S') ? 'SI' : 'NO';
+      if(pbsEl && med.pbs) {
+        const pbsVal = med.pbs.toUpperCase().startsWith('S') ? 'SI' : 'NO';
         for(let op of pbsEl.options) {
           if(op.value === pbsVal) { op.selected = true; break; }
         }
       }
+    } else {
+      console.info('[gBuscarMedicamento] Código no encontrado:', codigo);
     }
-  } catch(e) { console.warn('[gBuscarMedicamento]', e.message); }
+  } catch(e) { console.warn('[gBuscarMedicamento] Error:', e.message); }
 }
 
 function gRecolectarMeds() {
