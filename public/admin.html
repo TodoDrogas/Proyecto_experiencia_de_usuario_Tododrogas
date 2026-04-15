@@ -1181,14 +1181,22 @@ table.agents-tbl tr:hover td{background:var(--bg)}
 .gm-dropdown .gm-dd-item .gm-dd-sub{font-size:10px;color:var(--ink3);margin-top:1px}
 </style>
 <div class="modal-backdrop" id="modalGestion" onclick="if(event.target===this)closeModal('modalGestion')">
-  <div class="gestion-modal-wide">
+  <div class="gestion-modal-wide" onclick="event.stopPropagation()">
     <div class="gm-header">
       <h3 id="gModalTitulo">Añadir gestión</h3>
       <div class="modal-sub" id="gModalSub">Una vez guardada, la gestión no puede ser editada (garantía de trazabilidad)</div>
     </div>
     <div class="gm-body">
 
-      <!-- ── BLOQUE 1: ACCIÓN Y OBSERVACIONES ── -->
+      <!-- ── OBSERVACIONES — siempre visible ── -->
+      <div id="secObsFixed" style="margin-bottom:12px">
+        <div class="gm-field">
+          <label class="gm-label">Observaciones <span style="color:var(--red)">*</span></label>
+          <textarea class="gm-input" id="gestionObs" rows="3" placeholder="Describe la gestión realizada..." style="resize:vertical;min-height:80px"></textarea>
+        </div>
+      </div>
+
+      <!-- ── BLOQUE 1: ACCIÓN ── -->
       <div class="gm-section" id="secGestion">
         <div class="gm-section-header" onclick="gmToggle(this)">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -1202,10 +1210,7 @@ table.agents-tbl tr:hover td{background:var(--bg)}
               <option value="">— Seleccionar acción —</option>
             </select>
           </div>
-          <div class="gm-field">
-            <label class="gm-label">Observaciones <span style="color:var(--red)">*</span></label>
-            <textarea class="gm-input" id="gestionObs" rows="3" placeholder="Describe la gestión realizada..." style="resize:vertical;min-height:80px"></textarea>
-          </div>
+
           <div class="gm-field">
             <label class="gm-label">Evidencia <span style="font-weight:400;color:var(--ink3)">(opcional)</span></label>
             <div id="gestionEvidenciaZone" style="border:1.5px dashed var(--border);border-radius:var(--r2);padding:9px 12px;background:var(--bg);cursor:pointer;transition:background .15s"
@@ -3369,16 +3374,16 @@ async function gBuscarPaciente(cedula) {
       body: JSON.stringify({ cedula }),
     });
     const data = await res.json();
+    // Email siempre desde el correo activo (independiente de si el paciente existe en BD)
+    const _emailActual = state.emails.find(e=>e.id===state.selectedId);
+    const _emailVal = _emailActual?.from_email || _emailActual?.remitente || '';
+    if(_emailVal) document.getElementById('gEmail').value = _emailVal;
+
     if(data.ok) {
       // Autocompletar — todos los campos quedan EDITABLES
       document.getElementById('gNombre').value    = data.nombre      || '';
       document.getElementById('gDireccion').value = data.direccion   || data.Direccion || '';
       document.getElementById('gTelefono').value  = data.telefono    || data.Telefono  || '';
-      // Email: viene del correo actual que está gestionando
-      // Es el email con que el paciente contactó — único por correo
-      const emailActual = state.emails.find(e=>e.id===state.selectedId);
-      const emailVal = emailActual?.from_email || emailActual?.remitente || '';
-      document.getElementById('gEmail').value = emailVal;
       // EPS del paciente → preseleccionar en buscador si existe en catálogo
       if(data.eps && state.epsCatalogo) {
         const epsMatch = state.epsCatalogo.find(e =>
@@ -3731,17 +3736,11 @@ async function saveGestion() {
     showToast('Las observaciones son obligatorias','error');
     const obsEl = document.getElementById('gestionObs');
     if(obsEl) {
-      // Asegura que la sección GESTIÓN esté expandida
-      const gestBody = obsEl.closest('.gm-section-body');
-      if(gestBody && gestBody.classList.contains('collapsed')) {
-        gestBody.classList.remove('collapsed');
-        const arr = gestBody.previousElementSibling?.querySelector('.gm-arrow');
-        if(arr) arr.textContent = '▼';
-      }
-      // Scroll al campo y enfoca
       obsEl.classList.add('field-error');
       obsEl.addEventListener('input', () => obsEl.classList.remove('field-error'), { once: true });
-      obsEl.scrollIntoView({ behavior:'smooth', block:'center' });
+      // Scroll dentro del gm-body al campo
+      const gmBody = document.querySelector('#modalGestion .gm-body');
+      if(gmBody) gmBody.scrollTo({ top: 0, behavior: 'smooth' });
       setTimeout(() => obsEl.focus(), 300);
     }
     return;
