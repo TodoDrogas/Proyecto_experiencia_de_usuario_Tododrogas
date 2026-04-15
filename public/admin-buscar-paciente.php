@@ -39,8 +39,13 @@ function sbRpc($sb_url, $sb_key, $fn, $params) {
     return ['code' => $code, 'rows' => json_decode($resp, true)];
 }
 
-// Usar la misma RPC que validar-paciente.php
-$r = sbRpc($SB_URL, $SB_KEY, 'buscar_paciente', ['p_cedula' => $cedula]);
+// Usar RPC nueva que devuelve TODOS los campos incluyendo Direccion
+$r = sbRpc($SB_URL, $SB_KEY, 'buscar_paciente_admin', ['p_cedula' => $cedula]);
+
+// Fallback a RPC original si la nueva no existe aún
+if ($r['code'] !== 200 || !is_array($r['rows']) || count($r['rows']) === 0) {
+    $r = sbRpc($SB_URL, $SB_KEY, 'buscar_paciente', ['p_cedula' => $cedula]);
+}
 
 if ($r['code'] !== 200 || !is_array($r['rows']) || count($r['rows']) === 0) {
     echo json_encode(['ok' => false, 'razon' => 'no_encontrado']);
@@ -49,15 +54,15 @@ if ($r['code'] !== 200 || !is_array($r['rows']) || count($r['rows']) === 0) {
 
 $row = $r['rows'][0];
 
-// Devolver todos los campos necesarios para autocompletar el modal
+// Soportar tanto la RPC nueva (aliases en minúscula) como la original (nombres reales)
 echo json_encode([
     'ok'            => true,
-    'tipo_documento'=> $row['Tipo De Documento'] ?? '',
-    'cedula'        => $row['Cedula Pacientes']  ?? '',
-    'nombre'        => $row['Nombre Paciente']   ?? '',
-    'direccion'     => $row['Direccion']          ?? '',
-    'telefono'      => $row['Telefono']           ?? '',
-    'departamento'  => $row['Departamento']       ?? '',
-    'ciudad'        => $row['Ciudad']             ?? '',
-    'eps'           => $row['EPS']                ?? '',
+    'tipo_documento'=> $row['tipo_documento'] ?? $row['Tipo De Documento'] ?? '',
+    'cedula'        => $row['cedula']         ?? $row['Cedula Pacientes']  ?? '',
+    'nombre'        => $row['nombre']         ?? $row['Nombre Paciente']   ?? '',
+    'direccion'     => $row['direccion']      ?? $row['Direccion']         ?? '',
+    'telefono'      => $row['telefono']       ?? $row['Telefono']          ?? '',
+    'departamento'  => $row['departamento']   ?? $row['Departamento']      ?? '',
+    'ciudad'        => $row['ciudad']         ?? $row['Ciudad']            ?? '',
+    'eps'           => $row['eps']            ?? $row['EPS']               ?? '',
 ]);
