@@ -231,6 +231,30 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .ac-email{font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ac-cargo{font-size:10px;color:var(--blue);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rr-item{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;cursor:pointer;transition:all .15s}.rr-item:hover{border-color:#7c3aed;background:#f5f3ff}.rr-item .rr-cat{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--ink3);margin-bottom:3px}.rr-item .rr-sit{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:4px}.rr-item .rr-prev{font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rr-cat-btn{background:var(--bg2);border:1px solid var(--border);border-radius:99px;padding:2px 10px;font-size:10px;font-weight:600;cursor:pointer;color:var(--ink2);white-space:nowrap}.rr-cat-btn.active{background:#7c3aed;color:#fff;border-color:#7c3aed}
+.gm-header{padding:20px 24px 0;flex-shrink:0}
+.gm-body{overflow-y:auto;padding:0 24px 16px;flex:1}
+.gm-section{border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden}
+.gm-section-header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg2);cursor:pointer;user-select:none;font-size:12px;font-weight:700;color:var(--ink2);letter-spacing:.3px}
+.gm-section-header:hover{background:var(--bg)}
+.gm-section-header .gm-arrow{margin-left:auto;font-size:10px;transition:transform .2s;color:var(--ink3)}
+.gm-section-body{padding:12px 14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.gm-section-body.collapsed{display:none}
+.gm-section-body.full{grid-template-columns:1fr}
+.gm-field{display:flex;flex-direction:column;gap:4px;position:relative}
+.gm-label{font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.4px;text-transform:uppercase}
+.gm-input{background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r2);padding:8px 10px;font-size:12px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;transition:all .15s;width:100%}
+.gm-search-wrap{position:relative}
+.gm-search-wrap input{padding-right:28px}
+.gm-search-wrap .gm-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink3);font-size:14px;line-height:1;padding:0;display:none}
+.gm-search-wrap input:not(:placeholder-shown) ~ .gm-clear{display:block}
+.gm-dropdown{display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r2) var(--r2);max-height:220px;overflow-y:auto;font-size:12px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.gm-dropdown .gm-dd-item{padding:9px 12px;cursor:pointer;border-bottom:0.5px solid var(--border);line-height:1.4}
+.gm-dropdown .gm-dd-item:last-child{border-bottom:none}
+.gm-dropdown .gm-dd-item:hover{background:var(--blue-l);color:var(--blue);font-weight:600}
+.gm-dropdown .gm-dd-item .gm-dd-sub{font-size:10px;color:var(--ink3);margin-top:1px}
+    const gestBody = secGestion?.querySelector('.gm-section-body');
+  if(!e.target.closest('.gm-search-wrap')) {
+    document.querySelectorAll('.gm-dropdown').forEach(d=>d.style.display='none');
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
@@ -358,47 +382,231 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 
 <!-- ══ MODAL: AÑADIR GESTIÓN ══ -->
 <div class="modal-backdrop" id="modalGestion" onclick="if(event.target===this)closeModal('modalGestion')">
-  <div class="gestion-modal">
-    <h3>Añadir gestión</h3>
-    <div class="modal-sub">
-      <span class="lock-badge">🔒 No editable una vez guardada</span><br>
-      Garantiza la trazabilidad y auditoría del ticket.
+  <div class="gestion-modal-wide" onclick="event.stopPropagation()">
+    <div class="gm-header">
+      <h3 id="gModalTitulo">Añadir gestión</h3>
+      <div class="modal-sub" id="gModalSub">Una vez guardada, la gestión no puede ser editada (garantía de trazabilidad)</div>
     </div>
-    <div class="form-field">
-      <label class="form-label">Acción</label>
-      <select class="form-input" id="gestionAccion">
-        <option value="">— Seleccionar acción —</option>
-      </select>
-    </div>
-    <div class="form-field">
-      <label class="form-label">Observaciones <span style="color:var(--red)">*</span> <span style="font-weight:400;color:var(--ink3)">(obligatorio)</span></label>
-      <textarea class="form-input" id="gestionObs" rows="4" placeholder="Describe detalladamente la gestión realizada..." style="resize:vertical;min-height:90px"></textarea>
-    </div>
-    <div class="form-field">
-      <label class="form-label">Evidencia <span style="font-weight:400;color:var(--ink3)">(opcional — foto, PDF, captura)</span></label>
-      <div id="gestionEvidenciaZone" style="border:1.5px dashed var(--border);border-radius:var(--r2);padding:10px 12px;background:var(--bg);transition:background .15s;cursor:pointer"
-           ondragover="event.preventDefault();this.style.background='#EFF6FF';this.style.borderColor='var(--blue)'"
-           ondragleave="this.style.background='var(--bg)';this.style.borderColor='var(--border)'"
-           ondrop="event.preventDefault();this.style.background='var(--bg)';this.style.borderColor='var(--border)';gestionEvidenciaAdd(event.dataTransfer.files[0])"
-           onclick="document.getElementById('gestionFiles').click()">
-        <div id="gestionEvidenciaPreview" style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink3)">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          Clic aquí o arrastra un archivo
+    <div class="gm-body">
+
+      <!-- ── OBSERVACIONES — siempre visible ── -->
+      <div id="secObsFixed" style="margin-bottom:12px">
+        <div class="gm-field">
+          <label class="gm-label">Observaciones <span style="color:var(--red)">*</span></label>
+          <textarea class="gm-input" id="gestionObs" rows="3" placeholder="Describe la gestión realizada..." style="resize:vertical;min-height:80px"></textarea>
         </div>
       </div>
-      <input type="file" id="gestionFiles" style="display:none" accept="*/*"
-             onchange="gestionEvidenciaAdd(this.files[0]);this.value=''">
-    </div>
-    <div class="modal-actions">
+
+      <!-- ── BLOQUE 1: ACCIÓN ── -->
+      <div class="gm-section" id="secGestion">
+        <div class="gm-section-header" onclick="gmToggle(this)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          GESTIÓN
+          <span class="gm-arrow">▼</span>
+        </div>
+        <div class="gm-section-body full">
+          <div class="gm-field">
+            <label class="gm-label">Acción</label>
+            <select class="gm-input" id="gestionAccion">
+              <option value="">— Seleccionar acción —</option>
+            </select>
+          </div>
+
+          <div class="gm-field">
+            <label class="gm-label">Evidencia <span style="font-weight:400;color:var(--ink3)">(opcional)</span></label>
+            <div id="gestionEvidenciaZone" style="border:1.5px dashed var(--border);border-radius:var(--r2);padding:9px 12px;background:var(--bg);cursor:pointer;transition:background .15s"
+                 ondragover="event.preventDefault();this.style.background='#EFF6FF';this.style.borderColor='var(--blue)'"
+                 ondragleave="this.style.background='var(--bg)';this.style.borderColor='var(--border)'"
+                 ondrop="event.preventDefault();this.style.background='var(--bg)';this.style.borderColor='var(--border)';gestionEvidenciaAdd(event.dataTransfer.files[0])"
+                 onclick="document.getElementById('gestionFiles').click()">
+              <div id="gestionEvidenciaPreview" style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink3)">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                Clic aquí o arrastra un archivo
+              </div>
+            </div>
+            <input type="file" id="gestionFiles" style="display:none" accept="*/*" onchange="gestionEvidenciaAdd(this.files[0]);this.value=''">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── BLOQUE 2: DATOS DEL PACIENTE ── -->
+      <div class="gm-section" id="secPaciente">
+        <div class="gm-section-header" onclick="gmToggle(this)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          DATOS DEL PACIENTE
+          <span id="secPacienteTag" style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:6px">(se autocompleta al ingresar cédula)</span>
+          <span class="gm-arrow">▼</span>
+        </div>
+        <div class="gm-section-body collapsed" id="secPacienteBody">
+          <div class="gm-field">
+            <label class="gm-label">Tipo de documento</label>
+            <select class="gm-input" id="gTipoDoc">
+              <option value="">— Seleccionar —</option>
+              <option value="CÉDULA DE CIUDADANÍA">Cédula de ciudadanía</option>
+              <option value="TARJETA DE IDENTIDAD">Tarjeta de identidad</option>
+              <option value="CÉDULA DE EXTRANJERÍA">Cédula de extranjería</option>
+              <option value="TARJETA DE EXTRANJERÍA">Tarjeta de extranjería</option>
+              <option value="PASAPORTE">Pasaporte</option>
+              <option value="PASAPORTE DE LA ONU">Pasaporte de la ONU</option>
+              <option value="NIT">NIT</option>
+              <option value="REGISTRO CIVIL DE NACIMIENTO">Registro civil de nacimiento</option>
+              <option value="CERTIFICADO DE NACIDO VIVO">Certificado de nacido vivo</option>
+              <option value="SALVOCONDUCTO">Salvoconducto</option>
+              <option value="PERMISO DE PROTENCCION TEMPORAL">Permiso de protección temporal</option>
+              <option value="PERMANENCIA ESPECIAL">Permanencia especial</option>
+              <option value="CARNE DIPLOMATICO">Carné diplomático</option>
+              <option value="TIPO DE DOCUMENTO EXTRANJERO">Tipo de documento extranjero</option>
+              <option value="ADULTO SIN IDENTIFICAR">Adulto sin identificar</option>
+              <option value="MENOR SIN IDENTIFICAR">Menor sin identificar</option>
+              <option value="INFORMACIÓN EXOGENA">Información exógena</option>
+            </select>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">N° Documento <span style="color:var(--ink3);font-weight:400;text-transform:none;font-size:9px">→ autocompleta</span></label>
+            <div style="display:flex;gap:6px">
+              <input class="gm-input" id="gCedula" type="text" placeholder="Ej: 1020304050" oninput="gBuscarPaciente(this.value)" style="flex:1">
+              <div id="gBuscandoSpinner" style="display:none;align-items:center;padding:0 6px;color:var(--ink3)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+              </div>
+            </div>
+          </div>
+          <div class="gm-field span2">
+            <label class="gm-label">Nombre y apellidos</label>
+            <input class="gm-input" id="gNombre" type="text" placeholder="Se autocompleta…">
+          </div>
+          <div class="gm-field span2">
+            <label class="gm-label">Dirección</label>
+            <input class="gm-input" id="gDireccion" type="text" placeholder="Se autocompleta…">
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Teléfono <span style="color:var(--ink3);font-weight:400;text-transform:none;font-size:9px">cel 10 dig / fijo 7 dig</span></label>
+            <input class="gm-input" id="gTelefono" type="text" placeholder="Se autocompleta…" oninput="gValidarTel(this)">
+            <span id="gTelError" style="font-size:10px;color:var(--red);display:none">Debe tener 7 o 10 dígitos</span>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Email</label>
+            <input class="gm-input" id="gEmail" type="text" placeholder="Se autocompleta…">
+          </div>
+        </div>
+      </div>
+
+      <!-- ── BLOQUE 3: EPS, ORIGEN Y CLASIFICACIÓN ── -->
+      <div class="gm-section" id="secEps">
+        <div class="gm-section-header" onclick="gmToggle(this)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          EPS, ORIGEN Y CLASIFICACIÓN
+          <span class="gm-arrow">▼</span>
+        </div>
+        <div class="gm-section-body collapsed" id="secEpsBody">
+          <div class="gm-field span2">
+            <label class="gm-label">EPS <span style="color:var(--red)">*</span></label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gEpsSearch" type="text" placeholder="Escribir para buscar EPS…" oninput="gFiltrarEPS(this.value)" onfocus="gFiltrarEPS('')" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarEPS()">×</button>
+              <div id="gEpsDropdown" class="gm-dropdown"></div>
+            </div>
+            <input type="hidden" id="gEpsId">
+            <div style="display:flex;gap:6px;margin-top:4px">
+              <span style="font-size:10px;color:var(--ink3)">NIT:</span>
+              <span id="gNitEps" style="font-size:10px;color:var(--ink2);font-family:'DM Mono',monospace">—</span>
+            </div>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Origen</label>
+            <select class="gm-input" id="gOrigen">
+              <option value="">— Seleccionar —</option>
+              <option value="CORREO ELECTRONICO">Correo electrónico</option>
+              <option value="WHATSAPP">WhatsApp</option>
+              <option value="CONMUTADOR (TELEFONO)">Conmutador (teléfono)</option>
+              <option value="PAGINA WEB">Página web</option>
+              <option value="CODIGO QR">Código QR</option>
+              <option value="NOVA TD">Nova TD</option>
+              <option value="BUZON DE SUGERENCIAS FISICO">Buzón de sugerencias físico</option>
+              <option value="VERBAL">Verbal</option>
+            </select>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Tipo de solicitud</label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gNombreSolSearch" type="text" placeholder="Buscar tipo de solicitud…" oninput="gFiltrarNombreSol(this.value)" onfocus="gMostrarTipoSolicitud()" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarNombreSol()">×</button>
+              <div id="gNombreSolDropdown" class="gm-dropdown"></div>
+            </div>
+            <input type="hidden" id="gNombreSolVal">
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Detalle solicitud</label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gDetalleSearch" type="text" placeholder="Buscar detalle…" oninput="gFiltrarDetalle(this.value)" onfocus="gMostrarDetalles()" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarDetalle()">×</button>
+              <div id="gDetalleDropdown" class="gm-dropdown"></div>
+            </div>
+            <input type="hidden" id="gDetalleVal">
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Departamento</label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gDeptoSearch" type="text" placeholder="Buscar departamento…" oninput="gFiltrarDepto(this.value)" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarDepto()">×</button>
+              <div id="gDeptoDropdown" class="gm-dropdown"></div>
+            </div>
+            <input type="hidden" id="gDeptoVal">
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Ciudad</label>
+            <div class="gm-search-wrap">
+              <input class="gm-input" id="gCiudadSearch" type="text" placeholder="Buscar ciudad…" oninput="gFiltrarCiudad(this.value)" autocomplete="off">
+              <button class="gm-clear" onclick="gLimpiarCiudad()">×</button>
+              <div id="gCiudadDropdown" class="gm-dropdown"></div>
+            </div>
+            <input type="hidden" id="gCiudadVal">
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">Categoría</label>
+            <select class="gm-input" id="gCategoria">
+              <option value="">— Seleccionar —</option>
+              <option value="EPS">EPS</option>
+              <option value="TODODROGAS">Tododrogas</option>
+              <option value="PROVEEDOR">Proveedor</option>
+              <option value="USUARIO EXTERNO">Usuario externo</option>
+              <option value="COLABORADOR">Colaborador</option>
+              <option value="ENTE DE CONTROL">Ente de control</option>
+            </select>
+          </div>
+          <div class="gm-field">
+            <label class="gm-label">¿Tiene tutela?</label>
+            <div class="gm-toggle-row">
+              <button class="gm-toggle-btn" id="gTutelaSi" onclick="gSetTutela(true)">SÍ</button>
+              <button class="gm-toggle-btn" id="gTutelaNo" onclick="gSetTutela(false)">NO</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── BLOQUE 4: MEDICAMENTOS (colapsable) ── -->
+      <div class="gm-section">
+        <div class="gm-section-header" onclick="gmToggle(this)">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.5 20H4a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v3"/><circle cx="18" cy="18" r="3"/><path d="M22 22l-1.5-1.5"/></svg>
+          MEDICAMENTOS
+          <span style="font-size:10px;font-weight:400;color:var(--ink3);margin-left:6px">(opcional)</span>
+          <span class="gm-arrow">▶</span>
+        </div>
+        <div class="gm-section-body collapsed full" id="secMedBody">
+          <div id="gMedLista" style="display:flex;flex-direction:column;gap:10px"></div>
+          <button onclick="gAgregarMed()" style="align-self:flex-start;margin-top:4px;background:var(--blue-l);color:var(--blue);border:1.5px solid var(--blue-m);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;display:flex;align-items:center;gap:5px">
+            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+            Añadir medicamento
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /gm-body -->
+    <div class="gm-footer">
       <button class="btn btn-ghost" onclick="closeModal('modalGestion')">Cancelar</button>
-      <button class="btn btn-primary" id="btnSaveGestion" onclick="saveGestion()">
-        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-        Guardar gestión
-      </button>
+      <button class="btn btn-primary" id="btnSaveGestion" onclick="saveGestion()">Guardar gestión</button>
     </div>
   </div>
 </div>
-
 <!-- ══ MODAL: TIMELINE DETAIL ══ -->
 <div class="modal-backdrop" id="modalTlDetail" onclick="if(event.target===this)closeModal('modalTlDetail')">
   <div class="tl-modal" id="tlDetailContent"></div>
@@ -1248,102 +1456,2951 @@ async function generarConNovaTD(correoId) {
   }
 }
 
-function openGestionModal(mode) {
+async function openGestionModal(mode) {
   _gestionForSolucionado = mode==='solucionado';
   _gestionEvidenciaFile = null;
+  _gTutela = null;
+  _gMedCount = 0;
+
+  const email = state.emails.find(e=>e.id===state.selectedId);
+  // Leer num_gestiones desde Supabase en tiempo real
+  // (state.emails puede estar desactualizado tras una gestión reciente)
+  let numGestiones = email?.num_gestiones || 0;
+  try {
+    const fresh = await sb(`correos?id=eq.${state.selectedId}&select=num_gestiones&limit=1`);
+    if(fresh && fresh.length) numGestiones = fresh[0].num_gestiones || 0;
+  } catch(e) { /* usar valor local si falla */ }
+  const esPrimera = numGestiones === 0;
+
+  // ── Título y subtítulo dinámico ──
+  const tituloEl = document.getElementById('gModalTitulo');
+  const subEl    = document.getElementById('gModalSub');
+  if(esPrimera) {
+    tituloEl.textContent = 'Añadir gestión — #1 (registro completo)';
+    subEl.innerHTML = '<span style="color:var(--blue);font-weight:600">Primera gestión:</span> completa todos los campos para registrar el caso en el SIGI.';
+  } else {
+    tituloEl.textContent = `Añadir gestión — #${numGestiones + 1}`;
+    subEl.innerHTML = `<span style="background:var(--blue-l);color:var(--blue);border-radius:99px;padding:2px 8px;font-weight:700;font-size:11px">${numGestiones} gestión${numGestiones>1?'es':''} registrada${numGestiones>1?'s':''}</span>&nbsp; Solo Gestión es obligatoria. Los demás campos ya quedaron en la primera.`;
+  }
+
+  // ── Mostrar/ocultar bloques según lógica primera vs segunda gestión ──
+  const secGestion  = document.getElementById('secGestion');
+  const secPaciente = document.getElementById('secPaciente');
+  const secEps      = document.getElementById('secEps');
+
+  if(esPrimera) {
+    // Gestión #1: ocultar bloque Gestión, mostrar Paciente + EPS + Medicamentos
+    if(secGestion)  secGestion.style.display  = 'none';
+    if(secPaciente) secPaciente.style.display = '';
+    if(secEps)      secEps.style.display      = '';
+    // Expandir automáticamente paciente y EPS
+    const pacBody = document.getElementById('secPacienteBody');
+    const epsBody = document.getElementById('secEpsBody');
+    if(pacBody) { pacBody.classList.remove('collapsed'); const arr=pacBody.previousElementSibling?.querySelector('.gm-arrow'); if(arr) arr.textContent='▼'; }
+    if(epsBody) { epsBody.classList.remove('collapsed'); const arr=epsBody.previousElementSibling?.querySelector('.gm-arrow'); if(arr) arr.textContent='▼'; }
+  } else {
+    // Gestión #2+: mostrar solo bloque Gestión, ocultar todo lo demás
+    if(secGestion)  secGestion.style.display  = '';
+    if(secPaciente) secPaciente.style.display = 'none';
+    if(secEps)      secEps.style.display      = 'none';
+    // Expandir bloque gestión
+    const gestBody = secGestion?.querySelector('.gm-section-body');
+    if(gestBody) { gestBody.classList.remove('collapsed'); const arr=gestBody.previousElementSibling?.querySelector('.gm-arrow'); if(arr) arr.textContent='▼'; }
+  }
+
+  // ── Reset evidencia ──
   const preview = document.getElementById('gestionEvidenciaPreview');
   if(preview) preview.innerHTML = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg> Clic aquí o arrastra un archivo';
-  const sel=document.getElementById('gestionAccion');
-  sel.innerHTML='<option value="">— Seleccionar acción —</option>'+
-    DEFAULT_ACTIONS.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');
-  if(_gestionForSolucionado) sel.value='Solucionado';
-  document.getElementById('gestionObs').value='';
+
+  // ── Poblar acciones ──
+  const sel = document.getElementById('gestionAccion');
+  sel.innerHTML = '<option value="">— Seleccionar acción —</option>' +
+    state.defaultActions.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join('');
+  if(_gestionForSolucionado) sel.value = 'Solucionado';
+
+  // ── Reset observaciones ──
+  document.getElementById('gestionObs').value = '';
+
+  // ── Precargar datos del correo (solo si es primera y hay datos) ──
+  if(email && esPrimera) {
+    // Email del correo actual — es dinámico por cada correo
+    document.getElementById('gEmail').value = email.from_email || email.remitente || '';
+    document.getElementById('gNombre').value   = email.nombre||email.from_name||'';
+    document.getElementById('gTelefono').value = email.telefono_contacto||'';
+    if(email.origen) {
+      const origSel = document.getElementById('gOrigen');
+      for(let op of origSel.options){ if(op.value===email.origen){op.selected=true;break;} }
+    }
+    if(email.categoria_sigi||email.categoria_ia) {
+      const catSel = document.getElementById('gCategoria');
+      const catVal = email.categoria_sigi||email.categoria_ia||'';
+      for(let op of catSel.options){ if(op.value===catVal){op.selected=true;break;} }
+    }
+    if(email.tiene_tutela===true)  gSetTutela(true);
+    else if(email.tiene_tutela===false) gSetTutela(false);
+    if(email.eps_id && state.epsCatalogo) {
+      const eps = state.epsCatalogo.find(e=>e.id===email.eps_id);
+      if(eps) gSelectEPS(eps.id, eps.nombre, eps.nit||'');
+    }
+    if(email.nombre_solicitud) {
+      document.getElementById('gNombreSolSearch').value = email.nombre_solicitud;
+      document.getElementById('gNombreSolVal').value    = email.nombre_solicitud;
+      window._gDetallesActivos = G_NOMBRES_SOL[email.nombre_solicitud]||null;
+    }
+    if(email.detalle_solicitud) {
+      document.getElementById('gDetalleSearch').value = email.detalle_solicitud;
+      document.getElementById('gDetalleVal').value    = email.detalle_solicitud;
+    }
+    if(email.departamento_paciente) {
+      document.getElementById('gDeptoSearch').value = email.departamento_paciente;
+      document.getElementById('gDeptoVal').value    = email.departamento_paciente;
+    }
+    if(email.ciudad_paciente) {
+      document.getElementById('gCiudadSearch').value = email.ciudad_paciente;
+      document.getElementById('gCiudadVal').value    = email.ciudad_paciente;
+    }
+    if(email.tipo_documento) {
+      const tdSel = document.getElementById('gTipoDoc');
+      for(let op of tdSel.options){ if(op.value===email.tipo_documento){op.selected=true;break;} }
+    }
+    if(email.cedula_paciente)     document.getElementById('gCedula').value    = email.cedula_paciente;
+    if(email.direccion_paciente)  document.getElementById('gDireccion').value = email.direccion_paciente;
+  }
+
+  // ── Reset lista medicamentos ──
+  document.getElementById('gMedLista').innerHTML = '';
+
+  // ── Cargar catálogos si faltan ──
+  // Cargar EPS y esperar antes de mostrar el modal para que el buscador funcione
+  if(!state.epsCatalogo || !state.epsCatalogo.length) {
+    try {
+      state.epsCatalogo = await sb('eps_catalogo?order=nombre.asc') || [];
+    } catch(e) { state.epsCatalogo = []; }
+  }
+  if(!state.sedes||!state.sedes.length) {
+    sb('sedes?order=nombre.asc').then(d=>{ state.sedes=d||[]; }).catch(()=>{});
+  }
+
   document.getElementById('modalGestion').classList.add('show');
 }
 
+// Cerrar dropdowns al hacer clic fuera
+document.addEventListener('mousedown', function(e) {
+  if(!e.target.closest('.gm-search-wrap')) {
+    document.querySelectorAll('.gm-dropdown').forEach(d=>d.style.display='none');
+  }
+});
+
 async function saveGestion() {
-  const id=state.selectedId;
+  const id = state.selectedId;
   if(!id) return;
-  const accion=document.getElementById('gestionAccion').value;
-  const obs=document.getElementById('gestionObs').value.trim();
-  if(!obs) { showToast('Las observaciones son obligatorias','error'); return; }
 
-  const btn=document.getElementById('btnSaveGestion');
-  btn.disabled=true; btn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Guardando…';
+  const email = state.emails.find(e=>e.id===id);
+  // Leer num_gestiones fresco desde Supabase para no depender del estado local
+  let numGest = email?.num_gestiones || 0;
+  try {
+    const fresh = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
+    if(fresh && fresh.length) numGest = fresh[0].num_gestiones || 0;
+  } catch(e) { /* usar valor local */ }
+  const esPrimera = numGest === 0;
 
-  const email=state.emails.find(e=>e.id===id);
-  const metadata={
-    agente_id:AGENT_ID,
-    agente_nombre:AGENT_NAME,
-    por:'agente',
-    observaciones:obs,
-  };
-
-  // Subir evidencia a Storage si la hay
-  if(_gestionEvidenciaFile) {
-    try {
-      const ts=Date.now();
-      const safeName=_gestionEvidenciaFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
-      const storagePath=`evidencias/${id}/${ts}_${safeName}`;
-      const uploadRes=await fetch(`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`,{
-        method:'POST',
-        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':_gestionEvidenciaFile.type||'application/octet-stream','x-upsert':'true'},
-        body:_gestionEvidenciaFile,
-      });
-      if(uploadRes.ok) {
-        const signRes=await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`,{
-          method:'POST',
-          headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-          body:JSON.stringify({expiresIn:315360000}),
-        });
-        const signData=signRes.ok?await signRes.json():{};
-        metadata.evidencia_url = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
-        metadata.evidencia_nombre = _gestionEvidenciaFile.name;
-      }
-    } catch(e){ console.warn('[evidencia]', e.message); }
+  // ── Lectura campos siempre obligatorios ──
+  const accion = document.getElementById('gestionAccion').value;
+  const obs    = document.getElementById('gestionObs').value.trim();
+  if(!obs) {
+    showToast('Las observaciones son obligatorias','error');
+    const obsEl = document.getElementById('gestionObs');
+    if(obsEl) {
+      obsEl.classList.add('field-error');
+      obsEl.addEventListener('input', () => obsEl.classList.remove('field-error'), { once: true });
+      // Scroll dentro del gm-body al campo
+      const gmBody = document.querySelector('#modalGestion .gm-body');
+      if(gmBody) gmBody.scrollTo({ top: 0, behavior: 'smooth' });
+      setTimeout(() => obsEl.focus(), 300);
+    }
+    return;
   }
 
+  // ── Validación extra en primera gestión ──
+  if(esPrimera) {
+    if(!document.getElementById('gEpsId')?.value)         { showToast('EPS es obligatoria en la primera gestión','error'); return; }
+    if(!document.getElementById('gOrigen')?.value)        { showToast('Origen es obligatorio en la primera gestión','error'); return; }
+    if(!document.getElementById('gNombreSolVal')?.value)  { showToast('Nombre Solicitud es obligatorio en la primera gestión','error'); return; }
+    if(!document.getElementById('gCategoria')?.value)     { showToast('Categoría es obligatoria en la primera gestión','error'); return; }
+  }
+
+  const _rawAgId  = sessionStorage.getItem('pqr_agent_id')||'';
+  const _uuidRe   = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const agentId   = _uuidRe.test(_rawAgId) ? _rawAgId : null;
+  const agentName = 'Admin';
+  const meds      = gRecolectarMeds();
+
+  const btn = document.getElementById('btnSaveGestion');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+
   try {
-    try {
-      await sb('historial_eventos','POST',{
-        correo_id:id,
-        agente_id:AGENT_ID,
-        evento:accion||'Observación añadida',
-        from_email:email?.remitente,
-        subject:email?.asunto,
-        descripcion:obs||accion||'Observación añadida',
-        datos_extra:metadata||{},
-      });
-    } catch {
-      await sb('historial','POST',{correo_id:id,accion:accion||'Observación añadida',detalle:obs,fecha:new Date().toISOString()});
+    // ═══ OPERACIÓN 1: Evidencia ═══
+    const metadata = { agente_id:agentId, agente_nombre:agentName, por:'admin', observaciones:obs, num_gestion: numGest+1 };
+    if(_gestionEvidenciaFile) {
+      try {
+        const ts=Date.now();
+        const safeName=_gestionEvidenciaFile.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+        const storagePath=`evidencias/${id}/${ts}_${safeName}`;
+        const uploadRes=await fetch(`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`,{
+          method:'POST',
+          headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':_gestionEvidenciaFile.type||'application/octet-stream','x-upsert':'true'},
+          body:_gestionEvidenciaFile,
+        });
+        if(uploadRes.ok) {
+          const signRes=await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`,{
+            method:'POST',
+            headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+            body:JSON.stringify({expiresIn:315360000}),
+          });
+          const signData=signRes.ok?await signRes.json():{};
+          metadata.evidencia_url    = signData.signedURL ? `${SB_URL}/storage/v1${signData.signedURL}` : `${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
+          metadata.evidencia_nombre = _gestionEvidenciaFile.name;
+        }
+      } catch(e){ console.warn('[evidencia]', e.message); }
     }
 
+    // ═══ OPERACIÓN 2: PATCH correos ═══
+    const patchCorreo = { num_gestiones: numGest + 1 };
+
+    // Solo primera gestión: campos SIGI verdes
+    if(esPrimera) {
+      const tipoDoc   = document.getElementById('gTipoDoc')?.value||'';
+      const cedula    = document.getElementById('gCedula')?.value?.trim()||'';
+      const nombre    = document.getElementById('gNombre')?.value?.trim()||'';
+      const direccion = document.getElementById('gDireccion')?.value?.trim()||'';
+      const telefono  = document.getElementById('gTelefono')?.value?.trim()||'';
+      const epsId     = document.getElementById('gEpsId')?.value||null;
+      const origen    = document.getElementById('gOrigen')?.value||'';
+      const nombreSol = document.getElementById('gNombreSolVal')?.value||'';
+      const detalle   = document.getElementById('gDetalleVal')?.value||'';
+      const depto     = document.getElementById('gDeptoVal')?.value||'';
+      const ciudad    = document.getElementById('gCiudadVal')?.value||'';
+      const categoria = document.getElementById('gCategoria')?.value||'';
+      if(tipoDoc)   patchCorreo.tipo_documento       = tipoDoc;
+      if(cedula)    patchCorreo.cedula_paciente       = cedula;
+      if(nombre)    patchCorreo.nombre                = nombre;
+      if(direccion) patchCorreo.direccion_paciente    = direccion;
+      if(telefono)  patchCorreo.telefono_contacto     = telefono;
+      if(epsId)     patchCorreo.eps_id                = epsId;
+      if(origen)    patchCorreo.origen                = origen;
+      if(nombreSol) patchCorreo.nombre_solicitud      = nombreSol;
+      if(detalle)   patchCorreo.detalle_solicitud     = detalle;
+      if(depto)     patchCorreo.departamento_paciente = depto;
+      if(ciudad)    patchCorreo.ciudad_paciente       = ciudad;
+      if(categoria) patchCorreo.categoria_sigi        = categoria;
+      if(_gTutela!==null) patchCorreo.tiene_tutela   = _gTutela;
+    }
+
+    // Estado del ticket
     if(_gestionForSolucionado) {
-      await sb(`correos?id=eq.${id}`,'PATCH',{estado:'solucionado',fecha_resolucion:new Date().toISOString()});
-      const em=state.emails.find(e=>e.id===id);
-      if(em) em.estado='solucionado';
-      document.getElementById('mgmtEstadoBadge').className='badge solucionado';
-      document.getElementById('mgmtEstadoBadge').textContent='Solucionado';
-      showToast('Ticket solucionado ✓','success');
-    } else {
-      if(email?.estado==='pendiente') {
-        await sb(`correos?id=eq.${id}`,'PATCH',{estado:'gestion'});
-        const em=state.emails.find(e=>e.id===id);
-        if(em){ em.estado='gestion'; }
-        document.getElementById('mgmtEstadoBadge').className='badge gestion';
-        document.getElementById('mgmtEstadoBadge').textContent='En gestión';
-      }
-      showToast('Gestión registrada ✓','success');
+      patchCorreo.estado           = 'solucionado';
+      patchCorreo.fecha_resolucion = new Date().toISOString();
+    } else if(email?.estado==='pendiente') {
+      patchCorreo.estado = 'gestion';
     }
 
-    closeModal('modalGestion');
-    updateFolderCounts();
-    renderEmailList();
-    await loadTicketTimeline(id);
+    await sb(`correos?id=eq.${id}`, 'PATCH', patchCorreo);
 
-  } catch(e){ showToast('Error: '+e.message.substring(0,60),'error'); }
-  finally { btn.disabled=false; btn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Guardar gestión'; }
+    // ═══ OPERACIÓN 3: POST historial_eventos ═══
+    await addHistorialEvent(id, email, accion||'Gestión registrada', metadata);
+
+    // ═══ OPERACIÓN 4: POST gestiones_medicamentos ═══
+    for(const med of meds) {
+      try { await sb('gestiones_medicamentos', 'POST', { correo_id:id, ...med }); }
+      catch(e) { console.warn('[med]', e.message); }
+    }
+
+    // ── Toast ──
+    const label = esPrimera ? 'Gestión #1 registrada ✓' : `Gestión #${numGest+1} registrada ✓`;
+    if(_gestionForSolucionado) showToast('Ticket solucionado ✓','success');
+    else showToast(`${label}${meds.length?' + '+meds.length+' med.':''}`, 'success');
+
+  } catch(e) {
+    showToast('Error al guardar: '+e.message.substring(0,60),'error');
+    console.error('[saveGestion]', e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar gestión';
+  }
+
+  closeModal('modalGestion');
+  await loadEmails();
+  selectEmail(id);
 }
+
+
+async function gBuscarPaciente(cedula) {
+  if(cedula.length < 4) return;
+  document.getElementById('gBuscandoSpinner').style.display='flex';
+  try {
+    // Llamar admin-buscar-paciente.php (mismo servidor) — evita CORS y RLS
+    const res  = await fetch('admin-buscar-paciente.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cedula }),
+    });
+    const data = await res.json();
+    // Email siempre desde el correo activo (independiente de si el paciente existe en BD)
+    const _emailActual = state.emails.find(e=>e.id===state.selectedId);
+    const _emailVal = _emailActual?.from_email || _emailActual?.remitente || '';
+    if(_emailVal) document.getElementById('gEmail').value = _emailVal;
+
+    if(data.ok) {
+      // Autocompletar — todos los campos quedan EDITABLES
+      document.getElementById('gNombre').value    = data.nombre      || '';
+      document.getElementById('gDireccion').value = data.direccion   || data.Direccion || '';
+      document.getElementById('gTelefono').value  = data.telefono    || data.Telefono  || '';
+      // EPS del paciente → preseleccionar en buscador si existe en catálogo
+      if(data.eps && state.epsCatalogo) {
+        const epsMatch = state.epsCatalogo.find(e =>
+          e.nombre.toUpperCase().includes(data.eps.toUpperCase()) ||
+          data.eps.toUpperCase().includes(e.nombre.toUpperCase())
+        );
+        if(epsMatch) gSelectEPS(epsMatch.id, epsMatch.nombre, epsMatch.nit||'');
+      }
+      if(data.departamento) {
+        document.getElementById('gDeptoSearch').value = data.departamento;
+        document.getElementById('gDeptoVal').value    = data.departamento;
+      }
+      if(data.ciudad) {
+        document.getElementById('gCiudadSearch').value = data.ciudad;
+        document.getElementById('gCiudadVal').value    = data.ciudad;
+      }
+      // Tipo de documento — mapear abreviatura a valor del select
+      const tipoDoc = data.tipo_documento || '';
+      if(tipoDoc) {
+        const mapa = {
+          'CC':'CÉDULA DE CIUDADANÍA','CÉDULA DE CIUDADANÍA':'CÉDULA DE CIUDADANÍA',
+          'TI':'TARJETA DE IDENTIDAD', 'TARJETA DE IDENTIDAD':'TARJETA DE IDENTIDAD',
+          'CE':'CÉDULA DE EXTRANJERÍA','CÉDULA DE EXTRANJERÍA':'CÉDULA DE EXTRANJERÍA',
+          'RC':'REGISTRO CIVIL DE NACIMIENTO',
+          'PA':'PASAPORTE','PASAPORTE':'PASAPORTE',
+          'NIT':'NIT'
+        };
+        const val = mapa[tipoDoc.toUpperCase()] || tipoDoc;
+        const tdSel = document.getElementById('gTipoDoc');
+        for(let op of tdSel.options) {
+          if(op.value === val) { op.selected=true; break; }
+        }
+      }
+    } else {
+      console.info('[gBuscarPaciente] No encontrado:', cedula, data.razon);
+    }
+  } catch(e) { console.warn('[gBuscarPaciente] Error:', e.message); }
+  document.getElementById('gBuscandoSpinner').style.display='none';
+}
+
+const _medTimers = {};
+function gBuscarMedicamento(codigo, idx) {
+  // Debounce 500ms — esperar que el usuario termine de escribir
+  clearTimeout(_medTimers[idx]);
+  _medTimers[idx] = setTimeout(() => _gBuscarMedicamentoExec(codigo, idx), 500);
+}
+async function _gBuscarMedicamentoExec(codigo, idx) {
+  if(!codigo || codigo.length < 3) return;
+  try {
+    const res  = await fetch('admin-buscar-medicamento.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codigo }),
+    });
+    const data = await res.json();
+    if(data.ok) {
+      const descEl = document.getElementById(`gMedDesc_${idx}`);
+      const pbsEl  = document.getElementById(`gMedPbs_${idx}`);
+      if(descEl) descEl.value = data.nombre || '';
+      if(pbsEl && data.pbs) {
+        for(let op of pbsEl.options) {
+          if(op.value === data.pbs) { op.selected = true; break; }
+        }
+      }
+    } else {
+      console.info('[gBuscarMedicamento] No encontrado:', codigo);
+    }
+  } catch(e) { console.warn('[gBuscarMedicamento] Error:', e.message); }
+}
+// Reply
+// ─────────────────────────────────────────────────────────
+// SISTEMA DE ADJUNTOS ESTILO OUTLOOK
+// ─────────────────────────────────────────────────────────
+const ATTACH_MAX_FILE_MB  = 35;
+const ATTACH_MAX_TOTAL_MB = 150;
+const ATTACH_INLINE_MB    = 3.9;
+const ATTACH_CHUNK_BYTES  = 3 * 1024 * 1024;
+const _attachedFiles = new Map();
+let _attachCounter = 0;
+
+function _fmtSize(bytes){
+  if(bytes>1048576) return (bytes/1048576).toFixed(1)+' MB';
+  if(bytes>1024) return Math.round(bytes/1024)+' KB';
+  return bytes+' B';
+}
+function _attachRender(){
+  const preview=document.getElementById('replyFilesPreview');
+  if(!preview) return;
+  preview.innerHTML='';
+  let totalBytes=0;
+  _attachedFiles.forEach(({file,id})=>{
+    totalBytes+=file.size;
+    const isLarge=file.size>ATTACH_INLINE_MB*1024*1024;
+    const pill=document.createElement('div');
+    pill.id='attach-pill-'+id;
+    pill.style.cssText='display:inline-flex;align-items:center;gap:6px;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:4px 8px 4px 10px;font-size:11px;font-weight:500;color:var(--ink2);margin:2px;max-width:260px;position:relative';
+    pill.innerHTML=`<span style="flex-shrink:0;font-size:14px">${getFileIcon(file.name)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px" title="${esc(file.name)}">${esc(file.name)}</span><span style="color:var(--ink3);flex-shrink:0">${_fmtSize(file.size)}</span>${isLarge?'<span style="background:#EFF6FF;color:#3B82F6;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;flex-shrink:0">CHUNKED</span>':''}<div id="attach-progress-${id}" style="display:none;position:absolute;bottom:0;left:0;height:2px;background:#3B82F6;border-radius:0 0 0 6px;transition:width .2s"></div><button onclick="_attachRemove('${id}')" title="Quitar" style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 2px">×</button>`;
+    preview.appendChild(pill);
+  });
+  const totalEl=document.getElementById('replyAttachTotal');
+  if(totalEl){
+    const pct=Math.min(100,(totalBytes/(ATTACH_MAX_TOTAL_MB*1024*1024))*100);
+    const color=pct>85?'#e53e3e':pct>60?'#f59e0b':'#3B82F6';
+    totalEl.innerHTML=_attachedFiles.size>0?`<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><div style="flex:1;height:3px;background:var(--border);border-radius:2px"><div style="height:3px;width:${pct}%;background:${color};border-radius:2px"></div></div><span style="font-size:10px;color:var(--ink3)">${(totalBytes/1048576).toFixed(1)} / ${ATTACH_MAX_TOTAL_MB} MB</span></div>`:'';
+  }
+}
+function _attachRemove(id){
+  _attachedFiles.forEach((v,k)=>{if(v.id===id)_attachedFiles.delete(k);});
+  _attachRender();
+}
+function _attachAdd(files){
+  let totalBytes=0;
+  _attachedFiles.forEach(({file})=>totalBytes+=file.size);
+  for(const file of files){
+    if(file.size>ATTACH_MAX_FILE_MB*1024*1024){showToast(`"${file.name}" supera ${ATTACH_MAX_FILE_MB} MB`,'error');continue;}
+    if(totalBytes+file.size>ATTACH_MAX_TOTAL_MB*1024*1024){showToast(`Total de adjuntos supera ${ATTACH_MAX_TOTAL_MB} MB`,'error');break;}
+    if(!_attachedFiles.has(file.name)){_attachedFiles.set(file.name,{file,id:'a'+(++_attachCounter)});totalBytes+=file.size;}
+  }
+  _attachRender();
+}
+function _fileToBase64(file){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(file);});
+}
+async function _uploadLargeAttachment(token,userId,draftId,file,progressId){
+  const sessionRes=await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${draftId}/attachments/createUploadSession`,{
+    method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+    body:JSON.stringify({AttachmentItem:{attachmentType:'file',name:file.name,size:file.size}})
+  });
+  if(!sessionRes.ok) throw new Error('Upload session: '+await sessionRes.text());
+  const {uploadUrl}=await sessionRes.json();
+  let offset=0;
+  const progEl=document.getElementById('attach-progress-'+progressId);
+  while(offset<file.size){
+    const end=Math.min(offset+ATTACH_CHUNK_BYTES,file.size);
+    const chunkRes=await fetch(uploadUrl,{method:'PUT',headers:{'Content-Length':String(end-offset),'Content-Range':`bytes ${offset}-${end-1}/${file.size}`,'Content-Type':file.type||'application/octet-stream'},body:file.slice(offset,end)});
+    if(!chunkRes.ok&&chunkRes.status!==202&&chunkRes.status!==201) throw new Error(`Chunk ${chunkRes.status}`);
+    offset=end;
+    if(progEl){progEl.style.display='block';progEl.style.width=Math.round(offset/file.size*100)+'%';}
+  }
+}
+async function _buildAndSendMail(token,userId,payload){
+  return fetch(`https://graph.microsoft.com/v1.0/users/${userId}/sendMail`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({message:payload,saveToSentItems:true})});
+}
+async function _buildAndSendMailWithLargeAttachments(token,userId,payload,largeFiles){
+  const draftRes=await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  if(!draftRes.ok) throw new Error('Error creando borrador: '+await draftRes.text());
+  const draft=await draftRes.json();
+  for(const {file,id:fid} of largeFiles) await _uploadLargeAttachment(token,userId,draft.id,file,fid);
+  return fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${draft.id}/send`,{method:'POST',headers:{'Authorization':'Bearer '+token}});
+}
+
+async function _guardarAdjuntosEnStorage(correoId,archivos,enviadoPor){
+  const resultados=[];
+  for(const {file} of archivos){
+    try{
+      const ts=Date.now();
+      const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const storagePath=`saliente/${correoId}/${ts}_${safeName}`;
+      const storageUrl=`${SB_URL}/storage/v1/object/adjuntos-pqr/${storagePath}`;
+      const uploadRes=await fetch(storageUrl,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type||'application/octet-stream','x-upsert':'true'},body:file});
+      if(!uploadRes.ok) throw new Error(`Storage ${uploadRes.status}`);
+      const signRes=await fetch(`${SB_URL}/storage/v1/object/sign/adjuntos-pqr/${storagePath}`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:315360000})});
+      const signData=signRes.ok?await signRes.json():{};
+      const finalUrl=signData.signedURL?`${SB_URL}/storage/v1${signData.signedURL}`:storageUrl;
+      await sb('adjuntos','POST',{correo_id:correoId,attachment_id:`sal_${correoId}_${ts}`,nombre:file.name,tipo_contenido:file.type||'application/octet-stream',tamano_bytes:file.size,es_inline:false,storage_url:finalUrl,direccion:'saliente',enviado_por:enviadoPor||'admin'});
+      resultados.push({nombre:file.name,ok:true});
+    }catch(err){
+      console.warn(`[adjuntos-storage] "${file.name}":`,err.message);
+      resultados.push({nombre:file.name,ok:false,error:err.message});
+    }
+  }
+  return resultados;
+}
+
+function toggleReply(modo) {
+  modo = modo || 'reply';
+  const area = document.getElementById('replyBoxArea');
+  // Si ya está abierto con el mismo modo, cerrar
+  if(area.innerHTML && area.dataset.modo === modo) { area.innerHTML=''; return; }
+  area.dataset.modo = modo;
+  window._replyModo = modo;
+
+  const email = state.emails.find(e=>e.id===state.selectedId);
+  if(!email) return;
+
+  // Calcular campos según el modo
+  let toVal='', ccVal='', subjectVal='', titleColor='', modoLabel='';
+
+  if(modo==='reply') {
+    toVal = email.remitente||'';
+    ccVal = '';
+    subjectVal = 'RE: '+( email.asunto||'').replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor = 'var(--blue)'; modoLabel = '↩ Responder';
+  } else if(modo==='replyAll') {
+    toVal = email.remitente||'';
+    // CC = todos los to_recipients + cc_recipients excepto el buzón propio
+    const propioEmail = (window.GRAPH_USER_ID||'').toLowerCase();
+    const allCC = [
+      ..._arr(email.to_recipients).map(r=>r?.emailAddress?.address||r),
+      ..._arr(email.cc_recipients).map(r=>r?.emailAddress?.address||r),
+    ].filter(Boolean).filter(a=>a.toLowerCase()!==propioEmail && a.toLowerCase()!==toVal.toLowerCase());
+    ccVal = [...new Set(allCC)].join('; ');
+    subjectVal = 'RE: '+(email.asunto||'').replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor = 'var(--green)'; modoLabel = '↩↩ Responder a todos';
+  } else {
+    // forward
+    toVal = '';
+    ccVal = '';
+    subjectVal = 'RV: '+(email.asunto||'').replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor = 'var(--orange,#f97316)'; modoLabel = '↪ Reenviar';
+  }
+
+  const ccPrev = _arr(email.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ');
+
+  area.innerHTML = `
+    <div class="reply-box" style="border:1px solid var(--border);border-radius:var(--r);background:#fff;overflow:hidden;box-shadow:var(--shadow)">
+      <div style="padding:6px 12px;background:${titleColor}18;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:11px;font-weight:700;color:${titleColor}">${modoLabel}</span>
+        <button onclick="document.getElementById('replyBoxArea').innerHTML=''" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 4px">✕</button>
+      </div>
+      <div style="border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">Para</span>
+          <input id="replyTo" value="${esc(toVal)}" placeholder="${modo==='forward'?'Destinatario…':''}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        </div>
+        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">CC</span>
+          <input id="replyCC" value="${esc(ccVal)}" placeholder="Separar con punto y coma" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        </div>
+        <div style="display:flex;align-items:center;padding:7px 12px;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">Asunto</span>
+          <input id="replySubject" value="${esc(subjectVal)}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        </div>
+      </div>
+      <div id="replyEditor" contenteditable="true" style="min-height:120px;padding:12px 14px;font-size:13px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);outline:none;line-height:1.6"></div>
+      <div style="border-top:1px solid var(--border);padding:10px 14px;background:#fafafa">
+        <div style="font-size:11px;color:var(--ink3);margin-bottom:6px;font-family:'Franklin Gothic Book',Arial,sans-serif">───────── Mensaje original ─────────</div>
+        <div style="font-size:11px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;line-height:1.5">
+          <b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br>
+          <b>Enviado:</b> ${email?.sent_at ? new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : ''}<br>
+          <b>Para:</b> ${esc(_arr(email?.to_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br>
+          <b>CC:</b> ${esc(_arr(email?.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br>
+          <b>Asunto:</b> ${esc(email?.asunto||'')}
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;max-height:180px;overflow-y:auto;border-left:3px solid var(--border);padding-left:10px">${email?.body_content||email?.raw?.body_preview||''}</div>
+      </div>
+      <!-- Adjuntos -->
+      <div id="replyAttachZone" style="padding:8px 12px;background:var(--bg2);border-top:1px solid var(--border);transition:background .15s"
+           ondragover="event.preventDefault();this.style.background='#EFF6FF'"
+           ondragleave="this.style.background='var(--bg2)'"
+           ondrop="event.preventDefault();this.style.background='var(--bg2)';_attachAdd(event.dataTransfer.files)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <label for="replyFiles" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;font-weight:700;color:var(--ink3);padding:4px 10px;border:1.5px solid var(--border);border-radius:6px;background:#fff">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            Adjuntar
+          </label>
+          <span style="font-size:10px;color:var(--ink3)">o arrastra · máx. ${ATTACH_MAX_FILE_MB} MB/archivo · ${ATTACH_MAX_TOTAL_MB} MB total</span>
+        </div>
+        <input type="file" id="replyFiles" multiple style="display:none" accept="*/*">
+        <div id="replyFilesPreview" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+        <div id="replyAttachTotal"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:var(--bg)">
+        <button class="btn btn-ghost" onclick="document.getElementById('replyBoxArea').innerHTML=''">Cancelar</button>
+        <button class="btn btn-primary" onclick="sendReply()" style="background:${titleColor};border-color:${titleColor}">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          ${modo==='forward'?'Reenviar':'Enviar'}
+        </button>
+      </div>
+    </div>`;
+  _attachedFiles.clear(); _attachRender();
+  document.getElementById('replyFiles').addEventListener('change', function() {
+    _attachAdd(this.files); this.value='';
+  });
+  document.getElementById('replyEditor').focus();
+  // Activar autocompletado en campos Para y CC
+  // Activar autocompletado (sin delay — los inputs ya existen en el DOM)
+  _acInit(document.getElementById('replyTo'));
+  _acInit(document.getElementById('replyCC'));
+}
+
+async function sendReply() {
+  const id = state.selectedId;
+  const email = state.emails.find(e=>e.id===id);
+  const toInput = document.getElementById('replyTo')?.value?.trim();
+  const ccInput = document.getElementById('replyCC')?.value?.trim();
+  const subject = document.getElementById('replySubject')?.value?.trim();
+  const editor = document.getElementById('replyEditor');
+  const body = editor?.innerHTML?.trim();
+  if(!body || body==='<br>') { showToast('Escribe un mensaje','info'); return; }
+  if(!toInput) { showToast('Escribe un destinatario','info'); return; }
+
+  const hiloHTML=`<br><br><div style="border-left:3px solid #ccc;padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px"><b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br><b>Enviado:</b> ${email?.sent_at?new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}):''}<br><b>Para:</b> ${esc(_arr(email?.to_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br><b>CC:</b> ${esc(_arr(email?.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br><b>Asunto:</b> ${esc(email?.asunto||'')}<br><br>${email?.body_content||''}</div>`;
+
+  const inlineFiles=[], largeFiles=[];
+  _attachedFiles.forEach(({file,id:fid})=>{
+    if(file.size<=ATTACH_INLINE_MB*1024*1024) inlineFiles.push({file,id:fid});
+    else largeFiles.push({file,id:fid});
+  });
+
+  const sendBtn = document.querySelector('#replyBoxArea .btn-primary');
+  if(sendBtn){sendBtn.disabled=true;sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Enviando…';}
+
+  try {
+    const token = await getGraphToken();
+    const userId = window.GRAPH_USER_ID||'';
+    const attachments = [];
+    for(const {file} of inlineFiles){
+      const base64=await _fileToBase64(file);
+      attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:base64});
+    }
+    const messagePayload = {
+      subject: subject||('RE: '+email.asunto),
+      body:{contentType:'HTML',content:`<div style="font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px">${body}${hiloHTML}</div>`},
+      toRecipients:[{emailAddress:{address:toInput}}],
+    };
+    if(ccInput) messagePayload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+    if(attachments.length>0) messagePayload.attachments=attachments;
+
+    const r = largeFiles.length>0
+      ? await _buildAndSendMailWithLargeAttachments(token,userId,messagePayload,largeFiles)
+      : await _buildAndSendMail(token,userId,messagePayload);
+
+    const totalAdj=_attachedFiles.size;
+    if(r.ok||r.status===202||r.status===200){
+      const adjInfo=totalAdj>0?` (${totalAdj} adjunto${totalAdj>1?'s':''})` :'';
+      showToast('Respuesta enviada ✓'+adjInfo,'success');
+      const todosLosArchivos=[...inlineFiles,...largeFiles];
+      if(todosLosArchivos.length>0){
+        const _rawAgId3=sessionStorage.getItem('pqr_agent_id')||'';
+        const agentId=(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).test(_rawAgId3)?_rawAgId3:null;
+        _guardarAdjuntosEnStorage(id,todosLosArchivos,agentId)
+          .then(res=>{const f=res.filter(r=>!r.ok);if(f.length)console.warn('[adjuntos-storage] Sin guardar:',f.map(x=>x.nombre).join(', '));})
+          .catch(err=>console.warn('[adjuntos-storage]',err.message));
+      }
+      await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,100)});
+      _attachedFiles.clear();
+      document.getElementById('replyBoxArea').innerHTML='';
+    } else throw new Error(await r.text());
+  } catch(e){
+    showToast('Error al enviar: '+e.message.substring(0,80),'error');
+    if(sendBtn){sendBtn.disabled=false;sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar';}
+  }
+}
+
+// ──────────────────────────────────────────────
+// DRAG & DROP (tickets → agentes)
+// ──────────────────────────────────────────────
+let _dragEmailId = null;
+function onDragStart(e, emailId) {
+  _dragEmailId = emailId;
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+// ──────────────────────────────────────────────
+// AGENTS CONFIG
+// ──────────────────────────────────────────────
+const COLORS = ['#2563eb','#16a34a','#ea580c','#7c3aed','#ca8a04','#dc2626'];
+
+function openCreateAgent() {
+  state.editingAgentId = null;
+  document.getElementById('modalAgentTitle').textContent = 'Nuevo agente';
+  document.getElementById('agentName').value='';
+  document.getElementById('agentEmail').value='';
+  document.getElementById('agentPin').value='';
+  document.getElementById('modalAgent').classList.add('show');
+}
+
+async function saveAgent() {
+  const nombre = document.getElementById('agentName').value.trim();
+  const email = document.getElementById('agentEmail').value.trim();
+  const pin = document.getElementById('agentPin').value.trim();
+  if(!nombre||pin.length!==4||isNaN(pin)) { showToast('Completa todos los campos correctamente','error'); return; }
+  try {
+    if(state.editingAgentId) {
+      await sb(`agentes?id=eq.${state.editingAgentId}`, 'PATCH', {nombre,email,pin});
+      showToast('Agente actualizado ✓','success');
+    } else {
+      await sb('agentes','POST',{nombre,email,pin,activo:true,creado_en:new Date().toISOString()});
+      showToast('Agente creado ✓','success');
+    }
+    closeModal('modalAgent');
+    await loadAgents();
+    renderConfig();
+  } catch(e) { showToast('Error: '+e.message.substring(0,60),'error'); }
+}
+
+async function toggleAgentStatus(id, active) {
+  await sb(`agentes?id=eq.${id}`, 'PATCH', {activo:active});
+  showToast(active?'Agente activado':'Agente desactivado','info');
+  await loadAgents();
+  renderConfig();
+}
+
+function editAgent(id) {
+  const agent = state.agents.find(a=>a.id===id);
+  if(!agent) return;
+  state.editingAgentId = id;
+  document.getElementById('modalAgentTitle').textContent = 'Editar agente';
+  document.getElementById('agentName').value = agent.nombre||'';
+  document.getElementById('agentEmail').value = agent.email||'';
+  document.getElementById('agentPin').value = agent.pin||'';
+  document.getElementById('modalAgent').classList.add('show');
+}
+
+// ──────────────────────────────────────────────
+// CONFIG RENDER
+// ──────────────────────────────────────────────
+function renderConfig() {
+  const activos = state.agents.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
+  const inactivos = state.agents.filter(a=>!(a.activo===true||a.activo===1||a.activo==='true'));
+
+  const renderAgentCard = (a,i,isActive) => {
+    const ini=(a.nombre||'?').charAt(0).toUpperCase();
+    return `<div class="agent-row-config"
+      ondragover="event.preventDefault();this.classList.add('drag-over')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="onDropToAgent(event,'${a.id}','${esc(a.nombre||'')}')">
+      <div class="arc-av" style="background:${COLORS[i%COLORS.length]}">${ini}</div>
+      <div class="arc-info">
+        <div class="arc-name">${esc(a.nombre)}</div>
+        <div class="arc-email">${esc(a.email||'—')}</div>
+      </div>
+      <span class="arc-status ${isActive?'active':'inactive'}">${isActive?'● Activo':'Inactivo'}</span>
+      <div class="arc-actions">
+        <button class="arc-btn" onclick="editAgent('${a.id}')">Editar</button>
+        <button class="arc-btn ${isActive?'':'restore'}" onclick="toggleAgentStatus('${a.id}',${!isActive})">
+          ${isActive?'Desactivar':'Restaurar'}
+        </button>
+      </div>
+    </div>`;
+  };
+
+  document.getElementById('configAgentList').innerHTML = activos.length ?
+    activos.map((a,i)=>renderAgentCard(a,i,true)).join('') :
+    '<p style="font-size:12px;color:var(--ink3)">No hay agentes activos</p>';
+
+  document.getElementById('configAgentListInactive').innerHTML = inactivos.length ?
+    inactivos.map((a,i)=>renderAgentCard(a,activos.length+i,false)).join('') :
+    '<p style="font-size:12px;color:var(--ink3)">No hay agentes inactivos</p>';
+
+  // Actions list
+  document.getElementById('actionsList').innerHTML = state.defaultActions.map((a,i)=>`
+    <div class="action-item">
+      <span>${esc(a)}</span>
+      <button class="action-remove" onclick="removeAction(${i})">✕</button>
+    </div>`).join('');
+}
+
+function removeAction(idx) {
+  state.defaultActions.splice(idx,1);
+  renderConfig();
+}
+
+function addAction() {
+  const inp = document.getElementById('newActionInput');
+  const val = inp.value.trim();
+  if(!val) return;
+  state.defaultActions.push(val);
+  inp.value='';
+  renderConfig();
+}
+
+async function onDropToAgent(e, agentId, agentName) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if(!_dragEmailId) return;
+  const email = state.emails.find(em=>em.id===_dragEmailId);
+  await sb(`correos?id=eq.${_dragEmailId}`, 'PATCH', {agente_id:agentId, asignado_a:state.agents.find(a=>a.id===agentId)?.nombre||agentId, estado:'gestion'});
+  await addHistorialEvent(_dragEmailId, email, 'asignado_manual', {agente_id:agentId,agente_nombre:agentName,por:'admin (drag&drop)'});
+  showToast(`Asignado a ${agentName} ✓`,'success');
+  _dragEmailId = null;
+  await loadEmails();
+  if(state.selectedId) selectEmail(state.selectedId);
+}
+
+// ──────────────────────────────────────────────
+// SYNC
+// ──────────────────────────────────────────────
+async function syncAll() {
+  const btn  = document.getElementById('syncBtn');
+  const horas = parseInt(document.getElementById('ventanaSync')?.value || '12');
+  btn.classList.add('loading');
+  try {
+    await Promise.all([loadEmails(horas), loadAgents(), loadHistorial(), loadEncuestas()]);
+    const label = horas === 0 ? 'Hoy' : `últimas ${horas}h`;
+    document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')} · ${label}`;
+    showToast(`Datos actualizados (${label}) ✓`, 'success');
+  } catch { showToast('Error al actualizar', 'error'); }
+  finally { btn.classList.remove('loading'); }
+}
+
+// ──────────────────────────────────────────────
+// UTILS
+// ──────────────────────────────────────────────
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+function _arr(v){if(!v)return[];if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch(e){return[];}}
+
+function _parseMeta(v){if(!v)return{};if(typeof v==='object')return v;try{return JSON.parse(v);}catch(e){return{};}}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function getFileIcon(n=''){
+  const e=(n.split('.').pop()||'').toLowerCase();
+  if(['pdf'].includes(e))return '📄';
+  if(['doc','docx','odt','rtf'].includes(e))return '📝';
+  if(['xls','xlsx','csv','ods'].includes(e))return '📊';
+  if(['ppt','pptx','odp'].includes(e))return '📊';
+  if(['jpg','jpeg','png','gif','bmp','webp','svg','tiff','ico'].includes(e))return '🖼️';
+  if(['mp4','avi','mov','wmv','mkv','webm'].includes(e))return '🎬';
+  if(['mp3','wav','ogg','m4a','flac','aac'].includes(e))return '🎵';
+  if(['zip','rar','7z','tar','gz','bz2'].includes(e))return '🗜️';
+  if(['eml','msg','emlx'].includes(e))return '📧';
+  if(['txt','md','log'].includes(e))return '📃';
+  if(['js','ts','html','css','json','xml','py','java','cs','php','sql'].includes(e))return '💻';
+  if(['ics','vcf'].includes(e))return '📅';
+  return '📎';
+}
+function showToast(msg,type='info'){
+  const tc=document.getElementById('toasts'),t=document.createElement('div');
+  t.className=`toast ${type}`;t.innerHTML=`<span>${msg}</span>`;
+  tc.appendChild(t);setTimeout(()=>t.remove(),4000);
+}
+function formatDate(d, full=false) {
+  if(!d||isNaN(d)) return '—';
+  if(full) return d.toLocaleString('es-CO',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  const now=new Date(),diff=now-d;
+  if(diff<60000)return 'ahora';
+  if(diff<3600000)return Math.floor(diff/60000)+'m';
+  if(diff<86400000)return Math.floor(diff/3600000)+'h';
+  if(diff<604800000)return Math.floor(diff/86400000)+'d';
+  return d.toLocaleDateString('es-CO');
+}
+// ──────────────────────────────────────────────────────────────
+// DESCARGA EML Y HILO COMPLETO — replica funcionalidad de Outlook
+// ──────────────────────────────────────────────────────────────
+
+// ──────────────────────────────────────────────────────────────
+// MODAL PREVIEW CORREO ESTILO OUTLOOK
+// Abre desde: doble clic en lista ó clic en fila SLA
+// ──────────────────────────────────────────────────────────────
+let _mpCorreoId = null;
+
+async function abrirPreviewCorreo(id) {
+  _mpCorreoId = id;
+  const email = state.emails.find(e=>e.id===id);
+  if(!email) { showToast('Correo no encontrado','error'); return; }
+
+  // Asunto
+  document.getElementById('mpAsunto').textContent = email.asunto || '(Sin asunto)';
+
+  // Remitente + fecha
+  document.getElementById('mpRemitente').textContent =
+    (email.remitente_nombre ? email.remitente_nombre + ' ' : '') + '<' + (email.remitente||'') + '>';
+  document.getElementById('mpFecha').textContent =
+    email.sent_at ? new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : '';
+
+  // Badge estado
+  const badge = document.getElementById('mpEstadoBadge');
+  badge.innerHTML = `<span class="badge ${email.estado}">${estadoLabel(email.estado)}</span>`;
+
+  // Cuerpo
+  const bodyEl = document.getElementById('mpBody');
+  if(email.body_type==='html') {
+    bodyEl.innerHTML = `<iframe srcdoc="${esc(email.body_content||'')}" sandbox="allow-same-origin" style="width:100%;min-height:320px;border:none;border-radius:var(--r2)"></iframe>`;
+  } else {
+    bodyEl.innerHTML = `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(email.body_content||email.raw?.body_preview||'Sin contenido')}</pre>`;
+  }
+
+  // Selector de agentes
+  const sel = document.getElementById('mpSelectAgente');
+  sel.innerHTML = '<option value="">— Sin asignar —</option>' +
+    (state.agents||[]).filter(a=>a.activo!==false).map(a=>
+      `<option value="${esc(a.id)}" ${a.id===email.asignado_a?'selected':''}>${esc(a.nombre)}</option>`
+    ).join('');
+  document.getElementById('mpAsignarMsg').textContent = '';
+  document.getElementById('mpAsignarMsg').style.color = '';
+
+  // Adjuntos — siempre consultar, mostrar barra solo si hay resultados
+  const adjBar = document.getElementById('mpAdjuntosBar');
+  const adjGrid = document.getElementById('mpAdjuntosGrid');
+  adjGrid.innerHTML = '';
+  adjBar.style.display = 'none';
+  const _mpFiltrarAdjs = (lista) => lista.filter(a => {
+    const dir = a.direccion||'';
+    if(dir && dir !== 'entrante') return false;
+    const esInline = a.es_inline===true||a.isInline===true;
+    const esImagen = (a.tipo_contenido||a.contentType||'').toLowerCase().startsWith('image/');
+    // Excluir TODAS las imágenes inline — firmas embebidas en el cuerpo
+    if(esInline && esImagen) return false;
+    const nombre2 = a.nombre||a.name||'';
+    if(/^Outlook-[a-z0-9]+\./i.test(nombre2)) return false;
+    return true;
+  });
+  const _mpRenderAdjBar = (visibles) => {
+    if(!visibles.length){ adjBar.style.display='none'; return; }
+    adjBar.style.display='';
+    const totalBytes = visibles.reduce((s,a)=>s+(a.tamano_bytes||a.size||0),0);
+    const totalSize = totalBytes>=1048576?(totalBytes/1048576).toFixed(1)+' MB':Math.round(totalBytes/1024)+' KB';
+    const contador = visibles.length===1?'1 archivo adjunto':`${visibles.length} archivos adjuntos`;
+    adjGrid.innerHTML =
+      `<div style="font-size:11px;color:var(--ink3);font-weight:600;margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--border)">📎 ${contador} (${totalSize})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">` +
+      visibles.map(a=>{
+        const rawUrl = a.storage_url||a._graphUrl||'#';
+        const url = rawUrl.startsWith('https://graph.microsoft.com') ? `/adj-proxy.php?url=${encodeURIComponent(rawUrl)}` : rawUrl;
+        const nombre = a.nombre||a.name||'Archivo';
+        const tipo = a.tipo_contenido||a.contentType||'';
+        const bytes = a.tamano_bytes||a.size||0;
+        const size = bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':bytes>=1024?Math.round(bytes/1024)+' KB':bytes+' B';
+        return `<div onclick="mpPreviewAdjunto('${esc(url)}','${esc(nombre)}','${esc(tipo)}',this)"
+          style="display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;min-width:140px;max-width:210px;transition:all .15s;box-shadow:var(--shadow)"
+          onmouseover="this.style.borderColor='var(--blue)';this.style.background='var(--blue-l)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--surface)'"
+          title="${esc(nombre)}">
+          <span style="font-size:22px;flex-shrink:0">${getFileIcon(nombre)}</span>
+          <div style="min-width:0;flex:1">
+            <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--ink);font-size:11px">${esc(nombre)}</div>
+            <div style="color:var(--ink3);font-size:10px;margin-top:1px">${size}</div>
+          </div>
+        </div>`;
+      }).join('') + `</div>`;
+  };
+  (async()=>{
+    try{
+      const adjs = await sb(`adjuntos?correo_id=eq.${id}&direccion=eq.entrante&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion,es_inline`)||[];
+      const visibles = _mpFiltrarAdjs(adjs);
+      if(visibles.length){ _mpRenderAdjBar(visibles); return; }
+      // Fallback: Graph API directo
+      const emailObj = state.emails.find(e=>e.id===id);
+      const msgId = emailObj?.message_id;
+      if(!msgId) return;
+      const token = await getGraphToken();
+      if(!token) return;
+      const userId = window.GRAPH_USER_ID||'';
+      const resp = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments?$select=id,name,contentType,size,isInline`,{headers:{Authorization:'Bearer '+token}});
+      if(!resp.ok) return;
+      const data = await resp.json();
+      const graphAdjs = (data.value||[]).map(a=>({...a,_graphUrl:`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments/${a.id}/$value`}));
+      _mpRenderAdjBar(_mpFiltrarAdjs(graphAdjs));
+    }catch(e){ console.warn('[mpAdjBar]',e); }
+  })();
+
+  document.getElementById('modalCorreoPreview').classList.add('show');
+
+  // Cargar timeline en panel derecho
+  _mpLoadTimeline(id);
+}
+
+async function _mpLoadTimeline(correoId) {
+  const el = document.getElementById('mpTimeline');
+  if(!el) return;
+  el.innerHTML='<div class="empty-state"><p>Cargando…</p></div>';
+  try {
+    let evs=[];
+    try{ evs=await sb(`historial_eventos?correo_id=eq.${correoId}&order=created_at.asc`)||[]; }
+    catch{ try{ evs=await sb(`historial?correo_id=eq.${correoId}&order=fecha.asc`)||[]; }catch{} }
+    if(!evs.length){ el.innerHTML='<div class="empty-state"><p>Sin eventos</p></div>'; return; }
+    const colorMap={pendiente:'grey',recibido:'grey',asignado:'blue',asignado_manual:'blue',gestion:'yellow',en_gestion:'yellow',observacion:'orange',observacion_añadida:'orange',solucionado:'green',cerrado:'green',reabierto:'red',pendiente_firma:'purple',firma_confirmada:'purple',respondido:'purple',correo_respondido:'purple'};
+    const getC=ev=>{const k=(ev.evento||ev.accion||'').toLowerCase().replace(/[^a-z_]/g,'');for(const key of Object.keys(colorMap))if(k.includes(key))return colorMap[key];return 'grey';};
+    el.innerHTML=evs.map((ev,i)=>{
+      const color=getC(ev), fecha=ev.created_at||ev.fecha||'';
+      const accion=ev.evento||ev.accion||'Evento';
+      const meta=_parseMeta(ev.datos_extra||ev.metadata);
+      const agente=meta.agente_nombre||ev.agente_nombre||'';
+      const obs=meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
+      return `<div class="timeline-item" onclick="mpOpenTlDetail(${i})" style="cursor:pointer">
+        <div class="tl-dot color-${color}"></div>
+        <div class="tl-content">
+          <div class="tl-action">${esc(accion)}</div>
+          ${agente?`<div class="tl-agent">${esc(agente)}</div>`:''}
+          <div class="tl-date">${fecha?formatDate(new Date(fecha),true):''}</div>
+          ${obs?`<div class="tl-obs">${esc(obs.substring(0,80))}${obs.length>80?'…':''}</div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+    el._events=evs;
+  } catch(e){ el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">Error cargando historial</p></div>`; }
+}
+
+function mpOpenTlDetail(idx) {
+  const el = document.getElementById('mpTimeline');
+  const events = el?._events;
+  if(!events||!events[idx]) return;
+  const ev=events[idx], meta=_parseMeta(ev.datos_extra||ev.metadata);
+  const fecha=ev.created_at||ev.fecha||'';
+  let adjHTML='';
+  if(meta.firma_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
+  if(meta.evidencia_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Evidencia</div><div class="tl-detail-val"><a href="${esc(meta.evidencia_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--blue);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--blue-l);border-radius:6px;font-size:11px;background:var(--blue-l)">${getFileIcon(meta.evidencia_nombre||'evidencia')} ${esc(meta.evidencia_nombre||'Ver evidencia')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
+  document.getElementById('tlDetailContent').innerHTML=`
+    <button onclick="closeModal('modalTlDetail')" style="float:right;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:0">✕</button>
+    <h3>Detalle de gestión</h3>
+    <div style="margin-top:16px">
+      ${row('Fecha',fecha?new Date(fecha).toLocaleString('es-CO'):'')}
+      ${row('Acción',ev.evento||ev.accion||'')}
+      ${row('Agente',meta.agente_nombre||ev.agente_nombre||'—')}
+      ${row('Observaciones',meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'—')}
+      ${adjHTML}
+    </div>`;
+  document.getElementById('modalTlDetail').classList.add('show');
+}
+
+function mpPreviewAdjunto(url, nombre, tipo, el) {
+  if(url==='#' || !url) { showToast('URL del adjunto no disponible','error'); return; }
+  const isPDF = tipo.includes('pdf') || nombre.toLowerCase().endsWith('.pdf');
+  const isImg = tipo.startsWith('image/');
+  if(isPDF || isImg) {
+    // Abrir en ventana emergente pequeña estilo Outlook
+    const w = window.open('', '_blank', 'width=860,height=700,resizable=yes,scrollbars=yes');
+    if(isPDF) {
+      w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659}iframe{width:100%;height:100vh;border:none}</style></head><body><iframe src="${url}#toolbar=1&navpanes=0"></iframe>
+</body></html>`);
+    } else {
+      w.document.write(`<!DOCTYPE html><html><head><title>${nombre}</title><style>body{margin:0;background:#525659;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:100%;max-height:100vh;object-fit:contain}</style></head><body><img src="${url}" alt="${nombre}"></body></html>`);
+    }
+    w.document.close();
+  } else {
+    window.open(url, '_blank');
+  }
+}
+
+async function mpGuardarAgente() {
+  const id = _mpCorreoId;
+  if(!id) return;
+  const sel = document.getElementById('mpSelectAgente');
+  const agenteId = sel.value;
+  const msg = document.getElementById('mpAsignarMsg');
+  const agente = state.agents.find(a=>a.id===agenteId);
+
+  try {
+    await sb(`correos?id=eq.${id}`, 'PATCH', {
+      agente_id: agenteId||null,
+      asignado_a: agente?.nombre||null,  // nombre para display
+      estado: agenteId ? 'gestion' : 'pendiente'
+    });
+    // Actualizar estado local
+    const em = state.emails.find(e=>e.id===id);
+    if(em){ em.asignado_a = agenteId; em.estado = agenteId?'gestion':'pendiente'; }
+    msg.textContent = '✓ ' + (agente ? agente.nombre + ' asignado' : 'Asignación removida');
+    msg.style.color = 'var(--green)';
+    // Actualizar badge de estado en el modal
+    document.getElementById('mpEstadoBadge').innerHTML =
+      `<span class="badge ${em.estado}">${estadoLabel(em.estado)}</span>`;
+    renderEmailList();
+    showToast(agente ? `Asignado a ${agente.nombre} ✓` : 'Asignación removida','success');
+    // Si estamos en SLA, refrescar la tabla
+    if(document.getElementById('mtab-sla')?.classList.contains('active')) renderSLA();
+  } catch(e) {
+    msg.textContent = '⚠️ ' + e.message.substring(0,50);
+    msg.style.color = 'var(--red)';
+  }
+}
+
+function mpAbrirEnGestion() {
+  closeModal('modalCorreoPreview');
+  // Navegar a Gestión Correo y seleccionar el correo
+  const btn = document.querySelector('.topbar-nav-btn');
+  showPage('correos', btn);
+  if(_mpCorreoId) setTimeout(()=>selectEmail(_mpCorreoId), 100);
+}
+
+async function descargarHiloEML(msgs, asuntoHilo) {
+  if(!msgs||!msgs.length){ showToast('No hay mensajes en el hilo','error'); return; }
+  const userId = window.GRAPH_USER_ID || '';
+  const boundary = '----=_HiloPQR_' + Date.now();
+  const ahora = new Date().toUTCString();
+  const asuntoSeguro = (asuntoHilo||'Hilo').replace(/[\r\n]/g,'');
+  const partes = [];
+
+  // Intentar obtener token — si falla, usamos solo datos locales
+  let token = null;
+  try { token = await getGraphToken(); } catch(e) {}
+
+  showToast(`Preparando hilo (${msgs.length} mensajes)…`,'info');
+
+  for(let i=0; i<msgs.length; i++) {
+    const m = msgs[i];
+    let raw = null;
+
+    // Intentar Graph API si tenemos token
+    if(token && m.id) {
+      try {
+        const r = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${userId}/messages/${m.id}/$value`,
+          { headers:{'Authorization':'Bearer '+token} }
+        );
+        if(r.ok) raw = await r.text();
+      } catch(e) {}
+    }
+
+    // Fallback: construir MIME con datos locales del mensaje
+    if(!raw) {
+      const de     = m.from?.emailAddress?.address || 'desconocido@tododrogas.com.co';
+      const deNom  = m.from?.emailAddress?.name || de;
+      const para   = (m.toRecipients||[]).map(r=>r.emailAddress?.address||'').join(', ') || userId;
+      const fecha  = m.receivedDateTime||m.sentDateTime||new Date().toISOString();
+      const asunto = m.subject || '(Sin asunto)';
+      // Buscar cuerpo completo en state si es el correo principal
+      const emailLocal = (typeof state!=='undefined' && state.emails)
+        ? state.emails.find(e => e.message_id === m.id)
+        : null;
+      const cuerpo = emailLocal?.body_content || m.bodyPreview || '(Sin contenido disponible)';
+      const esCuerpoHTML = emailLocal?.body_type === 'html';
+      const fechaUTC = new Date(fecha).toUTCString();
+
+      if(esCuerpoHTML) {
+        const innerBoundary = '----=_Parte_' + i + '_' + Date.now();
+        raw  = `From: ${deNom} <${de}>\r\n`;
+        raw += `To: ${para}\r\n`;
+        raw += `Subject: ${asunto}\r\n`;
+        raw += `Date: ${fechaUTC}\r\n`;
+        raw += `MIME-Version: 1.0\r\n`;
+        raw += `Content-Type: multipart/alternative; boundary="${innerBoundary}"\r\n\r\n`;
+        raw += `--${innerBoundary}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n`;
+        raw += (m.bodyPreview||'').replace(/\r?\n/g,'\r\n') + '\r\n';
+        raw += `--${innerBoundary}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n`;
+        raw += cuerpo + '\r\n';
+        raw += `--${innerBoundary}--\r\n`;
+      } else {
+        raw  = `From: ${deNom} <${de}>\r\n`;
+        raw += `To: ${para}\r\n`;
+        raw += `Subject: ${asunto}\r\n`;
+        raw += `Date: ${fechaUTC}\r\n`;
+        raw += `MIME-Version: 1.0\r\n`;
+        raw += `Content-Type: text/plain; charset=utf-8\r\n\r\n`;
+        raw += cuerpo.replace(/\r?\n/g,'\r\n') + '\r\n';
+      }
+    }
+
+    partes.push(raw);
+  }
+
+  let eml = '';
+  eml += `From: PQR Tododrogas <noreply@tododrogas.com.co>\r\n`;
+  eml += `Subject: [Hilo] ${asuntoSeguro} (${msgs.length} mensaje${msgs.length>1?'s':''})\r\n`;
+  eml += `Date: ${ahora}\r\nMIME-Version: 1.0\r\n`;
+  eml += `Content-Type: multipart/digest; boundary="${boundary}"\r\n\r\n`;
+  partes.forEach(raw => {
+    eml += `--${boundary}\r\nContent-Type: message/rfc822\r\n\r\n${raw}\r\n`;
+  });
+  eml += `--${boundary}--\r\n`;
+
+  const fileName = ('[Hilo] '+(asuntoHilo||'conversacion')).replace(/[\/\\:*?"<>|]/g,'_').substring(0,80)+'.eml';
+  const blob = new Blob([eml],{type:'message/rfc822'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=fileName;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },2000);
+  showToast(`Hilo descargado: ${msgs.length} mensaje${msgs.length>1?'s':''} ✓`,'success');
+}
+
+
+// ──────────────────────────────────────────────────────────────
+// AUTOCOMPLETADO CONTACTOS — estilo Outlook
+// ──────────────────────────────────────────────────────────────
+let _acCache = null;
+
+async function _acCargar() {
+  if(_acCache) return _acCache;
+  try {
+    _acCache = await sb('contactos_frecuentes?bloqueado=eq.false&order=nombre.asc&limit=1000') || [];
+  } catch(e) { _acCache = []; }
+  return _acCache;
+}
+
+function _acNorm(s) {
+  return (s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+async function _acBuscar(q) {
+  const all = await _acCargar();
+  if(!q || q.length < 1) {
+    // Sin query: mostrar los 6 más frecuentes
+    return all.slice(0,6);
+  }
+  const n = _acNorm(q);
+  return all.filter(c =>
+    _acNorm(c.nombre).includes(n) ||
+    _acNorm(c.email).includes(n)  ||
+    _acNorm(c.telefono||'').includes(n)
+  ).slice(0,8);
+}
+
+function _acHL(txt, q) {
+  if(!q) return txt;
+  const nt = _acNorm(txt), nq = _acNorm(q);
+  const i = nt.indexOf(nq);
+  if(i < 0) return txt;
+  return txt.slice(0,i)
+    + '<mark style="background:#dbeafe;color:#1d4ed8;border-radius:2px;padding:0 2px">'
+    + txt.slice(i, i+q.length)
+    + '</mark>'
+    + txt.slice(i+q.length);
+}
+
+const _AC_COLORS = ['#3B82F6','#10B981','#8B5CF6','#F59E0B','#EF4444','#06B6D4','#EC4899','#14B8A6'];
+
+function _acGetDD() {
+  let dd = document.getElementById('ac-dropdown-global');
+  if(!dd) {
+    dd = document.createElement('div');
+    dd.id = 'ac-dropdown-global';
+    dd.style.cssText = [
+      'position:fixed','z-index:99999',
+      'background:var(--surface,#fff)',
+      'border:1px solid var(--border,#e2e8f0)',
+      'border-radius:10px',
+      'box-shadow:0 8px 32px rgba(0,0,0,.18)',
+      'min-width:300px','max-width:460px','max-height:280px',
+      'overflow-y:auto','display:none',
+      'font-family:Poppins,sans-serif'
+    ].join(';');
+    document.body.appendChild(dd);
+  }
+  return dd;
+}
+
+function _acPos(inp) {
+  const dd = _acGetDD();
+  const r  = inp.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - r.bottom;
+  const spaceAbove = r.top;
+  const h = Math.min(280, dd.scrollHeight || 200);
+  if(spaceBelow >= h || spaceBelow >= spaceAbove) {
+    dd.style.top  = (r.bottom + 2) + 'px';
+  } else {
+    dd.style.top  = (r.top - h - 2) + 'px';
+  }
+  dd.style.left  = r.left + 'px';
+  dd.style.width = Math.max(r.width, 300) + 'px';
+}
+
+function _acShow(inp, resultados, query) {
+  const dd = _acGetDD();
+  if(!resultados.length) { dd.style.display='none'; return; }
+  dd.innerHTML = resultados.map((c,i) => {
+    const ini = (c.nombre||'?')[0].toUpperCase();
+    const col = _AC_COLORS[i % _AC_COLORS.length];
+    const aliasCount = (c.aliases||[]).length;
+    return `<div class="_ac-item" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border,#f1f5f9)"
+      onmousedown="event.preventDefault()"
+      onclick="_acSelect(this)"
+      data-email="${c.email.replace(/"/g,'&quot;')}"
+      data-nombre="${(c.nombre||'').replace(/"/g,'&quot;')}"
+      onmouseenter="this.style.background='var(--blue-l,#eff6ff)'"
+      onmouseleave="this.style.background=''">
+      <div style="width:30px;height:30px;border-radius:50%;background:${col};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">${ini}</div>
+      <div style="min-width:0;flex:1">
+        <div style="font-size:12px;font-weight:700;color:var(--ink,#1e293b);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_acHL(c.nombre||'',query)}</div>
+        <div style="font-size:10px;color:var(--ink3,#94a3b8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_acHL(c.email,query)}${aliasCount?' <span style="opacity:.6">+'+aliasCount+' alias</span>':''}</div>
+        ${c.telefono?`<div style="font-size:10px;color:#3B82F6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.telefono}</div>`:''}
+      </div>
+      ${c.frecuencia>0?`<div style="font-size:9px;color:var(--ink3,#94a3b8);flex-shrink:0">×${c.frecuencia}</div>`:''}
+    </div>`;
+  }).join('');
+  dd.style.display = 'block';
+  _acPos(inp);
+}
+
+function _acHide() {
+  const dd = document.getElementById('ac-dropdown-global');
+  if(dd) dd.style.display = 'none';
+}
+
+let _acActiveInp = null, _acTimer = null;
+
+function _acSelect(el) {
+  const inp = _acActiveInp; if(!inp) return;
+  const email = el.dataset.email;
+  const val = inp.value;
+  const semi = val.lastIndexOf(';');
+  inp.value = (semi >= 0 ? val.slice(0,semi+1)+' ' : '') + email;
+  inp.dispatchEvent(new Event('input'));
+  // Mover foco al siguiente campo vacío o al editor
+  const nextInput = inp.id==='replyTo'
+    ? document.getElementById('replyCC')
+    : document.getElementById('replyEditor');
+  if(nextInput) nextInput.focus();
+  _acHide();
+  // frecuencia no existe en esta tabla — omitido
+}
+
+function _acInit(inp) {
+  if(!inp || inp._acOk) return;
+  inp._acOk = true;
+  inp.setAttribute('autocomplete','off');
+
+  const trigger = async function(query) {
+    const res = await _acBuscar(query);
+    _acShow(inp, res, query);
+  };
+
+  inp.addEventListener('focus', async function() {
+    _acActiveInp = this;
+    const semi = this.value.lastIndexOf(';');
+    const q = (semi >= 0 ? this.value.slice(semi+1) : this.value).trim();
+    // Al hacer foco: mostrar frecuentes o buscar lo que hay
+    await trigger(q);
+  });
+
+  inp.addEventListener('input', function() {
+    _acActiveInp = this;
+    clearTimeout(_acTimer);
+    const semi = this.value.lastIndexOf(';');
+    const q = (semi >= 0 ? this.value.slice(semi+1) : this.value).trim();
+    _acTimer = setTimeout(() => trigger(q), 80);
+  });
+
+  inp.addEventListener('keydown', function(e) {
+    const dd = document.getElementById('ac-dropdown-global');
+    if(!dd || dd.style.display==='none') return;
+    const items = [...dd.querySelectorAll('._ac-item')];
+    const fi = items.findIndex(x => x.style.background && x.style.background!=='');
+    if(e.key==='ArrowDown') {
+      e.preventDefault();
+      items[fi]?.style && (items[fi].style.background='');
+      const next = items[Math.min(fi+1, items.length-1)];
+      if(next) next.style.background='var(--blue-l,#eff6ff)';
+    } else if(e.key==='ArrowUp') {
+      e.preventDefault();
+      items[fi]?.style && (items[fi].style.background='');
+      const prev = items[Math.max(fi-1, 0)];
+      if(prev) prev.style.background='var(--blue-l,#eff6ff)';
+    } else if(e.key==='Enter' || e.key==='Tab') {
+      const focused = items.find(x => x.style.background && x.style.background!=='') || items[0];
+      if(focused) { e.preventDefault(); _acSelect(focused); }
+    } else if(e.key==='Escape') {
+      _acHide();
+    }
+  });
+
+  inp.addEventListener('blur', () => setTimeout(_acHide, 180));
+}
+
+function limpiarHilo(){const a=document.getElementById('hiloArea');if(a){a.innerHTML='';a.dataset.conv='';}}
+
+async function descargarEML(messageId, asunto) {
+  if(!messageId) { showToast('No hay ID de mensaje para descargar','error'); return; }
+  const userId = window.GRAPH_USER_ID || '';
+  const fileName = (asunto||'correo').replace(/[\/\\:*?"<>|]/g,'_').substring(0,80) + '.eml';
+
+  showToast('Preparando descarga EML…','info');
+  try {
+    const token = await getGraphToken();
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${userId}/messages/${messageId}/$value`,
+      { headers:{'Authorization':'Bearer '+token} }
+    );
+    if(r.status===401) { showToast('Token expirado. Recarga la página.','error'); return; }
+    if(r.status===404) { showToast('Mensaje no encontrado en el buzón.','error'); return; }
+    if(!r.ok) throw new Error('Graph '+r.status);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(new Blob([blob],{type:'message/rfc822'}));
+    const a = document.createElement('a');
+    a.href=url; a.download=fileName;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },2000);
+    showToast('EML descargado ✓','success');
+  } catch(e) {
+    // Graph falló (503, red, etc.) → usar datos locales inmediatamente
+    _descargarEMLLocal(messageId, asunto, fileName);
+  }
+}
+
+function _descargarEMLLocal(messageId, asunto, fileName) {
+  // Construir EML con datos que ya tenemos en memoria
+  const email = (typeof state!=='undefined' && state.emails)
+    ? state.emails.find(e => e.message_id === messageId || e.id === messageId)
+    : null;
+
+  if(!email) {
+    showToast('Buzón en migración y sin datos locales disponibles. Inténtalo en 2-3 minutos.','error');
+    return;
+  }
+
+  const de     = email.remitente || 'desconocido@tododrogas.com.co';
+  const deNom  = email.remitente_nombre || de;
+  const asuntoMsg = email.asunto || asunto || '(Sin asunto)';
+  const fecha  = email.sent_at || email.fecha || new Date().toISOString();
+  const cuerpo = email.body_content || email.raw?.body_preview || '(Sin contenido)';
+  const boundary = '----=_Local_' + Date.now();
+
+  let eml = '';
+  eml += `From: ${deNom} <${de}>\r\n`;
+  eml += `Subject: ${asuntoMsg}\r\n`;
+  eml += `Date: ${new Date(fecha).toUTCString()}\r\n`;
+  eml += `MIME-Version: 1.0\r\n`;
+
+  if(email.body_type==='html') {
+    eml += `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n`;
+    eml += `--${boundary}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n`;
+    eml += (email.raw?.body_preview||'').replace(/\r?\n/g,'\r\n') + '\r\n';
+    eml += `--${boundary}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n`;
+    eml += cuerpo + '\r\n';
+    eml += `--${boundary}--\r\n`;
+  } else {
+    eml += `Content-Type: text/plain; charset=utf-8\r\n\r\n`;
+    eml += cuerpo.replace(/\r?\n/g,'\r\n') + '\r\n';
+  }
+
+  const fn = fileName || (asuntoMsg.replace(/[\/\\:*?"<>|]/g,'_').substring(0,80)+'.eml');
+  const blob = new Blob([eml],{type:'message/rfc822'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=fn;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },2000);
+  showToast('EML descargado desde datos locales ✓','success');
+}
+
+async function verHiloCompleto(conversationId, correoId) {
+  const area = document.getElementById('hiloArea');
+  if(!area) return;
+  if(area.innerHTML && area.dataset.conv === conversationId) {
+    area.innerHTML = ''; area.dataset.conv = ''; return;
+  }
+  if(!conversationId) {
+    area.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--ink3);background:var(--bg2);border-radius:var(--r2);margin-top:8px">No hay conversation_id para este correo. Los correos radicados vía formulario no tienen hilo de Exchange.</div>';
+    return;
+  }
+  area.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--ink3)">Cargando hilo…</div>';
+  area.dataset.conv = conversationId;
+  try {
+    const token = await getGraphToken();
+    const userId = window.GRAPH_USER_ID || '';
+    // CORRECCIÓN InefficientFilter: usar mailFolders/allItems en lugar de /messages
+    // No usar $orderby junto con $filter (causa error de índice en Graph API)
+    // Ordenamos en el cliente después
+    const convIdClean = conversationId.replace(/'/g, "''");
+    const url = `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/allItems/messages?$filter=conversationId eq '${convIdClean}'&$select=id,subject,from,toRecipients,receivedDateTime,sentDateTime,bodyPreview,hasAttachments,isDraft&$top=50`;
+    const r = await fetch(url, { headers: {'Authorization':'Bearer '+token} });
+    if(!r.ok) {
+      const errText = await r.text();
+      if(r.status===503) throw new Error('Buzón temporalmente en migración (503). Intenta en unos minutos.');
+      if(r.status===404) throw new Error('Buzón no encontrado. Verifica GRAPH_USER_ID.');
+      if(r.status===401) throw new Error('Token expirado. Recarga la página.');
+      throw new Error('Graph API '+r.status+': '+errText.substring(0,100));
+    }
+    const data = await r.json();
+    const msgs = (data.value||[]).sort((a,b)=>new Date(a.receivedDateTime||a.sentDateTime||0)-new Date(b.receivedDateTime||b.sentDateTime||0));
+    window._hiloMsgs = msgs;
+    window._hiloAsunto = msgs[0]?.subject||'';
+    if(!msgs.length) {
+      area.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--ink3);background:var(--bg2);border-radius:var(--r2);margin-top:8px">No se encontraron mensajes en este hilo.</div>';
+      return;
+    }
+    let rows = '';
+    msgs.forEach((m,i) => {
+      const de = m.from?.emailAddress?.address || '';
+      const deNombre = m.from?.emailAddress?.name || de;
+      const fecha = m.receivedDateTime||m.sentDateTime||'';
+      const esEnviado = de.toLowerCase().includes((window.GRAPH_USER_ID||'').split('@')[0].toLowerCase());
+      const esFocus = correoId && state.emails.find(e=>e.id===correoId&&e.message_id===m.id);
+      const subjectSafe = (m.subject||'correo').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      rows += '<div style="padding:10px 14px;border-bottom:1px solid var(--border);'+(esFocus?'background:var(--blue-l);':'')+(i===msgs.length-1?'border-bottom:none':'')+'">';
+      rows += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
+      rows += '<div style="display:flex;align-items:center;gap:8px;min-width:0">';
+      rows += '<span style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:'+(esEnviado?'var(--blue)':'var(--green)')+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff">'+esc(deNombre).charAt(0).toUpperCase()+'</span>';
+      rows += '<div style="min-width:0">';
+      rows += '<div style="font-size:11px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(deNombre)+(esEnviado?' <span style="background:var(--blue-l);color:var(--blue);font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">ENVIADO</span>':'')+'</div>';
+      rows += '<div style="font-size:10px;color:var(--ink3)">'+(fecha?new Date(fecha).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'')+' </div>';
+      rows += '</div></div>';
+      rows += '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center">';
+      rows += (m.hasAttachments?'<span style="font-size:10px;color:var(--ink3)" title="Tiene adjuntos">📎</span>':'');
+      rows += '<button data-mid="'+m.id+'" data-sub="'+encodeURIComponent(m.subject||'correo')+'" onclick="descargarEML(this.dataset.mid,decodeURIComponent(this.dataset.sub))" title="Descargar como .eml" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2);display:flex;align-items:center;gap:4px">';
+      rows += '<svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> EML</button>';
+      rows += '</div></div>';
+      rows += '<div style="margin-top:5px;font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.bodyPreview||'')+'</div>';
+      rows += '</div>';
+    });
+    area.innerHTML = '<div style="margin-top:10px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
+      +'<div style="background:var(--bg2);padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px">'
+      +'<span style="font-size:11px;font-weight:700;color:var(--ink2)">🧵 Hilo completo · '+msgs.length+' mensaje'+(msgs.length>1?'s':'')+'</span>'
+      +'<div style="display:flex;gap:6px;align-items:center">'
+      +'<button onclick="descargarHiloEML(window._hiloMsgs,window._hiloAsunto)" title="Descargar hilo completo como un solo .eml (igual que Outlook)" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2);display:flex;align-items:center;gap:4px"><svg width=\'10\' height=\'10\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2.5\' viewBox=\'0 0 24 24\'><path d=\'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\'/><polyline points=\'7 10 12 15 17 10\'/><line x1=\'12\' y1=\'15\' x2=\'12\' y2=\'3\'/></svg> ⬇ Hilo completo</button>'
+      +'<button onclick="limpiarHilo()" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px">✕</button>'
+      +'</div></div>'+rows+'</div>';
+  } catch(e) {
+    area.innerHTML = '<div style="padding:12px 14px;background:var(--red-l);border-radius:var(--r2);margin-top:8px;font-size:11px;color:var(--red)">⚠️ '+esc(e.message)+'</div>';
+  }
+}
+
+// ──────────────────────────────────────────────────────────────
+// AUTOASIGNACIÓN MASIVA EQUITATIVA
+// ──────────────────────────────────────────────────────────────
+
+function _autoAsignarEstado(estado) {
+  ['Loading','Vacio','Error','Preview','Exito'].forEach(s => {
+    const el = document.getElementById('autoAsignar'+s);
+    if(el) el.style.display = s === estado ? '' : 'none';
+  });
+}
+
+function _autoAsignarTablaHTML(distribucion) {
+  if(!distribucion.length) return '<div style="padding:10px;font-size:12px;color:var(--ink3)">Sin datos</div>';
+  return `
+    <div style="display:grid;grid-template-columns:1fr auto auto auto;font-size:11px">
+      <div style="padding:6px 12px;font-weight:700;color:var(--ink3);border-bottom:1px solid var(--border);background:var(--bg2)">Agente</div>
+      <div style="padding:6px 12px;font-weight:700;color:var(--ink3);border-bottom:1px solid var(--border);background:var(--bg2);text-align:center">Antes</div>
+      <div style="padding:6px 12px;font-weight:700;color:var(--ink3);border-bottom:1px solid var(--border);background:var(--bg2);text-align:center">Nuevos</div>
+      <div style="padding:6px 12px;font-weight:700;color:var(--ink3);border-bottom:1px solid var(--border);background:var(--bg2);text-align:center">Total</div>
+      ${distribucion.map((d,i) => `
+        <div style="padding:7px 12px;${i<distribucion.length-1?'border-bottom:1px solid var(--border);':''}">${esc(d.agente)}</div>
+        <div style="padding:7px 12px;text-align:center;color:var(--ink3);${i<distribucion.length-1?'border-bottom:1px solid var(--border);':''}">${d.casos_activos_antes||0}</div>
+        <div style="padding:7px 12px;text-align:center;font-weight:700;color:var(--blue);${i<distribucion.length-1?'border-bottom:1px solid var(--border);':''}'">+${d.tickets_nuevos}</div>
+        <div style="padding:7px 12px;text-align:center;font-weight:700;${i<distribucion.length-1?'border-bottom:1px solid var(--border);':''}">${d.casos_activos_despues}</div>
+      `).join('')}
+    </div>`;
+}
+
+// ─── AUTOASIGNACIÓN DIRECTA CONTRA SUPABASE ───────────────────
+// Sin webhook N8N — el algoritmo corre en el browser con la misma
+// conexión a Supabase que usa todo el panel. Cero dependencias externas.
+
+let _autoAsignarData = null; // guarda el resultado del preview para confirmar
+
+async function _calcularAutoAsignacion() {
+  // 1. Obtener tickets pendientes sin agente (ordenados por fecha, más antiguo primero)
+  const tickets = await sb('correos?estado=eq.pendiente&agente_id=is.null&select=id,ticket_id,subject,received_at,agente_id&order=received_at.asc&limit=200') || [];
+  if(!tickets.length) return { total: 0, asignaciones: [], distribucion: [] };
+
+  // 2. Carga real desde correos activos (no casos_activos estático)
+  const agentesRaw = await sb('agentes?activo=eq.true&select=id,nombre,email&order=nombre.asc') || [];
+  if(!agentesRaw.length) throw new Error('No hay agentes activos en el sistema.');
+  const correosActivos = await sb("correos?estado=in.(pendiente,gestion,pendiente_firma)&agente_id=not.is.null&select=agente_id") || [];
+  const cargaMap = {};
+  agentesRaw.forEach(a => cargaMap[a.id] = 0);
+  correosActivos.forEach(c => { if(cargaMap[c.agente_id]!==undefined) cargaMap[c.agente_id]++; });
+  const agentes = agentesRaw.map(a => ({ ...a, carga_actual: cargaMap[a.id] || 0 }))
+    .sort((a,b) => a.carga_actual - b.carga_actual);
+
+  // 3. Algoritmo round-robin ponderado
+  const cargaExtra = {};
+  agentes.forEach(a => cargaExtra[a.id] = 0);
+  const asignaciones = [];
+
+  for (const ticket of tickets) {
+    // Ordenar por carga total (actual + lo que ya se asignó en este batch)
+    agentes.sort((a, b) => {
+      const ca = a.carga_actual + cargaExtra[a.id];
+      const cb = b.carga_actual + cargaExtra[b.id];
+      return ca !== cb ? ca - cb : a.nombre.localeCompare(b.nombre);
+    });
+    const ag = agentes[0];
+    cargaExtra[ag.id]++;
+    asignaciones.push({
+      correo_id: ticket.id,
+      ticket_id: ticket.ticket_id || ticket.id,
+      asunto: ticket.subject || '(Sin asunto)',
+      agente_id: ag.id,
+      agente_nombre: ag.nombre,
+      carga_resultante: ag.carga_actual + cargaExtra[ag.id]
+    });
+  }
+
+  // 4. Resumen por agente
+  const distribucion = agentes
+    .filter(a => cargaExtra[a.id] > 0)
+    .map(a => ({
+      agente_id: a.id,
+      agente: a.nombre,
+      tickets_nuevos: cargaExtra[a.id],
+      casos_activos_antes: a.carga_actual,
+      casos_activos_despues: a.carga_actual + cargaExtra[a.id]
+    }));
+
+  return { total: asignaciones.length, asignaciones, distribucion };
+}
+
+async function abrirModalAutoAsignar() {
+  _autoAsignarData = null;
+  _autoAsignarEstado('Loading');
+  document.getElementById('autoAsignarError').style.display = 'none';
+  document.getElementById('modalAutoAsignar').classList.add('show');
+
+  try {
+    const data = await _calcularAutoAsignacion();
+    _autoAsignarData = data;
+
+    if(!data.total) { _autoAsignarEstado('Vacio'); return; }
+
+    document.getElementById('autoAsignarResumen').textContent =
+      `Se distribuirán ${data.total} ticket${data.total>1?'s':''} entre ${data.distribucion.length} agente${data.distribucion.length>1?'s':''}.`;
+    document.getElementById('autoAsignarTabla').innerHTML = _autoAsignarTablaHTML(data.distribucion);
+    _autoAsignarEstado('Preview');
+
+  } catch(e) {
+    document.getElementById('autoAsignarError').textContent = '⚠️ ' + e.message.substring(0,120);
+    document.getElementById('autoAsignarError').style.display = '';
+    document.getElementById('autoAsignarLoading').style.display = 'none';
+  }
+}
+
+async function confirmarAutoAsignar() {
+  if(!_autoAsignarData?.asignaciones?.length) return;
+  const btn = document.getElementById('btnConfirmarAutoAsignar');
+  btn.disabled = true;
+  btn.innerHTML = '<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Asignando…';
+
+  const { asignaciones, distribucion } = _autoAsignarData;
+  let exitosos = 0, errores = 0;
+
+  try {
+    // PATCH cada correo con su agente asignado
+    for (const asig of asignaciones) {
+      try {
+        await sb(`correos?id=eq.${asig.correo_id}`, 'PATCH', {
+          agente_id: asig.agente_id,
+          asignado_a: asig.agente_nombre,  // nombre para display
+          estado: 'gestion'
+        });
+        await addHistorialEvent(asig.correo_id, null, 'asignado_automatico', {agente_id: asig.agente_id, agente_nombre: asig.agente_nombre, por:'admin (autoasignación masiva)'});
+        exitosos++;
+      } catch { errores++; }
+    }
+
+    // PATCH carga_actual de cada agente (una vez por agente)
+    const cargaFinalPorAgente = {};
+    asignaciones.forEach(a => cargaFinalPorAgente[a.agente_id] = a.carga_resultante);
+    for (const [agenteId, carga] of Object.entries(cargaFinalPorAgente)) {
+      try { await sb(`agentes?id=eq.${agenteId}`, 'PATCH', { casos_activos: carga }); }
+      catch { /* no crítico */ }
+    }
+
+    document.getElementById('autoAsignarExitoMsg').textContent =
+      `${exitosos} ticket${exitosos>1?'s':''} asignados${errores>0?' ('+errores+' con error)':''}`;
+    document.getElementById('autoAsignarExitoTabla').innerHTML = _autoAsignarTablaHTML(distribucion);
+    _autoAsignarEstado('Exito');
+    showToast(`${exitosos} tickets asignados ✓`, 'success');
+    // Recargar estado local sin cerrar el modal
+    await loadEmails();
+
+  } catch(e) {
+    showToast('Error: ' + e.message.substring(0,60), 'error');
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg> Confirmar y asignar';
+  }
+}
+
+
+async function loadTopbarLogo() {
+  const FALLBACK = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
+  const img = document.getElementById('topbarLogo');
+  if (!img) return;
+  img.src = FALLBACK;
+  img.style.display = 'block';
+  img.onerror = () => { img.style.display = 'none'; };
+  try {
+    const cfg = await sb('configuracion_sistema?id=eq.main&select=data');
+    const logoUrl = cfg?.[0]?.data?.logo || '';
+    if (logoUrl && logoUrl !== FALLBACK) {
+      const t = new Image();
+      t.onload = () => { img.src = logoUrl; };
+      t.src = logoUrl;
+    }
+  } catch(e) {}
+}
+// ── SYNC V3 — Iniciar / Nuevo Ciclo ──────────────────────────────────
+const SYNC_PHP = '/sincronizar-correos.php';
+const ADMIN_TOKEN_V3 = window.ADMIN_PASS || '';
+
+async function cargarEstadoSync() {
+  const badge   = document.getElementById('sync-estado-badge');
+  const btnInic = document.getElementById('btn-iniciar-sync');
+  const btnCiclo= document.getElementById('btn-nuevo-ciclo');
+  if (!badge || !btnInic || !btnCiclo) return;
+
+  try {
+    const r = await fetch(`${SYNC_PHP}?accion=estado&token=${ADMIN_TOKEN_V3}`);
+    if (!r.ok) {
+      // PHP no disponible — mostrar iniciar por defecto
+      btnInic.style.display  = 'inline-flex';
+      btnCiclo.style.display = 'none';
+      badge.style.display    = 'none';
+      return;
+    }
+    const d = await r.json();
+    const sync = d.sync || {};
+
+    if (sync.activo) {
+      badge.style.display    = 'inline-flex';
+      btnInic.style.display  = 'none';
+      btnCiclo.style.display = 'inline-flex';
+      if (sync.ciclo_inicio) state.ciclo_inicio = sync.ciclo_inicio;
+      if (sync.ultimo_sync) {
+        const ls = document.getElementById('lastSync');
+        if (ls) ls.textContent = 'Sync: ' + new Date(sync.ultimo_sync).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+      }
+    } else {
+      badge.style.display    = 'none';
+      btnInic.style.display  = 'inline-flex';
+      btnCiclo.style.display = 'none';
+    }
+  } catch(e) {
+    // Error de red — mostrar iniciar por defecto
+    btnInic.style.display  = 'inline-flex';
+    btnCiclo.style.display = 'none';
+    badge.style.display    = 'none';
+  }
+}
+
+async function iniciarSync() {
+  if (!confirm('¿Activar sincronización desde este momento?\n\nSolo se sincronizarán correos a partir de ahora.')) return;
+  const btn = document.getElementById('btn-iniciar-sync');
+  btn.disabled = true; btn.textContent = '⏳ Iniciando…';
+  try {
+    const r = await fetch(`${SYNC_PHP}?accion=iniciar&token=${ADMIN_TOKEN_V3}`);
+    const d = await r.json();
+    if (d.ok) {
+      showToast('✅ Sincronización iniciada. El cron comenzará a traer correos cada minuto.', 'success');
+      await cargarEstadoSync();
+    } else {
+      showToast('❌ Error al iniciar: ' + (d.motivo || 'desconocido'), 'error');
+    }
+  } catch(e) {
+    showToast('❌ Error de conexión al iniciar sync', 'error');
+  }
+  btn.disabled = false; btn.textContent = '▶ Iniciar sync';
+}
+
+async function nuevoCiclo() {
+  if (!confirm(
+    '♻ NUEVO CICLO\n\n' +
+    'Esta acción:\n' +
+    '1. Genera un backup JSON completo en Supabase Storage\n' +
+    '2. Elimina todos los correos, adjuntos e historial actuales\n' +
+    '3. Reinicia el cursor de sincronización\n\n' +
+    '¿Confirmas? Esta acción NO se puede deshacer.'
+  )) return;
+
+  const btn = document.getElementById('btn-nuevo-ciclo');
+  btn.disabled = true; btn.textContent = '⏳ Procesando…';
+  showToast('⏳ Generando backup y limpiando… puede tardar 30-60 segundos.', 'info');
+
+  try {
+    const r = await fetch(`${SYNC_PHP}?accion=nuevo_ciclo&token=${ADMIN_TOKEN_V3}`, {timeout: 120000});
+    const d = await r.json();
+    if (d.ok) {
+      showToast(
+        `✅ Ciclo reiniciado. Backup: ${d.backup_path} · ${d.correos_backup} correos archivados.`,
+        'success'
+      );
+      // Recargar página para reflejar BD limpia
+      setTimeout(() => window.location.reload(), 2000);
+    } else {
+      showToast('❌ Error en nuevo ciclo: ' + (d.motivo || 'desconocido'), 'error');
+    }
+  } catch(e) {
+    showToast('❌ Timeout o error de conexión. Verifica el log del servidor.', 'error');
+  }
+  btn.disabled = false; btn.textContent = '♻ Nuevo ciclo';
+}
+
+// Cargar estado del sync al iniciar
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(cargarEstadoSync, 2000); // Esperar a que el admin cargue
+  setInterval(cargarEstadoSync, 60000); // Verificar cada minuto
+});
+
+
+function logout(){sessionStorage.clear();window.location.href='login.html';}
+async function getGraphToken(){
+  try{
+    const r=await fetch('/api-token.php',{
+      method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:`client_id=${window.AZURE_CLIENT_ID||window.CLIENT_ID||''}&client_secret=${window.AZURE_CLIENT_SECRET||window.CLIENT_SECRET||''}&tenant_id=${window.AZURE_TENANT_ID||window.TENANT_ID||''}&scope=https://graph.microsoft.com/.default&grant_type=client_credentials`
+    });
+    const text=await r.text();
+    let d;
+    try{ d=JSON.parse(text); }catch(e){ console.error('Token response no es JSON:',text.substring(0,200)); return ''; }
+    if(!d.access_token) console.error('Token response:',d);
+    return d.access_token||'';
+  }catch(e){console.error('Error obteniendo token:',e);return '';}
+}
+
+// ──────────────────────────────────────────────
+// INIT
+// ──────────────────────────────────────────────
+(async()=>{
+  // Auth check
+  if(sessionStorage.getItem('pqr_role')!=='admin') {
+    window.location.href='login.html'; return;
+  }
+  await cargarEstadoSync();
+  await Promise.all([loadEmails(), loadAgents(), loadHistorial(), loadEncuestas()]);
+  loadTopbarLogo();
+  document.getElementById('lastSync').textContent=`sync ${new Date().toLocaleTimeString('es-CO')}`;
+  // Auto-refresh
+  setInterval(()=>{ loadEmails(); loadHistorial(); loadEncuestas(); }, 90000);
+})();
+
+// ── MULTIMEDIA FORMULARIO WEB — con URL firmada para buckets privados ──
+async function getSignedStorageUrl(publicUrl) {
+  // Extrae bucket y path de una URL de Supabase Storage
+  // /storage/v1/object/public/audios/correo_id/file.webm
+  // → genera URL firmada válida por 1 hora
+  const SB_URL = window.SUPABASE_URL || '';
+  const SB_KEY = window.SUPABASE_KEY || '';
+  if (!publicUrl || !SB_URL) return publicUrl;
+  
+  // Si ya es URL firmada, devolver tal cual
+  if (publicUrl.includes('/object/sign/')) return publicUrl;
+  
+  // Extraer bucket y path
+  const m = publicUrl.match(/\/storage\/v1\/object\/(?:public\/)?([^/]+)\/(.+)$/);
+  if (!m) return publicUrl;
+  const [, bucket, path] = m;
+  
+  try {
+    const r = await fetch(`${SB_URL}/storage/v1/object/sign/${bucket}/${path}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ expiresIn: 3600 })
+    });
+    if (!r.ok) return publicUrl;
+    const d = await r.json();
+    return d.signedURL ? `${SB_URL}/storage/v1${d.signedURL}` : publicUrl;
+  } catch { return publicUrl; }
+}
+
+async function renderMediaFormulario(email) {
+  const el = document.getElementById('mediaFormulario');
+  if (!el) return;
+  const audio = email.raw?.audio_url || email.audio_url || '';
+  const canvas = email.raw?.canvas_url || email.canvas_url || '';
+  const trans  = email.raw?.transcripcion || email.transcripcion || '';
+
+  if (!audio && !canvas && !trans) { el.style.display = 'none'; return; }
+  el.style.display = '';
+
+  // Mostrar loading
+  el.innerHTML = `<div style="padding:12px;font-size:12px;color:var(--ink3)">⏳ Cargando adjuntos del formulario...</div>`;
+
+  // Obtener URLs firmadas para buckets privados
+  let audioUrl  = audio  ? await getSignedStorageUrl(audio)  : '';
+  let canvasUrl = canvas ? await getSignedStorageUrl(canvas) : '';
+
+  let html = `<div style="margin-bottom:14px">
+    <div style="font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+      📎 Adjuntos del formulario web
+    </div>`;
+
+  if (audioUrl) {
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        🎤 <span>Audio original</span>
+      </div>
+      <audio controls style="width:100%;height:36px;border-radius:6px;accent-color:var(--blue)">
+        <source src="${audioUrl}" type="audio/webm">
+        <source src="${audioUrl}" type="audio/mp4">
+        Tu navegador no soporta reproducción de audio.
+      </audio>
+      <div style="margin-top:6px;display:flex;gap:10px;align-items:center">
+        <a href="${audioUrl}" download target="_blank"
+          style="font-size:11px;color:var(--blue);text-decoration:none;display:inline-flex;align-items:center;gap:4px">
+          ⬇ Descargar audio
+        </a>
+      </div>
+    </div>`;
+  }
+
+  if (canvasUrl) {
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+        ✏️ <span>Lápiz inteligente</span>
+      </div>
+      <img src="${canvasUrl}" alt="Canvas"
+        style="width:100%;max-height:280px;object-fit:contain;border-radius:6px;border:1px solid var(--border);cursor:zoom-in;background:#fff"
+        onclick="window.open('${canvasUrl}','_blank','width=900,height=700,resizable=yes')"
+        onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      <div style="display:none;padding:8px;background:#fff3cd;border-radius:4px;font-size:12px;color:#856404">
+        ⚠️ No se puede mostrar la imagen. <a href="${canvasUrl}" target="_blank" style="color:var(--blue)">Abrir directamente</a>
+      </div>
+      <div style="margin-top:6px">
+        <a href="${canvasUrl}" download target="_blank"
+          style="font-size:11px;color:var(--blue);text-decoration:none">⬇ Descargar imagen</a>
+      </div>
+    </div>`;
+  }
+
+  if (trans) {
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:6px;display:flex;align-items:center;gap:6px">
+        📝 <span>Transcripción IA</span>
+        <span style="font-size:9px;background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:99px;font-weight:600">Whisper / GPT-4o Vision</span>
+      </div>
+      <div style="font-size:12px;color:var(--ink);line-height:1.7;white-space:pre-wrap;background:#fff;border-radius:4px;padding:10px 12px;border:1px solid var(--border)">${esc(trans)}</div>
+    </div>`;
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+
+// ══════════════════════════════════════════════════════
+// ENCUESTAS — carga, render y export
+// ══════════════════════════════════════════════════════
+async function loadEncuestas() {
+  try {
+    // Carga historial_eventos filtrando encuesta_recibida (lleva datos_extra completos)
+    const data = await sb('historial_eventos?evento=eq.encuesta_recibida&order=created_at.desc&limit=2000');
+    state.encuestas = (data || []).map(ev => {
+      let ex = {};
+      try { ex = typeof ev.datos_extra === 'string' ? JSON.parse(ev.datos_extra) : (ev.datos_extra || {}); } catch(_) {}
+      return {
+        id:           ev.id,
+        created_at:   ev.created_at,
+        calificacion: ex.calificacion || null,
+        comentario:   ex.comentario   || null,
+        canal:        ex.canal        || 'web',
+        datos_extra:  ex,
+      };
+    });
+    console.log('[loadEncuestas]', state.encuestas.length, 'encuestas cargadas');
+  } catch(err) {
+    console.error('[loadEncuestas]', err.message);
+    state.encuestas = [];
+  }
+}
+
+function _filtrarEncuestas() {
+  const sede    = document.getElementById('eFiltrSede')?.value    || '';
+  const dias    = parseInt(document.getElementById('eFiltrPeriodo')?.value || '30');
+  const ahora   = new Date();
+  return (state.encuestas || []).filter(e => {
+    const ex = e.datos_extra || {};
+    if (sede && ex.sede_nombre !== sede) return false;
+    if (dias > 0) {
+      const f = e.created_at ? new Date(e.created_at) : null;
+      if (!f || (ahora - f) / 86400000 > dias) return false;
+    }
+    return true;
+  });
+}
+
+function renderEncuestasTab() {
+  const enc = _filtrarEncuestas();
+
+  // KPIs
+  const total = enc.length;
+  const prom  = total ? (enc.reduce((s,e) => s + (parseFloat(e.calificacion)||0), 0) / total) : 0;
+  const mesAnt = new Date(); mesAnt.setDate(mesAnt.getDate()-30);
+  const esMes = enc.filter(e => e.created_at && new Date(e.created_at) >= mesAnt).length;
+  const sat   = total ? Math.round(enc.filter(e => (e.calificacion||0) >= 3).length / total * 100) : 0;
+
+  const set = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; };
+  set('eKpiTotal', total);
+  set('eKpiProm',  total ? prom.toFixed(1) + ' / 3' : '—');
+  set('eKpiMes',   esMes);
+  set('eKpiSat',   total ? sat + '%' : '—');
+
+  // Poblar selector de sedes
+  const sedeSelect = document.getElementById('eFiltrSede');
+  if (sedeSelect && sedeSelect.options.length <= 1) {
+    const sedes = [...new Set((state.encuestas||[]).map(e => (e.datos_extra||{}).sede_nombre).filter(Boolean))].sort();
+    sedes.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sedeSelect.appendChild(o); });
+  }
+
+  // Tabla resumen por sede
+  const bySede = {};
+  enc.forEach(e => {
+    const ex = e.datos_extra || {};
+    const k  = ex.sede_nombre || '(Sin sede)';
+    if (!bySede[k]) bySede[k] = { ciudad: ex.sede_ciudad||'', total:0, suma:0, sat:0, ultimo:'' };
+    bySede[k].total++;
+    bySede[k].suma += parseFloat(e.calificacion||0);
+    if ((e.calificacion||0) >= 3) bySede[k].sat++;
+    const f = e.created_at || '';
+    if (f > bySede[k].ultimo) bySede[k].ultimo = f;
+  });
+
+  const tbody1 = document.getElementById('eTablaSedeBody');
+  if (tbody1) {
+    if (!Object.keys(bySede).length) {
+      tbody1.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--ink3)">Sin datos para el filtro seleccionado</td></tr>';
+    } else {
+      tbody1.innerHTML = Object.entries(bySede)
+        .sort((a,b) => b[1].total - a[1].total)
+        .map(([sede, d]) => {
+          const p   = d.total ? (d.suma / d.total).toFixed(1) : '—';
+          const pct = d.total ? Math.round(d.sat / d.total * 100) + '%' : '—';
+          const col = parseFloat(p) >= 3 ? '#10b981' : parseFloat(p) >= 2 ? '#ca8a04' : '#ef4444';
+          const ult = d.ultimo ? new Date(d.ultimo).toLocaleDateString('es-CO') : '—';
+          return `<tr>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border);font-weight:600">${sede}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border);color:var(--ink3)">${d.ciudad}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border);text-align:center">${d.total}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border);text-align:center;font-weight:700;color:${col}">${p}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border);text-align:center">${pct}</td>
+            <td style="padding:9px 12px;border-bottom:1px solid var(--border);color:var(--ink3)">${ult}</td>
+          </tr>`;
+        }).join('');
+    }
+  }
+
+  // Tabla detalle individual (últimas 50)
+  const tbody2 = document.getElementById('eTablaDetBody');
+  if (tbody2) {
+    const slice = enc.slice(0, 50);
+    if (!slice.length) {
+      tbody2.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--ink3)">Sin encuestas en este período</td></tr>';
+    } else {
+      const estrellas = n => '⭐'.repeat(Math.min(n,5)) + '☆'.repeat(Math.max(0,5-n));
+      tbody2.innerHTML = slice.map(e => {
+        const ex  = e.datos_extra || {};
+        const f   = e.created_at ? new Date(e.created_at).toLocaleDateString('es-CO') : '—';
+        const cal = e.calificacion || 0;
+        const col = cal >= 3 ? '#10b981' : cal >= 2 ? '#ca8a04' : '#ef4444';
+        const com = e.comentario || ex.comentario || '—';
+        return `<tr>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--border);color:var(--ink3);white-space:nowrap">${f}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px">${ex.sede_nombre||'—'}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--border);text-align:center;font-weight:700;color:${col}">${cal > 0 ? estrellas(cal) + ' ' + cal : '—'}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--border);color:var(--ink3);font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${com.replace(/"/g,'&quot;')}">${com}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--border);color:var(--ink3)">${e.canal||'web'}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+}
+
+function exportarEncuestasExcel() {
+  const enc = _filtrarEncuestas();
+  if (!enc.length) { showToast('Sin encuestas para exportar','error'); return; }
+
+  const rows = enc.map(e => {
+    const f  = e.created_at ? new Date(e.created_at) : null;
+    const ex = e.datos_extra || {};
+    return {
+      'Fecha':         f ? f.toLocaleDateString('es-CO') : '',
+      'Hora':          f ? f.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
+      'Sede':          ex.sede_nombre    || '',
+      'Ciudad':        ex.sede_ciudad    || '',
+      'Calificacion':  e.calificacion    || '',
+      'Promedio':      ex.promedio       || '',
+      'Instalaciones': ex.instalaciones  || '',
+      'Atencion':      ex.atencion       || '',
+      'Tiempos':       ex.tiempos        || '',
+      'Medicamentos':  ex.medicamentos   || '',
+      'Recomendacion': ex.recomendacion  || '',
+      'Comentario':    e.comentario || ex.comentario || '',
+      'Canal':         e.canal           || 'web',
+      'Nombre':        ex.nombre         || '',
+      'Correo':        ex.correo         || '',
+    };
+  });
+
+  const wb  = XLSX.utils.book_new();
+  const ws  = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:8},{wch:28},{wch:18},{wch:12},{wch:10},{wch:14},{wch:10},{wch:10},{wch:14},{wch:14},{wch:40},{wch:10},{wch:22},{wch:28}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Encuestas');
+
+  // Hoja resumen por sede
+  const bySede = {};
+  rows.forEach(r => {
+    const k = r['Sede'] || '(Sin sede)';
+    if (!bySede[k]) bySede[k] = { ciudad: r['Ciudad'], total:0, suma:0, sat:0 };
+    bySede[k].total++;
+    bySede[k].suma += parseFloat(r['Calificacion']||0);
+    if ((parseFloat(r['Calificacion'])||0) >= 3) bySede[k].sat++;
+  });
+  const resumen = Object.entries(bySede).map(([sede, d]) => ({
+    'Sede': sede, 'Ciudad': d.ciudad,
+    'Total_Encuestas': d.total,
+    'Promedio': d.total ? parseFloat((d.suma/d.total).toFixed(2)) : 0,
+    'Pct_Satisfechos': d.total ? Math.round(d.sat/d.total*100)+'%' : '0%',
+  }));
+  const ws2 = XLSX.utils.json_to_sheet(resumen);
+  ws2['!cols'] = [{wch:28},{wch:18},{wch:16},{wch:12},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Resumen_Sedes');
+
+  const fecha = new Date().toLocaleDateString('es-CO').replace(/\//g,'-');
+  XLSX.writeFile(wb, `Encuestas_Tododrogas_${fecha}.xlsx`);
+  showToast('Excel encuestas exportado ✓','success');
+}
+
+
+let _rrData=[],_rrCat='todas',_rrLoaded=false;
+// ══ RESPUESTAS RÁPIDAS v3 ══════════════════════════════════════════
+const RR_CATS = [
+  {id:'envio',icon:'📦',label:'Envío y Traslado'},
+  {id:'disponible',icon:'🏥',label:'Disponibilidad'},
+  {id:'formula',icon:'📋',label:'Fórmula'},
+  {id:'medicamento',icon:'💊',label:'Medicamento'},
+  {id:'glp1',icon:'🔬',label:'GLP1 / Especiales'},
+  {id:'cobertura',icon:'📍',label:'Cobertura'},
+  {id:'vencimiento',icon:'⏰',label:'Vencimientos'},
+  {id:'tiques',icon:'🎫',label:'Tiques Internos'},
+];
+const RR_PLANTILLAS = [
+  {cat:'envio',label:'Municipio no propio — envío hoy',preview:'Medicamento será enviado hoy para municipio X...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] será enviado el día de hoy para el municipio de [MUNICIPIO], para su entrega efectiva el día [FECHA] en horas de la tarde. Adjunto formato de entrega como evidencia de facturación.\n\nQuedo atenta, feliz día.'},
+  {cat:'envio',label:'Municipio no propio — solicitado a compras',preview:'Solicitado a compras, fecha estimada de llegada...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] fue solicitado al área de compras, tiene fecha de llegada para el día [FECHA LLEGADA], para su entrega efectiva el día [FECHA ENTREGA] en horas de la tarde. Adjunto formato de pendientes como evidencia de facturación.\n\nQuedo atenta, feliz día.'},
+  {cat:'envio',label:'Municipio propio — traslado programado',preview:'Medicamento en traslado para municipio X...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] será enviado el día de hoy en traslado para el municipio [MUNICIPIO], para su entrega efectiva el día [FECHA] en horas de la tarde. Adjunto formato de pendientes como evidencia de facturación.\n\nQuedo atenta, feliz día.'},
+  {cat:'envio',label:'Domicilio — envío a dirección',preview:'Medicamento enviado a domicilio...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] será enviado el día de hoy a domicilio a la dirección [DIRECCIÓN]. Inmediatamente sea entregado, el acta de entrega firmada será enviada por este mismo medio.\n\nQuedo atenta, feliz día.'},
+  {cat:'disponible',label:'Disponible en servicio farmacéutico',preview:'Medicamento ya disponible en SF de X...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] ya se encuentra disponible en el servicio farmacéutico de [SEDE] listo para ser entregado al usuario. Adjunto formato de entrega como evidencia de facturación.\n\nQuedo atenta, feliz día.'},
+  {cat:'disponible',label:'Medicamento agotado',preview:'Medicamento agotado, adjunto carta laboratorio...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] se encuentra agotado. Adjunto carta por parte del laboratorio.\n\nQuedo atenta, feliz día.'},
+  {cat:'disponible',label:'Compras — fecha estimada',preview:'Solicitado a compras, orden de compra adjunta...',texto:'Buen día,\n\nEl medicamento [MEDICAMENTO] fue solicitado al área de compras, tiene fecha estimada de llegada para el día [FECHA LLEGADA], para su entrega efectiva el día [FECHA ENTREGA] en horas de la tarde. Adjunto formato de pendiente y orden de compra.\n\nQuedo atenta, feliz día.'},
+  {cat:'disponible',label:'Preparado magistral',preview:'Solicitud preparación medicamento magistral...',texto:'Buen día,\n\nSolicito de su colaboración con la preparación del medicamento [MEDICAMENTO] para el usuario [TIPO_DOC]-[CC]-[NOMBRE PACIENTE] cantidad [CANTIDAD]. Adjunto fórmula médica, historia clínica.\n\nNota: prioridad por favor\n\nQuedo atenta, feliz tarde.'},
+  {cat:'disponible',label:'No corresponde — proveedor THE LABS',preview:'Entrega no corresponde, le corresponde a THE LABS...',texto:'Buen día,\n\nInformamos que la entrega del medicamento [MEDICAMENTO] no nos corresponde, la dispensación le corresponde al proveedor THE LABS.\n\nQuedo atenta, feliz día.'},
+  {cat:'formula',label:'Fórmula errada',preview:'Fórmula del medicamento X se encuentra errada...',texto:'Buen día,\n\nSe informa que la fórmula del medicamento [MEDICAMENTO] se encuentra errada: [DESCRIPCIÓN DEL ERROR]. Por favor corregir para su respectiva gestión.\n\nQuedo atenta, feliz día.'},
+  {cat:'formula',label:'Fórmula vencida',preview:'Fórmula vencida, adjuntar fórmula vigente...',texto:'Buen día,\n\nSe informa que la fórmula se encuentra vencida, por lo que no se puede realizar la dispensación. Por favor adjuntar fórmula vigente para su respectiva gestión.\n\nQuedo atenta, feliz día.'},
+  {cat:'formula',label:'Sin fórmula médica',preview:'No contamos con fórmula, intentamos comunicarnos...',texto:'Buen día,\n\nSe informa que no contamos con fórmula médica del usuario. Tratamos de comunicarnos al número [TELÉFONO] pero no obtuvimos respuesta. Adjunto evidencia de llamadas. Por favor compartir fórmula para su respectiva gestión.\n\nQuedo atenta, feliz día.'},
+  {cat:'medicamento',label:'No contratado con EPS',preview:'Medicamento no está en listado contratado con EPS...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] no se encuentra dentro del listado de medicamentos contratados con la EPS [EPS].\n\nQuedo atenta, feliz día.'},
+  {cat:'medicamento',label:'Pasa a cotización',preview:'Medicamento pasa a proceso de cotización...',texto:'Buen día,\n\nEl medicamento [MEDICAMENTO] pasa a proceso de cotización dado que no se encuentra dentro del listado de medicamentos contratados con la EPS.\n\nQuedo atenta, feliz día.'},
+  {cat:'medicamento',label:'Nivel 1 — ESE del municipio',preview:'Medicamento es de nivel 1, corresponde a ESE...',texto:'Buen día,\n\nSe informa que el medicamento [MEDICAMENTO] es de nivel 1, por lo tanto, le corresponde a la ESE del municipio.\n\nQuedo atenta, feliz día.'},
+  {cat:'glp1',label:'Rechazado GLP1',preview:'Se realizó estudio y fue rechazado...',texto:'Buen día,\n\nSe realizó el estudio para el medicamento [MEDICAMENTO] y este fue rechazado.\n\nQuedo atenta, feliz día.'},
+  {cat:'glp1',label:'Rechazado — hipolipemiante',preview:'Medicamento hipolipemiante, estudio rechazado...',texto:'Buen día,\n\nEl medicamento es HIPOLIPEMIANTE. Se realizó el estudio para el medicamento [MEDICAMENTO] y este fue rechazado.\n\nQuedo atenta, feliz día.'},
+  {cat:'glp1',label:'Comité autoinmune — sin nivel 1',preview:'Para comité dispensamos todos los mx contratados...',texto:'Para comité dispensamos todos los medicamentos que estén contratados, sin importar si es de nivel 1, ya que ellos no manejan nivel 1. Por favor ayúdame con la dispensa y si no tienes los medicamentos ya los envío en traslado.'},
+  {cat:'glp1',label:'Tique GLP1 — sin historial Mantis',preview:'Análisis QF medicamento GLP1 PACIENTE...',texto:'Análisis QF de medicamento GLP1 PACIENTE: [NOMBRE] CC: [CC], MEDICAMENTO: [MEDICAMENTO], TEL: [TELÉFONO]'},
+  {cat:'cobertura',label:'Sin cobertura — no puede acercarse',preview:'Sin cobertura en municipio, SF más cercano...',texto:'Buen día,\n\nEl usuario es del municipio [MUNICIPIO]. En el momento no contamos con cobertura al municipio. En comunicación con el usuario le informamos que el SF más cercano es [SF CERCANO], sin embargo indica que no puede desplazarse.\n\nQuedo atenta, feliz día.'},
+  {cat:'cobertura',label:'Ruta AUTOINMUNE — SAVIA',preview:'Usuario activo en ruta AUTOINMUNE...',texto:'Buen día,\n\nEl usuario se encuentra activo en la ruta AUTOINMUNE.\n\nQuedo atenta, feliz día.'},
+  {cat:'vencimiento',label:'Direccionamiento vencido — ampliar',preview:'Direccionamiento vencido, favor extender fecha...',texto:'Buen día,\n\nSe informa que el direccionamiento [NÚMERO] se encuentra vencido desde el [FECHA]. Por favor extender fecha para realizar la respectiva gestión.\n\nQuedo atenta, feliz día.'},
+  {cat:'tiques',label:'Autorización SAVIA-CAPITA (Don Henry)',preview:'Solicito autorización para dispensar en SAVIA-CAPITA...',texto:'Por favor solicito AUTORIZACIÓN PARA DISPENSAR EN SAVIA-CAPITA\n\nPACIENTE: [NOMBRE]\nCC: [CC]\nMEDICAMENTO: [MEDICAMENTO]\nDOSIS: [DOSIS]'},
+  {cat:'tiques',label:'Cotización DESACATO — COOSALUD',preview:'Mandar a cotizar COOSALUD EVENTO, DESACATO...',texto:'Por favor mandar a cotizar para COOSALUD EVENTO-COOSALUD [MEDICAMENTO] - solicitud OPS - [NOMBRE USUARIO] CC [CC] - DESACATO COOSALUD'},
+  {cat:'tiques',label:'Solicitud OPS — TUTELA COOSALUD',preview:'Ingresar EVENTO-COOSALUD solicitud OPS TUTELA...',texto:'Por favor ingresar a EVENTO-COOSALUD [MEDICAMENTO]\n- solicitud OPS [NOMBRE USUARIO] CC [CC] - TUTELA COOSALUD'},
+];
+
+function abrirPanelRR(){
+  const p=document.getElementById('panelRR');
+  if(!p)return;
+  p.style.visibility='visible';p.style.opacity='1';p.style.pointerEvents='auto';
+  _rrCat='todas';
+  renderRRCats();
+  renderRRLista();
+}
+function cerrarPanelRR(){const p=document.getElementById('panelRR');if(p){p.style.visibility='hidden';p.style.opacity='0';p.style.pointerEvents='none';}}
+function renderRRCats(){
+  const el=document.getElementById('rrCategorias');if(!el)return;
+  el.innerHTML='<button class="rr-cat-btn'+(_rrCat==='todas'?' active':'')+'" onclick="filtrarRR(&apos;todas&apos;)">Todas</button>'
+    +RR_CATS.map(c=>'<button class="rr-cat-btn'+(_rrCat===c.id?' active':'')+'" onclick="filtrarRR(&apos;'+c.id+'&apos;)">'+c.icon+' '+c.label+'</button>').join('');
+}
+function filtrarRR(cat){_rrCat=cat;renderRRCats();renderRRLista();}
+function renderRRLista(){
+  const el=document.getElementById('rrLista');if(!el)return;
+  const lista=_rrCat==='todas'?RR_PLANTILLAS:RR_PLANTILLAS.filter(p=>p.cat===_rrCat);
+  if(!lista.length){el.innerHTML='<div style="padding:24px;text-align:center;color:#94a3b8;font-size:12px">Sin plantillas</div>';return;}
+  let html='';
+  if(_rrCat==='todas'){
+    const grupos={};
+    lista.forEach(p=>{if(!grupos[p.cat])grupos[p.cat]=[];grupos[p.cat].push(p);});
+    Object.entries(grupos).forEach(function(entry){
+      const cat=entry[0],items=entry[1];
+      const catInfo=RR_CATS.find(c=>c.id===cat)||{icon:'📋',label:cat};
+      html+='<div style="padding:8px 14px 4px;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;background:#f8fafc;border-bottom:1px solid #f1f5f9">'+catInfo.icon+' '+catInfo.label+'</div>';
+      items.forEach(function(p){html+=rrItemHTML(p);});
+    });
+  } else {
+    lista.forEach(function(p){html+=rrItemHTML(p);});
+  }
+  el.innerHTML=html;
+}
+function rrItemHTML(p){
+  return '<div class="rr-item" onclick="usarPlantilla('+RR_PLANTILLAS.indexOf(p)+')">'
+    +'<div class="rr-item-label">'+esc(p.label)+'</div>'
+    +'<div class="rr-item-preview">'+esc(p.preview)+'</div>'
+    +'</div>';
+}
+function usarPlantilla(idx){
+  const p=RR_PLANTILLAS[idx];if(!p)return;
+  insertarTextoEnReply(p.texto);
+  cerrarPanelRR();
+}
+function insertarTextoEnReply(texto){
+  if(typeof toggleReply==='function')toggleReply('reply');
+  setTimeout(function(){
+    const ed=document.querySelector('#replyBoxArea [contenteditable]');
+    if(!ed){cerrarPanelRR();return;}
+    const html=texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/\n/g,'<br>')
+      .replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');
+    ed.innerHTML=html;ed.focus();
+    const v=ed.querySelector('span[style*="fef08a"]');
+    if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}
+  },350);
+}
+
+
+
+// ═══════════════════════════════════════════════════
+// NOVA TD — MÉTRICAS POR CANAL (3 + Global)
+// ═══════════════════════════════════════════════════
+let chartNovaTend=null, chartGlobalRad=null, chartGlobalEnc=null,
+    chartWebDist=null, chartQrDist=null;
+let novaDatos={};
+
+function initNovaFechas(){
+  const hoy=new Date(), hace30=new Date(hoy);
+  hace30.setDate(hoy.getDate()-30);
+  const fmt=d=>d.toISOString().split('T')[0];
+  const dEl=document.getElementById('novaDesde');
+  const hEl=document.getElementById('novaHasta');
+  if(dEl&&!dEl.value) dEl.value=fmt(hace30);
+  if(hEl&&!hEl.value) hEl.value=fmt(hoy);
+}
+
+async function loadNovaMetrics(){
+  document.getElementById('novaLastUpdate').textContent='Cargando...';
+  const desde=document.getElementById('novaDesde')?.value||'';
+  const hasta=document.getElementById('novaHasta')?.value||'';
+  const dISO=desde?desde+'T00:00:00-05:00':'';
+  const hISO=hasta?hasta+'T23:59:59-05:00':'';
+  const enc=s=>encodeURIComponent(s);
+
+  // Agrega filtros de fecha a una query
+  const q=(base,dateField)=>{
+    let r=base;
+    if(dISO) r+=`&${dateField}=gte.`+enc(dISO);
+    if(hISO) r+=`&${dateField}=lte.`+enc(hISO);
+    return r;
+  };
+  const qC=base=>q(base,'received_at');   // correos
+  const qE=base=>q(base,'created_at');    // encuestas
+  const qS=base=>q(base,'created_at');    // sesiones
+
+  const [
+    radWeb, radWebOld,
+    radNovaWeb, radNovaDir,
+    radQr,
+    encWeb, encWebOld,
+    encNovaWeb, encNovaDir,
+    encQr,
+    sesNovaWeb, sesNovaDir, sesNovaBv,
+  ] = await Promise.all([
+    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
+    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
+    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?origen=eq.qr&select=id,created_at,calificacion')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_web&select=id,created_at,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_bienvenida&select=id,created_at,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
+  ]);
+
+  novaDatos={
+    radWeb:[...(radWeb||[]),...(radWebOld||[])],
+    radNovaWeb:radNovaWeb||[], radNovaDir:radNovaDir||[], radQr:radQr||[],
+    encWeb:[...(encWeb||[]),...(encWebOld||[])],
+    encNovaWeb:encNovaWeb||[], encNovaDir:encNovaDir||[], encQr:encQr||[],
+    sesNovaWeb:sesNovaWeb||[], sesNovaDir:sesNovaDir||[], sesNovaBv:sesNovaBv||[],
+    desde, hasta,
+  };
+
+  renderNovaMetrics();
+  ['novaLastUpdate','novaLastUpdate2'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.textContent='Act. '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  });
+}
+
+function renderNovaMetrics(){
+  const D=novaDatos;
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+
+  // Calcular días del período para promedios
+  const d1=D.desde?new Date(D.desde):new Date(Date.now()-30*864e5);
+  const d2=D.hasta?new Date(D.hasta):new Date();
+  const dias=Math.max(1,Math.round((d2-d1)/864e5)+1);
+
+  // ── 1. WEB ──────────────────────────────────────────────────
+  const wTotal=D.radWeb.length+D.encWeb.length;
+  set('wKpiRad',   D.radWeb.length);
+  set('wKpiEnc',   D.encWeb.length);
+  set('wKpiTotal', wTotal);
+  set('wKpiProm',  (wTotal/dias).toFixed(1));
+
+  // Mini chart Web
+  if(chartWebDist) chartWebDist.destroy();
+  const cW=document.getElementById('chartWebDist');
+  if(cW) chartWebDist=new Chart(cW.getContext('2d'),{
+    type:'bar',
+    data:{labels:['Radicados','Encuestas'],
+      datasets:[{data:[D.radWeb.length,D.encWeb.length],
+        backgroundColor:['rgba(37,99,235,.2)','rgba(124,58,237,.2)'],
+        borderColor:['#2563eb','#7c3aed'],borderWidth:2,borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},x:{ticks:{font:{size:11,weight:'bold'}}}}}
+  });
+
+  // ── 2. QR ───────────────────────────────────────────────────
+  const qrTotal=D.radQr.length+D.encQr.length;
+  const gTotal=(D.radWeb.length+D.radNovaWeb.length+D.radNovaDir.length+D.radQr.length)
+              +(D.encWeb.length+D.encNovaWeb.length+D.encNovaDir.length+D.encQr.length);
+  const pctQr=gTotal>0?Math.round(qrTotal/gTotal*100):0;
+  set('qrKpiRad',   D.radQr.length);
+  set('qrKpiEnc',   D.encQr.length);
+  set('qrKpiTotal', qrTotal);
+  set('qrKpiPct',   pctQr+'%');
+  set('qrKpiProm',  (qrTotal/dias).toFixed(1));
+
+  if(chartQrDist) chartQrDist.destroy();
+  const cQ=document.getElementById('chartQrDist');
+  if(cQ) chartQrDist=new Chart(cQ.getContext('2d'),{
+    type:'bar',
+    data:{labels:['Radicados','Encuestas'],
+      datasets:[{data:[D.radQr.length,D.encQr.length],
+        backgroundColor:['rgba(245,158,11,.2)','rgba(202,138,4,.2)'],
+        borderColor:['#f59e0b','#ca8a04'],borderWidth:2,borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},x:{ticks:{font:{size:11,weight:'bold'}}}}}
+  });
+
+  // ── 3. NOVA TD ──────────────────────────────────────────────
+  const allSes=[...D.sesNovaWeb,...D.sesNovaDir,...(D.sesNovaBv||[])];
+  const allRadNova=D.radNovaWeb.length+D.radNovaDir.length;
+  const allEncNova=D.encNovaWeb.length+D.encNovaDir.length;
+  const autogest=allSes.filter(s=>!s.motivo_cierre||s.motivo_cierre==='inactividad').length;
+  const tasaAuto=allSes.length>0?Math.round(autogest/allSes.length*100):0;
+  const avgT=allSes.length>0?(allSes.reduce((a,s)=>a+(s.turnos||0),0)/allSes.length).toFixed(1):'0';
+
+  set('ntKpiSes',    allSes.length);
+  set('ntKpiRad',    allRadNova);
+  set('ntKpiEnc',    allEncNova);
+  set('ntKpiAuto',   tasaAuto+'%');
+  set('ntKpiTurnos', avgT);
+
+  // ── NUEVAS MÉTRICAS ──────────────────────────────────────
+  const set2=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+
+  // Calificación
+  const calSes=allSes.filter(s=>s.calificacion);
+  const calExc=calSes.filter(s=>s.calificacion==='excelente').length;
+  const calBue=calSes.filter(s=>s.calificacion==='buena').length;
+  const calMal=calSes.filter(s=>s.calificacion==='mala').length;
+  const calTotal=calSes.length||1;
+  const calSat=Math.round((calExc+calBue)/calTotal*100);
+  set2('ntCalExc', calExc);
+  set2('ntCalBue', calBue);
+  set2('ntCalMal', calMal);
+  set2('ntCalSat', calSat+'%');
+  const eb=document.getElementById('ntCalBarExc');
+  const bb=document.getElementById('ntCalBarBue');
+  const mb=document.getElementById('ntCalBarMal');
+  if(eb) eb.style.width=Math.round(calExc/calTotal*100)+'%';
+  if(bb) bb.style.width=Math.round(calBue/calTotal*100)+'%';
+  if(mb) mb.style.width=Math.round(calMal/calTotal*100)+'%';
+
+  // Menú más elegido
+  const menuCount={};
+  allSes.forEach(s=>{
+    if(s.menu_elegido) s.menu_elegido.split(',').forEach(m=>{
+      const t=m.trim();if(t) menuCount[t]=(menuCount[t]||0)+1;
+    });
+  });
+  const menuSorted=Object.entries(menuCount).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const menuMax=menuSorted[0]?.[1]||1;
+  const menuEl=document.getElementById('ntMenuList');
+  if(menuEl){
+    if(menuSorted.length){
+      menuEl.innerHTML=menuSorted.map(([k,v])=>
+        `<div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;background:#e9d5ff;border-radius:3px;height:6px;overflow:hidden">
+            <div style="background:#7c3aed;height:100%;width:${Math.round(v/menuMax*100)}%"></div>
+          </div>
+          <span style="min-width:22px;text-align:right;color:#7c3aed;font-weight:700">${v}</span>
+          <span style="color:#374151;min-width:80px">${k}</span>
+        </div>`
+      ).join('');
+    } else { menuEl.innerHTML='<div style="color:#94a3b8;font-size:11px">Sin datos aún</div>'; }
+  }
+
+  // Top municipios
+  const munCount={};
+  allSes.forEach(s=>{if(s.municipio&&s.municipio.trim()) {const m=s.municipio.trim().toUpperCase();munCount[m]=(munCount[m]||0)+1;}});
+  const munSorted=Object.entries(munCount).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const munMax=munSorted[0]?.[1]||1;
+  const munEl=document.getElementById('ntMunList');
+  if(munEl){
+    if(munSorted.length){
+      munEl.innerHTML=munSorted.map(([k,v])=>
+        `<div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;background:#dbeafe;border-radius:3px;height:6px;overflow:hidden">
+            <div style="background:#1d4ed8;height:100%;width:${Math.round(v/munMax*100)}%"></div>
+          </div>
+          <span style="min-width:22px;text-align:right;color:#1d4ed8;font-weight:700">${v}</span>
+          <span style="color:#374151;min-width:70px;font-size:11px">${k}</span>
+        </div>`
+      ).join('');
+    } else { munEl.innerHTML='<div style="color:#94a3b8;font-size:11px">Sin datos aún</div>'; }
+  }
+
+  // Tiempos y flujo
+  const sesCon=allSes.filter(s=>s.duracion_seg>0);
+  const avgDur=sesCon.length?Math.round(sesCon.reduce((a,s)=>a+(s.duracion_seg||0),0)/sesCon.length):0;
+  const durMin=Math.floor(avgDur/60), durSeg=avgDur%60;
+  const avgPreg=allSes.length?( allSes.reduce((a,s)=>a+(s.preguntas_libres||0),0)/allSes.length ).toFixed(1):'—';
+  const conMenu=allSes.filter(s=>s.consultas_count>0).length;
+  const conCal=allSes.filter(s=>s.calificacion).length;
+  const vipCount=allSes.filter(s=>s.es_vip).length;
+  set2('ntDurMed', avgDur>0?durMin+'m '+durSeg+'s':'—');
+  set2('ntPregProm', avgPreg);
+  set2('ntFunValid', allSes.length);
+  set2('ntFunMenu', conMenu+' ('+(allSes.length?Math.round(conMenu/allSes.length*100):0)+'%)');
+  set2('ntFunCal', conCal+' ('+(allSes.length?Math.round(conCal/allSes.length*100):0)+'%)');
+  set2('ntVipCount', vipCount);
+
+  // EPS más activa
+  const epsCount={};
+  allSes.forEach(s=>{if(s.eps_paciente&&s.eps_paciente.trim()){const e=s.eps_paciente.trim().toUpperCase();epsCount[e]=(epsCount[e]||0)+1;}});
+  const epsSorted=Object.entries(epsCount).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const epsMax=epsSorted[0]?.[1]||1;
+  const epsEl=document.getElementById('ntEpsList');
+  if(epsEl){
+    if(epsSorted.length){
+      epsEl.innerHTML=epsSorted.map(([k,v])=>
+        `<div style="display:flex;align-items:center;gap:6px">
+          <div style="flex:1;background:#e0f2fe;border-radius:3px;height:6px;overflow:hidden">
+            <div style="background:#0369a1;height:100%;width:${Math.round(v/epsMax*100)}%"></div>
+          </div>
+          <span style="min-width:22px;text-align:right;color:#0369a1;font-weight:700">${v}</span>
+          <span style="color:#374151;font-size:11px">${k}</span>
+        </div>`
+      ).join('');
+    } else { epsEl.innerHTML='<div style="color:#94a3b8;font-size:11px">Sin datos aún</div>'; }
+  }
+
+  // Hora de mayor uso
+  const horaCount=new Array(24).fill(0);
+  allSes.forEach(s=>{if(s.created_at){const h=new Date(s.created_at).getHours();horaCount[h]++;}});
+  const horaMax=Math.max(...horaCount)||1;
+  const horaPico=horaCount.indexOf(Math.max(...horaCount));
+  const horaEl=document.getElementById('ntHoraChart');
+  if(horaEl){
+    horaEl.innerHTML=horaCount.map((v,h)=>{
+      const pct=Math.round(v/horaMax*100);
+      const isTop=h===horaPico;
+      return `<div style="flex:1;background:${isTop?'#9333ea':'#e9d5ff'};border-radius:2px 2px 0 0;min-height:2px;height:${Math.max(2,pct*0.48)}px" title="${h}h: ${v} sesiones"></div>`;
+    }).join('');
+  }
+  set2('ntHoraPico', horaPico+'h ('+horaCount[horaPico]+' ses.)');
+
+  // Embudo de conversación
+  const embudoPasos=[
+    {label:'Ingresaron', val:allSes.length},
+    {label:'Validados',  val:allSes.length},
+    {label:'Usaron menú',val:conMenu},
+    {label:'Calificaron',val:conCal},
+  ];
+  const embudoMax=embudoPasos[0].val||1;
+  const embudoEl=document.getElementById('ntEmbudoChart');
+  const embudoLbl=document.getElementById('ntEmbudoLabels');
+  if(embudoEl){
+    const colors=['#be123c','#dc2626','#ef4444','#f87171'];
+    embudoEl.innerHTML=embudoPasos.map((p,i)=>{
+      const pct=Math.max(2,Math.round(p.val/embudoMax*100));
+      return `<div style="flex:1;background:${colors[i]};opacity:${0.4+0.15*i};border-radius:2px 2px 0 0;height:${pct*0.6}px;min-height:2px;align-self:flex-end" title="${p.label}: ${p.val}"></div>`;
+    }).join('');
+  }
+  if(embudoLbl){
+    embudoLbl.innerHTML=embudoPasos.map(p=>
+      `<span style="text-align:center"><div style="font-weight:700">${p.val}</div><div style="color:#94a3b8">${p.label}</div></span>`
+    ).join('');
+  }
+
+  // VIP
+  const vipSes=allSes.filter(s=>s.es_vip);
+  const vipCal=vipSes.filter(s=>s.calificacion==='excelente'||s.calificacion==='buena').length;
+  const vipCalPct=vipSes.length?Math.round(vipCal/vipSes.length*100):0;
+  const vipTurnos=vipSes.length?(vipSes.reduce((a,s)=>a+(s.turnos||0),0)/vipSes.length).toFixed(1):'—';
+  const vipDurSec=vipSes.filter(s=>s.duracion_seg>0);
+  const vipAvgDur=vipDurSec.length?Math.round(vipDurSec.reduce((a,s)=>a+(s.duracion_seg||0),0)/vipDurSec.length):0;
+  const vipMin=Math.floor(vipAvgDur/60), vipSeg=vipAvgDur%60;
+  set2('ntVipSes', vipSes.length);
+  set2('ntVipCal', vipCalPct+'%');
+  set2('ntVipTurnos', vipTurnos);
+  set2('ntVipDur', vipAvgDur>0?vipMin+'m '+vipSeg+'s':'—');
+  // Desglose Nova Web vs Directo
+  set('ntKpiWebSes', D.sesNovaWeb.length);
+  set('ntKpiWebRad', D.radNovaWeb.length);
+  set('ntKpiWebEnc', D.encNovaWeb.length);
+  set('ntKpiDirSes', D.sesNovaDir.length);
+  set('ntKpiBvSes', D.sesNovaBv.length);
+  set('ntKpiBvCal', D.sesNovaBv.filter(s=>s.calificacion).length);
+  set('ntKpiDirRad', D.radNovaDir.length);
+  set('ntKpiDirEnc', D.encNovaDir.length);
+
+  // Tendencia conversaciones Nova
+  const dias30=30, tLabels=[], tData=[];
+  for(let i=dias30-1;i>=0;i--){
+    const d=new Date(); d.setDate(d.getDate()-i);
+    const dk=d.toISOString().split('T')[0];
+    tLabels.push(d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'}));
+    tData.push(allSes.filter(s=>s.created_at?.startsWith(dk)).length);
+  }
+  if(chartNovaTend) chartNovaTend.destroy();
+  const cT=document.getElementById('chartNovaTend');
+  if(cT) chartNovaTend=new Chart(cT.getContext('2d'),{
+    type:'line',
+    data:{labels:tLabels,datasets:[{data:tData,borderColor:'#7c3aed',
+      backgroundColor:'rgba(124,58,237,.1)',borderWidth:2,pointRadius:2,tension:.4,fill:true}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},
+        x:{ticks:{font:{size:8},maxTicksLimit:10}}}}
+  });
+
+  // ── 4. GLOBAL ────────────────────────────────────────────────
+  const gRad=D.radWeb.length+D.radQr.length+allRadNova;
+  const gEnc=D.encWeb.length+D.encQr.length+allEncNova;
+  const pctDig=gRad>0?Math.round(allRadNova/gRad*100):0;
+  const canalesRad=[
+    {n:'🖥️ Web',v:D.radWeb.length},{n:'📷 QR',v:D.radQr.length},
+    {n:'🤖 Nova Web',v:D.radNovaWeb.length},{n:'🤖 Nova Directo',v:D.radNovaDir.length}
+  ];
+  const dom=canalesRad.slice().sort((a,b)=>b.v-a.v)[0];
+  set('gKpiRad',     gRad);
+  set('gKpiEnc',     gEnc);
+  set('gKpiDom',     dom&&dom.v>0?dom.n:'—');
+  set('gKpiDigital', pctDig+'%');
+
+  // Doughnuts globales
+  const gColors=['rgba(37,99,235,.7)','rgba(245,158,11,.7)','rgba(124,58,237,.7)','rgba(109,40,217,.7)'];
+  const gBorders=['#2563eb','#f59e0b','#7c3aed','#6d28d9'];
+  const gLabels=['Web','QR','Nova Web','Nova Directo'];
+
+  if(chartGlobalRad) chartGlobalRad.destroy();
+  const cGR=document.getElementById('chartGlobalRad');
+  if(cGR) chartGlobalRad=new Chart(cGR.getContext('2d'),{
+    type:'doughnut',
+    data:{labels:gLabels,datasets:[{
+      data:[D.radWeb.length,D.radQr.length,D.radNovaWeb.length,D.radNovaDir.length],
+      backgroundColor:gColors,borderColor:gBorders,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+      plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,.75)',font:{size:9},padding:6,boxWidth:10}}}}
+  });
+
+  if(chartGlobalEnc) chartGlobalEnc.destroy();
+  const cGE=document.getElementById('chartGlobalEnc');
+  if(cGE) chartGlobalEnc=new Chart(cGE.getContext('2d'),{
+    type:'doughnut',
+    data:{labels:gLabels,datasets:[{
+      data:[D.encWeb.length,D.encQr.length,D.encNovaWeb.length,D.encNovaDir.length],
+      backgroundColor:gColors,borderColor:gBorders,borderWidth:2}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',
+      plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,.75)',font:{size:9},padding:6,boxWidth:10}}}}
+  });
+}
+
+function exportNovaExcel(){
+  const D=novaDatos;
+  const wb=XLSX.utils.book_new();
+  const fR=arr=>(arr||[]).map(r=>({Fecha:r.received_at?new Date(r.received_at).toLocaleString('es-CO'):'',Ticket:r.ticket_id||'',Nombre:r.nombre||'',Tipo:r.tipo_pqr||''}));
+  const fE=arr=>(arr||[]).map(e=>({Fecha:e.created_at?new Date(e.created_at).toLocaleString('es-CO'):'',Calificacion:e.calificacion||''}));
+  const fS=arr=>(arr||[]).map(s=>({Fecha:s.created_at?new Date(s.created_at).toLocaleString('es-CO'):'',Turnos:s.turnos||0,Motivo:s.motivo_cierre||''}));
+
+  // Hoja Web
+  const h1=[...fR(D.radWeb).map(r=>({...r,Accion:'Radicado'})),...fE(D.encWeb).map(e=>({...e,Accion:'Encuesta'}))];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'Sin datos'}]),'🖥️ Web');
+
+  // Hoja QR
+  const h2=[...fR(D.radQr).map(r=>({...r,Accion:'Radicado'})),...fE(D.encQr).map(e=>({...e,Accion:'Encuesta'}))];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'Sin datos'}]),'📷 QR');
+
+  // Hoja Nova TD
+  const h3=[
+    ...fR(D.radNovaWeb).map(r=>({...r,Canal:'Nova Web',Accion:'Radicado'})),
+    ...fR(D.radNovaDir).map(r=>({...r,Canal:'Nova Directo',Accion:'Radicado'})),
+    ...fE(D.encNovaWeb).map(e=>({...e,Canal:'Nova Web',Accion:'Encuesta'})),
+    ...fE(D.encNovaDir).map(e=>({...e,Canal:'Nova Directo',Accion:'Encuesta'})),
+    ...fS(D.sesNovaWeb).map(s=>({...s,Canal:'Nova Web',Accion:'Sesión'})),
+    ...fS(D.sesNovaDir).map(s=>({...s,Canal:'Nova Directo',Accion:'Sesión'})),
+  ];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin datos'}]),'🤖 Nova TD');
+
+  // Hoja Global resumen
+  const h4=[
+    {Canal:'🖥️ Web',          Radicados:D.radWeb.length,   Encuestas:D.encWeb.length,   Total:D.radWeb.length+D.encWeb.length},
+    {Canal:'📷 QR',            Radicados:D.radQr.length,    Encuestas:D.encQr.length,    Total:D.radQr.length+D.encQr.length},
+    {Canal:'🤖 Nova Web',      Radicados:D.radNovaWeb.length,Encuestas:D.encNovaWeb.length,Total:D.radNovaWeb.length+D.encNovaWeb.length},
+    {Canal:'🤖 Nova Directo',  Radicados:D.radNovaDir.length,Encuestas:D.encNovaDir.length,Total:D.radNovaDir.length+D.encNovaDir.length},
+    {Canal:'TOTAL GLOBAL',
+      Radicados:D.radWeb.length+D.radQr.length+D.radNovaWeb.length+D.radNovaDir.length,
+      Encuestas:D.encWeb.length+D.encQr.length+D.encNovaWeb.length+D.encNovaDir.length,
+      Total:(D.radWeb.length+D.radQr.length+D.radNovaWeb.length+D.radNovaDir.length)+
+            (D.encWeb.length+D.encQr.length+D.encNovaWeb.length+D.encNovaDir.length)},
+  ];
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(h4),'🌐 Global');
+
+  const desde=D.desde||'inicio', hasta=D.hasta||'hoy';
+  XLSX.writeFile(wb,`Metricas_${desde}_${hasta}.xlsx`);
+}
+
+</script>
+<!-- ⚡ Panel Respuestas Rápidas v3 -->
+<style>
+.rr-cat-btn{padding:5px 10px;border:1.5px solid #e2e8f0;border-radius:99px;background:#f8fafc;font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;color:#475569;font-family:'Poppins',sans-serif}
+.rr-cat-btn:hover{border-color:#2563eb;color:#2563eb}
+.rr-cat-btn.active{background:#2563eb;border-color:#2563eb;color:#fff}
+.rr-item{padding:11px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .15s}
+.rr-item:hover{background:#f8fafc}
+.rr-item-label{font-size:13px;color:#0f172a;font-weight:600}
+.rr-item-preview{font-size:11px;color:#64748b;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
+<div id="panelRR" style="visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;right:0;width:400px;height:100vh;background:#fff;border-left:2px solid #e2e8f0;box-shadow:-8px 0 40px rgba(0,0,0,.12);z-index:9999;display:flex;flex-direction:column;transition:all .25s">
+  <div style="padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;flex-shrink:0;background:#0f172a">
+    <span style="font-size:18px">⚡</span>
+    <span style="font-weight:700;font-size:14px;color:#fff">Respuestas Rápidas</span>
+    <button onclick="cerrarPanelRR()" style="margin-left:auto;background:rgba(255,255,255,.1);border:none;cursor:pointer;font-size:16px;color:#fff;padding:4px 8px;border-radius:6px">✕</button>
+  </div>
+
+  <div style="padding:10px 12px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
+
+    <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+  </div>
+  <div id="rrLista" style="flex:1;overflow-y:auto"></div>
+</div>
+
+<script>
+// Sync all period inputs to the main novaDesde/novaHasta
+['novaDesde2','novaDesde3','novaDesde4'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el){ el.addEventListener('change',()=>{const m=document.getElementById('novaDesde');if(m)m.value=el.value;});}
+});
+['novaHasta2','novaHasta3','novaHasta4'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el){ el.addEventListener('change',()=>{const m=document.getElementById('novaHasta');if(m)m.value=el.value;});}
+});
+// Also keep secondary inputs in sync when main changes
+['novaDesde'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el){ el.addEventListener('change',()=>{ ['novaDesde2','novaDesde3','novaDesde4'].forEach(s=>{const e=document.getElementById(s);if(e)e.value=el.value;}); }); }
+});
+['novaHasta'].forEach(id=>{
+  const el=document.getElementById(id);
+  if(el){ el.addEventListener('change',()=>{ ['novaHasta2','novaHasta3','novaHasta4'].forEach(s=>{const e=document.getElementById(s);if(e)e.value=el.value;}); }); }
+});
+
+// ══════════════════════════════════════════════════
+// ASESORES — MÉTRICAS AVANZADAS
+// ══════════════════════════════════════════════════
+let _agDatos = { correos:[], eventos:[], agentes:[] };
+let chartAgSol=null, chartAgTiempo=null, chartAgGest=null;
+
+function initAgFechas(){
+  const hoy=new Date(), hace30=new Date(hoy);
+  hace30.setDate(hoy.getDate()-30);
+  const fmt=d=>d.toISOString().split('T')[0];
+  const d=document.getElementById('agDesde');
+  const h=document.getElementById('agHasta');
+  if(d&&!d.value) d.value=fmt(hace30);
+  if(h&&!h.value) h.value=fmt(hoy);
+}
+
+async function loadAgentesMetrics(){
+  const lu=document.getElementById('agLastUpdate');
+  if(lu) lu.textContent='Cargando...';
+  const desde=document.getElementById('agDesde')?.value||'';
+  const hasta=document.getElementById('agHasta')?.value||'';
+  const dISO=desde?desde+'T00:00:00-05:00':'';
+  const hISO=hasta?hasta+'T23:59:59-05:00':'';
+  const enc=s=>encodeURIComponent(s);
+
+  const qC=(base,field)=>{
+    let r=base;
+    if(dISO) r+=`&${field}=gte.`+enc(dISO);
+    if(hISO) r+=`&${field}=lte.`+enc(hISO);
+    return r;
+  };
+
+  const [correos, eventos, agentes] = await Promise.all([
+    sb(qC('correos?select=id,ticket_id,subject,from_email,nombre,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
+    sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=5000','created_at')).catch(()=>[]),
+    sb('agentes?select=id,nombre,email,activo&order=nombre.asc').catch(()=>[]),
+  ]);
+
+  _agDatos = {
+    correos: correos||[],
+    eventos: eventos||[],
+    agentes: agentes||[],
+    desde, hasta
+  };
+
+  renderAgentes();
+  if(lu) lu.textContent='Act. '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+}
+
+function renderAgentes(){
+  const { correos:E, eventos:H, agentes } = _agDatos;
+  const act = agentes.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
+
+  // ── KPIs GLOBALES ──
+  const total   = E.length;
+  const solv    = E.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
+  const backlog = E.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
+  const resol   = E.filter(e=>e.fecha_resolucion&&e.received_at);
+  const avgH    = resol.length>0
+    ? (resol.reduce((a,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return a+(h>0?h:0);},0)/resol.length).toFixed(1)+'h'
+    : '—';
+  const gestCount = H.filter(h=>h.agente_id&&!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length;
+
+  const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  setV('agKpiTotal',   total);
+  setV('agKpiSol',     solv);
+  setV('agKpiBacklog', backlog);
+  setV('agKpiTResol',  avgH);
+  setV('agKpiGest',    gestCount);
+  const autoCerrados = E.filter(e=>e.estado==='solucionado').length;
+  setV('agKpiAutoCerrado', autoCerrados);
+  setV('agTableInfo',  `${act.length} asesores activos · ${total} tickets en el período`);
+
+  // ── CHART RESUELTOS VS PENDIENTES ──
+  if(chartAgSol) chartAgSol.destroy();
+  const ctxS=document.getElementById('chartAgSol');
+  if(ctxS) chartAgSol=new Chart(ctxS.getContext('2d'),{
+    type:'bar',
+    data:{
+      labels: act.map(a=>(a.nombre||'').split(' ')[0]),
+      datasets:[
+        {label:'Resueltos', data:act.map(a=>E.filter(e=>e.agente_id===a.id&&(e.estado==='solucionado'||e.estado==='gestionado')).length),
+          backgroundColor:'#dcfce7',borderColor:'#16a34a',borderWidth:2,borderRadius:4},
+        {label:'Pendientes', data:act.map(a=>E.filter(e=>e.agente_id===a.id&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length),
+          backgroundColor:'#fef9c3',borderColor:'#ca8a04',borderWidth:2,borderRadius:4},
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:12}}},
+      scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},x:{ticks:{font:{size:10}}}}}
+  });
+
+  // ── CHART TIEMPO PROMEDIO RESOLUCIÓN ──
+  if(chartAgTiempo) chartAgTiempo.destroy();
+  const ctxT=document.getElementById('chartAgTiempo');
+  if(ctxT) chartAgTiempo=new Chart(ctxT.getContext('2d'),{
+    type:'bar',
+    data:{
+      labels: act.map(a=>(a.nombre||'').split(' ')[0]),
+      datasets:[{
+        label:'Horas promedio',
+        data: act.map(a=>{
+          const r=E.filter(e=>e.agente_id===a.id&&e.fecha_resolucion&&e.received_at);
+          if(!r.length) return 0;
+          return parseFloat((r.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/r.length).toFixed(1));
+        }),
+        backgroundColor:'#ede9fe',borderColor:'#7c3aed',borderWidth:2,borderRadius:4
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true,ticks:{font:{size:9}}},x:{ticks:{font:{size:10}}}}}
+  });
+
+  // ── CHART GESTIONES ──
+  if(chartAgGest) chartAgGest.destroy();
+  const ctxG=document.getElementById('chartAgGest');
+  if(ctxG) chartAgGest=new Chart(ctxG.getContext('2d'),{
+    type:'bar',
+    data:{
+      labels: act.map(a=>(a.nombre||'').split(' ')[0]),
+      datasets:[{
+        data: act.map(a=>H.filter(h=>h.agente_id===a.id&&!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length),
+        backgroundColor:'#e0f2fe',borderColor:'#0891b2',borderWidth:2,borderRadius:4
+      }]
+    },
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},x:{ticks:{font:{size:10}}}}}
+  });
+
+  // ── TABLA MAESTRA ──
+  const COLS=['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
+  const maxC=Math.max(...act.map(a=>E.filter(e=>e.agente_id===a.id).length),1);
+  document.getElementById('agTableBody').innerHTML = act.map((a,i)=>{
+    const myE  = E.filter(e=>e.agente_id===a.id);
+    const myH  = H.filter(h=>h.agente_id===a.id);
+    const tot  = myE.length;
+    const pend = myE.filter(e=>e.estado==='pendiente').length;
+    const gest = myE.filter(e=>e.estado==='gestion').length;
+    const sol  = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
+    const pct  = tot>0?Math.round(sol/tot*100):0;
+    const res  = myE.filter(e=>e.fecha_resolucion&&e.received_at);
+    const tRes = res.length>0
+      ? (res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1)+'h'
+      : '—';
+    const tResNum = parseFloat(tRes);
+    const tColor  = tRes==='—'?'var(--ink3)':tResNum>48?'var(--red)':tResNum>24?'#ca8a04':'var(--green)';
+    const resp    = myH.filter(h=>h.evento==='correo_respondido').length;
+    const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
+    const gestReg = myH.filter(h=>!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length;
+    const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
+    const carga   = pend+gest;
+    const color   = COLS[i%COLS.length];
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">${(a.nombre||'?').charAt(0).toUpperCase()}</div>
+        <div><div style="font-size:12px;font-weight:700">${esc(a.nombre||'')}</div>
+        <div style="font-size:10px;color:var(--ink3)">${esc(a.email||'')}</div></div>
+      </div></td>
+      <td style="font-family:'DM Mono',monospace;font-weight:700;text-align:center">${tot}</td>
+      <td style="text-align:center"><span class="badge pendiente">${pend}</span></td>
+      <td style="text-align:center"><span class="badge gestion">${gest}</span></td>
+      <td style="text-align:center"><span class="badge solucionado">${sol}</span></td>
+      <td style="text-align:center"><span class="sla-pill ${pct>=70?'sla-ok':pct>=40?'sla-warn':'sla-danger'}">${pct}%</span></td>
+      <td style="font-family:'DM Mono',monospace;text-align:center;color:${tColor};font-weight:600">${tRes}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:center">${gestReg}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:center">${resp}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:center">${firmas}</td>
+      <td style="text-align:center"><span style="font-weight:700;color:${alta>0?'var(--red)':'var(--ink3)'}">${alta}</span></td>
+      <td><div style="display:flex;align-items:center;gap:6px">
+        <div style="flex:1;height:5px;background:var(--bg2);border-radius:99px;overflow:hidden;width:60px">
+          <div style="height:100%;border-radius:99px;background:${color};width:${Math.round(carga/maxC*100)}%"></div>
+        </div>
+        <span style="font-size:10px;color:var(--ink3)">${carga}</span>
+      </div></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
+
+  // Poblar selector de asesores en timeline
+  const sel=document.getElementById('agFiltroAsesor');
+  if(sel){
+    sel.innerHTML='<option value="">Todos los asesores</option>'+
+      act.map(a=>`<option value="${a.id}">${esc(a.nombre||'')}</option>`).join('');
+  }
+
+  renderAgTimeline();
+}
+
+function renderAgTimeline(){
+  const { eventos:H, correos:E, agentes } = _agDatos;
+  const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
+  const cMap={}; E.forEach(c=>cMap[c.id]=c);
+
+  const filtroAg = document.getElementById('agFiltroAsesor')?.value||'';
+  const filtroEv = document.getElementById('agFiltroEvento')?.value||'';
+
+  let rows = H.filter(h=>h.agente_id);
+  if(filtroAg) rows=rows.filter(h=>h.agente_id===filtroAg);
+  if(filtroEv) rows=rows.filter(h=>h.evento===filtroEv);
+
+  const cnt=document.getElementById('agTimelineCount');
+  if(cnt) cnt.textContent=`${rows.length} registro${rows.length!==1?'s':''}`;
+
+  const evLabel={
+    asignado_manual:   '📌 Asignado',
+    correo_respondido: '✉️ Respuesta enviada',
+    pendiente_firma:   '🖊️ Pendiente firma',
+    firma_confirmada:  '✅ Firma confirmada',
+  };
+
+  document.getElementById('agTimelineBody').innerHTML = rows.slice(0,300).map(h=>{
+    const c       = cMap[h.correo_id]||{};
+    const agNom   = agMap[h.agente_id]||'—';
+    const fecha   = h.created_at?new Date(h.created_at).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'—';
+    const ticket  = c.ticket_id||h.correo_id?.slice(0,8)||'—';
+    const prio    = c.prioridad||'';
+    const prioCol = prio==='alta'||prio==='critica'?'var(--red)':prio==='media'?'#ca8a04':'var(--ink3)';
+    const obs     = h.descripcion||'';
+    let tiempoD   = '—';
+    if(c.received_at&&h.created_at){
+      const hrs=Math.round((new Date(h.created_at)-new Date(c.received_at))/3600000);
+      tiempoD = hrs<1?'<1h':hrs<24?hrs+'h':Math.floor(hrs/24)+'d '+(hrs%24)+'h';
+      const hNum=parseInt(tiempoD);
+    }
+    const tColor = tiempoD==='—'?'var(--ink3)':tiempoD.includes('d')?'var(--red)':parseInt(tiempoD)>24?'#ca8a04':'var(--green)';
+    const evL = evLabel[h.evento]||('⚡ '+h.evento);
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="font-size:11px;font-family:'DM Mono',monospace;color:var(--ink3);white-space:nowrap">${fecha}</td>
+      <td style="font-size:12px;font-weight:600">${esc(agNom)}</td>
+      <td style="font-size:11px;font-family:'DM Mono',monospace;color:var(--blue)">${esc(ticket)}</td>
+      <td style="font-size:11px;font-weight:600">${evL}</td>
+      <td style="font-size:10px;font-weight:700;color:${prioCol};text-transform:uppercase">${prio||'—'}</td>
+      <td style="font-size:11px;font-family:'DM Mono',monospace;font-weight:600;color:${tColor}">${tiempoD}</td>
+      <td style="font-size:11px;color:var(--ink2);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(obs)}">${esc(obs.slice(0,80))||'—'}</td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--ink3)">Sin eventos en el período seleccionado</td></tr>';
+}
+
+function exportAgentesExcel(){
+  const { correos:E, eventos:H, agentes, desde, hasta } = _agDatos;
+  const wb   = XLSX.utils.book_new();
+  const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
+  const cMap={}; E.forEach(c=>cMap[c.id]=c);
+  const act  = agentes.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
+
+  // Hoja 1: Resumen por asesor
+  const h1 = act.map(a=>{
+    const myE = E.filter(e=>e.agente_id===a.id);
+    const myH = H.filter(h=>h.agente_id===a.id);
+    const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
+    const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
+    const sol = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
+    return {
+      Asesor:                a.nombre||'',
+      Email:                 a.email||'',
+      Total_Asignados:       myE.length,
+      Pendientes:            myE.filter(e=>e.estado==='pendiente').length,
+      En_Gestion:            myE.filter(e=>e.estado==='gestion').length,
+      Resueltos:             sol,
+      Pct_Resolucion:        myE.length>0?Math.round(sol/myE.length*100)+'%':'0%',
+      T_Prom_Resolucion_h:   avgH,
+      Gestiones_Registradas: myH.filter(h=>!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length,
+      Respuestas_Enviadas:   myH.filter(h=>h.evento==='correo_respondido').length,
+      Firmas_Confirmadas:    myH.filter(h=>h.evento==='firma_confirmada').length,
+      Alta_Sin_Resolver:     myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
+    };
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'Sin asesores'}]), 'Resumen Asesores');
+
+  // Hoja 2: Tickets con tiempos
+  const h2 = E.filter(c=>c.asignado_a).map(c=>({
+    Ticket:              c.ticket_id||'',
+    Asunto:              c.subject||'',
+    Remitente:           c.nombre||c.from_email||'',
+    Asesor:              agMap[c.asignado_a]||'',
+    Estado:              c.estado||'',
+    Prioridad:           c.prioridad||'',
+    Sentimiento:         c.sentimiento||'',
+    Tipo_PQR:            c.tipo_pqr||'',
+    Recibido:            c.received_at?new Date(c.received_at).toLocaleString('es-CO'):'',
+    Resuelto:            c.fecha_resolucion?new Date(c.fecha_resolucion).toLocaleString('es-CO'):'',
+    T_Resolucion_h:      (c.fecha_resolucion&&c.received_at)?((new Date(c.fecha_resolucion)-new Date(c.received_at))/3600000).toFixed(1):'',
+    SLA_horas:           c.horas_sla||'',
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'Sin tickets'}]), 'Tickets Detallado');
+
+  // Hoja 3: Timeline gestiones
+  const h3 = H.filter(h=>h.agente_id).map(h=>{
+    const c=cMap[h.correo_id]||{};
+    return {
+      Fecha:                  h.created_at?new Date(h.created_at).toLocaleString('es-CO'):'',
+      Asesor:                 agMap[h.agente_id]||'',
+      Ticket:                 c.ticket_id||h.correo_id?.slice(0,8)||'',
+      Evento:                 h.evento||'',
+      Descripcion:            h.descripcion||'',
+      Prioridad_Ticket:       c.prioridad||'',
+      Estado_Ticket:          c.estado||'',
+      Horas_Desde_Recepcion:  (c.received_at&&h.created_at)?((new Date(h.created_at)-new Date(c.received_at))/3600000).toFixed(1):'',
+    };
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin eventos'}]), 'Timeline Gestiones');
+
+  XLSX.writeFile(wb, `Asesores_${desde||'inicio'}_${hasta||'hoy'}.xlsx`);
+}
+
+
+</script>
+</body>
+</html>
+
 
 // Reply
 function toggleReply(modo) {
