@@ -1172,10 +1172,10 @@ table.agents-tbl tr:hover td{background:var(--bg)}
 .gm-search-wrap input{padding-right:28px}
 .gm-search-wrap .gm-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink3);font-size:14px;line-height:1;padding:0;display:none}
 .gm-search-wrap input:not(:placeholder-shown) ~ .gm-clear{display:block}
-.gm-dropdown{display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r2) var(--r2);max-height:180px;overflow-y:auto;font-size:12px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.12)}
-.gm-dropdown .gm-dd-item{padding:8px 12px;cursor:pointer;border-bottom:0.5px solid var(--border);line-height:1.4}
+.gm-dropdown{display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r2) var(--r2);max-height:220px;overflow-y:auto;font-size:12px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.15)}
+.gm-dropdown .gm-dd-item{padding:9px 12px;cursor:pointer;border-bottom:0.5px solid var(--border);line-height:1.4}
 .gm-dropdown .gm-dd-item:last-child{border-bottom:none}
-.gm-dropdown .gm-dd-item:hover{background:var(--blue-l);color:var(--blue)}
+.gm-dropdown .gm-dd-item:hover{background:var(--blue-l);color:var(--blue);font-weight:600}
 .gm-dropdown .gm-dd-item .gm-dd-sub{font-size:10px;color:var(--ink3);margin-top:1px}
 </style>
 <div class="modal-backdrop" id="modalGestion" onclick="if(event.target===this)closeModal('modalGestion')">
@@ -3131,12 +3131,22 @@ function gSetTutela(val) {
 function gFiltrarEPS(q) {
   const dd = document.getElementById('gEpsDropdown');
   const epsList = state.epsCatalogo || [];
-  const matches = q.length < 1 ? epsList : epsList.filter(e =>
-    e.nombre.toLowerCase().includes(q.toLowerCase()) || (e.nit||'').includes(q)
-  );
+  if(!epsList.length) {
+    // Intentar cargar si aún no hay datos
+    sb('eps_catalogo?order=nombre.asc').then(d=>{
+      state.epsCatalogo=d||[];
+      if(q!==undefined) gFiltrarEPS(q);
+    }).catch(()=>{});
+    return;
+  }
+  const matches = q.length < 1
+    ? epsList
+    : epsList.filter(e =>
+        e.nombre.toLowerCase().includes(q.toLowerCase()) || (e.nit||'').includes(q)
+      );
   if(!matches.length) { dd.style.display='none'; return; }
   dd.style.display = 'block';
-  dd.innerHTML = matches.slice(0,12).map(e =>
+  dd.innerHTML = matches.map(e =>
     `<div class="gm-dd-item" onclick="gSelectEPS('${e.id}','${esc(e.nombre)}','${e.nit||''}')">
       <div style="font-weight:600">${esc(e.nombre)}</div>
       <div class="gm-dd-sub">NIT: ${e.nit||'—'}</div>
@@ -3353,10 +3363,19 @@ async function gBuscarPaciente(cedula) {
     if(data.ok) {
       // Autocompletar — todos los campos quedan EDITABLES
       document.getElementById('gNombre').value    = data.nombre      || '';
-      document.getElementById('gDireccion').value = data.direccion   || '';
-      document.getElementById('gTelefono').value  = data.telefono    || '';
-      document.getElementById('gEmail').value     =
-        state.emails.find(e=>e.id===state.selectedId)?.from_email || '';
+      document.getElementById('gDireccion').value = data.direccion   || data.Direccion || '';
+      document.getElementById('gTelefono').value  = data.telefono    || data.Telefono  || '';
+      // Email: siempre del correo actual (no del paciente)
+      const emailActual = state.emails.find(e=>e.id===state.selectedId);
+      document.getElementById('gEmail').value = emailActual?.from_email || emailActual?.remitente || '';
+      // EPS del paciente → preseleccionar en buscador si existe en catálogo
+      if(data.eps && state.epsCatalogo) {
+        const epsMatch = state.epsCatalogo.find(e =>
+          e.nombre.toUpperCase().includes(data.eps.toUpperCase()) ||
+          data.eps.toUpperCase().includes(e.nombre.toUpperCase())
+        );
+        if(epsMatch) gSelectEPS(epsMatch.id, epsMatch.nombre, epsMatch.nit||'');
+      }
       if(data.departamento) {
         document.getElementById('gDeptoSearch').value = data.departamento;
         document.getElementById('gDeptoVal').value    = data.departamento;
@@ -3443,10 +3462,15 @@ function gAgregarMed() {
 }
 
 // ── Autocompletar PBS y descripción desde tabla medicamentos ──
-async function gBuscarMedicamento(codigo, idx) {
+const _medTimers = {};
+function gBuscarMedicamento(codigo, idx) {
+  // Debounce 500ms — esperar que el usuario termine de escribir
+  clearTimeout(_medTimers[idx]);
+  _medTimers[idx] = setTimeout(() => _gBuscarMedicamentoExec(codigo, idx), 500);
+}
+async function _gBuscarMedicamentoExec(codigo, idx) {
   if(!codigo || codigo.length < 3) return;
   try {
-    // Llamar admin-buscar-medicamento.php (mismo servidor)
     const res  = await fetch('admin-buscar-medicamento.php', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3456,7 +3480,6 @@ async function gBuscarMedicamento(codigo, idx) {
     if(data.ok) {
       const descEl = document.getElementById(`gMedDesc_${idx}`);
       const pbsEl  = document.getElementById(`gMedPbs_${idx}`);
-      // Autocompletar — todos EDITABLES
       if(descEl) descEl.value = data.nombre || '';
       if(pbsEl && data.pbs) {
         for(let op of pbsEl.options) {
@@ -3553,7 +3576,7 @@ async function generarConNovaTD(correoId) {
   }
 }
 
-function openGestionModal(mode) {
+async function openGestionModal(mode) {
   _gestionForSolucionado = mode==='solucionado';
   _gestionEvidenciaFile = null;
   _gTutela = null;
@@ -3661,8 +3684,15 @@ function openGestionModal(mode) {
   document.getElementById('gMedLista').innerHTML = '';
 
   // ── Cargar catálogos si faltan ──
-  if(!state.epsCatalogo) sb('eps_catalogo?order=nombre.asc').then(d=>{ state.epsCatalogo=d||[]; }).catch(()=>{});
-  if(!state.sedes||!state.sedes.length) sb('sedes?order=nombre.asc').then(d=>{ state.sedes=d||[]; }).catch(()=>{});
+  // Cargar EPS y esperar antes de mostrar el modal para que el buscador funcione
+  if(!state.epsCatalogo || !state.epsCatalogo.length) {
+    try {
+      state.epsCatalogo = await sb('eps_catalogo?order=nombre.asc') || [];
+    } catch(e) { state.epsCatalogo = []; }
+  }
+  if(!state.sedes||!state.sedes.length) {
+    sb('sedes?order=nombre.asc').then(d=>{ state.sedes=d||[]; }).catch(()=>{});
+  }
 
   document.getElementById('modalGestion').classList.add('show');
 }
