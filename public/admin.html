@@ -984,26 +984,26 @@ table.agents-tbl tr:hover td{background:var(--bg)}
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
               <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR NOMBRE SOLICITUD</div>
-              <canvas id="sigiChartNombre" height="180"></canvas>
+              <div style="position:relative;height:180px"><canvas id="sigiChartNombre"></canvas></div>
             </div>
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
               <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR CATEGORÍA</div>
-              <canvas id="sigiChartCategoria" height="180"></canvas>
+              <div style="position:relative;height:180px"><canvas id="sigiChartCategoria"></canvas></div>
             </div>
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
               <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR EPS (TOP 7)</div>
-              <canvas id="sigiChartEps" height="180"></canvas>
+              <div style="position:relative;height:180px"><canvas id="sigiChartEps"></canvas></div>
             </div>
           </div>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
               <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">POR DEPARTAMENTO</div>
-              <canvas id="sigiChartDepto" height="160"></canvas>
+              <div style="position:relative;height:160px"><canvas id="sigiChartDepto"></canvas></div>
             </div>
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
               <div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;letter-spacing:.4px">GESTIONES POR DÍA</div>
-              <canvas id="sigiChartTendencia" height="160"></canvas>
+              <div style="position:relative;height:160px"><canvas id="sigiChartTendencia"></canvas></div>
             </div>
           </div>
 
@@ -3599,7 +3599,13 @@ async function openGestionModal(mode) {
   _gMedCount = 0;
 
   const email = state.emails.find(e=>e.id===state.selectedId);
-  const numGestiones = email?.num_gestiones || 0;
+  // Leer num_gestiones desde Supabase en tiempo real
+  // (state.emails puede estar desactualizado tras una gestión reciente)
+  let numGestiones = email?.num_gestiones || 0;
+  try {
+    const fresh = await sb(`correos?id=eq.${state.selectedId}&select=num_gestiones&limit=1`);
+    if(fresh && fresh.length) numGestiones = fresh[0].num_gestiones || 0;
+  } catch(e) { /* usar valor local si falla */ }
   const esPrimera = numGestiones === 0;
 
   // ── Título y subtítulo dinámico ──
