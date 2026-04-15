@@ -3168,34 +3168,34 @@ function gLimpiarEPS() {
 
 // ── Tipo de Solicitud (antes "Nombre Solicitud") ─────
 const G_NOMBRES_SOL = {
-  'PETICIÓN':                   [],
-  'QUEJA':                      [],
-  'RECLAMO':                    [],
-  'SUGERENCIA':                 [],
-  'FELICITACIÓN':               [],
-  'DENUNCIA':                   [],
-  'SOLICITUD':                  [],
-  'INFORMACIÓN':                [],
-  'TUTELA':                     [],
-  'FALLO/SENTENCIA':            [],
-  'REQUERIMIENTO PREVIO':       [],
-  'INCIDENTE DESACATO':         [],
-  'SANCIÓN INCIDENTE DESACATO': [],
+  'Petición':                   [],
+  'Queja':                      [],
+  'Reclamo':                    [],
+  'Sugerencia':                 [],
+  'Felicitación':               [],
+  'Denuncia':                   [],
+  'Solicitud':                  [],
+  'Información':                [],
+  'Tutela':                     [],
+  'Fallo/Sentencia':            [],
+  'Requerimiento Previo':       [],
+  'Incidente Desacato':         [],
+  'Sanción Incidente Desacato': [],
 };
 
 // Detalle Solicitud — lista exacta definida por el cliente
 const G_DETALLES = [
-  'PENDIENTE',
-  'FORMULA ERRADA',
-  'FORMULA VENCIDA',
-  'SIN FORMULA',
-  'SIN RADICADO',
-  'USUARIO YA RECLAMÓ',
-  'USUARIO NO RECLAMA',
-  'MX AGOTADO',
-  'MX NO AUTORIZADO (GLP-1, COTIZACIÓN, ETC)',
-  'USUARIO CON PORTABILIDAD',
-  'ATENCIÓN',
+  'Pendiente',
+  'Formula Errada',
+  'Formula Vencida',
+  'Sin Formula',
+  'Sin Radicado',
+  'Usuario Ya Reclamó',
+  'Usuario No Reclama',
+  'Mx Agotado',
+  'Mx No Autorizado (Glp-1, Cotización, Etc)',
+  'Usuario Con Portabilidad',
+  'Atención',
 ];
 function gFiltrarNombreSol(q) {
   const dd = document.getElementById('gNombreSolDropdown');
@@ -3371,9 +3371,11 @@ async function gBuscarPaciente(cedula) {
       document.getElementById('gNombre').value    = data.nombre      || '';
       document.getElementById('gDireccion').value = data.direccion   || data.Direccion || '';
       document.getElementById('gTelefono').value  = data.telefono    || data.Telefono  || '';
-      // Email: siempre del correo actual (no del paciente)
+      // Email: viene del correo actual que está gestionando
+      // Es el email con que el paciente contactó — único por correo
       const emailActual = state.emails.find(e=>e.id===state.selectedId);
-      document.getElementById('gEmail').value = emailActual?.from_email || emailActual?.remitente || '';
+      const emailVal = emailActual?.from_email || emailActual?.remitente || '';
+      document.getElementById('gEmail').value = emailVal;
       // EPS del paciente → preseleccionar en buscador si existe en catálogo
       if(data.eps && state.epsCatalogo) {
         const epsMatch = state.epsCatalogo.find(e =>
@@ -3643,7 +3645,8 @@ async function openGestionModal(mode) {
 
   // ── Precargar datos del correo (solo si es primera y hay datos) ──
   if(email && esPrimera) {
-    document.getElementById('gEmail').value    = email.from_email||email.remitente||'';
+    // Email del correo actual — es dinámico por cada correo
+    document.getElementById('gEmail').value = email.from_email || email.remitente || '';
     document.getElementById('gNombre').value   = email.nombre||email.from_name||'';
     document.getElementById('gTelefono').value = email.telefono_contacto||'';
     if(email.origen) {
