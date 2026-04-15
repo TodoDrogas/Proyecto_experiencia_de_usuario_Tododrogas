@@ -1747,7 +1747,7 @@ async function exportarSIGI() {
     let usuariosMap = {};
     if(cedulas.length) {
       // Supabase REST: columnas con espacios requieren comillas dobles
-      const col = encodeURIComponent('"Cedula Paciente"');
+      const col = encodeURIComponent('"Cedula Pacientes"');
       // Si son pocas cédulas consultamos de una; si son muchas, traemos todo
       let usuarios = [];
       if(cedulas.length <= 50) {
@@ -1760,7 +1760,7 @@ async function exportarSIGI() {
       }
       // Indexar por cédula para lookup O(1)
       usuarios.forEach(u => {
-        const key = (u['Cedula Paciente']||'').trim();
+        const key = (u['Cedula Pacientes']||u['Cedula Paciente']||'').trim();
         if(key) usuariosMap[key] = u;
       });
     }
@@ -3296,40 +3296,33 @@ async function gBuscarPaciente(cedula) {
   if(cedula.length < 4) return;
   document.getElementById('gBuscandoSpinner').style.display='flex';
   try {
-    // tabla_usuarios tiene columnas con espacios — usar select con alias
-    // y filtrar con id en dos pasos: primero buscar por cedula con ilike
-    // Supabase acepta: select=col1,col2&col_sin_espacios=eq.valor
-    // Para cols con espacios usamos select=* y filtramos en JS
-    // O mejor: usar la función de búsqueda con select renombrando
-    const selectCols = [
-      '"Cedula Paciente":cedula_p',
-      '"Nombre Paciente":nombre_p',
-      '"Tipo De Documento":tipo_doc',
-      '"Direccion":direccion',
-      '"Telefono":telefono',
-      '"Departamento":departamento',
-      '"Ciudad":ciudad',
-      '"EPS":eps'
-    ].join(',');
-    // El filtro en columna con espacios va como parámetro con comillas en la KEY
-    const params = new URLSearchParams();
-    params.set('select', selectCols);
-    params.set('limit', '1');
-    // Para columnas con espacios Supabase acepta el filtro con comillas dobles en la clave
-    const url = `${SB_URL}/rest/v1/tabla_usuarios?${params.toString()}&"Cedula Paciente"=eq.${encodeURIComponent(cedula)}`;
+    // NOMBRES REALES de columnas en tabla_usuarios (ver Supabase Table Editor):
+    // "Tipo De Documento", "Cedula Pacientes" (con S), "Nombre Paciente",
+    // "Direccion", "Telefono", "Departamento", "Ciudad", "EPS"
+    // Construir URL manualmente para evitar doble-encoding de URLSearchParams
+    const sel = '"Cedula Pacientes":cedula_p,"Nombre Paciente":nombre_p,"Tipo De Documento":tipo_doc,"Direccion":direccion,"Telefono":telefono,"Departamento":departamento,"Ciudad":ciudad,"EPS":eps';
+    const selEnc = encodeURIComponent(sel);
+    const cedEnc = encodeURIComponent(cedula);
+    // El filtro de columna con espacios va con comillas dobles en la key, NO codificadas
+    const url = `${SB_URL}/rest/v1/tabla_usuarios?select=${selEnc}&"Cedula Pacientes"=eq.${cedEnc}&limit=1`;
     const res = await fetch(url, {
       headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY }
     });
-    const data = res.ok ? await res.json() : [];
+    if(!res.ok) {
+      const err = await res.text();
+      console.warn('[gBuscarPaciente] Error Supabase:', res.status, err);
+      document.getElementById('gBuscandoSpinner').style.display='none';
+      return;
+    }
+    const data = await res.json();
     if(data && data.length) {
       const p = data[0];
-      // Autocompletar — todos editables para correcciones manuales
+      // Autocompletar — todos los campos quedan EDITABLES
       document.getElementById('gNombre').value    = p.nombre_p    || '';
       document.getElementById('gDireccion').value = p.direccion   || '';
       document.getElementById('gTelefono').value  = p.telefono    || '';
       document.getElementById('gEmail').value     =
         state.emails.find(e=>e.id===state.selectedId)?.from_email || '';
-      // Departamento y Ciudad desde tabla_usuarios
       if(p.departamento) {
         document.getElementById('gDeptoSearch').value = p.departamento;
         document.getElementById('gDeptoVal').value    = p.departamento;
@@ -3338,7 +3331,6 @@ async function gBuscarPaciente(cedula) {
         document.getElementById('gCiudadSearch').value = p.ciudad;
         document.getElementById('gCiudadVal').value    = p.ciudad;
       }
-      // Tipo de documento
       if(p.tipo_doc) {
         const tdSel = document.getElementById('gTipoDoc');
         for(let op of tdSel.options) {
@@ -3346,8 +3338,7 @@ async function gBuscarPaciente(cedula) {
         }
       }
     } else {
-      // No encontrado — dejar campos editables vacíos
-      console.info('[gBuscarPaciente] Cédula no encontrada en tabla_usuarios:', cedula);
+      console.info('[gBuscarPaciente] Cédula no encontrada:', cedula);
     }
   } catch(e) { console.warn('[gBuscarPaciente] Error:', e.message); }
   document.getElementById('gBuscandoSpinner').style.display='none';
