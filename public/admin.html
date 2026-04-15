@@ -1729,20 +1729,50 @@ async function exportarSIGI() {
       `&order=created_at.asc&limit=5000`
     ) || [];
 
-    const epsCat = state.epsCatalogo || await sb('eps_catalogo?order=nombre.asc') || [];
+    const epsCat  = state.epsCatalogo || await sb('eps_catalogo?order=nombre.asc') || [];
     const agentes = state.agents || [];
     const meds    = await sb(`gestiones_medicamentos?order=created_at.asc&limit=5000`) || [];
     const hist    = await sb(`historial_eventos?order=created_at.asc&limit=10000`) || [];
 
+    // ── Cargar tabla_usuarios cruzando por cédulas de los correos ──
+    // Extraer cédulas únicas del lote actual
+    const cedulas = [...new Set(
+      correos.map(c => c.cedula_paciente||c.cedula||'').filter(Boolean)
+    )];
+    let usuariosMap = {};
+    if(cedulas.length) {
+      // Supabase REST: columnas con espacios requieren comillas dobles
+      const col = encodeURIComponent('"Cedula Paciente"');
+      // Si son pocas cédulas consultamos de una; si son muchas, traemos todo
+      let usuarios = [];
+      if(cedulas.length <= 50) {
+        const vals = cedulas.map(c=>`"${c}"`).join(',');
+        usuarios = await sb(
+          `tabla_usuarios?${col}=in.(${encodeURIComponent(vals)})&limit=5000`
+        ) || [];
+      } else {
+        usuarios = await sb(`tabla_usuarios?limit=5000`) || [];
+      }
+      // Indexar por cédula para lookup O(1)
+      usuarios.forEach(u => {
+        const key = (u['Cedula Paciente']||'').trim();
+        if(key) usuariosMap[key] = u;
+      });
+    }
+
+    // Helper: buscar paciente por cédula en el mapa
+    function getPaciente(c) {
+      const cedula = (c.cedula_paciente||c.cedula||'').trim();
+      return usuariosMap[cedula] || null;
+    }
+
     const wb = XLSX.utils.book_new();
 
     // ══ HOJA 1: INFORME SIGI (38 columnas) ══
-    const VERDE = { fgColor:{rgb:'92D050'} };
-    const AZUL  = { fgColor:{rgb:'BDD7EE'} };
-
     const h1 = correos.map(c=>{
       const eps     = epsCat.find(e=>e.id===c.eps_id);
       const ag      = agentes.find(a=>a.id===c.agente_id);
+      const pac     = getPaciente(c);  // datos reales de tabla_usuarios
       const histC   = hist.filter(h=>h.correo_id===c.id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
       const pg      = histC.find(h=>!['creacion','asignacion_automatica','encuesta_recibida'].includes(h.evento));
       const fSol    = c.created_at   ? new Date(c.created_at).toLocaleDateString('es-CO')  : '';
@@ -1751,12 +1781,13 @@ async function exportarSIGI() {
       return {
         '# Gestiones':             c.num_gestiones||0,
         'Código PQR':              c.ticket_id||'',
-        'Tipo Documento':          c.tipo_documento||'',
-        'Documento':               c.cedula_paciente||c.cedula||'',
-        'Nombre y Apellidos':      c.nombre||'',
-        'Dirección':               c.direccion_paciente||'',
+        // Datos paciente: vienen de tabla_usuarios (autocompletado real)
+        'Tipo Documento':          pac?.['Tipo De Documento'] || c.tipo_documento||'',
+        'Documento':               pac?.['Cedula Paciente']   || c.cedula_paciente||c.cedula||'',
+        'Nombre y Apellidos':      pac?.['Nombre Paciente']   || c.nombre||'',
+        'Dirección':               pac?.['Direccion']          || c.direccion_paciente||'',
         'Email':                   c.from_email||c.correo||'',
-        'Teléfono':                c.telefono_contacto||'',
+        'Teléfono':                pac?.['Telefono']           || c.telefono_contacto||'',
         'NIT EPS':                 eps?.nit||'',
         'EPS':                     eps?.nombre||'',
         'Origen':                  c.origen||'',
@@ -1774,8 +1805,8 @@ async function exportarSIGI() {
         'Fecha Resp. Usuario':     fReal,
         'Respuesta Asignación':    pg?.descripcion||'',
         'Fecha PQRS Cerrada':      fCierre,
-        'Departamento':            c.departamento_paciente||'',
-        'Ciudad':                  c.ciudad_paciente||'',
+        'Departamento':            pac?.['Departamento'] || c.departamento_paciente||'',
+        'Ciudad':                  pac?.['Ciudad']       || c.ciudad_paciente||'',
         'Código Medicamento':      meds.filter(m=>m.correo_id===c.id).map(m=>m.codigo).join(' | ')||'',
         'Descripción Medicamento': meds.filter(m=>m.correo_id===c.id).map(m=>m.descripcion).join(' | ')||'',
         'Descripción Escrita':     meds.filter(m=>m.correo_id===c.id).map(m=>m.descripcion_escrita).join(' | ')||'',
@@ -1806,6 +1837,9 @@ async function exportarSIGI() {
     const h2 = meds.filter(m=> correos.some(c=>c.id===m.correo_id)).map(m=>{
       const c   = correos.find(cc=>cc.id===m.correo_id);
       const eps = epsCat.find(e=>e.id===c?.eps_id);
+      const pac = getPaciente(c||{});
+      // EPS: primero del catálogo (eps_id), si no del campo EPS de tabla_usuarios
+      const epsNombre = eps?.nombre || pac?.['EPS'] || '';
       const histC = hist.filter(h=>h.correo_id===c?.id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
       const pg  = histC.find(h=>!['creacion','asignacion_automatica','encuesta_recibida'].includes(h.evento));
       const fIni = pg?.created_at ? new Date(pg.created_at).toLocaleDateString('es-CO') : '';
@@ -1813,7 +1847,7 @@ async function exportarSIGI() {
       return {
         'Código PQR':    c?.ticket_id||'',
         'Paciente':      c?.nombre||'',
-        'EPS Usuario':   eps?.nombre||'',
+        'EPS Usuario':   epsNombre,
         'Código Med.':   m.codigo||'',
         'Descripción':   m.descripcion||'',
         'Desc. Escrita': m.descripcion_escrita||'',
