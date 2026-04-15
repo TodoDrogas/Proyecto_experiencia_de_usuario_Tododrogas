@@ -1749,6 +1749,8 @@ async function exportarSIGI() {
       const fReal   = pg?.created_at ? new Date(pg.created_at).toLocaleDateString('es-CO') : '';
       const fCierre = c.fecha_resolucion ? new Date(c.fecha_resolucion).toLocaleDateString('es-CO') : '';
       return {
+        '# Gestiones':             c.num_gestiones||0,
+        'Código PQR':              c.ticket_id||'',
         'Tipo Documento':          c.tipo_documento||'',
         'Documento':               c.cedula_paciente||c.cedula||'',
         'Nombre y Apellidos':      c.nombre||'',
@@ -1784,8 +1786,6 @@ async function exportarSIGI() {
         'Usuario Gestión Compra':  c.usuario_gestion_compra||'',
         'Gestión Us. Integrales':  c.gestion_usuarios_integ||'',
         'Usuarios Integrales':     c.usuarios_integrales||'',
-        'Código PQR':              c.ticket_id||'',
-        '# Gestiones':             c.num_gestiones||0,
         'Tiene Tutela':            c.tiene_tutela===true?'SI':c.tiene_tutela===false?'NO':'',
         'Categoría':               c.categoria_sigi||c.categoria_ia||'',
       };
@@ -1794,30 +1794,38 @@ async function exportarSIGI() {
     const ws1 = XLSX.utils.json_to_sheet(h1.length ? h1 : [{'Sin datos':'No hay casos con gestiones en el período'}]);
     // Anchos de columna
     ws1['!cols'] = [
-      {wch:18},{wch:14},{wch:26},{wch:22},{wch:26},{wch:14},{wch:13},{wch:30},{wch:20},
-      {wch:13},{wch:13},{wch:13},{wch:16},{wch:22},{wch:13},{wch:13},{wch:13},{wch:13},
-      {wch:26},{wch:13},{wch:13},{wch:30},{wch:13},{wch:16},{wch:16},{wch:13},{wch:28},
-      {wch:22},{wch:10},{wch:10},{wch:30},{wch:18},{wch:18},{wch:18},{wch:18},{wch:13},
-      {wch:10},{wch:10},{wch:16},
+      {wch:10},{wch:13},{wch:18},{wch:14},{wch:26},{wch:22},{wch:26},{wch:14},{wch:13},
+      {wch:30},{wch:20},{wch:13},{wch:13},{wch:13},{wch:16},{wch:22},{wch:13},{wch:13},
+      {wch:13},{wch:13},{wch:26},{wch:13},{wch:13},{wch:30},{wch:13},{wch:16},{wch:16},
+      {wch:13},{wch:28},{wch:22},{wch:10},{wch:10},{wch:30},{wch:18},{wch:18},{wch:18},
+      {wch:18},{wch:10},{wch:16},
     ];
     XLSX.utils.book_append_sheet(wb, ws1, 'INFORME_SIGI');
 
     // ══ HOJA 2: MEDICAMENTOS ══
     const h2 = meds.filter(m=> correos.some(c=>c.id===m.correo_id)).map(m=>{
-      const c = correos.find(cc=>cc.id===m.correo_id);
+      const c   = correos.find(cc=>cc.id===m.correo_id);
+      const eps = epsCat.find(e=>e.id===c?.eps_id);
+      const histC = hist.filter(h=>h.correo_id===c?.id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+      const pg  = histC.find(h=>!['creacion','asignacion_automatica','encuesta_recibida'].includes(h.evento));
+      const fIni = pg?.created_at ? new Date(pg.created_at).toLocaleDateString('es-CO') : '';
+      const fFin = c?.fecha_resolucion ? new Date(c.fecha_resolucion).toLocaleDateString('es-CO') : '';
       return {
-        'Código PQR':   c?.ticket_id||'',
-        'Paciente':     c?.nombre||'',
-        'Código Med.':  m.codigo||'',
-        'Descripción':  m.descripcion||'',
-        'Desc. Escrita':m.descripcion_escrita||'',
-        'Cantidad':     m.cantidad||'',
-        'PBS':          m.pbs||'',
-        'Fecha':        m.created_at?new Date(m.created_at).toLocaleDateString('es-CO'):'',
+        'Código PQR':    c?.ticket_id||'',
+        'Paciente':      c?.nombre||'',
+        'EPS Usuario':   eps?.nombre||'',
+        'Código Med.':   m.codigo||'',
+        'Descripción':   m.descripcion||'',
+        'Desc. Escrita': m.descripcion_escrita||'',
+        'Cantidad':      m.cantidad||'',
+        'PBS':           m.pbs||'',
+        'Fecha Inicial': fIni,
+        'Fecha Final':   fFin,
+        'Estado':        c?.estado||'',
       };
     });
     const ws2 = XLSX.utils.json_to_sheet(h2.length?h2:[{'Sin datos':'Sin medicamentos'}]);
-    ws2['!cols']=[{wch:13},{wch:26},{wch:13},{wch:30},{wch:22},{wch:10},{wch:10},{wch:13}];
+    ws2['!cols']=[{wch:13},{wch:26},{wch:30},{wch:13},{wch:30},{wch:22},{wch:10},{wch:10},{wch:13},{wch:13},{wch:13}];
     XLSX.utils.book_append_sheet(wb, ws2, 'MEDICAMENTOS');
 
     // ══ HOJA 3: RESUMEN AGENTES ══
@@ -1843,14 +1851,21 @@ async function exportarSIGI() {
     XLSX.utils.book_append_sheet(wb, ws3, 'RESUMEN_AGENTES');
 
     // ══ HOJA 4: EPS CATÁLOGO ══
-    const epsConConteo = epsCat.map(e=>({
-      'NIT':       e.nit||'',
-      'Nombre EPS':e.nombre||'',
-      'Total PQR': correos.filter(c=>c.eps_id===e.id).length,
-      'Activa':    e.activa?'SI':'NO',
-    }));
+    const TIPOS_SOL = ['PETICIÓN','QUEJA','RECLAMO','SUGERENCIA','FELICITACIÓN','SOLICITUD','DENUNCIA','TUTELA','INFORMACIÓN'];
+    const epsConConteo = epsCat.map(e=>{
+      const casosEps = correos.filter(c=>c.eps_id===e.id);
+      const fila = {
+        'NIT':          e.nit||'',
+        'Nombre EPS':   e.nombre||'',
+        'Total PQRSFD': casosEps.length,
+      };
+      TIPOS_SOL.forEach(t=>{
+        fila[t] = casosEps.filter(c=>(c.nombre_solicitud||c.tipo_pqr||'').toUpperCase().includes(t)).length||'';
+      });
+      return fila;
+    });
     const ws4 = XLSX.utils.json_to_sheet(epsConConteo.length?epsConConteo:[{'Sin datos':'Sin EPS'}]);
-    ws4['!cols']=[{wch:14},{wch:38},{wch:11},{wch:8}];
+    ws4['!cols']=[{wch:13},{wch:38},{wch:13},{wch:11},{wch:10},{wch:10},{wch:10},{wch:13},{wch:11},{wch:11},{wch:11},{wch:11},{wch:11}];
     XLSX.utils.book_append_sheet(wb, ws4, 'EPS_CATALOGO');
 
     // ── Descargar ──
@@ -3334,19 +3349,24 @@ function gAgregarMed() {
 async function gBuscarMedicamento(codigo, idx) {
   if(!codigo || codigo.length < 3) return;
   try {
-    const data = await sb(`medicamentos?codigo=eq.${encodeURIComponent(codigo)}&limit=1`);
+    // Columnas reales: "Codigo" (mayúscula), "Nombre", "Articulo_PBS"
+    const col = encodeURIComponent('"Codigo"');
+    const data = await sb(`medicamentos?${col}=eq.${encodeURIComponent(codigo)}&limit=1`);
     if(data && data.length) {
-      const med = data[0];
+      const med    = data[0];
       const descEl = document.getElementById(`gMedDesc_${idx}`);
       const pbsEl  = document.getElementById(`gMedPbs_${idx}`);
-      if(descEl && med.descripcion) descEl.value = med.descripcion;
-      if(pbsEl  && med.pbs) {
+      // "Nombre" → descripción del medicamento
+      if(descEl && med['Nombre']) descEl.value = med['Nombre'];
+      // "Articulo_PBS" → valor SI/NO/PARCIAL
+      if(pbsEl && med['Articulo_PBS']) {
+        const pbsVal = med['Articulo_PBS'].toUpperCase().includes('S') ? 'SI' : 'NO';
         for(let op of pbsEl.options) {
-          if(op.value === med.pbs) { op.selected = true; break; }
+          if(op.value === pbsVal) { op.selected = true; break; }
         }
       }
     }
-  } catch(e) { /* silencioso — tabla medicamentos puede no existir aún */ }
+  } catch(e) { console.warn('[gBuscarMedicamento]', e.message); }
 }
 
 function gRecolectarMeds() {
