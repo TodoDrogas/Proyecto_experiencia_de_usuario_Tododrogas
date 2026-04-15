@@ -902,6 +902,10 @@ async function loadEmails() {
       to_recipients: _arr(e.to_recipients),
       cc_recipients: _arr(e.cc_recipients),
       sent_at: e.sent_at || e.received_at || e.created_at,
+      num_gestiones: e.num_gestiones || 0,
+      nombre_solicitud: e.nombre_solicitud || '',
+      eps_id: e.eps_id || null,
+      agente_id: e.agente_id || null,
       raw: e,
     }));
   } catch(err) {
@@ -2001,20 +2005,16 @@ async function generarConNovaTD(correoId) {
   }
 }
 
-async function openGestionModal(mode) {
+function openGestionModal(mode) {
+  if(!state.selectedId) { showToast('Selecciona un ticket primero','error'); return; }
   _gestionForSolucionado = mode==='solucionado';
   _gestionEvidenciaFile = null;
   _gTutela = null;
   _gMedCount = 0;
 
   const email = state.emails.find(e=>e.id===state.selectedId);
-  // Leer num_gestiones desde Supabase en tiempo real
-  // (state.emails puede estar desactualizado tras una gestión reciente)
+  // Usar num_gestiones del state local (se actualiza al guardar)
   let numGestiones = email?.num_gestiones || 0;
-  try {
-    const fresh = await sb(`correos?id=eq.${state.selectedId}&select=num_gestiones&limit=1`);
-    if(fresh && fresh.length) numGestiones = fresh[0].num_gestiones || 0;
-  } catch(e) { /* usar valor local si falla */ }
   const esPrimera = numGestiones === 0;
 
   // ── Título y subtítulo dinámico ──
@@ -3821,11 +3821,11 @@ function insertarTextoEnReply(texto){
 // ══ TEMAS ══
 function setTema(t) {
   document.documentElement.setAttribute('data-theme', t);
-  document.getElementById('modalTema').style.visibility='hidden';
   localStorage.setItem('ag_tema_' + (AGENT_ID||'x'), t);
   document.querySelectorAll('[data-t]').forEach(el=>
     el.style.outline = el.dataset.t===t ? '3px solid var(--blue)' : 'none'
   );
+  // NO cerrar el modal — el usuario puede seguir explorando temas
 }
 (function(){
   const t = localStorage.getItem('ag_tema_' + (sessionStorage.getItem('pqr_agent_id')||'x')) || 'default';
