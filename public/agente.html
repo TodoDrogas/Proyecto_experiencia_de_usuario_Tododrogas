@@ -15,32 +15,23 @@
 <script src="config.js" onerror="console.warn('config.js not found')"></script>
 <style>
 :root {
-  --ink:      #0a0e1a;
-  --ink2:     #3a4258;
-  --ink3:     #8892a4;
-  --bg:       #f2f4f8;
-  --bg2:      #e8ebf2;
-  --surface:  #ffffff;
-  --surface2: #f7f8fb;
-  --border:   #dde1eb;
-  --blue:     #2563eb;
-  --blue-d:   #1d4ed8;
-  --blue-l:   #eff4ff;
-  --blue-m:   #bfdbfe;
-  --green:    #16a34a;
-  --green-l:  #dcfce7;
+  /* Solo variables NO-temáticas */
   --yellow:   #ca8a04;
   --yellow-l: #fef9c3;
-  --red:      #dc2626;
-  --red-l:    #fee2e2;
   --orange:   #ea580c;
-  --orange-l: #fff7ed;
   --purple:   #7c3aed;
-  --purple-l: #f5f3ff;
   --shadow:   0 1px 3px rgba(10,14,26,.08), 0 4px 12px rgba(10,14,26,.04);
   --shadow-l: 0 2px 8px rgba(10,14,26,.12), 0 8px 24px rgba(10,14,26,.08);
   --r:12px; --r2:8px;
   --agent-color:#2563eb;
+}
+/* DEFAULT — se aplica siempre, se sobreescribe por data-theme */
+html, html[data-theme="default"] {
+  --ink:#0a0e1a; --ink2:#3a4258; --ink3:#8892a4;
+  --bg:#f2f4f8; --bg2:#e8ebf2; --surface:#ffffff; --surface2:#f7f8fb; --border:#dde1eb;
+  --blue:#2563eb; --blue-d:#1d4ed8; --blue-l:#eff4ff; --blue-m:#bfdbfe;
+  --green:#16a34a; --green-l:#dcfce7; --red:#dc2626; --red-l:#fee2e2;
+  --orange-l:#fff7ed; --purple-l:#f5f3ff;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
@@ -243,7 +234,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
   if(!e.target.closest('.gm-search-wrap')) {
     document.querySelectorAll('.gm-dropdown').forEach(d=>d.style.display='none');
 /* ══ TEMAS ══ */
-html,[data-theme="default"]{--blue:#2563eb;--green:#16a34a;--surface:#fff;--bg:#f8fafc;--ink:#0f172a;--ink2:#334155;--ink3:#64748b;--border:#e2e8f0;--bg2:#f1f5f9;--red:#dc2626;--red-l:#fee2e2;--green-l:#dcfce7;--orange-l:#fff7ed;--purple-l:#f5f3ff;--blue-l:#dbeafe;--blue-m:#93c5fd;--blue-d:#1d4ed8}
+/* default ya definido arriba */
 html[data-theme="dark"]{--blue:#60a5fa;--green:#34d399;--surface:#1e293b;--bg:#0f172a;--ink:#f1f5f9;--ink2:#cbd5e1;--ink3:#94a3b8;--border:#334155;--bg2:#0f172a;--red:#f87171;--red-l:#450a0a;--green-l:#052e16;--orange-l:#431407;--purple-l:#2e1065;--blue-l:#172554;--blue-m:#3b82f6;--blue-d:#93c5fd}
 html[data-theme="dark"] body,html[data-theme="dark"] .folders-panel,html[data-theme="dark"] .email-list-panel,html[data-theme="dark"] .email-detail-outer,html[data-theme="dark"] .mgmt-right{background:var(--bg);color:var(--ink)}
 html[data-theme="dark"] .email-item,html[data-theme="dark"] .gestion-modal,html[data-theme="dark"] .tl-modal,html[data-theme="dark"] .gestion-modal-wide{background:var(--surface);color:var(--ink)}
@@ -2120,18 +2111,18 @@ async function openGestionModal(mode) {
   // ── Reset lista medicamentos ──
   document.getElementById('gMedLista').innerHTML = '';
 
-  // ── Cargar catálogos si faltan ──
-  // Cargar EPS y esperar antes de mostrar el modal para que el buscador funcione
+  // ── Abrir modal inmediatamente ──
+  document.getElementById('modalGestion').classList.add('show');
+
+  // ── Cargar catálogos en paralelo (no bloqueante) ──
   if(!state.epsCatalogo || !state.epsCatalogo.length) {
-    try {
-      state.epsCatalogo = await sb('eps_catalogo?order=nombre.asc') || [];
-    } catch(e) { state.epsCatalogo = []; }
+    sb('eps_catalogo?order=nombre.asc')
+      .then(d=>{ state.epsCatalogo=d||[]; })
+      .catch(()=>{ state.epsCatalogo=[]; });
   }
   if(!state.sedes||!state.sedes.length) {
     sb('sedes?order=nombre.asc').then(d=>{ state.sedes=d||[]; }).catch(()=>{});
   }
-
-  document.getElementById('modalGestion').classList.add('show');
 }
 
 // Cerrar dropdowns al hacer clic fuera
