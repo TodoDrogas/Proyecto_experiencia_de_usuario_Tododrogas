@@ -194,11 +194,11 @@ jobs:
             fi
             # ── Bloquear config.js al acceso externo ──
             NGINX_CONF="/etc/nginx/sites-enabled/pqr"
-            if ! grep -q "location = /config.js" "$NGINX_CONF" 2>/dev/null; then
-              sed -i 's|location / {|location = /config.js {\n        valid_referers none blocked server_names tododrogas.online www.tododrogas.online;\n        if ($invalid_referer) { return 403; }\n        add_header Cache-Control "no-store, no-cache";\n        add_header X-Content-Type-Options "nosniff";\n    }\n    location / {|' "$NGINX_CONF"
-              nginx -t && systemctl reload nginx
-              echo "✅ config.js protegido — solo desde tododrogas.online"
-            fi
+            # Forzar actualización del bloque config.js en cada deploy
+            sed -i '/location = \/config\.js/,/^[[:space:]]*}/d' "$NGINX_CONF" 2>/dev/null || true
+            sed -i 's|location / {|location = /config.js {\n        valid_referers none blocked server_names tododrogas.online www.tododrogas.online;\n        if ($invalid_referer) { return 403; }\n        add_header Cache-Control "no-store, no-cache";\n    }\n    location / {|' "$NGINX_CONF"
+            nginx -t && systemctl reload nginx
+            echo "✅ config.js actualizado a valid_referers"  
             echo "✅ VPS listo"
 
       # ── 7B. CONFIGURAR LÍMITES DE SUBIDA ──
