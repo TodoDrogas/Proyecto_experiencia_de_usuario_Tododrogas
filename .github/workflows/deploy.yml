@@ -47,6 +47,7 @@ jobs:
             public/validar-paciente.php
             public/admin-buscar-paciente.php
             public/admin-buscar-medicamento.php
+            public/login.php
           )
           for f in "${PHP_FILES[@]}"; do
             [ -f "$f" ] || { echo "⚠️  $f no existe — omitiendo"; continue; }
@@ -58,6 +59,8 @@ jobs:
             sed -i "s|__AZURE_CLIENT_SECRET__|${{ secrets.AZURE_CLIENT_SECRET }}|g" "$f"
             sed -i "s|__GRAPH_USER_ID__|${{ secrets.GRAPH_USER_ID }}|g"             "$f"
             sed -i "s|__ADMIN_TOKEN__|${{ secrets.ADMIN_TOKEN }}|g"                 "$f"
+            sed -i "s|__ADMIN_USER__|${{ secrets.ADMIN_USER }}|g"                  "$f"
+            sed -i "s|__ADMIN_PASS__|${{ secrets.ADMIN_PASS }}|g"                  "$f"
             sed -i "s|__INBOX_FOLDER_ID__|${{ secrets.INBOX_FOLDER_ID }}|g"         "$f"
             echo "✅ $f inyectado"
           done
@@ -315,7 +318,8 @@ jobs:
                      /var/www/pqr/nova-proxy.php /var/www/pqr/nova-consulta.php \
                      /var/www/pqr/cargar-plantillas.php /var/www/pqr/validar-paciente.php \
                      /var/www/pqr/admin-buscar-paciente.php /var/www/pqr/admin-buscar-medicamento.php \
-                     /var/www/pqr/api-token.php /var/www/pqr/adj-proxy.php; do
+                     /var/www/pqr/api-token.php /var/www/pqr/adj-proxy.php \
+                     /var/www/pqr/login.php; do
               [ -f "$f" ] || continue
               OUT=$(php -l "$f" 2>&1)
               if echo "$OUT" | grep -q "No syntax errors"; then
@@ -326,7 +330,7 @@ jobs:
               fi
             done
             echo "--- Placeholders residuales ---"
-            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__\|__ADMIN_TOKEN__\|__INBOX_FOLDER_ID__' \
+            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__\|__ADMIN_TOKEN__\|__INBOX_FOLDER_ID__\|__ADMIN_USER__\|__ADMIN_PASS__' \
               /var/www/pqr/*.php 2>/dev/null || true)
             if [ -n "$FOUND" ]; then
               echo "❌ Placeholders en: $FOUND"
