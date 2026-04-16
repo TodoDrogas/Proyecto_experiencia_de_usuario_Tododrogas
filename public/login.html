@@ -376,15 +376,11 @@ body{background:var(--ink);display:flex;height:100dvh;overflow:hidden;position:r
 
 </div>
 
-<script src="config.js" onerror="void 0"></script>
+<!-- config.js bloqueado — credenciales manejadas por login.php -->
 <script>
 
 /* ─── CONFIG ─── */
-const SB_URL     = window.SUPABASE_URL  || 'https://lyosqaqhiwhgvjigvqtc.supabase.co';
-const SB_KEY     = window.SUPABASE_KEY  || '';
-const SB_ANON    = window.SUPABASE_ANON || SB_KEY;
-const ADMIN_USER = window.ADMIN_USER    || 'admin';
-const ADMIN_PASS = window.ADMIN_PASS    || 'admin123';
+// Credenciales y keys manejadas por login.php — nunca en el browser
 const LOGO_URL   = window.LOGO_URL      ||
   'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png';
 
@@ -518,55 +514,75 @@ function switchMode(m, btn) {
 /* ─── AGENTS FROM SUPABASE ─── */
 async function loadAgents(){
   try{
-    const r=await fetch(`${SB_URL}/rest/v1/agentes?activo=eq.true&order=nombre.asc`,{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
-    if(!r.ok)return;
-    const agents=await r.json();
+    const r=await fetch('/login.php',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'load_agents'})});
+    const data=await r.json();
+    if(!data.ok)return;
     const sel=document.getElementById('agentSelect');
-    sel.innerHTML='<option value="">— Seleccionar agente —</option>'+(agents||[]).map(a=>`<option value="${a.id}" data-pin="${a.pin}">${esc(a.nombre)}</option>`).join('');
+    sel.innerHTML='<option value="">— Seleccionar agente —</option>'+(data.agents||[]).map(a=>`<option value="${a.id}">${esc(a.nombre)}</option>`).join('');
   }catch(e){console.warn('loadAgents:',e);}
 }
 
 /* ─── LOGIN ADMIN ─── */
-function loginAdmin(){
+async function loginAdmin(){
   const user=document.getElementById('adminUser').value.trim();
   const pass=document.getElementById('adminPass').value;
   if(!user||!pass){showError('Completa todos los campos');return;}
-  if(user===ADMIN_USER&&pass===ADMIN_PASS){
-    // Guardar en sessionStorage Y localStorage (fallback para Edge InPrivate)
-    const _saveAuth = (k,v) => { try{sessionStorage.setItem(k,v);}catch(e){} try{localStorage.setItem('td_auth_'+k,v);}catch(e){} };
-    _saveAuth('pqr_role','admin');
-    _saveAuth('pqr_name','Administrador');
-    const btn=document.getElementById('btnAdmin');btn.disabled=true;
-    btn.innerHTML='<svg class="spin-icon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg> Cargando...';
-    setTimeout(()=>window.location.href='admin.html',600);
-  }else{
-    showError('Usuario o contraseña incorrectos');
-    document.getElementById('adminPass').value='';
-    document.getElementById('adminPass').focus();
-    shake('adminForm');
+  const btn=document.getElementById('btnAdmin');
+  btn.disabled=true;
+  btn.innerHTML='<svg class="spin-icon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg> Verificando...';
+  try{
+    const r=await fetch('/login.php',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'login_admin',user,pass})});
+    const data=await r.json();
+    if(data.ok){
+      const _saveAuth=(k,v)=>{try{sessionStorage.setItem(k,v);}catch(e){}try{localStorage.setItem('td_auth_'+k,v);}catch(e){}};
+      _saveAuth('pqr_role','admin');
+      _saveAuth('pqr_name','Administrador');
+      setTimeout(()=>window.location.href='admin.html',400);
+    }else{
+      showError('Usuario o contraseña incorrectos');
+      document.getElementById('adminPass').value='';
+      document.getElementById('adminPass').focus();
+      shake('adminForm');
+      btn.disabled=false;
+      btn.innerHTML='→ Ingresar al panel';
+    }
+  }catch(e){
+    showError('Error de conexión');
+    btn.disabled=false;
+    btn.innerHTML='→ Ingresar al panel';
   }
 }
 
 /* ─── LOGIN AGENT ─── */
-function loginAgent(){
+async function loginAgent(){
   const sel=document.getElementById('agentSelect');
   const pin=['p1','p2','p3','p4'].map(id=>document.getElementById(id).value).join('');
   if(!sel.value){showError('Selecciona tu nombre');return;}
   if(pin.length<4){showError('Ingresa tu PIN de 4 dígitos');return;}
-  const opt=sel.options[sel.selectedIndex];
-  if(pin===opt.dataset.pin){
-    // Guardar en sessionStorage Y localStorage (fallback para Edge InPrivate)
-    const _saveA = (k,v) => { try{sessionStorage.setItem(k,v);}catch(e){} try{localStorage.setItem('td_auth_'+k,v);}catch(e){} };
-    _saveA('pqr_role','agente');
-    _saveA('pqr_agent_id',sel.value);
-    _saveA('pqr_name',opt.text);
-    const btn=document.getElementById('btnAgent');btn.disabled=true;btn.textContent='Cargando...';
-    setTimeout(()=>window.location.href='agente.html',600);
-  }else{
-    showError('PIN incorrecto');
-    ['p1','p2','p3','p4'].forEach(id=>document.getElementById(id).value='');
-    document.getElementById('p1').focus();
-    shake('agentForm');
+  const btn=document.getElementById('btnAgent');
+  btn.disabled=true;btn.textContent='Verificando...';
+  try{
+    const r=await fetch('/login.php',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'login_agent',agent_id:sel.value,pin})});
+    const data=await r.json();
+    if(data.ok){
+      const _saveA=(k,v)=>{try{sessionStorage.setItem(k,v);}catch(e){}try{localStorage.setItem('td_auth_'+k,v);}catch(e){}};
+      _saveA('pqr_role','agente');
+      _saveA('pqr_agent_id',data.id);
+      _saveA('pqr_name',data.name);
+      setTimeout(()=>window.location.href='agente.html',400);
+    }else{
+      showError('PIN incorrecto');
+      ['p1','p2','p3','p4'].forEach(id=>document.getElementById(id).value='');
+      document.getElementById('p1').focus();
+      shake('agentForm');
+      btn.disabled=false;btn.textContent='Ingresar al panel';
+    }
+  }catch(e){
+    showError('Error de conexión');
+    btn.disabled=false;btn.textContent='Ingresar al panel';
   }
 }
 
