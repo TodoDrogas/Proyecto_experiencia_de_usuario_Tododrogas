@@ -751,7 +751,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </select>
           </div>
           <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary">🔍 Filtrar</button>
-          <button onclick="exportNovaExcel()" class="mfiltros-btn-export">⬇ Excel</button>
+          <button onclick="exportWebExcel()" class="mfiltros-btn-export">⬇ Excel Web</button>
           <span id="novaLastUpdate" class="mfiltros-update"></span>
         </div>
 
@@ -866,7 +866,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </select>
           </div>
           <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#d97706">🔍 Filtrar</button>
-          <button onclick="exportNovaExcel()" class="mfiltros-btn-export">⬇ Excel</button>
+          <button onclick="exportQrExcel()" class="mfiltros-btn-export">⬇ Excel QR</button>
         </div>
 
         <div class="mkpi-strip">
@@ -970,7 +970,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </select>
           </div>
           <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#7c3aed">🔍 Filtrar</button>
-          <button onclick="exportNovaExcel()" class="mfiltros-btn-export">⬇ Excel</button>
+          <button onclick="exportNovaExcel()" class="mfiltros-btn-export">⬇ Excel Nova TD</button>
           <span id="novaLastUpdate2" class="mfiltros-update"></span>
         </div>
 
@@ -1146,7 +1146,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <input type="date" id="novaHasta4" class="mfiltros-input" style="background:#1e293b;border-color:#334155;color:#fff">
           </div>
           <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#2563eb">🔍 Filtrar</button>
-          <button onclick="exportNovaExcel()" class="mfiltros-btn-export">⬇ Excel</button>
+          <button onclick="exportGlobalExcel()" class="mfiltros-btn-export">⬇ Excel Global</button>
           <span class="mfiltros-update" style="color:rgba(255,255,255,.4)" id="gLastUpdate"></span>
         </div>
 
@@ -1267,7 +1267,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
               </select>
             </div>
             <button onclick="loadAgentesMetrics()" class="mfiltros-btn-primary">🔍 Filtrar</button>
-            <button onclick="exportAgentesExcel()" class="mfiltros-btn-export">⬇ Excel detallado</button>
+            <button onclick="exportAsesoresExcel()" class="mfiltros-btn-export">⬇ Excel Asesores</button>
             <span id="agLastUpdate" class="mfiltros-update"></span>
           </div>
 
@@ -6524,592 +6524,378 @@ function _mTend(arr,f,dias,d1){
 }
 
 
-async function exportNovaExcel(){
-  const D = novaDatos;
-  const wb = XLSX.utils.book_new();
-  const SB_URL = (window.SUPABASE_URL||'').replace(/\/$/,'');
-  const SB_KEY = window.SUPABASE_KEY||'';
-  const sbH = {headers:{apikey:SB_KEY,'Authorization':'Bearer '+SB_KEY}};
-  const fmt = d => d ? new Date(d).toLocaleString('es-CO') : '';
-  const fmtD = d => d ? new Date(d).toLocaleDateString('es-CO') : '';
+// ═══════════════════════════════════════════════════════════════════════
+// HELPERS COMUNES PARA TODOS LOS EXPORTS DE MÉTRICAS
+// ═══════════════════════════════════════════════════════════════════════
+async function _mExportInit() {
+  const D      = novaDatos;
+  const sbUrl  = (window.SUPABASE_URL||'').replace(/\/$/,'');
+  const sbKey  = window.SUPABASE_KEY||'';
+  const sbH    = {headers:{apikey:sbKey,'Authorization':'Bearer '+sbKey}};
+  const fmtD   = d => d ? new Date(d).toLocaleDateString('es-CO') : '';
+  const fmtH   = d => d ? new Date(d).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '';
 
-  // ── correos ya enriquecidos directamente desde novaDatos ────────────
-  // loadNovaMetrics ahora incluye todos los campos necesarios en el select
-  let correoMap = {};
-  D.radWeb.forEach(r => correoMap[r.id] = r);
-  D.radQr.forEach(r => correoMap[r.id] = r);
+  // Cargar sedes de Supabase para cruzar con ciudad_paciente
+  let sedesMap = {};  // municipio_norm.toLowerCase() → nombre sede
+  try {
+    const sedesRaw = await fetch(
+      `${sbUrl}/rest/v1/sedes?select=id,nombre,municipio_norm,ciudad&activa=eq.true&limit=200`, sbH
+    ).then(r=>r.json()).catch(()=>[]);
+    (sedesRaw||[]).forEach(s => {
+      const key = (s.municipio_norm||s.ciudad||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+      if (key) sedesMap[key] = s.nombre;
+    });
+  } catch(e) { console.warn('[export] sedes:', e.message); }
 
-  // ── Enriquecer encuestas Web y QR con datos_extra del historial ──────
-  // state.encuestas ya está cargado desde historial_eventos (loadEncuestas)
-  // Tiene: datos_extra con nombre, correo, sede_nombre, sede_ciudad, cedula,
-  //        instalaciones, atencion, tiempos, medicamentos, recomendacion, promedio
+  // Cruzar ciudad del paciente/correo con tabla sedes
+  function getSede(r) {
+    const ciudad = (r.ciudad_paciente || r.municipio || '').toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+    return sedesMap[ciudad] || r.ciudad_paciente || '';
+  }
+
+  // Encuestas por canal
   const encAll = state.encuestas || [];
   const encByCanal = canal => encAll.filter(e => {
     const c = e.canal || (e.datos_extra||{}).canal || 'web';
     return c === canal;
   });
 
-  // ── Cargar agentes para cruzar sede ──────────────────────────────────
-  const agsMap = {};
-  (state.agents||[]).forEach(a => agsMap[a.id] = a);
+  // Tipo badge text
+  const tipoLabel = t => t ? (t.charAt(0).toUpperCase()+t.slice(1)) : 'Sin clasificar';
+  const sentLabel = s => s ? (s.charAt(0).toUpperCase()+s.slice(1)) : 'Sin clasificar';
 
-  // ─────────────────────────────────────────────────────────────────────
-  // HOJA 1 — WEB_ENCUESTA
-  // Fecha | Sede | Municipio | Cédula | Nombre | Teléfono | EPS | Correo |
-  // Resultado | Instalaciones y Cal | Atención y Cal | Tiempos y Cal |
-  // Medicamentos y Cal | Recomendación y Cal | Comentario
-  // ─────────────────────────────────────────────────────────────────────
-  const wEncuestas = encByCanal('web');
-  const h_wEnc = wEncuestas.map(e => {
+  return { D, fmtD, fmtH, getSede, encAll, encByCanal, tipoLabel, sentLabel };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXPORT WEB → WEB_Encuesta + WEB_Radicacion
+// ═══════════════════════════════════════════════════════════════════════
+async function exportWebExcel() {
+  const { D, fmtD, fmtH, getSede, encByCanal, tipoLabel, sentLabel } = await _mExportInit();
+  const wb = XLSX.utils.book_new();
+  const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
+
+  // ── WEB_Encuesta ────────────────────────────────────────────────────
+  const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
+  const h_wEnc = encByCanal('web').map(e => {
     const ex = e.datos_extra || {};
-    const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
     return {
       'Fecha':             fmtD(e.created_at),
-      'Hora':              e.created_at ? new Date(e.created_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-      'Sede':              ex.sede_nombre   || '',
-      'Municipio':         ex.sede_ciudad   || '',
-      'Cédula':            ex.cedula        || ex.documento || '',
-      'Nombre':            ex.nombre        || '',
-      'Teléfono':          ex.telefono      || '',
-      'EPS':               ex.eps           || '',
-      'Correo':            ex.correo        || '',
-      'Resultado':         e.calificacion>=3?'SATISFACTORIO':e.calificacion>=2?'NEUTRO':'INSATISFACTORIO',
-      'Promedio':          ex.promedio      || '',
+      'Hora':              fmtH(e.created_at),
+      'Sede':              ex.sede_nombre || '',
+      'Municipio':         ex.sede_ciudad || '',
+      'Cédula':            ex.cedula      || ex.documento || '',
+      'Nombre':            ex.nombre      || '',
+      'Teléfono':          ex.telefono    || '',
+      'EPS':               ex.eps         || '',
+      'Correo':            ex.correo      || '',
+      'Resultado':         (e.calificacion||0)>=3?'SATISFACTORIO':(e.calificacion||0)>=2?'NEUTRO':'INSATISFACTORIO',
+      'Promedio':          ex.promedio    || '',
       'Instalaciones':     ex.instalaciones || '',
       'Cal_Instalaciones': calLabel(ex.instalaciones),
-      'Atencion':          ex.atencion      || '',
+      'Atencion':          ex.atencion    || '',
       'Cal_Atencion':      calLabel(ex.atencion),
-      'Tiempos':           ex.tiempos       || '',
+      'Tiempos':           ex.tiempos     || '',
       'Cal_Tiempos':       calLabel(ex.tiempos),
-      'Medicamentos':      ex.medicamentos  || '',
+      'Medicamentos':      ex.medicamentos|| '',
       'Cal_Medicamentos':  calLabel(ex.medicamentos),
-      'Recomendacion':     ex.recomendacion || '',
+      'Recomendacion':     ex.recomendacion||'',
       'Cal_Recomendacion': calLabel(ex.recomendacion),
       'Comentario':        e.comentario || ex.comentario || '',
       'Canal':             'Web',
     };
   });
-  const ws_wEnc = XLSX.utils.json_to_sheet(h_wEnc.length ? h_wEnc : [{'Sin_datos':'Sin encuestas Web'}]);
+  const ws_wEnc = XLSX.utils.json_to_sheet(h_wEnc.length ? h_wEnc : [{'Sin_datos':'Sin encuestas Web en el período'}]);
   ws_wEnc['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:18},{wch:13},{wch:26},{wch:13},{wch:16},{wch:28},{wch:16},{wch:9},{wch:13},{wch:16},{wch:10},{wch:12},{wch:8},{wch:11},{wch:13},{wch:16},{wch:13},{wch:18},{wch:40},{wch:8}];
   XLSX.utils.book_append_sheet(wb, ws_wEnc, 'WEB_Encuesta');
 
-  // ─────────────────────────────────────────────────────────────────────
-  // HOJA 2 — WEB_RADICACIÓN
-  // Fecha | Sede del agente | Municipio | Cédula | Nombre | Teléfono |
-  // EPS | Correo | Ticket | Tipo PQR | Sentimiento | Prioridad | Estado
-  // ─────────────────────────────────────────────────────────────────────
-  const h_wRad = D.radWeb.map(r => {
-    const ag = agsMap[r.agente_id] || {};
-    return {
-      'Fecha':       fmtD(r.received_at),
-      'Hora':        r.received_at ? new Date(r.received_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-      'Sede_Agente': ag.sede           || '',
-      'Cédula':      r.cedula          || '',
-      'Nombre':      r.from_name || r.nombre || '',
-      'Correo':      r.from_email      || '',
-      'Ticket':      r.ticket_id       || '',
-      'Tipo_PQR':    r.tipo_pqr        || '',
-      'Sentimiento': r.sentimiento     || '',
-      'Prioridad':   r.prioridad       || '',
-      'Estado':      r.estado          || '',
-      'Canal':       r.canal_contacto  || r.origen || 'web',
-      'Accion':      'Radicado',
-    };
-  });
-  const ws_wRad = XLSX.utils.json_to_sheet(h_wRad.length ? h_wRad : [{'Sin_datos':'Sin radicados Web'}]);
-  ws_wRad['!cols'] = [{wch:12},{wch:8},{wch:22},{wch:13},{wch:26},{wch:28},{wch:20},{wch:16},{wch:13},{wch:11},{wch:14},{wch:14},{wch:10}];
+  // ── WEB_Radicacion ──────────────────────────────────────────────────
+  const h_wRad = (D.radWeb||[]).map(r => ({
+    'Fecha':       fmtD(r.received_at),
+    'Hora':        fmtH(r.received_at),
+    'Sede':        getSede(r),
+    'Cédula':      r.cedula      || '',
+    'Nombre':      r.from_name   || r.nombre || '',
+    'Correo':      r.from_email  || '',
+    'Ticket':      r.ticket_id   || '',
+    'Tipo_PQR':    tipoLabel(r.tipo_pqr),
+    'Sentimiento': sentLabel(r.sentimiento),
+    'Prioridad':   r.prioridad   || '',
+    'Estado':      r.estado      || '',
+    'Canal':       r.canal_contacto || r.origen || 'web',
+  }));
+  const ws_wRad = XLSX.utils.json_to_sheet(h_wRad.length ? h_wRad : [{'Sin_datos':'Sin radicados Web en el período'}]);
+  ws_wRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:26},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws_wRad, 'WEB_Radicacion');
 
-  // ─────────────────────────────────────────────────────────────────────
-  // HOJA 3 — QR_ENCUESTA
-  // ─────────────────────────────────────────────────────────────────────
-  const qrEncuestas = encByCanal('qr');
-  const h_qEnc = qrEncuestas.map(e => {
+  XLSX.writeFile(wb, `WEB_${desde}_${hasta}.xlsx`);
+  showToast('Excel Web exportado ✓','success');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXPORT QR → QR_Encuesta + QR_Radicacion
+// ═══════════════════════════════════════════════════════════════════════
+async function exportQrExcel() {
+  const { D, fmtD, fmtH, getSede, encByCanal, tipoLabel, sentLabel } = await _mExportInit();
+  const wb = XLSX.utils.book_new();
+  const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
+
+  // ── QR_Encuesta ─────────────────────────────────────────────────────
+  const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
+  const h_qEnc = encByCanal('qr').map(e => {
     const ex = e.datos_extra || {};
-    const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
     return {
       'Fecha':             fmtD(e.created_at),
-      'Hora':              e.created_at ? new Date(e.created_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-      'Sede':              ex.sede_nombre   || '',
-      'Municipio':         ex.sede_ciudad   || '',
-      'Cédula':            ex.cedula        || ex.documento || '',
-      'Nombre':            ex.nombre        || '',
-      'Teléfono':          ex.telefono      || '',
-      'EPS':               ex.eps           || '',
-      'Correo':            ex.correo        || '',
-      'Resultado':         e.calificacion>=3?'SATISFACTORIO':e.calificacion>=2?'NEUTRO':'INSATISFACTORIO',
-      'Promedio':          ex.promedio      || '',
+      'Hora':              fmtH(e.created_at),
+      'Sede':              ex.sede_nombre || '',
+      'Municipio':         ex.sede_ciudad || '',
+      'Cédula':            ex.cedula      || ex.documento || '',
+      'Nombre':            ex.nombre      || '',
+      'Teléfono':          ex.telefono    || '',
+      'EPS':               ex.eps         || '',
+      'Correo':            ex.correo      || '',
+      'Resultado':         (e.calificacion||0)>=3?'SATISFACTORIO':(e.calificacion||0)>=2?'NEUTRO':'INSATISFACTORIO',
+      'Promedio':          ex.promedio    || '',
       'Instalaciones':     ex.instalaciones || '',
       'Cal_Instalaciones': calLabel(ex.instalaciones),
-      'Atencion':          ex.atencion      || '',
+      'Atencion':          ex.atencion    || '',
       'Cal_Atencion':      calLabel(ex.atencion),
-      'Tiempos':           ex.tiempos       || '',
+      'Tiempos':           ex.tiempos     || '',
       'Cal_Tiempos':       calLabel(ex.tiempos),
-      'Medicamentos':      ex.medicamentos  || '',
+      'Medicamentos':      ex.medicamentos|| '',
       'Cal_Medicamentos':  calLabel(ex.medicamentos),
-      'Recomendacion':     ex.recomendacion || '',
+      'Recomendacion':     ex.recomendacion||'',
       'Cal_Recomendacion': calLabel(ex.recomendacion),
       'Comentario':        e.comentario || ex.comentario || '',
       'Canal':             'QR',
     };
   });
-  const ws_qEnc = XLSX.utils.json_to_sheet(h_qEnc.length ? h_qEnc : [{'Sin_datos':'Sin encuestas QR'}]);
-  ws_qEnc['!cols'] = ws_wEnc['!cols'];
+  const ws_qEnc = XLSX.utils.json_to_sheet(h_qEnc.length ? h_qEnc : [{'Sin_datos':'Sin encuestas QR en el período'}]);
+  ws_qEnc['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:18},{wch:13},{wch:26},{wch:13},{wch:16},{wch:28},{wch:16},{wch:9},{wch:13},{wch:16},{wch:10},{wch:12},{wch:8},{wch:11},{wch:13},{wch:16},{wch:13},{wch:18},{wch:40},{wch:8}];
   XLSX.utils.book_append_sheet(wb, ws_qEnc, 'QR_Encuesta');
 
-  // ─────────────────────────────────────────────────────────────────────
-  // HOJA 4 — QR_RADICACIÓN
-  // ─────────────────────────────────────────────────────────────────────
-  // QR ya en correoMap (cargado arriba desde novaDatos)
-  const correoMapQR = correoMap;
-
-  const h_qRad = D.radQr.map(r => {
-    const ag = agsMap[r.agente_id] || {};
-    return {
-      'Fecha':       fmtD(r.received_at),
-      'Hora':        r.received_at ? new Date(r.received_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-      'Sede_Agente': ag.sede           || '',
-      'Cédula':      r.cedula          || '',
-      'Nombre':      r.from_name || r.nombre || '',
-      'Correo':      r.from_email      || '',
-      'Ticket':      r.ticket_id       || '',
-      'Tipo_PQR':    r.tipo_pqr        || '',
-      'Sentimiento': r.sentimiento     || '',
-      'Prioridad':   r.prioridad       || '',
-      'Estado':      r.estado          || '',
-      'Canal':       'QR',
-      'Accion':      'Radicado',
-    };
-  });
-  const ws_qRad = XLSX.utils.json_to_sheet(h_qRad.length ? h_qRad : [{'Sin_datos':'Sin radicados QR'}]);
-  ws_qRad['!cols'] = ws_wRad['!cols'];
+  // ── QR_Radicacion ───────────────────────────────────────────────────
+  const h_qRad = (D.radQr||[]).map(r => ({
+    'Fecha':       fmtD(r.received_at),
+    'Hora':        fmtH(r.received_at),
+    'Sede':        getSede(r),
+    'Cédula':      r.cedula      || '',
+    'Nombre':      r.from_name   || r.nombre || '',
+    'Correo':      r.from_email  || '',
+    'Ticket':      r.ticket_id   || '',
+    'Tipo_PQR':    tipoLabel(r.tipo_pqr),
+    'Sentimiento': sentLabel(r.sentimiento),
+    'Prioridad':   r.prioridad   || '',
+    'Estado':      r.estado      || '',
+    'Canal':       'QR',
+  }));
+  const ws_qRad = XLSX.utils.json_to_sheet(h_qRad.length ? h_qRad : [{'Sin_datos':'Sin radicados QR en el período'}]);
+  ws_qRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:26},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:8}];
   XLSX.utils.book_append_sheet(wb, ws_qRad, 'QR_Radicacion');
 
-  // ─────────────────────────────────────────────────────────────────────
-  // HOJA 5 — NOVA_TD
-  // Enfocado en sesiones: sede, municipio, sesiones, turnos, preguntas
-  // frecuentes, usuarios frecuentes, preguntas abiertas, pasó a asesor
-  // ─────────────────────────────────────────────────────────────────────
-  const sesAll = [...(D.sesNovaWeb||[]), ...(D.sesNovaDir||[]), ...(D.sesNovaBv||[])];
+  XLSX.writeFile(wb, `QR_${desde}_${hasta}.xlsx`);
+  showToast('Excel QR exportado ✓','success');
+}
 
-  // Detalle por sesión
-  // Opciones fijas del menú Nova (en orden)
-  const MENU_OPCIONES = [
-    'Medicamentos',    // 1 Estado o entrega de medicamentos
-    'Sedes',           // 2 Puntos de dispensación
-    'Requisitos',      // 3 Requisitos para reclamar medicamentos
-    'Radicar',         // 4 Radicar PQRSFD
-    'Radicado',        // 5 Estado de mi radicado PQRSFD
-    'Horarios',        // 6 Horarios y canales de contacto
-    'Encuesta',        // 7 Encuesta de satisfacción
-    'PreguntaLibre',   // 8 Pregunta personalizada a Nova TD
-  ];
+// ═══════════════════════════════════════════════════════════════════════
+// EXPORT NOVA TD → NOVA_TD_Detalle + Por_Sede + Preguntas + Usuarios
+// ═══════════════════════════════════════════════════════════════════════
+async function exportNovaExcel() {
+  const { D, fmtD, fmtH, getSede } = await _mExportInit();
+  const wb = XLSX.utils.book_new();
+  const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
 
-  const h_nova_det = sesAll.map(s => {
-    const menuStr  = s.menu_elegido || '';
-    const menuArr  = menuStr ? menuStr.split(',').map(m=>m.trim()).filter(Boolean) : [];
-    // Marcar con 'Sí' solo las opciones que realmente eligió, vacío si no usó el menú
+  const MENU_OPCIONES = ['Medicamentos','Sedes','Requisitos','Radicar','Radicado','Horarios','Encuesta','PreguntaLibre'];
+  const allSes = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])];
+
+  // ── NOVA_TD_Detalle ─────────────────────────────────────────────────
+  const h_det = allSes.map(s => {
+    const menuArr = (s.menu_elegido||'').split(',').map(m=>m.trim()).filter(Boolean);
     const menuCols = {};
     MENU_OPCIONES.forEach(op => {
-      menuCols['Menu_'+op] = menuArr.length > 0
-        ? (menuArr.includes(op) ? 'Sí' : 'No')
-        : '';   // vacío si nunca tocó el menú
+      menuCols['Menu_'+op] = menuArr.length > 0 ? (menuArr.includes(op)?'Sí':'No') : '';
     });
-
     return {
       'Fecha':            fmtD(s.created_at),
-      'Hora':             s.created_at ? new Date(s.created_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-      'Canal':            s.origen === 'nova_directo' ? 'Nova Directo' : s.origen === 'nova_bienvenida' ? 'Nova Bienvenida' : 'Nova Web',
-      'Municipio':        s.municipio      || '',
-      'EPS':              s.eps_paciente   || s.eps || '',
-      'Cédula':           s.cedula         || '',
-      'Nombre':           s.nombre         || '',
-      'Turnos':           s.turnos         || 0,
-      'Consultas':        s.consultas_count|| 0,
-      'Preguntas_Libres': s.preguntas_libres || 0,
-      'Motivo_Cierre':    s.motivo_cierre  || '',
-      'Paso_Asesor':      (s.motivo_cierre||'').toLowerCase().includes('asesor') ? 'Sí' : 'No',
-      'Calificacion':     s.calificacion   || '',
+      'Hora':             fmtH(s.created_at),
+      'Canal':            s.origen==='nova_directo'?'Nova Directo':s.origen==='nova_bienvenida'?'Nova Bienvenida':'Nova Web',
+      'Sede':             getSede(s),
+      'Municipio':        s.municipio       || '',
+      'EPS':              s.eps_paciente    || s.eps || '',
+      'Cédula':           s.cedula          || '',
+      'Nombre':           s.nombre          || '',
+      'Turnos':           s.turnos          || 0,
+      'Consultas':        s.consultas_count || 0,
+      'Preguntas_Libres': s.preguntas_libres|| 0,
+      'Motivo_Cierre':    s.motivo_cierre   || '',
+      'Paso_Asesor':      (s.motivo_cierre||'').toLowerCase().includes('asesor')?'Sí':'No',
+      'Calificacion':     s.calificacion    || '',
       'Duracion_seg':     s.duracion_seg !== null && s.duracion_seg !== undefined ? s.duracion_seg : '',
       'VIP':              s.es_vip ? 'Sí' : 'No',
       ...menuCols,
     };
   });
+  const ws_det = XLSX.utils.json_to_sheet(h_det.length ? h_det : [{'Sin_datos':'Sin sesiones Nova'}]);
+  ws_det['!cols'] = [{wch:12},{wch:8},{wch:14},{wch:32},{wch:18},{wch:16},{wch:13},{wch:26},{wch:7},{wch:10},{wch:16},{wch:22},{wch:12},{wch:12},{wch:13},{wch:5},{wch:14},{wch:10},{wch:12},{wch:8},{wch:11},{wch:10},{wch:10},{wch:15}];
+  XLSX.utils.book_append_sheet(wb, ws_det, 'NOVA_TD_Detalle');
 
-  // Resumen por municipio/sede
+  // ── NOVA_TD_Por_Sede ────────────────────────────────────────────────
   const byMuni = {};
-  sesAll.forEach(s => {
+  allSes.forEach(s => {
     const k = s.municipio || '(Sin municipio)';
-    if (!byMuni[k]) byMuni[k] = {sesiones:0, turnos:0, preguntas_libres:0, consultas:0, paso_asesor:0, eps_set:new Set(), cedulas:[], vip:0};
+    if (!byMuni[k]) byMuni[k] = {sesiones:0,turnos:0,preguntas_libres:0,consultas:0,paso_asesor:0,eps_set:new Set(),cedulas:[],vip:0};
     byMuni[k].sesiones++;
-    byMuni[k].turnos      += s.turnos||0;
-    byMuni[k].preguntas_libres += s.preguntas_libres||0;
-    byMuni[k].consultas   += s.consultas_count||0;
+    byMuni[k].turnos          += s.turnos||0;
+    byMuni[k].preguntas_libres+= s.preguntas_libres||0;
+    byMuni[k].consultas       += s.consultas_count||0;
     if ((s.motivo_cierre||'').toLowerCase().includes('asesor')) byMuni[k].paso_asesor++;
     if (s.eps_paciente||s.eps) byMuni[k].eps_set.add(s.eps_paciente||s.eps);
     if (s.cedula) byMuni[k].cedulas.push(s.cedula);
     if (s.es_vip) byMuni[k].vip++;
   });
+  const h_sede = Object.entries(byMuni).sort((a,b)=>b[1].sesiones-a[1].sesiones).map(([muni,v]) => {
+    const cedFreq = {};
+    v.cedulas.forEach(c=>{cedFreq[c]=(cedFreq[c]||0)+1;});
+    const topCed = Object.entries(cedFreq).sort((a,b)=>b[1]-a[1])[0];
+    return {
+      'Municipio':           muni,
+      'Total_Sesiones':      v.sesiones,
+      'Total_Turnos':        v.turnos,
+      'Prom_Turnos_Sesion':  v.sesiones?(v.turnos/v.sesiones).toFixed(1):0,
+      'Total_Consultas':     v.consultas,
+      'Preguntas_Libres':    v.preguntas_libres,
+      'Paso_A_Asesor':       v.paso_asesor,
+      'Pct_Paso_Asesor':     v.sesiones?Math.round(v.paso_asesor/v.sesiones*100)+'%':'0%',
+      'EPS_Presentes':       [...v.eps_set].join(', '),
+      'Usuarios_Unicos':     new Set(v.cedulas).size,
+      'Usuario_Mas_Frecuente': topCed?topCed[0]+' ('+topCed[1]+'x)':'',
+      'Usuarios_VIP':        v.vip,
+    };
+  });
+  const ws_sede = XLSX.utils.json_to_sheet(h_sede.length ? h_sede : [{'Sin_datos':'Sin datos por municipio'}]);
+  ws_sede['!cols'] = [{wch:22},{wch:15},{wch:13},{wch:18},{wch:16},{wch:16},{wch:14},{wch:16},{wch:30},{wch:15},{wch:22},{wch:13}];
+  XLSX.utils.book_append_sheet(wb, ws_sede, 'NOVA_TD_Por_Sede');
 
-  const h_nova_sede = Object.entries(byMuni)
-    .sort((a,b)=>b[1].sesiones-a[1].sesiones)
-    .map(([muni, v]) => {
-      // Usuario más frecuente por cédula
-      const cedFreq = {};
-      v.cedulas.forEach(c=>{cedFreq[c]=(cedFreq[c]||0)+1;});
-      const topCed = Object.entries(cedFreq).sort((a,b)=>b[1]-a[1])[0];
-      return {
-        'Municipio':           muni,
-        'Total_Sesiones':      v.sesiones,
-        'Total_Turnos':        v.turnos,
-        'Prom_Turnos_Sesion':  v.sesiones ? (v.turnos/v.sesiones).toFixed(1) : 0,
-        'Total_Consultas':     v.consultas,
-        'Preguntas_Libres':    v.preguntas_libres,
-        'Paso_A_Asesor':       v.paso_asesor,
-        'Pct_Paso_Asesor':     v.sesiones ? Math.round(v.paso_asesor/v.sesiones*100)+'%' : '0%',
-        'EPS_Presentes':       [...v.eps_set].join(', '),
-        'Usuarios_Unicos':     new Set(v.cedulas).size,
-        'Usuario_Mas_Frecuente': topCed ? topCed[0]+' ('+topCed[1]+'x)' : '',
-        'Usuarios_VIP':        v.vip,
-      };
-    });
+  // ── NOVA_TD_Preguntas ───────────────────────────────────────────────
+  const menuCount = {};
+  allSes.forEach(s=>{if(s.menu_elegido)s.menu_elegido.split(',').forEach(m=>{const t=m.trim();if(t)menuCount[t]=(menuCount[t]||0)+1;});});
+  const h_preg = Object.entries(menuCount).sort((a,b)=>b[1]-a[1]).map(([menu,cnt])=>({
+    'Opcion_Menu':   menu,
+    'Veces_Elegida': cnt,
+    'Porcentaje':    allSes.length?Math.round(cnt/allSes.length*100)+'%':'0%',
+  }));
+  const ws_preg = XLSX.utils.json_to_sheet(h_preg.length ? h_preg : [{'Sin_datos':'Sin datos de menú'}]);
+  ws_preg['!cols'] = [{wch:36},{wch:14},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, ws_preg, 'NOVA_TD_Preguntas');
 
-  // Preguntas frecuentes (menu_elegido)
-  const menuFreq = {};
-  sesAll.forEach(s => { if(s.menu_elegido) menuFreq[s.menu_elegido] = (menuFreq[s.menu_elegido]||0)+1; });
-  const h_nova_menu = Object.entries(menuFreq)
-    .sort((a,b)=>b[1]-a[1])
-    .map(([menu, cnt]) => ({
-      'Opcion_Menu':    menu,
-      'Veces_Elegida':  cnt,
-      'Porcentaje':     sesAll.length ? Math.round(cnt/sesAll.length*100)+'%' : '0%',
-    }));
-
-  // Usuarios más frecuentes
+  // ── NOVA_TD_Usuarios ────────────────────────────────────────────────
   const userFreq = {};
-  sesAll.forEach(s => {
+  allSes.forEach(s => {
     if (!s.cedula) return;
-    if (!userFreq[s.cedula]) userFreq[s.cedula] = {nombre:s.nombre||'',eps:s.eps_paciente||s.eps||'',sesiones:0,vip:s.es_vip||false};
+    if (!userFreq[s.cedula]) userFreq[s.cedula]={nombre:s.nombre||'',eps:s.eps_paciente||s.eps||'',sesiones:0,vip:s.es_vip||false};
     userFreq[s.cedula].sesiones++;
   });
-  const h_nova_users = Object.entries(userFreq)
-    .sort((a,b)=>b[1].sesiones-a[1].sesiones)
-    .slice(0, 50)
-    .map(([ced, v]) => ({
-      'Cédula':   ced,
-      'Nombre':   v.nombre,
-      'EPS':      v.eps,
-      'Sesiones': v.sesiones,
-      'VIP':      v.vip ? 'Sí' : 'No',
-    }));
+  const h_users = Object.entries(userFreq).sort((a,b)=>b[1].sesiones-a[1].sesiones).slice(0,50).map(([ced,v])=>({
+    'Cédula':   ced,
+    'Nombre':   v.nombre,
+    'EPS':      v.eps,
+    'Sesiones': v.sesiones,
+    'VIP':      v.vip?'Sí':'No',
+  }));
+  const ws_users = XLSX.utils.json_to_sheet(h_users.length ? h_users : [{'Sin_datos':'Sin usuarios frecuentes'}]);
+  ws_users['!cols'] = [{wch:15},{wch:28},{wch:16},{wch:9},{wch:5}];
+  XLSX.utils.book_append_sheet(wb, ws_users, 'NOVA_TD_Usuarios');
 
-  // Escribir hoja Nova TD con múltiples secciones separadas
-  const ws_nova = XLSX.utils.json_to_sheet(h_nova_det.length ? h_nova_det : [{'Sin_datos':'Sin sesiones'}]);
-  ws_nova['!cols'] = [{wch:12},{wch:8},{wch:14},{wch:18},{wch:16},{wch:13},{wch:26},{wch:7},{wch:10},{wch:16},{wch:22},{wch:12},{wch:12},{wch:13},{wch:5},{wch:14},{wch:10},{wch:12},{wch:8},{wch:11},{wch:10},{wch:10},{wch:15}];
-  XLSX.utils.book_append_sheet(wb, ws_nova, 'NOVA_TD_Detalle');
+  XLSX.writeFile(wb, `NovaTD_${desde}_${hasta}.xlsx`);
+  showToast('Excel Nova TD exportado ✓','success');
+}
 
-  const ws_nova_sede = XLSX.utils.json_to_sheet(h_nova_sede.length ? h_nova_sede : [{'Sin_datos':'Sin datos por municipio'}]);
-  ws_nova_sede['!cols'] = [{wch:20},{wch:15},{wch:13},{wch:18},{wch:16},{wch:16},{wch:14},{wch:16},{wch:30},{wch:15},{wch:22},{wch:13}];
-  XLSX.utils.book_append_sheet(wb, ws_nova_sede, 'NOVA_TD_Por_Sede');
+// ═══════════════════════════════════════════════════════════════════════
+// EXPORT GLOBAL → GLOBAL canal + GLOBAL sede
+// ═══════════════════════════════════════════════════════════════════════
+async function exportGlobalExcel() {
+  const { D, encAll, encByCanal, tipoLabel } = await _mExportInit();
+  const wb = XLSX.utils.book_new();
+  const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
 
-  const ws_nova_menu = XLSX.utils.json_to_sheet(h_nova_menu.length ? h_nova_menu : [{'Sin_datos':'Sin datos de menú'}]);
-  ws_nova_menu['!cols'] = [{wch:36},{wch:14},{wch:12}];
-  XLSX.utils.book_append_sheet(wb, ws_nova_menu, 'NOVA_TD_Preguntas');
+  const allSes = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])];
+  const ctT = (arr,t) => arr.filter(r=>(r.tipo_pqr||'').toLowerCase()===t).length;
+  const ePr = arr => { const v=arr.filter(e=>(e.calificacion||0)>0); return v.length?(v.reduce((a,e)=>a+(e.calificacion||0),0)/v.length).toFixed(2):'N/A'; };
+  const pasoA = arr => arr.filter(s=>(s.motivo_cierre||'').toLowerCase().includes('asesor')).length;
+  const allRads = [...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])];
 
-  const ws_nova_users = XLSX.utils.json_to_sheet(h_nova_users.length ? h_nova_users : [{'Sin_datos':'Sin usuarios frecuentes'}]);
-  ws_nova_users['!cols'] = [{wch:15},{wch:28},{wch:16},{wch:9},{wch:5}];
-  XLSX.utils.book_append_sheet(wb, ws_nova_users, 'NOVA_TD_Usuarios');
-
-  // ─────────────────────────────────────────────────────────────────────
-  // HOJA 6 — GLOBAL
-  // Resumen consolidado por canal — solo datos reales de BD
-  // ─────────────────────────────────────────────────────────────────────
-  const totalRad = D.radWeb.length + D.radQr.length + D.radNovaWeb.length + D.radNovaDir.length;
-  const totalEnc = D.encWeb.length + D.encQr.length + D.encNovaWeb.length + D.encNovaDir.length;
-  const totalSes = (D.sesNovaWeb||[]).length + (D.sesNovaDir||[]).length + (D.sesNovaBv||[]).length;
-
-  // Helper: promedio calificación solo cuando hay datos reales
-  const encPromedio = arr => {
-    const valid = (arr||[]).filter(e=>(e.calificacion||0)>0);
-    if(!valid.length) return '';
-    return (valid.reduce((a,e)=>a+(e.calificacion||0),0)/valid.length).toFixed(2);
-  };
-  // Conteos por tipo PQR — solo de radicados que tienen tipo asignado
-  const contarTipo = (arr, tipo) => arr.filter(r=>(r.tipo_pqr||'').toLowerCase()===tipo).length;
-  const tiposValidos = ['peticion','queja','reclamo','sugerencia','felicitacion','denuncia'];
-
-  // ── Fila por canal ──────────────────────────────────────────────────
-  const canalesData = [
-    { label:'Web', rads:D.radWeb,     encs:encByCanal('web'),  ses:[] },
-    { label:'QR',  rads:D.radQr,      encs:encByCanal('qr'),   ses:[] },
-    { label:'Nova Web',      rads:D.radNovaWeb, encs:D.encNovaWeb, ses:D.sesNovaWeb||[] },
-    { label:'Nova Directo',  rads:D.radNovaDir, encs:D.encNovaDir, ses:D.sesNovaDir||[] },
-    { label:'Nova Bienvenida', rads:[], encs:[], ses:D.sesNovaBv||[] },
+  const cRows = [
+    {n:'Web',              rads:D.radWeb||[],     encs:encByCanal('web'), ses:[]},
+    {n:'QR',               rads:D.radQr||[],      encs:encByCanal('qr'),  ses:[]},
+    {n:'Nova Web',         rads:D.radNovaWeb||[], encs:D.encNovaWeb||[], ses:D.sesNovaWeb||[]},
+    {n:'Nova Directo',     rads:D.radNovaDir||[], encs:D.encNovaDir||[], ses:D.sesNovaDir||[]},
+    {n:'Nova Bienvenida',  rads:[],               encs:[],               ses:D.sesNovaBv||[]},
+    {n:'TOTAL',            rads:allRads,           encs:[...encByCanal('web'),...encByCanal('qr'),...(D.encNovaWeb||[]),...(D.encNovaDir||[])], ses:allSes},
   ];
 
-  const h_global = canalesData.map(c => {
-    const row = {
-      'Canal':              c.label,
-      'Radicados':          c.rads.length || 0,
-      'Peticiones':         contarTipo(c.rads,'peticion'),
-      'Quejas':             contarTipo(c.rads,'queja'),
-      'Reclamos':           contarTipo(c.rads,'reclamo'),
-      'Sugerencias':        contarTipo(c.rads,'sugerencia'),
-      'Felicitaciones':     contarTipo(c.rads,'felicitacion'),
-      'Denuncias':          contarTipo(c.rads,'denuncia'),
-      'Sin_Tipo_Asignado':  c.rads.filter(r=>!r.tipo_pqr).length,
-      'Encuestas':          c.encs.length || 0,
-      'Prom_Satisfaccion':  encPromedio(c.encs),
-      'Sesiones_Nova':      c.ses.length || 0,
-      'Paso_Asesor_Nova':   c.ses.filter(s=>(s.motivo_cierre||'').toLowerCase().includes('asesor')).length || '',
-      'Total_Interacciones': (c.rads.length||0) + (c.encs.length||0) + (c.ses.length||0),
-    };
-    // Si no hay sesiones nova, dejar en blanco (no inventar 0)
-    if(!c.ses.length) { row['Sesiones_Nova']=''; row['Paso_Asesor_Nova']=''; }
-    // Si no hay encuestas, dejar promedio en blanco
-    return row;
+  const h_global = cRows.map(c => ({
+    'Canal':             c.n,
+    'Radicados':         c.rads.length,
+    'Peticiones':        ctT(c.rads,'peticion'),
+    'Quejas':            ctT(c.rads,'queja'),
+    'Reclamos':          ctT(c.rads,'reclamo'),
+    'Sugerencias':       ctT(c.rads,'sugerencia'),
+    'Felicitaciones':    ctT(c.rads,'felicitacion'),
+    'Denuncias':         ctT(c.rads,'denuncia'),
+    'Sin_Tipo':          c.rads.filter(r=>!r.tipo_pqr).length,
+    'Encuestas':         c.encs.length || (c.ses.length ? 'N/A' : 0),
+    'Prom_Satisfaccion': c.encs.length ? ePr(c.encs) : 'N/A',
+    'Sesiones_Nova':     c.ses.length || (c.n==='Web'||c.n==='QR' ? 'N/A' : 0),
+    'Paso_Asesor_Nova':  c.ses.length ? pasoA(c.ses) : (c.n==='Web'||c.n==='QR' ? 'N/A' : 0),
+    'Total':             c.rads.length + c.encs.length + c.ses.length,
+  }));
+  const ws_g = XLSX.utils.json_to_sheet(h_global);
+  ws_g['!cols'] = [{wch:18},{wch:11},{wch:11},{wch:8},{wch:10},{wch:12},{wch:14},{wch:10},{wch:10},{wch:10},{wch:17},{wch:14},{wch:18},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws_g, 'GLOBAL_Canal');
+
+  // Resumen por sede (de encuestas)
+  const bySede = {};
+  encAll.forEach(e => {
+    const ex = e.datos_extra||{};
+    const k  = ex.sede_nombre || '(Sin sede)';
+    if (!bySede[k]) bySede[k]={ciudad:ex.sede_ciudad||'',total:0,suma:0,sat:0,insat:0,canales:new Set()};
+    bySede[k].total++;
+    bySede[k].suma += e.calificacion||0;
+    if ((e.calificacion||0)>=3) bySede[k].sat++;
+    if ((e.calificacion||0)<=1) bySede[k].insat++;
+    bySede[k].canales.add(e.canal||'web');
   });
+  const h_sede = Object.entries(bySede).sort((a,b)=>b[1].total-a[1].total).map(([sede,v])=>({
+    'Sede':           sede,
+    'Ciudad':         v.ciudad,
+    'Total_Encuestas':v.total,
+    'Promedio':       v.total?(v.suma/v.total).toFixed(2):'',
+    'Satisfechos':    v.sat,
+    'Pct_Satisfechos':v.total?Math.round(v.sat/v.total*100)+'%':'0%',
+    'Insatisfechos':  v.insat,
+    'Canales':        [...v.canales].join(', '),
+  }));
+  const ws_gs = XLSX.utils.json_to_sheet(h_sede.length ? h_sede : [{'Sin_datos':'Sin encuestas con sede en el período'}]);
+  ws_gs['!cols'] = [{wch:36},{wch:18},{wch:15},{wch:10},{wch:13},{wch:15},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws_gs, 'GLOBAL_Sede');
 
-  // Fila total — solo suma lo que existe
-  h_global.push({
-    'Canal':              'TOTAL',
-    'Radicados':          totalRad,
-    'Peticiones':         canalesData.reduce((s,c)=>s+contarTipo(c.rads,'peticion'),0),
-    'Quejas':             canalesData.reduce((s,c)=>s+contarTipo(c.rads,'queja'),0),
-    'Reclamos':           canalesData.reduce((s,c)=>s+contarTipo(c.rads,'reclamo'),0),
-    'Sugerencias':        canalesData.reduce((s,c)=>s+contarTipo(c.rads,'sugerencia'),0),
-    'Felicitaciones':     canalesData.reduce((s,c)=>s+contarTipo(c.rads,'felicitacion'),0),
-    'Denuncias':          canalesData.reduce((s,c)=>s+contarTipo(c.rads,'denuncia'),0),
-    'Sin_Tipo_Asignado':  canalesData.reduce((s,c)=>s+c.rads.filter(r=>!r.tipo_pqr).length,0),
-    'Encuestas':          totalEnc,
-    'Prom_Satisfaccion':  encPromedio([...encByCanal('web'),...encByCanal('qr'),...(D.encNovaWeb||[]),...(D.encNovaDir||[])]),
-    'Sesiones_Nova':      totalSes,
-    'Paso_Asesor_Nova':   [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])].filter(s=>(s.motivo_cierre||'').toLowerCase().includes('asesor')).length,
-    'Total_Interacciones': totalRad + totalEnc + totalSes,
-  });
-
-  const ws_global = XLSX.utils.json_to_sheet(h_global);
-  ws_global['!cols'] = [{wch:18},{wch:11},{wch:11},{wch:8},{wch:10},{wch:12},{wch:14},{wch:10},{wch:18},{wch:10},{wch:17},{wch:14},{wch:18},{wch:20}];
-  XLSX.utils.book_append_sheet(wb, ws_global, 'GLOBAL');
-
-  // ─────────────────────────────────────────────────────────────────────
-  // HOJA 7 — ASESORES (productividad enriquecida)
-  // Cédula | Asesor | Sede | Gestiones | Casos | Tipo PQR | Canal |
-  // Fecha Asignación | Fecha Solución | Pendientes Firma | En Gestión | EPS
-  // ─────────────────────────────────────────────────────────────────────
-  const { correos:agE, eventos:agH, agentes:agentes_list } = _agDatos;
-  const act = (agentes_list||[]).filter(a=>a.activo===true||a.activo===1||a.activo==='true');
-  const agMap2 = {}; (agentes_list||[]).forEach(a=>agMap2[a.id]=a);
-  const cMap2  = {}; (agE||[]).forEach(c=>cMap2[c.id]=c);
-
-  // Cargar EPS catálogo si está disponible
-  const epsMap2 = {};
-  try {
-    const epsCat = state.epsCatalogo || await sb('eps_catalogo?select=id,nombre&order=nombre.asc').catch(()=>[]) || [];
-    epsCat.forEach(e => epsMap2[e.id] = e.nombre);
-  } catch(e) {}
-
-  // Resumen por asesor
-  const h_asesores = act.map(a => {
-    const myE = (agE||[]).filter(e=>e.agente_id===a.id);
-    const myH = (agH||[]).filter(h=>h.agente_id===a.id && !['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento));
-    const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
-    const avgH = res.length>0
-      ? (res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000; return s+(h>0?h:0);},0)/res.length).toFixed(1)
-      : '';
-    const sol  = myE.filter(e=>['solucionado','gestionado'].includes(e.estado)).length;
-    const pfirma = myE.filter(e=>e.estado==='pendiente_firma').length;
-    const engest = myE.filter(e=>e.estado==='gestion').length;
-    const pend   = myE.filter(e=>e.estado==='pendiente').length;
-
-    // Tipos PQR desglosados
-    const tipoCnts = {};
-    myE.forEach(e=>{ if(e.tipo_pqr){ tipoCnts[e.tipo_pqr]=(tipoCnts[e.tipo_pqr]||0)+1; }});
-    const quejas    = myE.filter(e=>e.tipo_pqr==='queja').length;
-    const peticion  = myE.filter(e=>e.tipo_pqr==='peticion').length;
-    const reclamo   = myE.filter(e=>e.tipo_pqr==='reclamo').length;
-    const suger     = myE.filter(e=>e.tipo_pqr==='sugerencia').length;
-    const felicit   = myE.filter(e=>e.tipo_pqr==='felicitacion').length;
-    const denuncia  = myE.filter(e=>e.tipo_pqr==='denuncia').length;
-    const sinTipo   = myE.filter(e=>!e.tipo_pqr).length;
-
-    // Canal más frecuente
-    const canalCnt = {};
-    myE.forEach(e=>{ const c=e.canal_contacto||e.origen||''; if(c) canalCnt[c]=(canalCnt[c]||0)+1; });
-    const topCanal = Object.entries(canalCnt).sort((a,b)=>b[1]-a[1])[0]?.[0] || '';
-
-    // EPS más frecuente
-    const epsCnt = {};
-    myE.forEach(e=>{ const ep=epsMap2[e.eps_id]||''; if(ep) epsCnt[ep]=(epsCnt[ep]||0)+1; });
-    const topEps = Object.entries(epsCnt).sort((a,b)=>b[1]-a[1])[0]?.[0] || '';
-
-    return {
-      'Asesor':              a.nombre      || '',
-      'Email':               a.email       || '',
-      'Sede':                a.sede        || '',
-      'Total_Casos':         myE.length,
-      'Num_Gestiones':       myH.length,
-      'Prom_Gest_Caso':      myE.length ? (myH.length/myE.length).toFixed(1) : 0,
-      'Peticiones':          peticion,
-      'Quejas':              quejas,
-      'Reclamos':            reclamo,
-      'Sugerencias':         suger,
-      'Felicitaciones':      felicit,
-      'Denuncias':           denuncia,
-      'Sin_Tipo_Asignado':   sinTipo,
-      'Pendientes':          pend,
-      'En_Gestion':          engest,
-      'Pendientes_Firma':    pfirma,
-      'Resueltos':           sol,
-      'Pct_Resolucion':      myE.length ? Math.round(sol/myE.length*100)+'%' : '0%',
-      'T_Prom_Resolucion_h': avgH,
-      'Canal_Principal':     topCanal,
-      'EPS_Principal':       topEps,
-      'Respuestas_Enviadas': myH.filter(h=>h.evento==='correo_respondido').length,
-      'Firmas_Confirmadas':  myH.filter(h=>h.evento==='firma_confirmada').length,
-      'Alta_Sin_Resolver':   myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
-    };
-  }).sort((a,b)=>b['Total_Casos']-a['Total_Casos']);
-
-  // Detalle de tickets por asesor
-  const h_tickets = (agE||[]).filter(c=>c.agente_id).map(c => {
-    const ag = agMap2[c.agente_id] || {};
-    // Primera y última gestión
-    const myH = (agH||[]).filter(h=>h.correo_id===c.id&&h.agente_id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
-    const primeraGest = myH[0]?.created_at || '';
-    const ultimaGest  = myH[myH.length-1]?.created_at || '';
-    return {
-      'Ticket':            c.ticket_id    || c.id?.slice(0,8) || '',
-      'Cédula_Paciente':   c.cedula       || '',
-      'Nombre_Paciente':   c.from_name    || c.nombre || '',
-      'Asesor':            ag.nombre      || '',
-      'Sede_Asesor':       ag.sede        || '',
-      'EPS':               epsMap2[c.eps_id] || '',
-      'Tipo_PQR':          c.tipo_pqr     || '',
-      'Sentimiento':       c.sentimiento  || '',
-      'Prioridad':         c.prioridad    || '',
-      'Estado':            c.estado       || '',
-      'Canal':             c.canal_contacto || c.origen || '',
-      'Fecha_Recibido':    fmtD(c.received_at),
-      'Fecha_Asignacion':  primeraGest ? fmtD(primeraGest) : '',
-      'Fecha_Solucion':    c.fecha_resolucion ? fmtD(c.fecha_resolucion) : '',
-      'T_Resolucion_h':    (c.fecha_resolucion&&c.received_at) ? ((new Date(c.fecha_resolucion)-new Date(c.received_at))/3600000).toFixed(1) : '',
-      'Num_Gestiones':     myH.length,
-      'Pendiente_Firma':   c.estado==='pendiente_firma' ? 'Sí' : 'No',
-    };
-  });
-
-  const ws_ases = XLSX.utils.json_to_sheet(h_asesores.length ? h_asesores : [{'Sin_datos':'Sin asesores'}]);
-  ws_ases['!cols'] = [{wch:24},{wch:28},{wch:16},{wch:12},{wch:14},{wch:14},{wch:8},{wch:11},{wch:10},{wch:14},{wch:14},{wch:12},{wch:17},{wch:12},{wch:15},{wch:18},{wch:16},{wch:16},{wch:18},{wch:18},{wch:16}];
-  XLSX.utils.book_append_sheet(wb, ws_ases, 'ASESORES_Resumen');
-
-  const ws_tick = XLSX.utils.json_to_sheet(h_tickets.length ? h_tickets : [{'Sin_datos':'Sin tickets'}]);
-  ws_tick['!cols'] = [{wch:20},{wch:14},{wch:26},{wch:22},{wch:14},{wch:16},{wch:14},{wch:13},{wch:11},{wch:14},{wch:14},{wch:13},{wch:16},{wch:14},{wch:15},{wch:13},{wch:15}];
-  XLSX.utils.book_append_sheet(wb, ws_tick, 'ASESORES_Tickets');
-
-  // ── Guardar ──────────────────────────────────────────────────────────
-  const desde = D.desde || 'inicio';
-  const hasta  = D.hasta  || 'hoy';
-  XLSX.writeFile(wb, `Metricas_${desde}_${hasta}.xlsx`);
-  showToast('Informe generado ✓','success');
+  XLSX.writeFile(wb, `Global_${desde}_${hasta}.xlsx`);
+  showToast('Excel Global exportado ✓','success');
 }
 
-</script>
-<!-- ⚡ Panel Respuestas Rápidas v3 -->
-<style>
-.rr-cat-btn{padding:5px 10px;border:1.5px solid var(--border);border-radius:99px;background:var(--bg2);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;color:var(--ink2);font-family:'Poppins',sans-serif}
-.rr-cat-btn:hover{border-color:#2563eb;color:#2563eb}
-.rr-cat-btn.active{background:#2563eb;border-color:#2563eb;color:#fff}
-.rr-item{padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
-.rr-item:hover{background:var(--bg)}
-.rr-item-label{font-size:13px;color:var(--ink);font-weight:600}
-.rr-item-preview{font-size:11px;color:var(--ink3);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* RR panel dark */
-html[data-theme="dark"] #panelRR{background:var(--surface)!important;border-left-color:var(--border)!important}
-html[data-theme="dark"] #panelRR .rr-section-title{color:var(--ink3)!important}
-html[data-theme="dark"] #panelRR [style*="border-bottom:1px solid #e2e8f0"]{border-bottom-color:var(--border)!important}
-</style>
-<div id="panelRR" style="visibility:hidden;opacity:0;pointer-events:none;position:fixed;top:0;right:0;width:400px;height:100vh;background:var(--surface);border-left:2px solid var(--border);box-shadow:-8px 0 40px rgba(0,0,0,.12);z-index:9999;display:flex;flex-direction:column;transition:all .25s">
-  <div style="padding:14px 16px;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;gap:8px;flex-shrink:0;background:#0f172a">
-    <span style="font-size:18px">⚡</span>
-    <span style="font-weight:700;font-size:14px;color:#fff">Respuestas Rápidas</span>
-    <button onclick="cerrarPanelRR()" style="margin-left:auto;background:rgba(255,255,255,.1);border:none;cursor:pointer;font-size:16px;color:#fff;padding:4px 8px;border-radius:6px">✕</button>
-  </div>
-
-  <div style="padding:10px 12px;border-bottom:1px solid var(--border);flex-shrink:0">
-
-    <div id="rrCategorias" style="display:flex;flex-wrap:wrap;gap:5px"></div>
-  </div>
-  <div id="rrLista" style="flex:1;overflow-y:auto"></div>
-</div>
-
-<script>
-
-// ══ TEMAS ══
-function setTema(t) {
-  document.documentElement.setAttribute('data-theme', t);
-  var id = sessionStorage.getItem('pqr_agent_id') || 'x';
-  localStorage.setItem('ag_tema_' + id, t);
-  document.querySelectorAll('#temaGrid [data-t]').forEach(function(el) {
-    el.style.boxShadow = el.dataset.t === t ? '0 0 0 3px #fff, 0 0 0 5px #2563eb' : 'none';
-  });
-  // Re-renderizar iframes del cuerpo del correo para aplicar tema
-  var _darkTs = ['dark'];
-  document.querySelectorAll('.ev-body iframe').forEach(function(fr) {
-    try {
-      var doc = fr.contentDocument;
-      if (!doc) return;
-      var existing = doc.getElementById('_tema_style');
-      if (existing) existing.remove();
-      if (_darkTs.includes(t)) {
-        var st = doc.createElement('style');
-        st.id = '_tema_style';
-        st.textContent = 'html,body{background:#1e293b!important;color:#e2e8f0!important}' +
-          '*{color:#e2e8f0!important;border-color:#334155!important}' +
-          '*{background-color:transparent!important}' +
-          'html,body,table,td,th,div,p,section,article,header,footer,main{background-color:#1e293b!important}' +
-          'a{color:#93c5fd!important}' +
-          'img{opacity:.92!important;filter:brightness(.9)!important}';
-        (doc.head || doc.documentElement).appendChild(st);
-      }
-    } catch(e) {}
-  });
+// ═══════════════════════════════════════════════════════════════════════
+// EXPORT ASESORES → carga datos frescos si _agDatos está vacío
+// ═══════════════════════════════════════════════════════════════════════
+async function exportAsesoresExcel() {
+  // Si _agDatos está vacío (asesor tab nunca visitado), cargar frescos
+  if (!_agDatos.correos?.length && !_agDatos.agentes?.length) {
+    showToast('Cargando datos de asesores…','info');
+    await loadAgentesMetrics();
+  }
+  exportAgentesExcel();
 }
 
-// Sync all period inputs to the main novaDesde/novaHasta
-['novaDesde2','novaDesde3','novaDesde4'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el){ el.addEventListener('change',()=>{const m=document.getElementById('novaDesde');if(m)m.value=el.value;});}
-});
-['novaHasta2','novaHasta3','novaHasta4'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el){ el.addEventListener('change',()=>{const m=document.getElementById('novaHasta');if(m)m.value=el.value;});}
-});
-// Also keep secondary inputs in sync when main changes
-['novaDesde'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el){ el.addEventListener('change',()=>{ ['novaDesde2','novaDesde3','novaDesde4'].forEach(s=>{const e=document.getElementById(s);if(e)e.value=el.value;}); }); }
-});
-['novaHasta'].forEach(id=>{
-  const el=document.getElementById(id);
-  if(el){ el.addEventListener('change',()=>{ ['novaHasta2','novaHasta3','novaHasta4'].forEach(s=>{const e=document.getElementById(s);if(e)e.value=el.value;}); }); }
-});
-
-// ══════════════════════════════════════════════════
-// ASESORES — MÉTRICAS AVANZADAS
-// ══════════════════════════════════════════════════
-let _agDatos = { correos:[], eventos:[], agentes:[] };
-let chartAgSol=null, chartAgTiempo=null, chartAgGest=null;
-
-function initAgFechas(){
-  const hoy=new Date(), hace30=new Date(hoy);
-  hace30.setDate(hoy.getDate()-30);
-  const fmt=d=>d.toISOString().split('T')[0];
-  const d=document.getElementById('agDesde');
-  const h=document.getElementById('agHasta');
-  if(d&&!d.value) d.value=fmt(hace30);
-  if(h&&!h.value) h.value=fmt(hoy);
-}
 
 async function loadAgentesMetrics(){
   const lu=document.getElementById('agLastUpdate');
