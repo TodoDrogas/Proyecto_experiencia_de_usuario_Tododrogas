@@ -3488,11 +3488,13 @@ async function verHiloCompleto(conversationId, correoId) {
 
 function logout(){sessionStorage.clear();window.location.href='login.html';}
 async function getGraphToken(){
+  // Las credenciales Azure viven solo en api-token.php (servidor)
+  // El browser NO envía ninguna credencial — solo solicita el token
   try{
     const r=await fetch('/api-token.php',{
       method:'POST',
-      headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:`client_id=${window.AZURE_CLIENT_ID||window.CLIENT_ID||''}&client_secret=${window.AZURE_CLIENT_SECRET||window.CLIENT_SECRET||''}&tenant_id=${window.AZURE_TENANT_ID||window.TENANT_ID||''}&scope=https://graph.microsoft.com/.default&grant_type=client_credentials`
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'get_token'})
     });
     const text=await r.text();
     let d;
