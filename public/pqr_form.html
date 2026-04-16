@@ -1466,7 +1466,13 @@ const N8N_BASE       = window._N8N_BASE || 'https://tododrogas.online/webhook';
 const WEBHOOK_PQR    = '/radicar-pqr.php';
 // Canal de origen desde URL + URL de retorno
 const _urlParams  = new URLSearchParams(window.location.search);
-const _ORIGEN     = _urlParams.get('origen') || 'web';
+const _ORIGEN = (()=>{
+  const p = _urlParams.get('origen');
+  if (p) return p;                                        // 1. ?origen= en URL
+  if (sessionStorage.getItem('td_origen') === 'qr') return 'qr'; // 2. viene de bienvenida
+  if (!document.referrer) return 'qr';                   // 3. QR físico (referrer vacío)
+  return 'web';                                          // 4. acceso web normal
+})();
 const _RETURN_URL = _ORIGEN === 'nova_directo' ? 'nova.html' : 'pqr_bienvenida.html';
 const _PREFILL    = {
   nombre: _urlParams.get('nombre') || '',
