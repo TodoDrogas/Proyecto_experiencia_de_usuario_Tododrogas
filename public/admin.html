@@ -865,7 +865,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
               <option value="">Todas las sedes</option>
             </select>
           </div>
-          <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#d97706">🔍 Filtrar</button>
+          <button onclick="sincFechasDesdeTab('novaDesde2','novaHasta2');loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#d97706">🔍 Filtrar</button>
           <button onclick="exportQrExcel()" class="mfiltros-btn-export">⬇ Excel QR</button>
         </div>
 
@@ -969,7 +969,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
               <option value="">Todas</option>
             </select>
           </div>
-          <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#7c3aed">🔍 Filtrar</button>
+          <button onclick="sincFechasDesdeTab('novaDesde3','novaHasta3');loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#7c3aed">🔍 Filtrar</button>
           <button onclick="exportNovaExcel()" class="mfiltros-btn-export">⬇ Excel Nova TD</button>
           <span id="novaLastUpdate2" class="mfiltros-update"></span>
         </div>
@@ -1145,7 +1145,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <span class="mfiltros-sep" style="color:rgba(255,255,255,.4)">→</span>
             <input type="date" id="novaHasta4" class="mfiltros-input" style="background:#1e293b;border-color:#334155;color:#fff">
           </div>
-          <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#2563eb">🔍 Filtrar</button>
+          <button onclick="sincFechasDesdeTab('novaDesde4','novaHasta4');loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#2563eb">🔍 Filtrar</button>
           <button onclick="exportGlobalExcel()" class="mfiltros-btn-export">⬇ Excel Global</button>
           <span class="mfiltros-update" style="color:rgba(255,255,255,.4)" id="gLastUpdate"></span>
         </div>
@@ -2012,9 +2012,38 @@ function showMTab(tab, el) {
   renderMTab(tab);
 }
 function renderMTab(tab){
-  if(tab==='web' || tab==='qr' || tab==='nova' || tab==='global') loadNovaMetrics();
+  if(tab==='web' || tab==='qr' || tab==='nova' || tab==='global') {
+    initNovaFechas();   // siempre inicializar fechas antes de cargar
+    sincFechas();       // sincronizar todos los inputs de fecha entre tabs
+    loadNovaMetrics();
+  }
   if(tab==='asesores') loadAgentesMetrics();
   if(tab==='sigi') { initSigiFechas(); loadSigiMetrics(); }
+}
+
+// Propaga fechas de un tab específico al principal antes de filtrar
+function sincFechasDesdeTab(desdeId, hastaId) {
+  const d = document.getElementById(desdeId)?.value || '';
+  const h = document.getElementById(hastaId)?.value  || '';
+  if (d) ['novaDesde','novaDesde2','novaDesde3','novaDesde4'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=d; });
+  if (h) ['novaHasta','novaHasta2','novaHasta3','novaHasta4'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=h; });
+}
+
+// Sincroniza el valor de fecha entre todos los inputs de todos los tabs
+// (novaDesde, novaDesde2, novaDesde3, novaDesde4 → todos deben tener el mismo valor)
+function sincFechas() {
+  const desde = document.getElementById('novaDesde')?.value || '';
+  const hasta  = document.getElementById('novaHasta')?.value  || '';
+  ['novaDesde2','novaDesde3','novaDesde4'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.value && desde) el.value = desde;
+    else if (el && el.value && !desde) document.getElementById('novaDesde').value = el.value;
+  });
+  ['novaHasta2','novaHasta3','novaHasta4'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && !el.value && hasta) el.value = hasta;
+    else if (el && el.value && !hasta) document.getElementById('novaHasta').value = el.value;
+  });
 }
 
 // ══════════════════════════════════════════════════
@@ -2022,6 +2051,16 @@ function renderMTab(tab){
 // ══════════════════════════════════════════════════
 let _sigiChartNombre=null, _sigiChartCategoria=null, _sigiChartEps=null,
     _sigiChartDepto=null,  _sigiChartTendencia=null;
+
+function initAgFechas() {
+  const hoy   = new Date();
+  const hace30 = new Date(hoy); hace30.setDate(hoy.getDate()-30);
+  const fmt = d => d.toISOString().split('T')[0];
+  const d = document.getElementById('agDesde');
+  const h = document.getElementById('agHasta');
+  if (d && !d.value) d.value = fmt(hace30);
+  if (h && !h.value) h.value = fmt(hoy);
+}
 
 function initSigiFechas() {
   if(document.getElementById('sigiDesde').value) return;
@@ -6298,8 +6337,13 @@ function initNovaFechas(){
 
 async function loadNovaMetrics(){
   document.getElementById('novaLastUpdate').textContent='Cargando...';
-  const desde=document.getElementById('novaDesde')?.value||'';
-  const hasta=document.getElementById('novaHasta')?.value||'';
+  // Leer fechas del primer input disponible (cualquier tab puede haberlas cambiado)
+  const _getDate = ids => { for(const id of ids){ const v=document.getElementById(id)?.value||''; if(v) return v; } return ''; };
+  const desde = _getDate(['novaDesde','novaDesde2','novaDesde3','novaDesde4']);
+  const hasta  = _getDate(['novaHasta','novaHasta2','novaHasta3','novaHasta4']);
+  // Propagar al input principal para que los demás queden sincronizados
+  if(desde){ ['novaDesde','novaDesde2','novaDesde3','novaDesde4'].forEach(id=>{ const el=document.getElementById(id); if(el&&!el.value) el.value=desde; }); }
+  if(hasta){  ['novaHasta','novaHasta2','novaHasta3','novaHasta4'].forEach(id=>{ const el=document.getElementById(id); if(el&&!el.value) el.value=hasta;  }); }
   const dISO=desde?desde+'T00:00:00-05:00':'';
   const hISO=hasta?hasta+'T23:59:59-05:00':'';
   const enc=s=>encodeURIComponent(s);
