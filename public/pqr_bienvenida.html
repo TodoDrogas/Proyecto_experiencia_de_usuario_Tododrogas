@@ -588,10 +588,18 @@ let CFG = {};
 const _bvParams = new URLSearchParams(window.location.search);
 (function(){
   const fromUrl = _bvParams.get('origen');
-  if(fromUrl === 'qr') sessionStorage.setItem('td_origen', 'qr');
-  else if(fromUrl && fromUrl !== 'qr') sessionStorage.removeItem('td_origen');
+  // Si NO viene ?origen= Y referrer está vacío → llegó escaneando QR físico impreso
+  // (cuando la cámara del móvil abre un QR, document.referrer queda vacío)
+  const esQrFisico = !fromUrl && !document.referrer;
+  const origenDetectado = fromUrl || (esQrFisico ? 'qr' : sessionStorage.getItem('td_origen') || 'web');
+  if(origenDetectado === 'qr') sessionStorage.setItem('td_origen', 'qr');
+  else sessionStorage.removeItem('td_origen');
 })();
-const _BV_ORIGEN = _bvParams.get('origen') || sessionStorage.getItem('td_origen') || 'web';
+const _BV_ORIGEN = (() => {
+  const fromUrl = _bvParams.get('origen');
+  const esQrFisico = !fromUrl && !document.referrer;
+  return fromUrl || (esQrFisico ? 'qr' : sessionStorage.getItem('td_origen') || 'web');
+})();
 let FORM_URL = window.location.origin + '/pqr_form.html';
 let _lastQrUrl = null;
 
@@ -642,11 +650,19 @@ const ENC_DEFAULT = (window.location.origin || 'https://tododrogas.online') + '/
 let ENC_URL = ENC_DEFAULT;
 
 function applyQRs(){
-  makeQR('qr-radicar', FORM_URL, 130);
+  // Helper: agrega ?origen al URL para que QRs en pantalla hereden el canal
+  function addOrigen(url, origen){
+    if(!url) return url;
+    try{ const u=new URL(url,window.location.origin); u.searchParams.set('origen',origen); return u.toString(); }
+    catch(e){ return url+(url.includes('?')?'&':'?')+'origen='+origen; }
+  }
+  // QR Radicar en pantalla — con origen heredado
+  makeQR('qr-radicar', addOrigen(FORM_URL, _BV_ORIGEN), 130);
   const radLbl = document.getElementById('qr-radicar-url');
   if(radLbl){ try{ radLbl.textContent = new URL(FORM_URL).hostname + new URL(FORM_URL).pathname; }catch(e){ radLbl.textContent = FORM_URL; } }
+  // QR Encuesta en pantalla — con origen heredado
   ENC_URL = (CFG.canales && CFG.canales.encuesta) ? CFG.canales.encuesta : ENC_DEFAULT;
-  makeQR('qr-encuesta', ENC_URL, 130);
+  makeQR('qr-encuesta', addOrigen(ENC_URL, _BV_ORIGEN), 130);
   const encLbl = document.getElementById('qr-encuesta-url');
   if(encLbl) encLbl.textContent = ENC_URL ? 'Encuesta · Escanea con tu cámara' : 'Encuesta · configura la URL en el panel';
   const btnWrap = document.getElementById('btn-encuesta-wrap');
