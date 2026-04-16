@@ -53,52 +53,62 @@ $ts        = round(microtime(true) * 1000);
 $filename  = "audio_{$pqr_id}.{$ext}";
 $now       = date('c');
 
-// ── 1. Obtener correo_id ─────────────────────────────────────────────
-$ch = curl_init("$SB_URL/rest/v1/correos?ticket_id=eq.$pqr_id&select=id,subject,canal_contacto");
-curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>10,
-    CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Accept: application/json']]);
-$res = curl_exec($ch); curl_close($ch);
-$correos = json_decode($res, true);
-if (empty($correos)) {
-    http_response_code(404);
-    echo json_encode(['error'=>'Ticket no encontrado', 'ticket_id'=>$pqr_id]);
-    exit;
+// ── MODO PRE-TRANSCRIPCIÓN: pqr_id temporal (pre_TIMESTAMP) ────────────
+// El frontend llama este endpoint ANTES de radicar para obtener la
+// transcripción e incluirla en el correo. En este caso no hay ticket en BD.
+$modo_pre = str_starts_with($pqr_id, 'pre_');
+
+// ── 1. Obtener correo_id (solo si no es modo pre) ────────────────────
+$correo_id      = null;
+$subject_actual = '';
+
+if (!$modo_pre) {
+    $ch = curl_init("$SB_URL/rest/v1/correos?ticket_id=eq.$pqr_id&select=id,subject,canal_contacto");
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>10,
+        CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Accept: application/json']]);
+    $res = curl_exec($ch); curl_close($ch);
+    $correos = json_decode($res, true);
+    if (empty($correos)) {
+        http_response_code(404);
+        echo json_encode(['error'=>'Ticket no encontrado', 'ticket_id'=>$pqr_id]);
+        exit;
+    }
+    $correo_id      = $correos[0]['id'];
+    $subject_actual = $correos[0]['subject'] ?? '';
 }
-$correo_id      = $correos[0]['id'];
-$subject_actual = $correos[0]['subject'] ?? '';
 
-// ── 2. Subir audio a bucket 'audios' ────────────────────────────────
-$storage_path = "$correo_id/{$ts}_{$filename}";
-$storage_url  = "$SB_URL/storage/v1/object/audios/$storage_path";
-
-$ch = curl_init($storage_url);
-curl_setopt_array($ch, [
-    CURLOPT_POST           => true,
-    CURLOPT_POSTFIELDS     => $audio_data,
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 30,
-    CURLOPT_HTTPHEADER     => [
-        "apikey: $SB_KEY",
-        "Authorization: Bearer $SB_KEY",
-        "Content-Type: $mime_type",
-        "x-upsert: true"
-    ],
-]);
-$upload_resp = curl_exec($ch);
-$upload_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-
-// FIX: Solo construir URL pública si el upload realmente fue exitoso (2xx)
+// ── 2. Subir audio a bucket 'audios' (solo si hay ticket real) ──────
+$storage_path     = $correo_id ? "$correo_id/{$ts}_{$filename}" : null;
 $audio_public_url = null;
 $storage_ok       = false;
 $storage_error    = null;
+$upload_code      = null;
 
-if ($upload_code >= 200 && $upload_code < 300) {
-    $audio_public_url = "$SB_URL/storage/v1/object/public/audios/$storage_path";
-    $storage_ok       = true;
-} else {
-    // Capturar error real para diagnóstico
-    $storage_error = "HTTP $upload_code: " . substr($upload_resp, 0, 300);
+if (!$modo_pre && $correo_id && $storage_path) {
+    $storage_url = "$SB_URL/storage/v1/object/audios/$storage_path";
+    $ch = curl_init($storage_url);
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $audio_data,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_HTTPHEADER     => [
+            "apikey: $SB_KEY",
+            "Authorization: Bearer $SB_KEY",
+            "Content-Type: $mime_type",
+            "x-upsert: true"
+        ],
+    ]);
+    $upload_resp = curl_exec($ch);
+    $upload_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($upload_code >= 200 && $upload_code < 300) {
+        $audio_public_url = "$SB_URL/storage/v1/object/public/audios/$storage_path";
+        $storage_ok       = true;
+    } else {
+        $storage_error = "HTTP $upload_code: " . substr($upload_resp, 0, 300);
+    }
 }
 
 // ── 3. Transcribir con OpenAI Whisper ───────────────────────────────
@@ -131,6 +141,19 @@ if ($OPENAI_KEY && strlen($audio_data) > 0) {
     } else {
         $whisper_error = $whisper_data['error']['message'] ?? "HTTP $whisper_code";
     }
+}
+
+// ── MODO PRE: solo devolver transcripción, sin tocar BD ─────────────
+if ($modo_pre) {
+    echo json_encode([
+        'ok'            => true,
+        'transcripcion' => $transcripcion,
+        'whisper_usado' => !empty($transcripcion),
+        'whisper_error' => $whisper_error ?: null,
+        'tamano_kb'     => round(strlen($audio_data)/1024),
+        'modo'          => 'pre_transcripcion',
+    ]);
+    exit;
 }
 
 // ── 4. Actualizar correo en BD ───────────────────────────────────────
