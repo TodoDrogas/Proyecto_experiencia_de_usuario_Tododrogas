@@ -2289,7 +2289,23 @@ async function exportarSIGI() {
 
       const obsTexto = histC
         .filter(h => !ES.includes(h.evento))
-        .map(h => { try { return JSON.parse(h.datos_extra||'{}').observaciones||h.descripcion||''; } catch { return h.descripcion||''; } })
+        .map(h => {
+          try {
+            const ex = JSON.parse(h.datos_extra||'{}');
+            // Preferir observaciones del datos_extra (texto real del agente)
+            if (ex.observaciones) return ex.observaciones;
+            // Si solo hay descripcion, excluir si es igual al nombre del agente
+            // (historial guarda agente_nombre como fallback de descripcion)
+            const desc = h.descripcion || '';
+            const agNom = (ag?.nombre || '').trim().toLowerCase();
+            if (agNom && desc.trim().toLowerCase() === agNom) return '';
+            // Excluir también si la descripcion empieza con el nombre del agente seguido de |
+            if (agNom && desc.trim().toLowerCase().startsWith(agNom + ' |')) {
+              return desc.trim().substring(agNom.length + 3).trim();
+            }
+            return desc;
+          } catch { return h.descripcion || ''; }
+        })
         .filter(Boolean).join(' | ');
 
       const medsC = meds.filter(m => m.correo_id === c.id);
@@ -2326,11 +2342,11 @@ async function exportarSIGI() {
         'Fecha PQRSFD Cerrada':    fCierre,                     // Col Y
         'Departamento':            pac?.['Departamento'] || c.departamento_paciente || '',
         'Ciudad':                  pac?.['Ciudad']       || c.ciudad_paciente || '',
-        'Código Medicamento':      medsC.map(m => m.codigo).join(' | ')              || '',
-        'Descripción Medicamento': medsC.map(m => m.descripcion).join(' | ')         || '',
-        'Descripción Escrita':     medsC.map(m => m.descripcion_escrita).join(' | ') || '',
-        'Cantidad':                medsC.map(m => m.cantidad).join(' | ')             || '',
-        'PBS':                     medsC.map(m => m.pbs).join(' | ')                 || '',
+        'Código Medicamento':      '',   // datos en hoja MEDICAMENTOS
+        'Descripción Medicamento': '',
+        'Descripción Escrita':     '',
+        'Cantidad':                '',
+        'PBS':                     '',
         'Observación':             obsTexto,
         'Gestión Compra':          c.gestion_compra || '',
         'Usuario Gestión Compra':  c.usuario_gestion_compra || '',
