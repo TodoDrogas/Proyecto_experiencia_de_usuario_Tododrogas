@@ -93,7 +93,10 @@ $correo        = trim($body['correo']        ?? '');
 $telefono      = trim($body['telefono']      ?? '');
 $documento     = trim($body['documento']     ?? '');
 $comentario    = trim($body['comentario']    ?? '');
-$sede_id       = trim($body['sede_id']       ?? '');
+$sede_id_raw   = trim($body['sede_id'] ?? '');
+// Validar que sea UUID real — si es string local ('medellin', etc.) usar null
+$sede_id       = preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $sede_id_raw)
+                 ? $sede_id_raw : null;
 $sede_nombre   = trim($body['sede_nombre']   ?? '');
 $sede_ciudad   = trim($body['sede_ciudad']   ?? '');
 $sede_direccion = trim($body['sede_direccion'] ?? '');
