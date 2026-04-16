@@ -2197,6 +2197,33 @@ async function submitPQR(){
       sin_correo: !correo,
     };
 
+    // ── PRE-PASO: Si hay audio, transcribir ANTES de radicar para incluirlo en el correo ──
+    if(S.audioB64 && WEBHOOK_AUDIO){
+      try {
+        btn.innerHTML='⏳ Procesando audio…';
+        const audioRes = await fetch(WEBHOOK_AUDIO,{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            pqr_id:         'pre_' + Date.now(),
+            audio_base64:   S.audioB64,
+            mime_type:      S.audioMime || 'audio/webm',
+            nombre_paciente: nombre
+          })
+        });
+        if(audioRes.ok){
+          const audioData = await audioRes.json();
+          if(audioData.transcripcion){
+            payload.transcripcion = audioData.transcripcion;
+            payload.descripcion   = audioData.transcripcion;
+          }
+          if(audioData.audio_url){
+            payload.audio_url = audioData.audio_url;
+          }
+        }
+      } catch(e){ /* Si Whisper falla, continuar igual sin transcripción */ }
+      btn.innerHTML='⏳ Enviando…';
+    }
+
     const res=await fetch(WEBHOOK_PQR,{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload)
@@ -2204,12 +2231,6 @@ async function submitPQR(){
     if(!res.ok) throw new Error('Error '+res.status);
     const data=await res.json();
     if(!data.ok) throw new Error(data.error||'Error desconocido');
-
-    if(S.audioB64){
-      fetch(WEBHOOK_AUDIO,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({pqr_id:data.pqr_id||data.radicado,audio_base64:S.audioB64,mime_type:S.audioMime||'audio/webm',nombre_paciente:nombre})
-      }).catch(()=>{});
-    }
     if(canvasB64){
       fetch(WEBHOOK_CANVAS,{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({pqr_id:data.pqr_id||data.radicado,imagen_base64:canvasB64})
