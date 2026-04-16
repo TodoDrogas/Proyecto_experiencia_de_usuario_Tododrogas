@@ -872,9 +872,20 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
       </tr>
     </table>
 
-    <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:24px'>
-      <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>".htmlspecialchars(mb_substr($texto_pqr, 0, 500)).(strlen($texto_pqr)>500?'…':'')."</p>
-      ".($audio_url || $canvas_url ? "<p style='margin:10px 0 0;font-size:10px;color:#7a90a8'>Su ".($audio_url?'audio':'imagen')." fue adjuntado a este correo como evidencia.</p>" : "")."
+    <div style='background:#f6f9fd;border:1px solid #d4dce8;border-top:2px solid #0c2d5e;padding:18px 20px;margin-bottom:24px'>" .
+
+      // ── Audio: mostrar transcripción Whisper si existe ────────────────
+      ($canal === 'audio' && $transcripcion
+        ? "<p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>🎤 Transcripción de su mensaje de voz</p>
+           <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . nl2br(htmlspecialchars(mb_substr($transcripcion, 0, 500))) . (strlen($transcripcion) > 500 ? '…' : '') . "</p>"
+        // ── Audio sin transcripción disponible ───────────────────────────
+        : ($canal === 'audio' && !$transcripcion
+            ? "<p style='margin:0 0 6px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>🎤 Mensaje de voz recibido</p>
+               <p style='margin:0;font-size:12px;color:#7a90a8;line-height:1.7'>Su mensaje de voz fue recibido y adjuntado a este correo. Nuestro equipo lo escuchará y le dará respuesta.</p>"
+        // ── Texto / canvas: mostrar texto plano ──────────────────────────
+        : "<p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . nl2br(htmlspecialchars(mb_substr($texto_pqr, 0, 500))) . (strlen($texto_pqr) > 500 ? '…' : '') . "</p>")) .
+
+      ($audio_url || $canvas_url ? "<p style='margin:10px 0 0;font-size:10px;color:#7a90a8'>Su " . ($audio_url ? 'audio' : 'imagen') . " fue adjuntado a este correo como evidencia.</p>" : "") . "
     </div>" : "")."
 
     <!-- DIVIDER CONSULTA RADICADO -->
