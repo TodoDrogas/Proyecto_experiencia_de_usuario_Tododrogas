@@ -20,6 +20,7 @@ jobs:
           cat > public/config.js << 'CONFIGEOF'
           window.SUPABASE_URL        = '${{ secrets.SUPABASE_URL }}';
           window.SUPABASE_KEY        = '${{ secrets.SUPABASE_KEY }}';
+          window.GRAPH_USER_ID       = '${{ secrets.GRAPH_USER_ID }}';
           window.N8N_WEBHOOK_BASE    = '${{ secrets.N8N_WEBHOOK_BASE }}';
           window.NOVA_PROXY          = '/nova-proxy.php';
           window.VALIDAR_URL         = '/validar-paciente.php';
@@ -47,7 +48,6 @@ jobs:
             public/validar-paciente.php
             public/admin-buscar-paciente.php
             public/admin-buscar-medicamento.php
-            public/login.php
           )
           for f in "${PHP_FILES[@]}"; do
             [ -f "$f" ] || { echo "⚠️  $f no existe — omitiendo"; continue; }
@@ -59,8 +59,6 @@ jobs:
             sed -i "s|__AZURE_CLIENT_SECRET__|${{ secrets.AZURE_CLIENT_SECRET }}|g" "$f"
             sed -i "s|__GRAPH_USER_ID__|${{ secrets.GRAPH_USER_ID }}|g"             "$f"
             sed -i "s|__ADMIN_TOKEN__|${{ secrets.ADMIN_TOKEN }}|g"                 "$f"
-            sed -i "s|__ADMIN_USER__|${{ secrets.ADMIN_USER }}|g"                  "$f"
-            sed -i "s|__ADMIN_PASS__|${{ secrets.ADMIN_PASS }}|g"                  "$f"
             sed -i "s|__INBOX_FOLDER_ID__|${{ secrets.INBOX_FOLDER_ID }}|g"         "$f"
             echo "✅ $f inyectado"
           done
@@ -70,14 +68,19 @@ jobs:
         run: |
           cat > public/api-token.php << 'PHPEOF'
           <?php
-          header('Content-Type: application/json');
-          header('Access-Control-Allow-Origin: *');
+          // Credenciales Azure inyectadas por deploy — el browser NO las envía
+          $origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
+          $allowed = ['https://tododrogas.online', 'https://www.tododrogas.online'];
+          if ($origin && !in_array($origin, $allowed)) { http_response_code(403); echo json_encode(['error'=>'Origen no permitido']); exit; }
+          header('Content-Type: application/json; charset=utf-8');
+          if ($origin) header('Access-Control-Allow-Origin: ' . $origin);
           header('Access-Control-Allow-Methods: POST, OPTIONS');
           header('Access-Control-Allow-Headers: Content-Type');
           if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
           $tenant_id     = 'AZURE_TENANT_ID_VAL';
           $client_id     = 'AZURE_CLIENT_ID_VAL';
           $client_secret = 'AZURE_CLIENT_SECRET_VAL';
+          // Usar siempre las credenciales del servidor — ignorar cualquier cosa del browser
           $url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
           $body = http_build_query(['grant_type'=>'client_credentials','client_id'=>$client_id,
             'client_secret'=>$client_secret,'scope'=>'https://graph.microsoft.com/.default']);
@@ -189,9 +192,9 @@ jobs:
             # ── Bloquear config.js al acceso externo ──
             NGINX_CONF="/etc/nginx/sites-enabled/pqr"
             if ! grep -q "location = /config.js" "$NGINX_CONF" 2>/dev/null; then
-              sed -i 's|location / {|location = /config.js {\n        deny all;\n        return 403;\n    }\n    location / {|' "$NGINX_CONF"
+              sed -i 's|location / {|location = /config.js {\n        valid_referers none blocked server_names tododrogas.online www.tododrogas.online;\n        if ($invalid_referer) { return 403; }\n        add_header Cache-Control "no-store, no-cache";\n        add_header X-Content-Type-Options "nosniff";\n    }\n    location / {|' "$NGINX_CONF"
               nginx -t && systemctl reload nginx
-              echo "✅ config.js bloqueado externamente"
+              echo "✅ config.js protegido — solo desde tododrogas.online"
             fi
             echo "✅ VPS listo"
 
@@ -318,8 +321,7 @@ jobs:
                      /var/www/pqr/nova-proxy.php /var/www/pqr/nova-consulta.php \
                      /var/www/pqr/cargar-plantillas.php /var/www/pqr/validar-paciente.php \
                      /var/www/pqr/admin-buscar-paciente.php /var/www/pqr/admin-buscar-medicamento.php \
-                     /var/www/pqr/api-token.php /var/www/pqr/adj-proxy.php \
-                     /var/www/pqr/login.php; do
+                     /var/www/pqr/api-token.php /var/www/pqr/adj-proxy.php; do
               [ -f "$f" ] || continue
               OUT=$(php -l "$f" 2>&1)
               if echo "$OUT" | grep -q "No syntax errors"; then
@@ -330,7 +332,7 @@ jobs:
               fi
             done
             echo "--- Placeholders residuales ---"
-            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__\|__ADMIN_TOKEN__\|__INBOX_FOLDER_ID__\|__ADMIN_USER__\|__ADMIN_PASS__' \
+            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__\|__ADMIN_TOKEN__\|__INBOX_FOLDER_ID__' \
               /var/www/pqr/*.php 2>/dev/null || true)
             if [ -n "$FOUND" ]; then
               echo "❌ Placeholders en: $FOUND"
