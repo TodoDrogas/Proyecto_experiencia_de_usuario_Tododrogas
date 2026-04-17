@@ -6287,6 +6287,9 @@ function insertarTextoEnReply(texto){
 let chartNovaTend=null, chartGlobalRad=null, chartGlobalEnc=null,
     chartWebDist=null, chartQrDist=null;
 let novaDatos={};
+let novaSedesMap={};
+let novaUsuariosMap={};
+let novaCorreoSedeMap={};
 
 function initNovaFechas(){
   const hoy=new Date(), hace30=new Date(hoy);
@@ -6326,11 +6329,11 @@ async function loadNovaMetrics(){
     encQr,
     sesNovaWeb, sesNovaDir, sesNovaBv,
   ] = await Promise.all([
-    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
-    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
-    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
-    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
-    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
+    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
+    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
+    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
@@ -6340,6 +6343,40 @@ async function loadNovaMetrics(){
     sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
     sb(qS('nova_sesiones?origen=eq.nova_bienvenida&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
   ]);
+
+  // Cargar mapas de referencia (sedes, usuarios, historial) en paralelo
+  const sbUrl2=(window.SUPABASE_URL||'').replace(/\/$/,'');
+  const sbH2={headers:{apikey:window.SUPABASE_KEY||'','Authorization':'Bearer '+(window.SUPABASE_KEY||'')}};
+  const normK=v=>(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const [sedesRaw2, usRaw2, vipRaw2, hRaw2] = await Promise.all([
+    fetch(`${sbUrl2}/rest/v1/sedes?select=id,nombre,municipio_norm,ciudad&activa=eq.true&limit=200`,sbH2).then(r=>r.json()).catch(()=>[]),
+    fetch(`${sbUrl2}/rest/v1/tabla_usuarios?select=${encodeURIComponent('"Cedula Pacientes","EPS","Ciudad"')}&limit=5000`,sbH2).then(r=>r.json()).catch(()=>[]),
+    fetch(`${sbUrl2}/rest/v1/usuarios_vip?select=cedula,eps&limit=5000`,sbH2).then(r=>r.json()).catch(()=>[]),
+    fetch(`${sbUrl2}/rest/v1/historial_eventos?evento=eq.pqr_recibida&select=correo_id,datos_extra&limit=5000`,sbH2).then(r=>r.json()).catch(()=>[]),
+  ]);
+  novaSedesMap={};
+  (sedesRaw2||[]).forEach(s=>{
+    if(s.municipio_norm) novaSedesMap[normK(s.municipio_norm)]=s.nombre;
+    if(s.ciudad)         novaSedesMap[normK(s.ciudad)]=s.nombre;
+  });
+  novaUsuariosMap={};
+  (usRaw2||[]).forEach(u=>{
+    const ced=String(u['Cedula Pacientes']||'').trim();
+    if(ced) novaUsuariosMap[ced]={eps:u['EPS']||'',ciudad:u['Ciudad']||''};
+  });
+  // Complementar con usuarios_vip (tiene eps directa en columna lowercase)
+  (vipRaw2||[]).forEach(v=>{
+    const ced=String(v.cedula||'').trim();
+    if(ced && !novaUsuariosMap[ced]) novaUsuariosMap[ced]={eps:v.eps||'',ciudad:''};
+    else if(ced && !novaUsuariosMap[ced]?.eps) novaUsuariosMap[ced]={...novaUsuariosMap[ced],eps:v.eps||''};
+  });
+  novaCorreoSedeMap={};
+  (hRaw2||[]).forEach(h=>{
+    if(!h.correo_id) return;
+    let ex={};
+    try{ex=typeof h.datos_extra==='string'?JSON.parse(h.datos_extra):(h.datos_extra||{});}catch(_){}
+    if(ex.sede_nombre) novaCorreoSedeMap[h.correo_id]=ex.sede_nombre;
+  });
 
   novaDatos={
     radWeb:[...(radWeb||[]),...(radWebOld||[])],
@@ -6363,7 +6400,23 @@ function renderNovaMetrics(){
   const d1=D.desde?new Date(D.desde):new Date(Date.now()-30*864e5);
   const d2=D.hasta?new Date(D.hasta):new Date();
   const dias=Math.max(1,Math.round((d2-d1)/864e5)+1);
-  const fmtSede=r=>r.agente_id?(state.agents.find(a=>a.id===r.agente_id)||{}).sede||'':'';
+  // Resolver sede usando los mismos mapas globales que usa el export Excel
+  const _normS=v=>(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const _parseSedeBody=body=>{
+    if(!body) return '';
+    const m=(body+'').match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i);
+    return m?m[1].replace(/·.*$/,'').trim():'';
+  };
+  const fmtSede=r=>{
+    if(r.id&&novaCorreoSedeMap[r.id]) return novaCorreoSedeMap[r.id];
+    const fromBody=_parseSedeBody(r.body_content);
+    if(fromBody) return fromBody;
+    if(r.ciudad_paciente){const s=novaSedesMap[_normS(r.ciudad_paciente)];if(s)return s;}
+    const ced=String(r.cedula||r.cedula_paciente||'').trim();
+    if(ced&&novaUsuariosMap[ced]?.ciudad){const s=novaSedesMap[_normS(novaUsuariosMap[ced].ciudad)];if(s)return s;}
+    if(r.municipio){const s=novaSedesMap[_normS(r.municipio)];if(s)return s;}
+    return r.ciudad_paciente||'';
+  };
   const tipoBadge=t=>{
     if(!t)return '<span class="mpqr-badge mpqr-empty">Sin tipo</span>';
     const m={peticion:'🔵 Petición',queja:'🔴 Queja',reclamo:'🟡 Reclamo',sugerencia:'🟢 Sugerencia',felicitacion:'✅ Felicitación',denuncia:'🟣 Denuncia'};
@@ -6376,10 +6429,14 @@ function renderNovaMetrics(){
   const TIPO_COLORS=['#2563eb','#dc2626','#ca8a04','#16a34a','#059669','#9333ea'];
 
   // ── Poblar filtros ────────────────────────────────────────────────────
-  const allSedes=[...new Set((state.agents||[]).map(a=>a.sede).filter(Boolean))].sort();
+  // Poblar filtros de sede desde tabla sedes real (misma fuente que el Excel)
+  const allSedes=Object.values(novaSedesMap).filter((v,i,a)=>a.indexOf(v)===i).sort();
   ['webFiltroSede','qrFiltroSede'].forEach(id=>{
     const el=document.getElementById(id);
-    if(el&&el.options.length<=1) allSedes.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;el.appendChild(o);});
+    if(!el) return;
+    // Repoblar siempre para reflejar sedes actuales
+    el.innerHTML='<option value="">Todas las sedes</option>';
+    allSedes.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;el.appendChild(o);});
   });
   const allSesFlat=[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])];
   const mnEl=document.getElementById('novaFiltroMun');
@@ -6394,8 +6451,9 @@ function renderNovaMetrics(){
   const novaMun = document.getElementById('novaFiltroMun')?.value||'';
   const novaEps = document.getElementById('novaFiltroEps')?.value||'';
 
-  const radWebF = (D.radWeb||[]).filter(r=>(!wSede||fmtSede(r)===wSede)&&(!wTipo||(r.tipo_pqr||'')===wTipo));
-  const radQrF  = (D.radQr||[]).filter(r=>(!qrSede||fmtSede(r)===qrSede));
+  const _esInterno=r=>(r.from_email||'').toLowerCase().includes('pqrsfd@tododrogas')||(r.from_name||'').toLowerCase().includes('pqrsfd');
+  const radWebF = (D.radWeb||[]).filter(r=>!_esInterno(r)&&(!wSede||fmtSede(r)===wSede)&&(!wTipo||(r.tipo_pqr||'')===wTipo));
+  const radQrF  = (D.radQr||[]).filter(r=>!_esInterno(r)&&(!qrSede||fmtSede(r)===qrSede));
   const sesF    = allSesFlat.filter(s=>(!novaMun||(s.municipio||'')===novaMun)&&(!novaEps||(s.eps_paciente||s.eps||'')===novaEps));
 
   // ═══ 1. WEB ════════════════════════════════════════════════════════════
@@ -6539,67 +6597,50 @@ async function _mExportInit() {
 
   const norm = v => (v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
 
-  // 1. Cargar sedes → mapa municipio_norm/ciudad → nombre sede
-  let sedesMap = {};
-  try {
-    const sedesRaw = await fetch(
-      `${sbUrl}/rest/v1/sedes?select=id,nombre,municipio_norm,ciudad&activa=eq.true&limit=200`, sbH
-    ).then(r=>r.json()).catch(()=>[]);
-    (sedesRaw||[]).forEach(s => {
-      if (s.municipio_norm) sedesMap[norm(s.municipio_norm)] = s.nombre;
-      if (s.ciudad)         sedesMap[norm(s.ciudad)]         = s.nombre;
-    });
-  } catch(e) { console.warn('[export] sedes:', e.message); }
+  // Reutilizar mapas globales cargados en loadNovaMetrics
+  // Si están vacíos (export sin haber cargado métricas), recargar
+  let sedesMap     = novaSedesMap;
+  let usuariosMap  = novaUsuariosMap;
+  let correoSedeMap= novaCorreoSedeMap;
+  if (!Object.keys(sedesMap).length || !Object.keys(usuariosMap).length) {
+    try {
+      const [sedesRaw,usRaw,vipRaw,hRaw] = await Promise.all([
+        fetch(`${sbUrl}/rest/v1/sedes?select=id,nombre,municipio_norm,ciudad&activa=eq.true&limit=200`,sbH).then(r=>r.json()).catch(()=>[]),
+        fetch(`${sbUrl}/rest/v1/tabla_usuarios?select=${encodeURIComponent('"Cedula Pacientes","EPS","Ciudad"')}&limit=5000`,sbH).then(r=>r.json()).catch(()=>[]),
+        fetch(`${sbUrl}/rest/v1/usuarios_vip?select=cedula,eps&limit=5000`,sbH).then(r=>r.json()).catch(()=>[]),
+        fetch(`${sbUrl}/rest/v1/historial_eventos?evento=eq.pqr_recibida&select=correo_id,datos_extra&limit=5000`,sbH).then(r=>r.json()).catch(()=>[]),
+      ]);
+      sedesMap={};
+      (sedesRaw||[]).forEach(s=>{if(s.municipio_norm)sedesMap[norm(s.municipio_norm)]=s.nombre;if(s.ciudad)sedesMap[norm(s.ciudad)]=s.nombre;});
+      usuariosMap={};
+      (usRaw||[]).forEach(u=>{const ced=String(u['Cedula Pacientes']||'').trim();if(ced)usuariosMap[ced]={eps:u['EPS']||'',ciudad:u['Ciudad']||''};});
+      (vipRaw||[]).forEach(v=>{const ced=String(v.cedula||'').trim();if(ced&&!usuariosMap[ced])usuariosMap[ced]={eps:v.eps||'',ciudad:''};else if(ced&&!usuariosMap[ced]?.eps)usuariosMap[ced]={...usuariosMap[ced],eps:v.eps||''};});
+      correoSedeMap={};
+      (hRaw||[]).forEach(h=>{if(!h.correo_id)return;let ex={};try{ex=typeof h.datos_extra==='string'?JSON.parse(h.datos_extra):(h.datos_extra||{});}catch(_){}if(ex.sede_nombre)correoSedeMap[h.correo_id]=ex.sede_nombre;});
+    } catch(e){ console.warn('[export] mapas fallback:', e.message); }
+  }
 
-  // 2. Cargar tabla_usuarios → mapa cedula → {eps, ciudad}
-  let usuariosMap = {};  // cedula → { eps, ciudad }
-  try {
-    const usRaw = await fetch(
-      `${sbUrl}/rest/v1/tabla_usuarios?select=${encodeURIComponent('"Cedula Pacientes","EPS","Ciudad"')}&limit=5000`, sbH
-    ).then(r=>r.json()).catch(()=>[]);
-    (usRaw||[]).forEach(u => {
-      const ced = String(u['Cedula Pacientes']||'').trim();
-      if (ced) usuariosMap[ced] = { eps: u['EPS']||'', ciudad: u['Ciudad']||'' };
-    });
-  } catch(e) { console.warn('[export] tabla_usuarios:', e.message); }
-
-  // 3. Cargar historial_eventos pqr_recibida → mapa correo_id → sede_nombre
-  let correoSedeMap = {};  // correo_id → sede_nombre
-  try {
-    const hRaw = await fetch(
-      `${sbUrl}/rest/v1/historial_eventos?evento=eq.pqr_recibida&select=correo_id,datos_extra&limit=5000`, sbH
-    ).then(r=>r.json()).catch(()=>[]);
-    (hRaw||[]).forEach(h => {
-      if (!h.correo_id) return;
-      let ex = {};
-      try { ex = typeof h.datos_extra === 'string' ? JSON.parse(h.datos_extra) : (h.datos_extra||{}); } catch(_) {}
-      if (ex.sede_nombre) correoSedeMap[h.correo_id] = ex.sede_nombre;
-    });
-  } catch(e) { console.warn('[export] historial pqr_recibida:', e.message); }
-
-  // Resolver sede para un registro de correos
+  // Resolver sede (idéntica a fmtSede del dashboard)
+  function _parseSedeBody(body) {
+    if (!body) return '';
+    const m = (body+'').match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i);
+    return m ? m[1].replace(/·.*$/, '').trim() : '';
+  }
   function getSede(r) {
-    // 1) historial pqr_recibida (fuente más directa)
     if (r.id && correoSedeMap[r.id]) return correoSedeMap[r.id];
-    // 2) ciudad_paciente → sedesMap
+    const fromBody = _parseSedeBody(r.body_content);
+    if (fromBody) return fromBody;
     if (r.ciudad_paciente) { const s = sedesMap[norm(r.ciudad_paciente)]; if (s) return s; }
-    // 3) cedula → tabla_usuarios → ciudad → sedesMap
     const ced = String(r.cedula||r.cedula_paciente||'').trim();
-    if (ced && usuariosMap[ced]?.ciudad) {
-      const s = sedesMap[norm(usuariosMap[ced].ciudad)];
-      if (s) return s;
-    }
-    // 4) municipio (nova_sesiones)
+    if (ced && usuariosMap[ced]?.ciudad) { const s = sedesMap[norm(usuariosMap[ced].ciudad)]; if (s) return s; }
     if (r.municipio) { const s = sedesMap[norm(r.municipio)]; if (s) return s; }
     return r.ciudad_paciente || '';
   }
 
-  // Resolver EPS para un registro (encuesta o correo)
+  // Resolver EPS
   function getEps(cedula, datosExtra) {
     const ex = datosExtra || {};
-    // 1) datos_extra directo
     if (ex.eps || ex.eps_paciente || ex.eps_nombre) return ex.eps || ex.eps_paciente || ex.eps_nombre;
-    // 2) cruzar por cedula en tabla_usuarios
     const ced = String(cedula||'').trim();
     if (ced && usuariosMap[ced]?.eps) return usuariosMap[ced].eps;
     return '';
@@ -6662,7 +6703,8 @@ async function exportWebExcel() {
   XLSX.utils.book_append_sheet(wb, ws_wEnc, 'WEB_Encuesta');
 
   // ── WEB_Radicacion ──────────────────────────────────────────────────
-  const h_wRad = (D.radWeb||[]).map(r => ({
+  const _esInterno = r => (r.from_email||'').toLowerCase().includes('pqrsfd@tododrogas') || (r.from_name||'').toLowerCase().includes('pqrsfd');
+  const h_wRad = (D.radWeb||[]).filter(r=>!_esInterno(r)).map(r => ({
     'Fecha':       fmtD(r.received_at),
     'Hora':        fmtH(r.received_at),
     'Sede':        getSede(r),
@@ -6727,7 +6769,7 @@ async function exportQrExcel() {
   XLSX.utils.book_append_sheet(wb, ws_qEnc, 'QR_Encuesta');
 
   // ── QR_Radicacion ───────────────────────────────────────────────────
-  const h_qRad = (D.radQr||[]).map(r => ({
+  const h_qRad = (D.radQr||[]).filter(r=>!_esInterno(r)).map(r => ({
     'Fecha':       fmtD(r.received_at),
     'Hora':        fmtH(r.received_at),
     'Sede':        getSede(r),
