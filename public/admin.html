@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PQRSFD Admin · Tododrogas</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script>(function(){var id=sessionStorage.getItem("pqr_agent_id")||"x";var t=localStorage.getItem("ag_tema_"+id)||"default";if(t!=="default")document.documentElement.setAttribute("data-theme",t);})();</script>
+<script>(function(){var t=localStorage.getItem("ag_tema_admin")||"default";if(t!=="default")document.documentElement.setAttribute("data-theme",t);})();</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="config.js" onerror="console.warn('config.js not found')"></script>
@@ -2954,6 +2954,11 @@ async function loadEmails(horasVentana = 0) {
         if (['critica','alta'].includes(email.prioridad) && !['critica','alta'].includes(existing.prioridad)) {
           existing.prioridad = email.prioridad;
         }
+        // Si cualquier mensaje del hilo está pendiente_firma, preservar ese estado
+        const rep = hilos.get(convId);
+        if (email.estado === 'pendiente_firma' || existing.estado === 'pendiente_firma') {
+          if (rep) rep.estado = 'pendiente_firma';
+        }
       }
     }
 
@@ -3077,7 +3082,7 @@ function renderEmailList() {
     const prio = {critica:0,alta:1,media:2,baja:3,'':4};
     list.sort((a,b)=>(prio[a.prioridad||'']||4)-(prio[b.prioridad||'']||4));
   } else if(state.sort==='estado') {
-    const ord = {pendiente:0,gestion:1,gestionado:2,solucionado:3};
+    const ord = {pendiente:0,gestion:1,gestionado:2,pendiente_firma:3,solucionado:4};
     list.sort((a,b)=>(ord[a.estado]||0)-(ord[b.estado]||0));
   }
 
@@ -5932,6 +5937,35 @@ async function cargarHistorico(){
   state.ciclo_inicio = desde;
   await loadEmails();
   showToast('✅ Correos cargados desde '+el.value,'success');
+}
+
+function setTema(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('ag_tema_admin', t);
+  document.querySelectorAll('#temaGrid [data-t]').forEach(function(el) {
+    el.style.boxShadow = el.dataset.t === t ? '0 0 0 3px #fff, 0 0 0 5px #2563eb' : 'none';
+  });
+  // Aplicar tema oscuro a iframes del cuerpo del correo
+  var _darkTs = ['dark'];
+  document.querySelectorAll('.ev-body iframe').forEach(function(fr) {
+    try {
+      var doc = fr.contentDocument;
+      if (!doc) return;
+      var existing = doc.getElementById('_tema_style');
+      if (existing) existing.remove();
+      if (_darkTs.includes(t)) {
+        var st = doc.createElement('style');
+        st.id = '_tema_style';
+        st.textContent = 'html,body{background:#1e293b!important;color:#e2e8f0!important}' +
+          '*{color:#e2e8f0!important;border-color:#334155!important}' +
+          '*{background-color:transparent!important}' +
+          'html,body,table,td,th,div,p,section,article,header,footer,main{background-color:#1e293b!important}' +
+          'a{color:#93c5fd!important}' +
+          'img{opacity:.92!important;filter:brightness(.9)!important}';
+        (doc.head || doc.documentElement).appendChild(st);
+      }
+    } catch(e) {}
+  });
 }
 
 function logout(){sessionStorage.clear();window.location.href='login.html';}
