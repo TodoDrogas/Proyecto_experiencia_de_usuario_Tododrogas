@@ -2833,18 +2833,17 @@ function showPage(page, btn) {
 // ──────────────────────────────────────────────
 async function loadEmails(horasVentana = 0) {
   try {
-    // ── Ventana: desde el inicio del día de HOY en hora Colombia ──
-    // horasVentana=0 → desde las 00:00 de hoy (default, igual que el PHP)
-    // horasVentana>0 → carga histórica manual (ej: últimas 48h)
+    // ── Ventana de carga ──
+    // horasVentana>0 → carga histórica manual
+    // ciclo_inicio   → desde que se inició el ciclo activo
+    // fallback       → últimas 48h (cubre desfases de zona horaria y reinicios de servidor)
     let desde;
     if (horasVentana > 0) {
       desde = new Date(Date.now() - horasVentana * 60 * 60 * 1000).toISOString();
     } else if (state.ciclo_inicio) {
       desde = new Date(state.ciclo_inicio).toISOString();
     } else {
-      const ahora = new Date();
-      const inicioDia = new Date(ahora.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }));
-      desde = new Date(inicioDia.getTime() + 5 * 60 * 60 * 1000).toISOString();
+      desde = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
     }
 
     // Paginación: traer TODOS los correos del ciclo sin techo de 500
@@ -5757,37 +5756,48 @@ async function cargarEstadoSync() {
   const btnCiclo= document.getElementById('btn-nuevo-ciclo');
   if (!badge || !btnInic || !btnCiclo) return;
 
+  // ── FUENTE PRIMARIA: Supabase (persiste reinicios de servidor) ──
+  let syncActivo = false;
+  let cicloInicio = null;
+  let ultimoSync  = null;
+
+  try {
+    const cfg = await sb('configuracion_sistema?id=eq.main&select=data');
+    const syncData = cfg?.[0]?.data?.sync || {};
+    if (syncData.activo && syncData.ciclo_inicio) {
+      syncActivo  = true;
+      cicloInicio = syncData.ciclo_inicio;
+      ultimoSync  = syncData.ultimo_sync || null;
+    }
+  } catch(_) {}
+
+  // ── FUENTE SECUNDARIA: PHP (complementa con ultimo_sync en tiempo real) ──
   try {
     const r = await fetch(`${SYNC_PHP}?accion=estado&token=${ADMIN_TOKEN_V3}`);
-    if (!r.ok) {
-      // PHP no disponible — mostrar iniciar por defecto
-      btnInic.style.display  = 'inline-flex';
-      btnCiclo.style.display = 'none';
-      badge.style.display    = 'none';
-      return;
-    }
-    const d = await r.json();
-    const sync = d.sync || {};
-
-    if (sync.activo) {
-      badge.style.display    = 'inline-flex';
-      btnInic.style.display  = 'none';
-      btnCiclo.style.display = 'inline-flex';
-      if (sync.ciclo_inicio) state.ciclo_inicio = sync.ciclo_inicio;
-      if (sync.ultimo_sync) {
-        const ls = document.getElementById('lastSync');
-        if (ls) ls.textContent = 'Sync: ' + new Date(sync.ultimo_sync).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+    if (r.ok) {
+      const d = await r.json();
+      const sync = d.sync || {};
+      // PHP puede confirmar activo también
+      if (sync.activo && sync.ciclo_inicio) {
+        syncActivo  = true;
+        cicloInicio = sync.ciclo_inicio;
+        ultimoSync  = sync.ultimo_sync || ultimoSync;
       }
-    } else {
-      badge.style.display    = 'none';
-      btnInic.style.display  = 'inline-flex';
-      btnCiclo.style.display = 'none';
     }
-  } catch(e) {
-    // Error de red — mostrar iniciar por defecto
+  } catch(_) {}
+
+  // ── APLICAR ESTADO ──
+  if (syncActivo && cicloInicio) {
+    state.ciclo_inicio = cicloInicio;
+    badge.style.display    = 'inline-flex';
+    btnInic.style.display  = 'none';
+    btnCiclo.style.display = 'inline-flex';
+    const ls = document.getElementById('lastSync');
+    if (ls && ultimoSync) ls.textContent = 'Sync: ' + new Date(ultimoSync).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  } else {
+    badge.style.display    = 'none';
     btnInic.style.display  = 'inline-flex';
     btnCiclo.style.display = 'none';
-    badge.style.display    = 'none';
   }
 }
 
@@ -5799,6 +5809,16 @@ async function iniciarSync() {
     const r = await fetch(`${SYNC_PHP}?accion=iniciar&token=${ADMIN_TOKEN_V3}`);
     const d = await r.json();
     if (d.ok) {
+      // Persistir estado de sync en Supabase para sobrevivir reinicios del servidor
+      try {
+        const cicloInicio = d.ciclo_inicio || new Date().toISOString();
+        state.ciclo_inicio = cicloInicio;
+        const cfgActual = await sb('configuracion_sistema?id=eq.main&select=data');
+        const dataActual = cfgActual?.[0]?.data || {};
+        await sb('configuracion_sistema?id=eq.main', 'PATCH', {
+          data: { ...dataActual, sync: { activo: true, ciclo_inicio: cicloInicio, ultimo_sync: new Date().toISOString() } }
+        });
+      } catch(_) {}
       showToast('✅ Sincronización iniciada. El cron comenzará a traer correos cada minuto.', 'success');
       await cargarEstadoSync();
     } else {
@@ -5828,6 +5848,15 @@ async function nuevoCiclo() {
     const r = await fetch(`${SYNC_PHP}?accion=nuevo_ciclo&token=${ADMIN_TOKEN_V3}`, {timeout: 120000});
     const d = await r.json();
     if (d.ok) {
+      // Limpiar estado de sync en Supabase al hacer nuevo ciclo
+      try {
+        const cfgActual = await sb('configuracion_sistema?id=eq.main&select=data');
+        const dataActual = cfgActual?.[0]?.data || {};
+        await sb('configuracion_sistema?id=eq.main', 'PATCH', {
+          data: { ...dataActual, sync: { activo: false, ciclo_inicio: null, ultimo_sync: new Date().toISOString() } }
+        });
+        state.ciclo_inicio = null;
+      } catch(_) {}
       showToast(
         `✅ Ciclo reiniciado. Backup: ${d.backup_path} · ${d.correos_backup} correos archivados.`,
         'success'
