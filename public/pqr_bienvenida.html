@@ -642,18 +642,25 @@ const ENC_DEFAULT = (window.location.origin || 'https://tododrogas.online') + '/
 let ENC_URL = ENC_DEFAULT;
 
 function applyQRs(){
-  // Helper: agrega ?origen al URL para que QRs en pantalla hereden el canal
+  // Limpia cualquier ?origen que venga de Supabase para que _BV_ORIGEN siempre gane
+  function stripOrigen(url){
+    if(!url) return url;
+    try{ const u=new URL(url,window.location.origin); u.searchParams.delete('origen'); return u.toString(); }
+    catch(e){ return url.replace(/([?&])origen=[^&]*/,'').replace(/[?&]$/,''); }
+  }
+  // Helper: agrega ?origen correcto (el de ESTA sesión)
   function addOrigen(url, origen){
     if(!url) return url;
     try{ const u=new URL(url,window.location.origin); u.searchParams.set('origen',origen); return u.toString(); }
     catch(e){ return url+(url.includes('?')?'&':'?')+'origen='+origen; }
   }
   // QR Radicar en pantalla — con origen heredado
-  makeQR('qr-radicar', addOrigen(FORM_URL, _BV_ORIGEN), 130);
+  makeQR('qr-radicar', addOrigen(stripOrigen(FORM_URL), _BV_ORIGEN), 130);
   const radLbl = document.getElementById('qr-radicar-url');
   if(radLbl){ try{ radLbl.textContent = new URL(FORM_URL).hostname + new URL(FORM_URL).pathname; }catch(e){ radLbl.textContent = FORM_URL; } }
-  // QR Encuesta en pantalla — con origen heredado
-  ENC_URL = (CFG.canales && CFG.canales.encuesta) ? CFG.canales.encuesta : ENC_DEFAULT;
+  // QR Encuesta en pantalla — limpiamos origen de Supabase y ponemos el de esta sesión
+  const rawEncUrl = (CFG.canales && CFG.canales.encuesta) ? CFG.canales.encuesta : ENC_DEFAULT;
+  ENC_URL = stripOrigen(rawEncUrl); // guardamos sin origen para que openEncuesta también lo use limpio
   makeQR('qr-encuesta', addOrigen(ENC_URL, _BV_ORIGEN), 130);
   const encLbl = document.getElementById('qr-encuesta-url');
   if(encLbl) encLbl.textContent = ENC_URL ? 'Encuesta · Escanea con tu cámara' : 'Encuesta · configura la URL en el panel';
@@ -662,6 +669,7 @@ function applyQRs(){
 }
 
 function openEncuesta(){
+  // ENC_URL ya está limpio (sin origen), le agregamos el correcto de esta sesión
   if(ENC_URL){ try{ const u = new URL(ENC_URL, window.location.origin); u.searchParams.set('origen', _BV_ORIGEN); window.open(u.toString(), '_blank'); }catch(e){ window.open(ENC_URL, '_blank'); } }
 }
 
