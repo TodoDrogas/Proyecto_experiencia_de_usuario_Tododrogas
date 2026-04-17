@@ -998,7 +998,7 @@ async function selectEmail(id) {
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Añadir gestión
       </button>
-      <button class="btn btn-ghost" onclick="generarConNovaTD('${email.id}')" style="border-color:#7c3aed;color:#7c3aed">
+      <button class="btn btn-ghost" onclick="(window.top||window).generarConNovaTD('${email.id}')" style="border-color:#7c3aed;color:#7c3aed">
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         ✦ Nova TD
       </button>
@@ -1350,7 +1350,13 @@ function marcarSolucionado() {
   if(!id) return;
   const email=state.emails.find(e=>e.id===id);
   if(!confirm('¿Marcar este ticket como "Pendiente por firma"?\n\nDeberás adjuntar la firma de cierre para cerrar definitivamente.')) return;
-  sb(`correos?id=eq.${id}`,'PATCH',{estado:'pendiente_firma'}).then(()=>{
+  sb(`correos?id=eq.${id}`,'PATCH',{estado:'pendiente_firma'}).then(async()=>{
+    // Incrementar num_gestiones
+    try {
+      const fresh = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
+      const ng = (fresh?.[0]?.num_gestiones||0) + 1;
+      await sb(`correos?id=eq.${id}`,'PATCH',{num_gestiones:ng});
+    } catch(e){}
     sb('historial_eventos','POST',{correo_id:id,agente_id:AGENT_ID,evento:'pendiente_firma',from_email:email?.remitente,subject:email?.asunto,descripcion:'Ticket marcado como pendiente de firma de cierre',datos_extra:JSON.stringify({agente_nombre:AGENT_NAME,por:'agente'})}).catch(e=>console.error('[agente] pendiente_firma error:',e?.message));
     const em=state.emails.find(e=>e.id===id);
     if(em) em.estado='pendiente_firma';
@@ -1425,7 +1431,12 @@ async function confirmarFirma() {
     await sb('adjuntos','POST',{correo_id:id,attachment_id:`firma_${id}_${Date.now()}`,nombre:file.name,tipo_contenido:file.type||'application/octet-stream',tamano_bytes:file.size,es_inline:false,storage_url:firmaUrl,storage_path:storagePath,direccion:'firma_cierre',enviado_por:AGENT_ID});
     // 4. Cambiar estado a solucionado
     await sb(`correos?id=eq.${id}`,'PATCH',{estado:'solucionado',fecha_resolucion:new Date().toISOString()});
-    // 5. Historial
+    // 5. Incrementar num_gestiones + Historial
+    try {
+      const _freshFirma = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
+      const _ngFirma = (_freshFirma?.[0]?.num_gestiones||0) + 1;
+      await sb(`correos?id=eq.${id}`,'PATCH',{num_gestiones:_ngFirma});
+    } catch(e){}
     try {
       const _agId = (AGENT_ID && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(AGENT_ID)) ? AGENT_ID : null;
       const _payFirma = {correo_id:id,evento:'firma_confirmada',from_email:email?.remitente,subject:email?.asunto,descripcion:obs||'Firma de cierre adjuntada — ticket cerrado',datos_extra:JSON.stringify({agente_nombre:AGENT_NAME,por:'agente',firma_archivo:file.name,firma_url:firmaUrl||'(sin URL)'})};
@@ -1470,61 +1481,6 @@ function gestionEvidenciaAdd(file) {
     </span>`;
 }
 
-
-// ── NOVA TD ──────────────────────────────────────────────────
-async function generarConNovaTD(correoId) {
-  const email = state.emails.find(e=>e.id===correoId);
-  if(!email) return;
-  const area = document.getElementById('replyBoxArea');
-  area.innerHTML = `<div style="background:#f5f3ff;border:1px solid #7c3aed;border-radius:8px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border:2px solid #7c3aed;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><span style="color:#7c3aed;font-weight:600;font-size:13px">✦ Nova TD generando respuesta...</span></div>`;
-  try {
-    const res = await fetch('/nova-td-respuesta.php', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        correo_id: email.id,
-        asunto: email.asunto||'',
-        body_content: email.body_content||'',
-        tipo_pqr: email.tipo_pqr||'',
-        categoria_ia: email.categoria_ia||'',
-        prioridad: email.prioridad||'',
-        es_urgente: email.es_urgente||false,
-        ley_aplicable: email.ley_aplicable||'Ley 1755/2015',
-        fecha_limite_sla: email.fecha_limite_sla||'',
-        nivel_riesgo: email.nivel_riesgo||'',
-        horas_sla: email.horas_sla||120,
-        agente_nombre: state.user?.nombre||'Equipo PQRSFD',
-        remitente_nombre: email.remitente_nombre||email.remitente||'',
-        remitente: email.remitente||'',
-        conversation_id: email.raw?.conversation_id||'',
-        ticket_id: email.raw?.ticket_id||email.id,
-        estado: email.estado||'',
-        sentimiento: email.sentimiento||'neutro',
-        tono: email.tono||'neutro',
-        resumen_corto: email.resumen_corto||''
-      })
-    });
-    const data = await res.json();
-    const html = data.respuesta_html||data.respuesta||'';
-    const confianza = data.confianza||70;
-    const advertencias = data.advertencias||[];
-    const fuentes = data.fuentes_usadas||{};
-    const extraccion = data.extraccion||{};
-    const bc = confianza>=80?'#dcfce7':confianza>=50?'#fef9c3':'#fee2e2';
-    const tc = confianza>=80?'#16a34a':confianza>=50?'#ca8a04':'#dc2626';
-    const msg = confianza>=80?'✅ Alta confianza':confianza>=50?'⚠️ Confianza media · revisa antes de enviar':'❌ Baja confianza · reescribe manualmente';
-    const fuentesBadges = [
-      fuentes.kb?'<span style="background:#ede9fe;color:#6d28d9;font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px">📚 KB</span>':'',
-      fuentes.extraccion_ia?'<span style="background:#dbeafe;color:#1d4ed8;font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px">🧠 IA</span>':''
-    ].filter(Boolean).join(' ');
-    const extInfo = extraccion.paciente||extraccion.radicado ? `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:6px 12px;margin-bottom:6px;font-size:11px;color:var(--ink2)">${[extraccion.paciente?'👤 '+extraccion.paciente:'', extraccion.radicado?'📋 Rad: '+extraccion.radicado:'', extraccion.medicamento?'💊 '+extraccion.medicamento:'', extraccion.urgencia&&extraccion.urgencia!=='normal'?'⚡ '+extraccion.urgencia:''].filter(Boolean).join(' · ')}</div>` : '';
-    area.innerHTML = `<div style="background:${bc};border-radius:6px;padding:8px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><span style="color:${tc};font-weight:700;font-size:12px">${msg}</span><span style="color:${tc};font-size:11px">Confianza: ${confianza}%</span></div>${fuentesBadges?`<div style="margin-bottom:6px;font-size:11px;color:var(--ink3)">Fuentes: ${fuentesBadges}</div>`:''}${extInfo}${advertencias.length?`<ul style="margin:0 0 8px;padding:0 0 0 18px;font-size:12px;color:#ca8a04">${advertencias.map(a=>`<li>${a}</li>`).join('')}</ul>`:''}`;
-    toggleReply('reply');
-    setTimeout(()=>{ const ed=document.querySelector('#replyBoxArea [contenteditable]'); if(ed) ed.innerHTML=html; },300);
-  } catch(err) {
-    area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error Nova TD PHP — revisa el log del servidor.</div>`;
-    console.error('Nova TD error:', err);
-  }
-}
 
 function gmToggle(header) {
   const body = header.nextElementSibling;
@@ -2506,6 +2462,12 @@ async function sendReply() {
           .catch(err=>console.warn('[adjuntos-storage] Error general:',err.message));
       }
 
+      // Incrementar num_gestiones al responder
+      try {
+        const _freshResp = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
+        const _ngResp = (_freshResp?.[0]?.num_gestiones||0) + 1;
+        await sb(`correos?id=eq.${id}`,'PATCH',{num_gestiones:_ngResp});
+      } catch(e){}
       try{ await sb('historial_eventos','POST',{
         correo_id:id,
         agente_id:AGENT_ID,
