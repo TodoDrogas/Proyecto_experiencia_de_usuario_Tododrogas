@@ -586,17 +586,11 @@ let FRASES = [
 ];
 let CFG = {};
 const _bvParams = new URLSearchParams(window.location.search);
-(function(){
-  const fromUrl = _bvParams.get('origen');
-  // El origen solo es 'qr' si viene explícito ?origen=qr en la URL del QR impreso.
-  // Sin parámetro siempre se limpia el sessionStorage para no contaminar sesiones web.
-  if(fromUrl === 'qr') sessionStorage.setItem('td_origen', 'qr');
-  else sessionStorage.removeItem('td_origen');
-})();
 const _BV_ORIGEN = (() => {
   const fromUrl = _bvParams.get('origen');
-  // Solo usar el valor de URL si viene explícito; de lo contrario siempre 'web'.
-  return fromUrl || 'web';
+  if(fromUrl) return fromUrl;
+  // Sin ?origen=: referrer vacío = QR físico (cámara no deja referrer), con referrer = web
+  return !document.referrer ? 'qr' : 'web';
 })();
 let FORM_URL = window.location.origin + '/pqr_form.html';
 let _lastQrUrl = null;
