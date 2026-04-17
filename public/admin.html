@@ -557,6 +557,30 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 
 
 <!-- ══ MODAL TEMA ══ -->
+<!-- Modal Cargar Histórico -->
+<div id="modalHistorial" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(6px)" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:#fff;border-radius:14px;padding:28px 32px;width:400px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#0f172a">📥 Cargar correos históricos</div>
+        <div style="font-size:11px;color:#64748b;margin-top:2px">Trae correos desde una fecha y hora específica</div>
+      </div>
+      <button onclick="document.getElementById('modalHistorial').style.display='none'" style="background:none;border:none;cursor:pointer;font-size:20px;color:#64748b">✕</button>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:6px">DESDE (fecha y hora Colombia)</label>
+      <input type="datetime-local" id="historialDesde" style="width:100%;border:1.5px solid #e2e8f0;border-radius:8px;padding:9px 12px;font-size:13px;font-family:inherit;color:#0f172a;outline:none" onfocus="this.style.borderColor='#2563eb'" onblur="this.style.borderColor='#e2e8f0'">
+    </div>
+    <div style="background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:20px;font-size:11px;color:#92400e">
+      ⚠️ Solo trae correos que ya estén en Supabase. El sync los trajo pero pueden estar fuera de la ventana de visualización.
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="document.getElementById('modalHistorial').style.display='none'" style="flex:1;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;background:#fff;color:#64748b">Cancelar</button>
+      <button onclick="cargarHistorico()" style="flex:2;padding:10px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;background:#2563eb;color:#fff">📥 Cargar desde esa fecha</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalTema" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(6px)" onclick="if(event.target===this)this.style.display='none'">
   <div style="background:#fff;border-radius:16px;padding:24px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)" onclick="event.stopPropagation()">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
@@ -5884,6 +5908,33 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(cargarEstadoSync, 60000); // Verificar cada minuto
 });
 
+
+function abrirModalHistorial(){
+  // Precargar con ayer 22:00 como sugerencia
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate()-1);
+  ayer.setHours(22,0,0,0);
+  const fmt = d => d.toISOString().slice(0,16); // yyyy-MM-ddTHH:mm
+  const el = document.getElementById('historialDesde');
+  if(el && !el.value) el.value = fmt(ayer);
+  document.getElementById('modalHistorial').style.display='flex';
+}
+
+async function cargarHistorico(){
+  const el = document.getElementById('historialDesde');
+  if(!el||!el.value){ showToast('Selecciona una fecha','error'); return; }
+  // Convertir hora Colombia (UTC-5) a UTC
+  const localDt = new Date(el.value); // el input es hora local del browser
+  const desde = localDt.toISOString();
+  document.getElementById('modalHistorial').style.display='none';
+  showToast('⏳ Cargando correos desde '+el.value+'...','info');
+  // Cargar correos desde esa fecha sin cambiar el ciclo_inicio
+  const prev = state.ciclo_inicio;
+  state.ciclo_inicio = desde;
+  await loadEmails();
+  state.ciclo_inicio = prev; // restaurar ciclo real
+  showToast('✅ Correos cargados','success');
+}
 
 function logout(){sessionStorage.clear();window.location.href='login.html';}
 async function getGraphToken(){
