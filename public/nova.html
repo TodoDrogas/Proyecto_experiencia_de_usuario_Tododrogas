@@ -1497,7 +1497,7 @@ const ntdHav2=(lat1,lng1,lat2,lng2)=>{
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 };
 
-async function ntdFetchSedes(mun){
+async function ntdFetchSedes(mun, epsParam){
   NTD.fase='libre';
   if(!mun||!mun.trim()){
     ntdRmSk();ntdTyping(false);
@@ -1505,7 +1505,7 @@ async function ntdFetchSedes(mun){
     return;
   }
   ntdTyping(true);ntdAddSk();
-  const eps=(NTD.eps||'').toUpperCase().trim();
+  const eps=(epsParam||NTD.eps||'').toUpperCase().replace(/\s*\([^)]*\)\s*/g,'').trim();
   const munNorm=ntdNormMun(mun);
 
   // Consultar Supabase directamente — traer TODAS las sedes activas
@@ -2016,9 +2016,11 @@ async function ntdFLibre(txt){
       // dat puede ser "municipio" o "municipio:EPS"
       const _partes=(dat||'').split(':');
       const _mun=_partes[0].trim();
-      const _epsOverride=_partes[1]?_partes[1].trim().toUpperCase().replace('PREVENTIVA SALUD','PREVENTIVA').replace('SAVIA SALUD','SAVIA'):null;
-      if(_epsOverride) NTD.eps=_epsOverride; // actualizar EPS permanentemente
-      await ntdFetchSedes(_mun);
+      const _epsOverride=_partes[1]?_partes[1].trim().toUpperCase()
+        .replace('PREVENTIVA SALUD','PREVENTIVA').replace('SAVIA SALUD','SAVIA')
+        .replace(/\s*\([^)]*\)\s*/g,'').trim():null;
+      // NO cambiar NTD.eps permanentemente — solo usar para esta consulta
+      await ntdFetchSedes(_mun, _epsOverride||null);
       break;}
     case 'REQUISITOS':
       ntdRequisitosReclamar();break;
