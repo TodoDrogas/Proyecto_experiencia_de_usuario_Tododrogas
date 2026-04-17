@@ -30,7 +30,7 @@ jobs:
           window.ENC_URL             = '/pqr_encuesta.html';
           window.NOVA_HTML_URL       = '/nova.html';
           CONFIGEOF
-          echo "✅ config.js generado (sin keys peligrosas)"
+          echo "✅ config.js generado"
 
       # ── 3. INYECTAR SECRETS EN PHP ──────────────────────────────
       - name: Inyectar secrets en PHP
@@ -62,8 +62,8 @@ jobs:
             sed -i "s|__GRAPH_USER_ID__|${{ secrets.GRAPH_USER_ID }}|g"             "$f"
             sed -i "s|__ADMIN_TOKEN__|${{ secrets.ADMIN_TOKEN }}|g"                 "$f"
             sed -i "s|__INBOX_FOLDER_ID__|${{ secrets.INBOX_FOLDER_ID }}|g"         "$f"
-            sed -i "s|__ADMIN_USER__|${{ secrets.ADMIN_USER }}|g"                  "$f"
-            sed -i "s|__ADMIN_PASS__|${{ secrets.ADMIN_PASS }}|g"                  "$f"
+            sed -i "s|__ADMIN_USER__|${{ secrets.ADMIN_USER }}|g"                   "$f"
+            sed -i "s|__ADMIN_PASS__|${{ secrets.ADMIN_PASS }}|g"                   "$f"
             echo "✅ $f inyectado"
           done
 
@@ -258,12 +258,6 @@ jobs:
               -H "apikey: ${SB_KEY}" -H "Authorization: Bearer ${SB_KEY}" \
               -H "Content-Type: application/json" -d "$json_body"
           }
-          CODE=$(run_sql "CREATE TABLE IF NOT EXISTS nova_sesiones (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, sesion_id text, cedula text, nombre text, eps text, turnos int DEFAULT 0, resumen text, motivo_cierre text, created_at timestamptz DEFAULT now());")
-          [ "$CODE" = "200" ] && echo "✅ nova_sesiones OK" || echo "⚠️ nova_sesiones: $CODE"
-          CODE=$(run_sql "ALTER TABLE nova_sesiones ADD COLUMN IF NOT EXISTS origen text DEFAULT 'nova_web';")
-          [ "$CODE" = "200" ] && echo "✅ nova_sesiones.origen OK" || echo "⚠️ $CODE"
-          CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS origen text DEFAULT 'web';")
-          [ "$CODE" = "200" ] && echo "✅ encuestas.origen OK" || echo "⚠️ $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS origen text DEFAULT 'web';")
           [ "$CODE" = "200" ] && echo "✅ correos.origen OK" || echo "⚠️ $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS resumen_ia text;")
@@ -289,7 +283,25 @@ jobs:
             fi
             touch /var/log/sync-correos.log && chmod 644 /var/log/sync-correos.log
 
-      # ── 10. VERIFICAR DEPLOY ────────────────────────────────────
+      # ── 10. INICIAR SYNC AUTOMÁTICAMENTE SI NO ESTÁ ACTIVO ──────
+      - name: Iniciar sync si no está activo
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.VPS_WEB_HOST }}
+          username: root
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            RESP=$(curl -s "https://tododrogas.online/sincronizar-correos.php?accion=estado&token=${{ secrets.ADMIN_TOKEN }}")
+            ACTIVO=$(echo "$RESP" | grep -o '"activo":true' || true)
+            if [ -z "$ACTIVO" ]; then
+              echo "⚡ Sync no activo — iniciando automáticamente..."
+              curl -s "https://tododrogas.online/sincronizar-correos.php?accion=iniciar&token=${{ secrets.ADMIN_TOKEN }}"
+              echo "✅ Sync iniciado"
+            else
+              echo "✅ Sync ya estaba activo"
+            fi
+
+      # ── 11. VERIFICAR DEPLOY ────────────────────────────────────
       - name: Verificar deploy
         uses: appleboy/ssh-action@v1
         with:
@@ -298,18 +310,9 @@ jobs:
           key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
             nginx -t && systemctl reload nginx && echo "✅ Nginx OK"
-            echo "--- Archivos PHP desplegados ---"
-            ls -la /var/www/pqr/*.php 2>/dev/null || echo "(sin .php)"
-            echo "--- Sintaxis PHP ---"
             ERRORS=0
-            for f in /var/www/pqr/radicar-pqr.php /var/www/pqr/radicar-encuesta.php \
-                     /var/www/pqr/transcribir-audio.php /var/www/pqr/procesar-canvas.php \
-                     /var/www/pqr/sincronizar-correos.php /var/www/pqr/nova-td-respuesta.php \
-                     /var/www/pqr/nova-proxy.php /var/www/pqr/nova-consulta.php \
-                     /var/www/pqr/cargar-plantillas.php /var/www/pqr/validar-paciente.php \
-                     /var/www/pqr/admin-buscar-paciente.php /var/www/pqr/admin-buscar-medicamento.php \
-                     /var/www/pqr/api-token.php /var/www/pqr/adj-proxy.php \
-                     /var/www/pqr/login.php; do
+            for f in /var/www/pqr/radicar-pqr.php /var/www/pqr/sincronizar-correos.php \
+                     /var/www/pqr/nova-td-respuesta.php /var/www/pqr/login.php; do
               [ -f "$f" ] || continue
               OUT=$(php -l "$f" 2>&1)
               if echo "$OUT" | grep -q "No syntax errors"; then
@@ -319,8 +322,7 @@ jobs:
                 ERRORS=$((ERRORS+1))
               fi
             done
-            echo "--- Placeholders residuales ---"
-            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_\|__GRAPH_USER_ID__\|__ADMIN_TOKEN__\|__INBOX_FOLDER_ID__\|__ADMIN_USER__\|__ADMIN_PASS__' \
+            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__ADMIN_TOKEN__' \
               /var/www/pqr/*.php 2>/dev/null || true)
             if [ -n "$FOUND" ]; then
               echo "❌ Placeholders en: $FOUND"
