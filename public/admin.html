@@ -5962,7 +5962,17 @@ async function getGraphToken(){
   if(sessionStorage.getItem('pqr_role')!=='admin') {
     window.location.href='login.html'; return;
   }
+  // cargarEstadoSync PRIMERO y esperar — carga ciclo_inicio de Supabase
+  // loadEmails debe correr DESPUÉS para usar el ciclo_inicio correcto
   await cargarEstadoSync();
+  // Si después de cargarEstadoSync no hay ciclo_inicio, leerlo directo de Supabase
+  if (!state.ciclo_inicio) {
+    try {
+      const cfg = await sb('configuracion_sistema?id=eq.main&select=data');
+      const syncData = cfg?.[0]?.data?.sync || {};
+      if (syncData.ciclo_inicio) state.ciclo_inicio = syncData.ciclo_inicio;
+    } catch(_) {}
+  }
   await Promise.all([loadEmails(), loadAgents(), loadHistorial(), loadEncuestas()]);
   loadTopbarLogo();
   document.getElementById('lastSync').textContent=`sync ${new Date().toLocaleTimeString('es-CO')}`;
