@@ -808,7 +808,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
                 <div class="mchart-sub">Proporción del canal Web</div>
               </div>
             </div>
-            <div class="mchart-body" style="height:200px"><canvas id="chartWebDist"></canvas></div>
+            <div class="mchart-body" style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="chartWebDist"></canvas></div>
           </div>
         </div>
 
@@ -923,7 +923,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
               <div class="mchart-title">Radicados vs Encuestas QR</div>
               <div class="mchart-sub">Proporción del canal QR</div>
             </div>
-            <div class="mchart-body" style="height:200px"><canvas id="chartQrDist"></canvas></div>
+            <div class="mchart-body" style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="chartQrDist"></canvas></div>
           </div>
         </div>
 
@@ -957,15 +957,13 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
           <div class="mfiltros-group">
             <span class="mfiltros-label" style="color:#5b21b6">MUNICIPIO</span>
-            <select id="novaFiltroMun" class="mfiltros-select" onchange="renderNovaMetrics()">
-              <option value="">Todos</option>
-            </select>
+            <input type="text" id="novaFiltroMun" list="novaFiltroMunList" class="mfiltros-input" placeholder="Buscar municipio..." oninput="renderNovaMetrics()" style="min-width:180px">
+            <datalist id="novaFiltroMunList"></datalist>
           </div>
           <div class="mfiltros-group">
             <span class="mfiltros-label" style="color:#5b21b6">EPS</span>
-            <select id="novaFiltroEps" class="mfiltros-select" onchange="renderNovaMetrics()">
-              <option value="">Todas</option>
-            </select>
+            <input type="text" id="novaFiltroEps" list="novaFiltroEpsList" class="mfiltros-input" placeholder="Buscar EPS..." oninput="renderNovaMetrics()" style="min-width:160px">
+            <datalist id="novaFiltroEpsList"></datalist>
           </div>
           <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#7c3aed">🔍 Filtrar</button>
           <button onclick="exportNovaExcel()" class="mfiltros-btn-export">⬇ Excel Nova TD</button>
@@ -6326,11 +6324,11 @@ async function loadNovaMetrics(){
     encQr,
     sesNovaWeb, sesNovaDir, sesNovaBv,
   ] = await Promise.all([
-    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
-    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
-    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
-    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
-    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content')).catch(()=>[]),
+    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
+    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
+    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
@@ -6404,6 +6402,11 @@ function renderNovaMetrics(){
     const m=(body+'').match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i);
     return m?m[1].replace(/·.*$/,'').trim():'';
   };
+  const _parseNombreBody=body=>{
+    if(!body) return '';
+    const m=(body+'').match(/Nombre<\/td>[^<]*<td[^>]*>([^<\n]+)/i);
+    return m?m[1].trim():'';
+  };
   const fmtSede=r=>{
     if(r.id&&novaCorreoSedeMap[r.id]) return novaCorreoSedeMap[r.id];
     const fromBody=_parseSedeBody(r.body_content);
@@ -6434,10 +6437,11 @@ function renderNovaMetrics(){
     allSedes.forEach(s=>{const o=document.createElement('option');o.value=s;dl.appendChild(o);});
   });
   const allSesFlat=[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])];
-  const mnEl=document.getElementById('novaFiltroMun');
-  if(mnEl&&mnEl.options.length<=1) [...new Set(allSesFlat.map(s=>s.municipio).filter(Boolean))].sort().forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;mnEl.appendChild(o);});
-  const epFEl=document.getElementById('novaFiltroEps');
-  if(epFEl&&epFEl.options.length<=1) [...new Set(allSesFlat.map(s=>s.eps_paciente||s.eps).filter(Boolean))].sort().forEach(e=>{const o=document.createElement('option');o.value=e;o.textContent=e;epFEl.appendChild(o);});
+  // Poblar datalists municipio y EPS de Nova
+  const mnDl=document.getElementById('novaFiltroMunList');
+  if(mnDl&&mnDl.children.length===0) [...new Set(allSesFlat.map(s=>s.municipio).filter(Boolean))].sort().forEach(m=>{const o=document.createElement('option');o.value=m;mnDl.appendChild(o);});
+  const epDl=document.getElementById('novaFiltroEpsList');
+  if(epDl&&epDl.children.length===0) [...new Set(allSesFlat.map(s=>s.eps_paciente||s.eps).filter(Boolean))].sort().forEach(e=>{const o=document.createElement('option');o.value=e;epDl.appendChild(o);});
 
   // ── Filtros activos ───────────────────────────────────────────────────
   const wSede   = document.getElementById('webFiltroSede')?.value||'';
@@ -6482,7 +6486,7 @@ function renderNovaMetrics(){
   if(cWS){ const sW={positivo:0,neutro:0,negativo:0,sin:0}; radWebF.forEach(r=>{const s=r.sentimiento||'';if(sW[s]!==undefined)sW[s]++;else sW.sin++;}); _mCharts.chartWebSent=new Chart(cWS.getContext('2d'),{type:'doughnut',data:{labels:['Positivo','Neutro','Negativo','Sin clasificar'],datasets:[{data:[sW.positivo,sW.neutro,sW.negativo,sW.sin],backgroundColor:['rgba(22,163,74,.7)','rgba(100,116,139,.7)','rgba(220,38,38,.7)','rgba(148,163,184,.4)'],borderColor:['#16a34a','#64748b','#dc2626','#94a3b8'],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{font:{size:9},padding:6,boxWidth:10}}}}}); }
   // Tabla Web
   const wTB=document.getElementById('wTabBody'); set('wTabCount',radWebF.length+' radicados');
-  if(wTB){ const rows=radWebF.slice().sort((a,b)=>new Date(b.received_at)-new Date(a.received_at)).slice(0,50); wTB.innerHTML=rows.length?rows.map(r=>`<tr><td style="white-space:nowrap;color:var(--ink3)">${r.received_at?new Date(r.received_at).toLocaleDateString('es-CO'):''}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.ticket_id||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.cedula||'—'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.from_name||r.nombre||'—'}</td><td>${tipoBadge(r.tipo_pqr)}</td><td style="font-size:11px">${sentEmoji(r.sentimiento)}</td><td><span class="mpqr-badge" style="background:var(--bg2);color:var(--ink2)">${r.prioridad||'—'}</span></td><td>${estadoBadge(r.estado)}</td></tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink3)">Sin radicados en el período</td></tr>'; }
+  if(wTB){ const rows=radWebF.slice().sort((a,b)=>new Date(b.received_at)-new Date(a.received_at)).slice(0,50); wTB.innerHTML=rows.length?rows.map(r=>{const nom=r.nombre_solicitud||_parseNombreBody(r.body_content)||r.nombre||'—';return`<tr><td style="white-space:nowrap;color:var(--ink3)">${r.received_at?new Date(r.received_at).toLocaleDateString('es-CO'):''}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.ticket_id||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.cedula||'—'}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${esc(nom)}</td><td>${tipoBadge(r.tipo_pqr)}</td><td style="font-size:11px">${sentEmoji(r.sentimiento)}</td><td><span class="mpqr-badge" style="background:var(--bg2);color:var(--ink2)">${r.prioridad||'—'}</span></td><td>${estadoBadge(r.estado)}</td></tr>`;}).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink3)">Sin radicados en el período</td></tr>'; }
 
   // ═══ 2. QR ═════════════════════════════════════════════════════════════
   const qrTotal=radQrF.length+(D.encQr||[]).length;
@@ -6496,7 +6500,7 @@ function renderNovaMetrics(){
   const cQD=document.getElementById('chartQrDist');
   if(cQD){ _mCharts.chartQrDist=new Chart(cQD.getContext('2d'),{type:'doughnut',data:{labels:['Radicados','Encuestas'],datasets:[{data:[radQrF.length,(D.encQr||[]).length],backgroundColor:['rgba(245,158,11,.7)','rgba(202,138,4,.7)'],borderColor:['#f59e0b','#ca8a04'],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:8}}}}}); }
   const qrTB=document.getElementById('qrTabBody'); set('qrTabCount',radQrF.length+' radicados');
-  if(qrTB){ const rows=radQrF.slice().sort((a,b)=>new Date(b.received_at)-new Date(a.received_at)).slice(0,50); qrTB.innerHTML=rows.length?rows.map(r=>`<tr><td style="white-space:nowrap;color:var(--ink3)">${r.received_at?new Date(r.received_at).toLocaleDateString('es-CO'):''}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.ticket_id||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.cedula||'—'}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.from_name||r.nombre||'—'}</td><td>${tipoBadge(r.tipo_pqr)}</td><td style="font-size:11px">${sentEmoji(r.sentimiento)}</td><td><span class="mpqr-badge" style="background:var(--bg2);color:var(--ink2)">${r.prioridad||'—'}</span></td><td>${estadoBadge(r.estado)}</td></tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink3)">Sin radicados QR en el período</td></tr>'; }
+  if(qrTB){ const rows=radQrF.slice().sort((a,b)=>new Date(b.received_at)-new Date(a.received_at)).slice(0,50); qrTB.innerHTML=rows.length?rows.map(r=>{const nom=r.nombre_solicitud||_parseNombreBody(r.body_content)||r.nombre||'—';return`<tr><td style="white-space:nowrap;color:var(--ink3)">${r.received_at?new Date(r.received_at).toLocaleDateString('es-CO'):''}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.ticket_id||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.cedula||'—'}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${esc(nom)}</td><td>${tipoBadge(r.tipo_pqr)}</td><td style="font-size:11px">${sentEmoji(r.sentimiento)}</td><td><span class="mpqr-badge" style="background:var(--bg2);color:var(--ink2)">${r.prioridad||'—'}</span></td><td>${estadoBadge(r.estado)}</td></tr>`;}).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink3)">Sin radicados QR en el período</td></tr>'; }
 
   // ═══ 3. NOVA TD ════════════════════════════════════════════════════════
   const allRadNova=(D.radNovaWeb||[]).length+(D.radNovaDir||[]).length;
@@ -6627,6 +6631,11 @@ async function _mExportInit() {
     const m = (body+'').match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i);
     return m ? m[1].replace(/·.*$/, '').trim() : '';
   }
+  function _parseNombreBody(body) {
+    if (!body) return '';
+    const m = (body+'').match(/Nombre<\/td>[^<]*<td[^>]*>([^<\n]+)/i);
+    return m ? m[1].trim() : '';
+  }
   function getSede(r) {
     if (r.id && correoSedeMap[r.id]) return correoSedeMap[r.id];
     const fromBody = _parseSedeBody(r.body_content);
@@ -6710,8 +6719,7 @@ async function exportWebExcel() {
     'Hora':        fmtH(r.received_at),
     'Sede':        getSede(r),
     'Cédula':      r.cedula      || '',
-    'Nombre':      r.from_name   || r.nombre || '',
-    'Correo':      r.from_email  || '',
+    'Nombre':      r.nombre_solicitud || _parseNombreBody(r.body_content) || r.nombre || '',
     'Ticket':      r.ticket_id   || '',
     'Tipo_PQR':    tipoLabel(r.tipo_pqr),
     'Sentimiento': sentLabel(r.sentimiento),
@@ -6720,7 +6728,7 @@ async function exportWebExcel() {
     'Canal':       r.canal_contacto || r.origen || 'web',
   }));
   const ws_wRad = XLSX.utils.json_to_sheet(h_wRad.length ? h_wRad : [{'Sin_datos':'Sin radicados Web en el período'}]);
-  ws_wRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:26},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:14}];
+  ws_wRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws_wRad, 'WEB_Radicacion');
 
   XLSX.writeFile(wb, `WEB_${desde}_${hasta}.xlsx`);
@@ -6776,8 +6784,7 @@ async function exportQrExcel() {
     'Hora':        fmtH(r.received_at),
     'Sede':        getSede(r),
     'Cédula':      r.cedula      || '',
-    'Nombre':      r.from_name   || r.nombre || '',
-    'Correo':      r.from_email  || '',
+    'Nombre':      r.nombre_solicitud || _parseNombreBody(r.body_content) || r.nombre || '',
     'Ticket':      r.ticket_id   || '',
     'Tipo_PQR':    tipoLabel(r.tipo_pqr),
     'Sentimiento': sentLabel(r.sentimiento),
@@ -6786,7 +6793,7 @@ async function exportQrExcel() {
     'Canal':       'QR',
   }));
   const ws_qRad = XLSX.utils.json_to_sheet(h_qRad.length ? h_qRad : [{'Sin_datos':'Sin radicados QR en el período'}]);
-  ws_qRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:26},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:8}];
+  ws_qRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:8}];
   XLSX.utils.book_append_sheet(wb, ws_qRad, 'QR_Radicacion');
 
   XLSX.writeFile(wb, `QR_${desde}_${hasta}.xlsx`);
