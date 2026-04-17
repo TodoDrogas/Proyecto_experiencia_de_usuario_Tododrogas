@@ -772,7 +772,7 @@ function ntdSys(){
   s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
   s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
   s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, malo, en mal estado, mal concentración, deteriorado, equivocado, dañado, defectuoso — di SIEMPRE: "No lo consuma. Por su seguridad NO utilice ese medicamento." Luego ofrece contacto: PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] si mencionó municipio, o pregúntale en qué municipio está para mostrarle la sede más cercana.\n';
-  s+='REGLA SEDES — OBLIGATORIA:\n  PASO 1 — DETECTAR EPS A CONSULTAR:\n    - Si el usuario menciona explícitamente una EPS (NUEVA EPS, COOSALUD, SAVIA, etc.) → usar ESA EPS, NO la del usuario registrado.\n    - Ejemplos: "SI SOY NUEVA EPS" → EPS=NUEVA EPS. "SALUD TOTAL PUEDE RECLAMAR" → EPS=SALUD TOTAL.\n    - Si NO menciona EPS → usar la EPS del usuario registrado.\n  PASO 2 — CONSTRUIR EL TAG:\n    - Si EPS mencionada ≠ EPS del usuario → OBLIGATORIO usar [SEDES:municipio:EPSMENCIONADA]\n    - Si EPS = EPS del usuario o no mencionó EPS → usar [SEDES:municipio]\n  PASO 3 — NUNCA omitir el tag. SIEMPRE incluirlo al final de la respuesta.\n  EJEMPLOS CORRECTOS:\n    Usuario COOSALUD pregunta "NUEVA EPS puede reclamar en NECHI" → [SEDES:NECHI:NUEVA EPS]\n    Usuario COOSALUD pregunta "SALUD TOTAL en BARBOSA" → [SEDES:BARBOSA:SALUD TOTAL]\n    Usuario COOSALUD pregunta "puedo reclamar en RIONEGRO" → [SEDES:RIONEGRO]\n    Usuario sin municipio → preguntar municipio primero.\n';
+  s+='REGLA SEDES — OBLIGATORIA:\n  PASO 1 — DETECTAR EPS A CONSULTAR:\n    - Si el usuario menciona explícitamente una EPS (NUEVA EPS, COOSALUD, SAVIA, etc.) → usar ESA EPS, NO la del usuario registrado.\n    - Ejemplos: "SI SOY NUEVA EPS" → EPS=NUEVA EPS. "SALUD TOTAL PUEDE RECLAMAR" → EPS=SALUD TOTAL.\n    - Si NO menciona EPS → usar la EPS del usuario registrado.\n  PASO 2 — CONSTRUIR EL TAG:\n    - Si EPS mencionada ≠ EPS del usuario → OBLIGATORIO usar [SEDES:municipio:EPSMENCIONADA]\n    - Si EPS = EPS del usuario o no mencionó EPS → usar [SEDES:municipio]\n  PASO 3 — NUNCA omitir el tag. SIEMPRE incluirlo al final de la respuesta.\n  CASO ESPECIAL — QUÉ EPS ATIENDEN EN UN MUNICIPIO:\n    Si el usuario pregunta "qué EPS atienden en X", "qué EPS hay en X", "qué EPS tienen en X": NO buscar la EPS del usuario. Consultar el CATÁLOGO DE SEDES para ese municipio y listar TODAS las EPS disponibles. Usar [SEDES:municipio:TODAS].\n    Ejemplo: "QUÉ EPS ATIENDEN EN GIRARDOTA" → responder: En Girardota atienden: SALUD TOTAL, NUEVA EPS. Luego [SEDES:GIRARDOTA:TODAS]\n  EJEMPLOS CORRECTOS:\n    "NUEVA EPS puede reclamar en NECHI" → [SEDES:NECHI:NUEVA EPS]\n    "SALUD TOTAL en BARBOSA" → [SEDES:BARBOSA:SALUD TOTAL]\n    "puedo reclamar en RIONEGRO" (usuario COOSALUD) → [SEDES:RIONEGRO]\n    "QUÉ EPS ATIENDEN EN GIRARDOTA" → [SEDES:GIRARDOTA:TODAS]\n    Usuario sin municipio → preguntar municipio primero.\n';
   s+='REGLA CONSULTAR: Si el usuario escribe ÚNICAMENTE un número de radicado (formato TD-xxxxx) o un correo electrónico para consultar estado, usa [CONSULTAR:valor]. NUNCA uses [CONSULTAR] cuando el mensaje contiene palabras como EPS, municipio, sede, piso, atención, cobertura — esos son preguntas de sedes.\n';
   s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
   s+='REGLA RADICAR: Si el usuario quiere radicar una PQRSFD, puede hacerlo con su número de cédula directamente en el formulario. Usa [FORMULARIO].\n';
@@ -1505,7 +1505,9 @@ async function ntdFetchSedes(mun, epsParam){
     return;
   }
   ntdTyping(true);ntdAddSk();
-  const eps=(epsParam||NTD.eps||'').toUpperCase().replace(/\s*\([^)]*\)\s*/g,'').trim();
+  const epsRaw=(epsParam||NTD.eps||'').toUpperCase().replace(/\s*\([^)]*\)\s*/g,'').trim();
+  const eps=epsRaw;
+  const mostrarTodas=(epsRaw==='TODAS');
   const munNorm=ntdNormMun(mun);
 
   // Consultar Supabase directamente — traer TODAS las sedes activas
@@ -1527,20 +1529,22 @@ async function ntdFetchSedes(mun, epsParam){
   }
 
   // Filtrar por EPS en el cliente (campo eps es array JSON en Supabase)
-  const sedesPorEps=eps?todasSedes.filter(s=>{
-    try{
-      let arr=[];
-      if(Array.isArray(s.eps)) arr=s.eps;
-      else if(typeof s.eps==='string'){
-        const t=s.eps.trim();
-        if(t.startsWith('{')) arr=t.slice(1,-1).split(',').map(e=>e.trim().replace(/"/g,''));
-        else try{arr=JSON.parse(t);}catch(e){arr=[];}
-      }
-      // Normalizar: SAVIA SALUD == SAVIA, SAVIA == SAVIA SALUD
-      const epsNorm=eps.replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();
-      return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();return en===epsNorm||en===eps.replace(/\s*\([^)]*\)\s*/g,'').trim();});
-    }catch(e){return false;}
-  }):todasSedes;
+  let sedesPorEps=todasSedes;
+  if(!mostrarTodas&&eps){
+    sedesPorEps=todasSedes.filter(s=>{
+      try{
+        let arr=[];
+        if(Array.isArray(s.eps)) arr=s.eps;
+        else if(typeof s.eps==='string'){
+          const t=s.eps.trim();
+          if(t.startsWith('{')) arr=t.slice(1,-1).split(',').map(e=>e.trim().replace(/"/g,''));
+          else try{arr=JSON.parse(t);}catch(e){arr=[];}
+        }
+        const epsNorm=eps.replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();
+        return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();return en===epsNorm||en===eps.replace(/\s*\([^)]*\)\s*/g,'').trim();});
+      }catch(e){return false;}
+    });
+  }
 
   // Obtener coordenadas de referencia: GPS del usuario o coordenadas del municipio consultado
   let refLat=NTD._geoLat, refLng=NTD._geoLng;
