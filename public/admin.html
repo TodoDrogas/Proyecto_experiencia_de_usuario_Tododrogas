@@ -5915,8 +5915,13 @@ async function nuevoCiclo() {
 
 // Cargar estado del sync al iniciar
 document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(cargarEstadoSync, 2000); // Esperar a que el admin cargue
-  setInterval(cargarEstadoSync, 60000); // Verificar cada minuto
+  // Limpiar buscador después de que el autocompletado del navegador lo llene
+  setTimeout(() => {
+    const si = document.getElementById('searchInput');
+    if(si && si.value) { si.value = ''; renderEmailList(); }
+  }, 500);
+  setTimeout(cargarEstadoSync, 2000);
+  setInterval(cargarEstadoSync, 60000);
 });
 
 
@@ -6002,10 +6007,6 @@ async function getGraphToken(){
   }
   // cargarEstadoSync PRIMERO y esperar — carga ciclo_inicio de Supabase
   // loadEmails debe correr DESPUÉS para usar el ciclo_inicio correcto
-  // Limpiar buscador al iniciar — evita que autocompletado del navegador filtre correos
-  const si = document.getElementById('searchInput');
-  if(si) si.value = '';
-
   await cargarEstadoSync();
   // Si después de cargarEstadoSync no hay ciclo_inicio, leerlo directo de Supabase
   if (!state.ciclo_inicio) {
