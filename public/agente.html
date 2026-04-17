@@ -1351,12 +1351,6 @@ function marcarSolucionado() {
   const email=state.emails.find(e=>e.id===id);
   if(!confirm('¿Marcar este ticket como "Pendiente por firma"?\n\nDeberás adjuntar la firma de cierre para cerrar definitivamente.')) return;
   sb(`correos?id=eq.${id}`,'PATCH',{estado:'pendiente_firma'}).then(async()=>{
-    // Incrementar num_gestiones
-    try {
-      const fresh = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
-      const ng = (fresh?.[0]?.num_gestiones||0) + 1;
-      await sb(`correos?id=eq.${id}`,'PATCH',{num_gestiones:ng});
-    } catch(e){}
     sb('historial_eventos','POST',{correo_id:id,agente_id:AGENT_ID,evento:'pendiente_firma',from_email:email?.remitente,subject:email?.asunto,descripcion:'Ticket marcado como pendiente de firma de cierre',datos_extra:JSON.stringify({agente_nombre:AGENT_NAME,por:'agente'})}).catch(e=>console.error('[agente] pendiente_firma error:',e?.message));
     const em=state.emails.find(e=>e.id===id);
     if(em) em.estado='pendiente_firma';
@@ -1431,12 +1425,7 @@ async function confirmarFirma() {
     await sb('adjuntos','POST',{correo_id:id,attachment_id:`firma_${id}_${Date.now()}`,nombre:file.name,tipo_contenido:file.type||'application/octet-stream',tamano_bytes:file.size,es_inline:false,storage_url:firmaUrl,storage_path:storagePath,direccion:'firma_cierre',enviado_por:AGENT_ID});
     // 4. Cambiar estado a solucionado
     await sb(`correos?id=eq.${id}`,'PATCH',{estado:'solucionado',fecha_resolucion:new Date().toISOString()});
-    // 5. Incrementar num_gestiones + Historial
-    try {
-      const _freshFirma = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
-      const _ngFirma = (_freshFirma?.[0]?.num_gestiones||0) + 1;
-      await sb(`correos?id=eq.${id}`,'PATCH',{num_gestiones:_ngFirma});
-    } catch(e){}
+    // 5. Historial firma — NO incrementa num_gestiones (es cierre, no gestión)
     try {
       const _agId = (AGENT_ID && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(AGENT_ID)) ? AGENT_ID : null;
       const _payFirma = {correo_id:id,evento:'firma_confirmada',from_email:email?.remitente,subject:email?.asunto,descripcion:obs||'Firma de cierre adjuntada — ticket cerrado',datos_extra:JSON.stringify({agente_nombre:AGENT_NAME,por:'agente',firma_archivo:file.name,firma_url:firmaUrl||'(sin URL)'})};
@@ -3726,51 +3715,133 @@ html[data-theme="dark"] #panelRR [style*="border-bottom:1px solid #e2e8f0"]{bord
 </div>
 
 <!-- ══ MODAL MÉTRICAS ══ -->
-<div id="modalMetricasAg" style="display:none;position:fixed;inset:0;background:rgba(10,14,26,.65);z-index:9998;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;backdrop-filter:blur(4px)" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:#fff;border-radius:16px;width:100%;max-width:1100px;margin:0 auto;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden" onclick="event.stopPropagation()">
-    <div style="background:#0f172a;padding:16px 24px;display:flex;align-items:center;gap:12px">
-      <svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
-      <div><div style="color:#fff;font-size:14px;font-weight:700">Mis Métricas SIGI</div><div style="color:#94a3b8;font-size:11px" id="agMetSub">—</div></div>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <input type="date" id="agMDesde" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif">
-        <span style="color:#64748b">→</span>
-        <input type="date" id="agMHasta" style="background:#1e293b;border:1px solid #334155;color:#e2e8f0;padding:5px 8px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif">
-        <button onclick="cargarMetricasAgente()" style="background:#22c55e;color:#fff;border:none;padding:6px 14px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">Filtrar</button>
-        <button onclick="document.getElementById('modalMetricasAg').style.display='none'" style="background:rgba(255,255,255,.15);border:none;cursor:pointer;color:#fff;font-size:18px;width:32px;height:32px;border-radius:8px">✕</button>
+<style>
+#modalMetricasAg .met-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;transition:box-shadow .2s}
+#modalMetricasAg .met-card:hover{box-shadow:0 4px 16px rgba(0,0,0,.08)}
+#modalMetricasAg .met-kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;position:relative;overflow:hidden}
+#modalMetricasAg .met-kpi::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;border-radius:12px 0 0 12px}
+#modalMetricasAg .met-kpi.k-green::before{background:var(--green)}
+#modalMetricasAg .met-kpi.k-blue::before{background:var(--blue)}
+#modalMetricasAg .met-kpi.k-purple::before{background:var(--purple,#7c3aed)}
+#modalMetricasAg .met-kpi.k-red::before{background:var(--red)}
+#modalMetricasAg .met-kpi.k-cyan::before{background:#0891b2}
+#modalMetricasAg .met-label{font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+#modalMetricasAg .met-val{font-size:28px;font-weight:800;color:var(--ink);line-height:1;margin-bottom:2px}
+#modalMetricasAg .met-sub{font-size:10px;color:var(--ink3)}
+#modalMetricasAg .met-chart-title{font-size:11px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+#modalMetricasAg .met-chart-title::before{content:'';display:inline-block;width:3px;height:12px;background:var(--blue);border-radius:2px}
+#modalMetricasAg table th{text-align:left;padding:10px 12px;color:var(--ink3);font-weight:700;text-transform:uppercase;font-size:10px;border-bottom:2px solid var(--border)}
+#modalMetricasAg table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--ink);vertical-align:middle}
+#modalMetricasAg table tr:last-child td{border-bottom:none}
+#modalMetricasAg table tr:hover td{background:var(--bg2)}
+</style>
+<div id="modalMetricasAg" style="display:none;position:fixed;inset:0;background:rgba(10,14,26,.7);z-index:9998;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto;backdrop-filter:blur(6px)" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:var(--bg,#fff);border-radius:18px;width:100%;max-width:1120px;margin:0 auto;box-shadow:0 24px 80px rgba(0,0,0,.35);overflow:hidden" onclick="event.stopPropagation()">
+
+    <!-- Header -->
+    <div style="background:var(--blue,#2563eb);padding:18px 24px;display:flex;align-items:center;gap:14px">
+      <div style="width:38px;height:38px;background:rgba(255,255,255,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="18" height="18" fill="none" stroke="#fff" stroke-width="2.5" viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
+      </div>
+      <div>
+        <div style="color:#fff;font-size:15px;font-weight:800;letter-spacing:-.2px">Mis Métricas SIGI</div>
+        <div style="color:rgba(255,255,255,.7);font-size:11px;margin-top:1px" id="agMetSub">—</div>
+      </div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="date" id="agMDesde" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 10px;border-radius:8px;font-size:11px;font-family:'Poppins',sans-serif;outline:none">
+        <span style="color:rgba(255,255,255,.5);font-size:13px">→</span>
+        <input type="date" id="agMHasta" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;padding:6px 10px;border-radius:8px;font-size:11px;font-family:'Poppins',sans-serif;outline:none">
+        <button onclick="cargarMetricasAgente()" style="background:#fff;color:var(--blue,#2563eb);border:none;padding:6px 16px;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;font-family:'Poppins',sans-serif;transition:opacity .15s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">Filtrar</button>
+        <button onclick="document.getElementById('modalMetricasAg').style.display='none'" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);cursor:pointer;color:#fff;font-size:16px;width:34px;height:34px;border-radius:8px;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.25)'" onmouseout="this.style.background='rgba(255,255,255,.15)'">✕</button>
       </div>
     </div>
-    <div style="padding:20px 24px">
+
+    <!-- Body -->
+    <div style="padding:22px 24px;background:var(--bg2,#f8fafc)">
+
+      <!-- KPIs -->
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-left:3px solid #16a34a"><div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px">Mis casos</div><div style="font-size:26px;font-weight:800;color:#0f172a;margin:4px 0" id="agKpiCasos">—</div><div style="font-size:10px;color:#94a3b8">Con gestión</div></div>
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-left:3px solid #2563eb"><div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px">Gestiones</div><div style="font-size:26px;font-weight:800;color:#0f172a;margin:4px 0" id="agKpiGest">—</div><div style="font-size:10px;color:#94a3b8">Total</div></div>
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-left:3px solid #7c3aed"><div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px">Promedio</div><div style="font-size:26px;font-weight:800;color:#0f172a;margin:4px 0" id="agKpiProm">—</div><div style="font-size:10px;color:#94a3b8">Gest./caso</div></div>
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-left:3px solid #dc2626"><div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px">Tutelas</div><div style="font-size:26px;font-weight:800;color:#dc2626;margin:4px 0" id="agKpiTutela">—</div><div style="font-size:10px;color:#94a3b8">Con tutela</div></div>
-        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-left:3px solid #0891b2"><div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.4px">Cerrados</div><div style="font-size:26px;font-weight:800;color:#0891b2;margin:4px 0" id="agKpiCerrados">—</div><div style="font-size:10px;color:#94a3b8">Solucionados</div></div>
+        <div class="met-kpi k-green">
+          <div class="met-label">Mis casos</div>
+          <div class="met-val" id="agKpiCasos">—</div>
+          <div class="met-sub">Con gestión</div>
+        </div>
+        <div class="met-kpi k-blue">
+          <div class="met-label">Gestiones</div>
+          <div class="met-val" id="agKpiGest">—</div>
+          <div class="met-sub">Total</div>
+        </div>
+        <div class="met-kpi k-purple">
+          <div class="met-label">Promedio</div>
+          <div class="met-val" id="agKpiProm">—</div>
+          <div class="met-sub">Gest./caso</div>
+        </div>
+        <div class="met-kpi k-red">
+          <div class="met-label">Tutelas</div>
+          <div class="met-val" style="color:var(--red)" id="agKpiTutela">—</div>
+          <div class="met-sub">Con tutela</div>
+        </div>
+        <div class="met-kpi k-cyan">
+          <div class="met-label">Cerrados</div>
+          <div class="met-val" style="color:#0891b2" id="agKpiCerrados">—</div>
+          <div class="met-sub">Solucionados</div>
+        </div>
       </div>
+
+      <!-- Gráficas fila 1 -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Tipo Solicitud</div><div style="position:relative;height:180px"><canvas id="agChartTipo"></canvas></div></div>
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Por Categoría</div><div style="position:relative;height:180px"><canvas id="agChartCat"></canvas></div></div>
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Por EPS</div><div style="position:relative;height:180px"><canvas id="agChartEps"></canvas></div></div>
+        <div class="met-card">
+          <div class="met-chart-title">Tipo Solicitud</div>
+          <div style="position:relative;height:190px"><canvas id="agChartTipo"></canvas></div>
+        </div>
+        <div class="met-card">
+          <div class="met-chart-title">Por Categoría</div>
+          <div style="position:relative;height:190px"><canvas id="agChartCat"></canvas></div>
+        </div>
+        <div class="met-card">
+          <div class="met-chart-title">Por EPS</div>
+          <div style="position:relative;height:190px"><canvas id="agChartEps"></canvas></div>
+        </div>
       </div>
+
+      <!-- Gráficas fila 2 -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Por Departamento</div><div style="position:relative;height:160px"><canvas id="agChartDepto"></canvas></div></div>
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px"><div style="font-size:11px;font-weight:700;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px">Tendencia Diaria</div><div style="position:relative;height:160px"><canvas id="agChartTend"></canvas></div></div>
+        <div class="met-card">
+          <div class="met-chart-title">Por Departamento</div>
+          <div style="position:relative;height:170px"><canvas id="agChartDepto"></canvas></div>
+        </div>
+        <div class="met-card">
+          <div class="met-chart-title">Tendencia Diaria</div>
+          <div style="position:relative;height:170px"><canvas id="agChartTend"></canvas></div>
+        </div>
       </div>
-      <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px">
-        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:12px">MIS ÚLTIMOS CASOS</div>
-        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px">
-          <thead><tr style="border-bottom:2px solid #e2e8f0">
-            <th style="text-align:left;padding:8px;color:#64748b;font-weight:700;text-transform:uppercase;font-size:10px">Ticket</th>
-            <th style="text-align:left;padding:8px;color:#64748b;font-weight:700;text-transform:uppercase;font-size:10px">Paciente</th>
-            <th style="text-align:left;padding:8px;color:#64748b;font-weight:700;text-transform:uppercase;font-size:10px">EPS</th>
-            <th style="text-align:left;padding:8px;color:#64748b;font-weight:700;text-transform:uppercase;font-size:10px">Tipo</th>
-            <th style="text-align:center;padding:8px;color:#64748b;font-weight:700;text-transform:uppercase;font-size:10px">#Gest</th>
-            <th style="text-align:center;padding:8px;color:#64748b;font-weight:700;text-transform:uppercase;font-size:10px">Tutela</th>
-            <th style="text-align:left;padding:8px;color:#64748b;font-weight:700;text-transform:uppercase;font-size:10px">Estado</th>
-          </tr></thead>
-          <tbody id="agTablaBody"><tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8">Cargando...</td></tr></tbody>
-        </table></div>
+
+      <!-- Tabla casos -->
+      <div class="met-card" style="padding:18px 20px">
+        <div style="font-size:12px;font-weight:800;color:var(--ink);margin-bottom:14px;display:flex;align-items:center;gap:8px">
+          <svg width="13" height="13" fill="none" stroke="var(--blue)" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+          MIS ÚLTIMOS CASOS
+        </div>
+        <div style="overflow-x:auto;border-radius:8px;border:1px solid var(--border)">
+          <table style="width:100%;border-collapse:collapse;min-width:600px">
+            <thead style="background:var(--surface)">
+              <tr>
+                <th>Ticket</th>
+                <th>Paciente</th>
+                <th>EPS</th>
+                <th>Tipo</th>
+                <th style="text-align:center">#Gest</th>
+                <th style="text-align:center">Tutela</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="agTablaBody">
+              <tr><td colspan="7" style="text-align:center;padding:24px;color:var(--ink3)">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
+
     </div>
   </div>
 </div>
