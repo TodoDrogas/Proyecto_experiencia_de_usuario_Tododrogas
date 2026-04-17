@@ -734,9 +734,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
           <div class="mfiltros-group">
             <span class="mfiltros-label">SEDE</span>
-            <select id="webFiltroSede" class="mfiltros-select" onchange="renderNovaMetrics()">
-              <option value="">Todas las sedes</option>
-            </select>
+            <input type="text" id="webFiltroSede" list="webFiltroSedeList" class="mfiltros-input" placeholder="Buscar sede..." oninput="renderNovaMetrics()" style="min-width:200px">
+            <datalist id="webFiltroSedeList"></datalist>
           </div>
           <div class="mfiltros-group">
             <span class="mfiltros-label">TIPO</span>
@@ -861,9 +860,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
           <div class="mfiltros-group">
             <span class="mfiltros-label" style="color:#92400e">SEDE</span>
-            <select id="qrFiltroSede" class="mfiltros-select" onchange="renderNovaMetrics()">
-              <option value="">Todas las sedes</option>
-            </select>
+            <input type="text" id="qrFiltroSede" list="qrFiltroSedeList" class="mfiltros-input" placeholder="Buscar sede..." oninput="renderNovaMetrics()" style="min-width:200px">
+            <datalist id="qrFiltroSedeList"></datalist>
           </div>
           <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#d97706">🔍 Filtrar</button>
           <button onclick="exportQrExcel()" class="mfiltros-btn-export">⬇ Excel QR</button>
@@ -1261,10 +1259,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </div>
             <div class="mfiltros-group">
               <span class="mfiltros-label">SEDE</span>
-              <select id="agFiltroSedeKpi" class="mfiltros-select" onchange="renderAgentes()">
-                <option value="">Todas</option>
-                <option value="Sede Principal">Sede Principal</option>
-              </select>
+              <input type="text" id="agFiltroSedeKpi" list="agFiltroSedeList" class="mfiltros-input" placeholder="Buscar sede..." oninput="renderAgentes()" style="min-width:180px">
+              <datalist id="agFiltroSedeList"></datalist>
             </div>
             <button onclick="loadAgentesMetrics()" class="mfiltros-btn-primary">🔍 Filtrar</button>
             <button onclick="exportAsesoresExcel()" class="mfiltros-btn-export">⬇ Excel Asesores</button>
@@ -1349,12 +1345,13 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <div style="overflow-x:auto">
             <table class="m-tbl">
               <thead><tr>
-                <th>Asesor</th><th>Sede</th><th>Asignados</th><th>Pendientes</th>
+                <th>Asesor</th><th>Rol</th><th>Sede</th><th>Cédula</th><th>Teléfono</th>
+                <th>Asignados</th><th>Pendientes</th>
                 <th>En gestión</th><th>P. Firma</th><th>Resueltos</th>
                 <th>% Resolución</th><th>T. prom. h</th>
                 <th>Gestiones</th><th>Respuestas</th><th>Firmas</th>
                 <th>Quejas</th><th>Peticiones</th><th>Reclamos</th>
-                <th>Alta sin resolver</th><th>Carga</th>
+                <th>Alta sin resolver</th><th>Casos Activos</th>
               </tr></thead>
               <tbody id="agTableBody"></tbody>
             </table>
@@ -6429,14 +6426,12 @@ function renderNovaMetrics(){
   const TIPO_COLORS=['#2563eb','#dc2626','#ca8a04','#16a34a','#059669','#9333ea'];
 
   // ── Poblar filtros ────────────────────────────────────────────────────
-  // Poblar filtros de sede desde tabla sedes real (misma fuente que el Excel)
+  // Poblar datalists de sede desde tabla sedes real
   const allSedes=Object.values(novaSedesMap).filter((v,i,a)=>a.indexOf(v)===i).sort();
-  ['webFiltroSede','qrFiltroSede'].forEach(id=>{
-    const el=document.getElementById(id);
-    if(!el) return;
-    // Repoblar siempre para reflejar sedes actuales
-    el.innerHTML='<option value="">Todas las sedes</option>';
-    allSedes.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;el.appendChild(o);});
+  [['webFiltroSede','webFiltroSedeList'],['qrFiltroSede','qrFiltroSedeList']].forEach(([inpId,listId])=>{
+    const dl=document.getElementById(listId);
+    if(!dl||dl.children.length>0) return; // solo poblar una vez
+    allSedes.forEach(s=>{const o=document.createElement('option');o.value=s;dl.appendChild(o);});
   });
   const allSesFlat=[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])];
   const mnEl=document.getElementById('novaFiltroMun');
@@ -6569,11 +6564,11 @@ function renderNovaMetrics(){
   // Sesiones por origen
   _mDestroyChart('chartGlobalEnc');
   const cGE2=document.getElementById('chartGlobalEnc');
-  if(cGE2){_mCharts.chartGlobalEnc=new Chart(cGE2.getContext('2d'),{type:'doughnut',data:{labels:['Nova Web','Nova Directo','Nova Bienvenida'],datasets:[{data:[(D.sesNovaWeb||[]).length,(D.sesNovaDir||[]).length,(D.sesNovaBv||[]).length],backgroundColor:['rgba(124,58,237,.7)','rgba(109,40,217,.7)','rgba(167,139,250,.5)'],borderColor:['#7c3aed','#6d28d9','#a78bfa'],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,.7)',font:{size:9},padding:6,boxWidth:10}}}}}); }
+  if(cGE2){_mCharts.chartGlobalEnc=new Chart(cGE2.getContext('2d'),{type:'doughnut',data:{labels:['Nova Web','Nova Directo'],datasets:[{data:[(D.sesNovaWeb||[]).length,(D.sesNovaDir||[]).length],backgroundColor:['rgba(124,58,237,.7)','rgba(109,40,217,.7)'],borderColor:['#7c3aed','#6d28d9'],borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,.7)',font:{size:9},padding:6,boxWidth:10}}}}}); }
   // Tabla global
   const ctT=(arr,t)=>arr.filter(r=>(r.tipo_pqr||'')===t).length; const ePr=arr=>{const v=arr.filter(e=>(e.calificacion||0)>0);return v.length?(v.reduce((a,e)=>a+(e.calificacion||0),0)/v.length).toFixed(1):''};
   const pasoA=arr=>arr.filter(s=>(s.motivo_cierre||'').toLowerCase().includes('asesor')).length;
-  const cRows=[{n:'🖥️ Web',rads:radWebF,encs:D.encWeb||[],ses:[]},{n:'📷 QR',rads:radQrF,encs:D.encQr||[],ses:[]},{n:'🤖 Nova Web',rads:D.radNovaWeb||[],encs:D.encNovaWeb||[],ses:D.sesNovaWeb||[]},{n:'🤖 Nova Directo',rads:D.radNovaDir||[],encs:D.encNovaDir||[],ses:D.sesNovaDir||[]},{n:'🤖 Nova Bienvenida',rads:[],encs:[],ses:D.sesNovaBv||[]},{n:'<strong>TOTAL</strong>',rads:allRads,encs:[...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])],ses:[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])]}];
+  const cRows=[{n:'🖥️ Web',rads:radWebF,encs:D.encWeb||[],ses:[]},{n:'📷 QR',rads:radQrF,encs:D.encQr||[],ses:[]},{n:'🤖 Nova Web',rads:D.radNovaWeb||[],encs:D.encNovaWeb||[],ses:D.sesNovaWeb||[]},{n:'🤖 Nova Directo',rads:D.radNovaDir||[],encs:D.encNovaDir||[],ses:D.sesNovaDir||[]},{n:'<strong>TOTAL</strong>',rads:allRads,encs:[...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])],ses:[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[])]}];
   const gTB=document.getElementById('gTabBody');
   if(gTB){gTB.innerHTML=cRows.map(c=>`<tr><td style="font-weight:600;color:rgba(255,255,255,.8);white-space:nowrap">${c.n}</td><td style="text-align:center;font-weight:700;color:#60a5fa">${c.rads.length}</td><td style="text-align:center">${ctT(c.rads,'peticion')||''}</td><td style="text-align:center">${ctT(c.rads,'queja')||''}</td><td style="text-align:center">${ctT(c.rads,'reclamo')||''}</td><td style="text-align:center">${ctT(c.rads,'sugerencia')||''}</td><td style="text-align:center">${ctT(c.rads,'felicitacion')||''}</td><td style="text-align:center">${ctT(c.rads,'denuncia')||''}</td><td style="text-align:center;color:rgba(255,255,255,.4)">${c.rads.filter(r=>!r.tipo_pqr).length||''}</td><td style="text-align:center;color:#a78bfa">${c.encs.length||''}</td><td style="text-align:center;color:#34d399">${ePr(c.encs)||'—'}</td><td style="text-align:center;color:#c084fc">${c.ses.length||''}</td><td style="text-align:center;color:#f87171">${pasoA(c.ses)||''}</td><td style="text-align:center;font-weight:700;color:#fff">${c.rads.length+c.encs.length+c.ses.length}</td></tr>`).join('');}
 
@@ -6709,7 +6704,7 @@ async function exportWebExcel() {
   XLSX.utils.book_append_sheet(wb, ws_wEnc, 'WEB_Encuesta');
 
   // ── WEB_Radicacion ──────────────────────────────────────────────────
-  const _esInterno = r => { const s=_parseSedeBody(r.body_content||''); const c=!!(r.cedula||r.cedula_paciente||'').trim(); const ci=!!(r.ciudad_paciente||'').trim(); return !s&&!c&&!ci; };
+  const _esInterno = r => { const b=r.body_content||''; const s=b.match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i); const c=!!(r.cedula||r.cedula_paciente||'').trim(); const ci=!!(r.ciudad_paciente||'').trim(); return !s&&!c&&!ci; };
   const h_wRad = (D.radWeb||[]).filter(r=>!_esInterno(r)).map(r => ({
     'Fecha':       fmtD(r.received_at),
     'Hora':        fmtH(r.received_at),
@@ -6775,7 +6770,7 @@ async function exportQrExcel() {
   XLSX.utils.book_append_sheet(wb, ws_qEnc, 'QR_Encuesta');
 
   // ── QR_Radicacion ───────────────────────────────────────────────────
-  const _esInterno = r => { const s=_parseSedeBody(r.body_content||''); const c=!!(r.cedula||r.cedula_paciente||'').trim(); const ci=!!(r.ciudad_paciente||'').trim(); return !s&&!c&&!ci; };
+  const _esInterno = r => { const b=r.body_content||''; const s=b.match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i); const c=!!(r.cedula||r.cedula_paciente||'').trim(); const ci=!!(r.ciudad_paciente||'').trim(); return !s&&!c&&!ci; };
   const h_qRad = (D.radQr||[]).filter(r=>!_esInterno(r)).map(r => ({
     'Fecha':       fmtD(r.received_at),
     'Hora':        fmtH(r.received_at),
@@ -6819,7 +6814,7 @@ async function exportNovaExcel() {
     return {
       'Fecha':            fmtD(s.created_at),
       'Hora':             fmtH(s.created_at),
-      'Canal':            s.origen==='nova_directo'?'Nova Directo':s.origen==='nova_bienvenida'?'Nova Bienvenida':'Nova Web',
+      'Canal':            s.origen==='nova_directo'?'Nova Directo':'Nova Web',
       'Sede':             getSede(s),
       'Municipio':        s.municipio       || '',
       'EPS':              s.eps_paciente    || s.eps || '',
@@ -6930,7 +6925,7 @@ async function exportGlobalExcel() {
     {n:'QR',               rads:D.radQr||[],      encs:encByCanal('qr'),  ses:[]},
     {n:'Nova Web',         rads:D.radNovaWeb||[], encs:D.encNovaWeb||[], ses:D.sesNovaWeb||[]},
     {n:'Nova Directo',     rads:D.radNovaDir||[], encs:D.encNovaDir||[], ses:D.sesNovaDir||[]},
-    {n:'Nova Bienvenida',  rads:[],               encs:[],               ses:D.sesNovaBv||[]},
+
     {n:'TOTAL',            rads:allRads,           encs:[...encByCanal('web'),...encByCanal('qr'),...(D.encNovaWeb||[]),...(D.encNovaDir||[])], ses:allSes},
   ];
 
@@ -7032,7 +7027,8 @@ async function loadAgentesMetrics(){
 
 function renderAgentes(){
   const { correos:E, eventos:H, agentes } = _agDatos;
-  const act = agentes.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
+  const sedeFiltro = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
+  const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!sedeFiltro||esc(a.sede||'')=== sedeFiltro||a.sede===sedeFiltro));
 
   // ── KPIs GLOBALES ──
   const total   = E.length;
@@ -7135,37 +7131,49 @@ function renderAgentes(){
     const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
     const carga   = pend+gest;
     const color   = COLS[i%COLS.length];
+    const pfirma = myE.filter(e=>e.estado==='pendiente_firma').length;
+    const qCount = myE.filter(e=>e.tipo_pqr==='queja').length;
+    const pCount = myE.filter(e=>e.tipo_pqr==='peticion').length;
+    const rCount = myE.filter(e=>e.tipo_pqr==='reclamo').length;
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px">
         <div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">${(a.nombre||'?').charAt(0).toUpperCase()}</div>
         <div><div style="font-size:12px;font-weight:700">${esc(a.nombre||'')}</div>
         <div style="font-size:10px;color:var(--ink3)">${esc(a.email||'')}</div></div>
       </div></td>
+      <td style="font-size:11px;text-align:center"><span style="background:var(--blue-l);color:var(--blue);padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700">${esc(a.rol||'—')}</span></td>
       <td style="font-size:11px;color:var(--ink3)">${esc(a.sede||'—')}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--ink3);text-align:center">${esc(a.cedula||'—')}</td>
+      <td style="font-size:11px;color:var(--ink3);text-align:center">${esc(a.telefono||'—')}</td>
       <td style="font-family:'DM Mono',monospace;font-weight:700;text-align:center">${tot}</td>
       <td style="text-align:center"><span class="badge pendiente">${pend}</span></td>
       <td style="text-align:center"><span class="badge gestion">${gest}</span></td>
+      <td style="text-align:center"><span class="badge pendiente_firma">${pfirma}</span></td>
       <td style="text-align:center"><span class="badge solucionado">${sol}</span></td>
       <td style="text-align:center"><span class="sla-pill ${pct>=70?'sla-ok':pct>=40?'sla-warn':'sla-danger'}">${pct}%</span></td>
       <td style="font-family:'DM Mono',monospace;text-align:center;color:${tColor};font-weight:600">${tRes}</td>
       <td style="font-family:'DM Mono',monospace;text-align:center">${gestReg}</td>
       <td style="font-family:'DM Mono',monospace;text-align:center">${resp}</td>
       <td style="font-family:'DM Mono',monospace;text-align:center">${firmas}</td>
+      <td style="text-align:center;font-size:11px">${qCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${pCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${rCount||'—'}</td>
       <td style="text-align:center"><span style="font-weight:700;color:${alta>0?'var(--red)':'var(--ink3)'}">${alta}</span></td>
-      <td><div style="display:flex;align-items:center;gap:6px">
-        <div style="flex:1;height:5px;background:var(--bg2);border-radius:99px;overflow:hidden;width:60px">
-          <div style="height:100%;border-radius:99px;background:${color};width:${Math.round(carga/maxC*100)}%"></div>
-        </div>
-        <span style="font-size:10px;color:var(--ink3)">${carga}</span>
-      </div></td>
+      <td style="text-align:center;font-family:'DM Mono',monospace;font-weight:700;color:${(a.casos_activos||0)>10?'var(--red)':(a.casos_activos||0)>5?'#ca8a04':'var(--green)'}">${a.casos_activos||0}</td>
     </tr>`;
-  }).join('')||'<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
+  }).join('')||'<tr><td colspan="20" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
 
   // Poblar selector de asesores en timeline
   const sel=document.getElementById('agFiltroAsesor');
   if(sel){
     sel.innerHTML='<option value="">Todos los asesores</option>'+
       act.map(a=>`<option value="${a.id}">${esc(a.nombre||'')}</option>`).join('');
+  }
+  // Poblar datalist de sedes en filtro Asesores
+  const agSedeList=document.getElementById('agFiltroSedeList');
+  if(agSedeList&&agSedeList.children.length===0){
+    const sedesAg=[...new Set(agentes.map(a=>a.sede).filter(Boolean))].sort();
+    sedesAg.forEach(s=>{const o=document.createElement('option');o.value=s;agSedeList.appendChild(o);});
   }
 
   renderAgTimeline();
@@ -7238,15 +7246,24 @@ function exportAgentesExcel(){
     return {
       Asesor:                a.nombre||'',
       Email:                 a.email||'',
+      Rol:                   a.rol||'',
+      Sede:                  a.sede||'',
+      Cedula:                a.cedula||'',
+      Telefono:              a.telefono||'',
+      Casos_Activos:         a.casos_activos||0,
       Total_Asignados:       myE.length,
       Pendientes:            myE.filter(e=>e.estado==='pendiente').length,
       En_Gestion:            myE.filter(e=>e.estado==='gestion').length,
+      Pendiente_Firma:       myE.filter(e=>e.estado==='pendiente_firma').length,
       Resueltos:             sol,
       Pct_Resolucion:        myE.length>0?Math.round(sol/myE.length*100)+'%':'0%',
       T_Prom_Resolucion_h:   avgH,
       Gestiones_Registradas: myH.filter(h=>!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length,
       Respuestas_Enviadas:   myH.filter(h=>h.evento==='correo_respondido').length,
       Firmas_Confirmadas:    myH.filter(h=>h.evento==='firma_confirmada').length,
+      Quejas:                myE.filter(e=>e.tipo_pqr==='queja').length,
+      Peticiones:            myE.filter(e=>e.tipo_pqr==='peticion').length,
+      Reclamos:              myE.filter(e=>e.tipo_pqr==='reclamo').length,
       Alta_Sin_Resolver:     myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
     };
   });
