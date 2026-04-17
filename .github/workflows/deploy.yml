@@ -22,6 +22,7 @@ jobs:
           window.SUPABASE_KEY        = '${{ secrets.SUPABASE_KEY }}';
           window.GRAPH_USER_ID       = '${{ secrets.GRAPH_USER_ID }}';
           window.N8N_WEBHOOK_BASE    = '${{ secrets.N8N_WEBHOOK_BASE }}';
+          window.ADMIN_PASS          = '${{ secrets.ADMIN_TOKEN }}';
           window.NOVA_PROXY          = '/nova-proxy.php';
           window.VALIDAR_URL         = '/validar-paciente.php';
           window.NOVA_URL            = '/nova-consulta.php';
@@ -71,7 +72,6 @@ jobs:
         run: |
           cat > public/api-token.php << 'PHPEOF'
           <?php
-          // Credenciales Azure inyectadas por deploy — el browser NO las envía
           $origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
           $allowed = ['https://tododrogas.online', 'https://www.tododrogas.online'];
           if ($origin && !in_array($origin, $allowed)) { http_response_code(403); echo json_encode(['error'=>'Origen no permitido']); exit; }
@@ -83,7 +83,6 @@ jobs:
           $tenant_id     = 'AZURE_TENANT_ID_VAL';
           $client_id     = 'AZURE_CLIENT_ID_VAL';
           $client_secret = 'AZURE_CLIENT_SECRET_VAL';
-          // Usar siempre las credenciales del servidor — ignorar cualquier cosa del browser
           $url  = "https://login.microsoftonline.com/{$tenant_id}/oauth2/v2.0/token";
           $body = http_build_query(['grant_type'=>'client_credentials','client_id'=>$client_id,
             'client_secret'=>$client_secret,'scope'=>'https://graph.microsoft.com/.default']);
@@ -192,13 +191,10 @@ jobs:
               sed -i 's|location / {|location ~ \\.php$ {\n        fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;\n        fastcgi_index index.php;\n        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n        include fastcgi_params;\n    }\n    location / {|' /etc/nginx/sites-enabled/pqr 2>/dev/null || true
               nginx -t && systemctl reload nginx
             fi
-            # ── Bloquear config.js al acceso externo ──
             NGINX_CONF="/etc/nginx/sites-enabled/pqr"
-            # Forzar actualización del bloque config.js en cada deploy
             sed -i '/location = \/config\.js/,/^[[:space:]]*}/d' "$NGINX_CONF" 2>/dev/null || true
             sed -i 's|location / {|location = /config.js {\n        valid_referers none blocked server_names tododrogas.online www.tododrogas.online;\n        if ($invalid_referer) { return 403; }\n        add_header Cache-Control "no-store, no-cache";\n    }\n    location / {|' "$NGINX_CONF"
             nginx -t && systemctl reload nginx
-            echo "✅ config.js actualizado a valid_referers"  
             echo "✅ VPS listo"
 
       # ── 7B. CONFIGURAR LÍMITES DE SUBIDA ──
@@ -217,7 +213,6 @@ jobs:
               grep -q "^post_max_size" "$PHP_INI" \
                 && sed -i 's/^post_max_size.*/post_max_size = 32M/' "$PHP_INI" \
                 || echo "post_max_size = 32M" >> "$PHP_INI"
-              echo "✅ php.ini: upload_max_filesize=32M, post_max_size=32M"
             fi
             POOL_FILE=$(find /etc/php -name "www.conf" 2>/dev/null | head -1)
             if [ -f "$POOL_FILE" ]; then
@@ -227,17 +222,12 @@ jobs:
               grep -q "^php_admin_value\[post_max_size\]" "$POOL_FILE" \
                 && sed -i 's/^php_admin_value\[post_max_size\].*/php_admin_value[post_max_size] = 32M/' "$POOL_FILE" \
                 || echo "php_admin_value[post_max_size] = 32M" >> "$POOL_FILE"
-              echo "✅ PHP-FPM pool: 32M"
             fi
             NGINX_CONF="/etc/nginx/sites-enabled/pqr"
             if [ -f "$NGINX_CONF" ]; then
               grep -q "client_max_body_size" "$NGINX_CONF" \
                 && sed -i 's/client_max_body_size.*/client_max_body_size 32M;/' "$NGINX_CONF" \
                 || sed -i 's/server {/server {\n    client_max_body_size 32M;/' "$NGINX_CONF"
-            else
-              grep -q "client_max_body_size" /etc/nginx/nginx.conf \
-                && sed -i 's/client_max_body_size.*/client_max_body_size 32M;/' /etc/nginx/nginx.conf \
-                || sed -i 's/http {/http {\n    client_max_body_size 32M;/' /etc/nginx/nginx.conf
             fi
             systemctl restart php8.3-fpm
             nginx -t && systemctl reload nginx
@@ -274,12 +264,6 @@ jobs:
           [ "$CODE" = "200" ] && echo "✅ nova_sesiones.origen OK" || echo "⚠️ $CODE"
           CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS origen text DEFAULT 'web';")
           [ "$CODE" = "200" ] && echo "✅ encuestas.origen OK" || echo "⚠️ $CODE"
-          CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS nombre text;")
-          [ "$CODE" = "200" ] && echo "✅ encuestas.nombre OK" || echo "⚠️ $CODE"
-          CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS cedula text;")
-          [ "$CODE" = "200" ] && echo "✅ encuestas.cedula OK" || echo "⚠️ $CODE"
-          CODE=$(run_sql "ALTER TABLE encuestas_satisfaccion ADD COLUMN IF NOT EXISTS eps text;")
-          [ "$CODE" = "200" ] && echo "✅ encuestas.eps OK" || echo "⚠️ $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS origen text DEFAULT 'web';")
           [ "$CODE" = "200" ] && echo "✅ correos.origen OK" || echo "⚠️ $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS resumen_ia text;")
