@@ -651,7 +651,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
       <div class="list-header">
         <div class="list-search">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="searchInput" placeholder="Buscar remitente, asunto..." oninput="renderEmailList()">
+          <input type="text" id="searchInput" placeholder="Buscar remitente, asunto..." oninput="renderEmailList()" autocomplete="off">
         </div>
         <div class="list-filters" id="sortFilters">
           <button class="filter-chip active" onclick="setSort('fecha',this)">Por fecha</button>
@@ -3132,7 +3132,10 @@ function estadoLabel(s){
 // ──────────────────────────────────────────────
 async function selectEmail(id) {
   state.selectedId = id;
-  renderEmailList();
+  // Marcar visualmente el seleccionado sin re-renderizar toda la lista
+  document.querySelectorAll('.email-item').forEach(el=>{
+    el.classList.toggle('selected', el.dataset.id===id);
+  });
   // Buscar en lista agrupada primero, luego en todos los emails individuales
   const email = state.emails.find(e=>e.id===id) || (state.allEmails||[]).find(e=>e.id===id);
   if(!email) return;
