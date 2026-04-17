@@ -2266,7 +2266,12 @@ async function ntdCargarSedes(){
 
 document.addEventListener('DOMContentLoaded', () => {
   NTD.arrancado = true;
-  ntdCargarSedes().finally(function(){ ntdStart(); });
+  var _ntdStarted=false;
+  function _safeStart(){ if(!_ntdStarted){_ntdStarted=true;ntdStart();} }
+  try{
+    ntdCargarSedes().then(function(){ _safeStart(); }).catch(function(){ _safeStart(); });
+  }catch(e){ _safeStart(); }
+  setTimeout(function(){ _safeStart(); }, 3000);
 });
 </script>
 </body>
