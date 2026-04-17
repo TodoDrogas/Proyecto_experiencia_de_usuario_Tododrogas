@@ -6326,11 +6326,11 @@ async function loadNovaMetrics(){
     encQr,
     sesNovaWeb, sesNovaDir, sesNovaBv,
   ] = await Promise.all([
-    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
-    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
-    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
-    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
-    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id')).catch(()=>[]),
+    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
+    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
+    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
@@ -6544,8 +6544,9 @@ async function _mExportInit() {
       `${sbUrl}/rest/v1/sedes?select=id,nombre,municipio_norm,ciudad&activa=eq.true&limit=200`, sbH
     ).then(r=>r.json()).catch(()=>[]);
     (sedesRaw||[]).forEach(s => {
-      const key = (s.municipio_norm||s.ciudad||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-      if (key) sedesMap[key] = s.nombre;
+      const norm = v => (v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+      if (s.municipio_norm) sedesMap[norm(s.municipio_norm)] = s.nombre;
+      if (s.ciudad)         sedesMap[norm(s.ciudad)]         = s.nombre;
     });
   } catch(e) { console.warn('[export] sedes:', e.message); }
 
@@ -6590,7 +6591,7 @@ async function exportWebExcel() {
       'Cédula':            ex.cedula      || ex.documento || '',
       'Nombre':            ex.nombre      || '',
       'Teléfono':          ex.telefono    || '',
-      'EPS':               ex.eps         || '',
+      'EPS':               ex.eps         || ex.eps_paciente || ex.eps_nombre || '',
       'Correo':            ex.correo      || '',
       'Resultado':         (e.calificacion||0)>=3?'SATISFACTORIO':(e.calificacion||0)>=2?'NEUTRO':'INSATISFACTORIO',
       'Promedio':          ex.promedio    || '',
@@ -6655,7 +6656,7 @@ async function exportQrExcel() {
       'Cédula':            ex.cedula      || ex.documento || '',
       'Nombre':            ex.nombre      || '',
       'Teléfono':          ex.telefono    || '',
-      'EPS':               ex.eps         || '',
+      'EPS':               ex.eps         || ex.eps_paciente || ex.eps_nombre || '',
       'Correo':            ex.correo      || '',
       'Resultado':         (e.calificacion||0)>=3?'SATISFACTORIO':(e.calificacion||0)>=2?'NEUTRO':'INSATISFACTORIO',
       'Promedio':          ex.promedio    || '',
