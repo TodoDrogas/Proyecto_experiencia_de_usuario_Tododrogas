@@ -10,7 +10,8 @@
 :root{
   --blue:#1d6ae5;--bd:#1452c8;--bl:rgba(29,106,229,.13);
   --cyan:#38bdf8;--green:#22c55e;--gold:#f59e0b;--red:#ef4444;
-  --t:rgba(240,246,255,.96);--t2:rgba(180,210,255,.62);--t3:rgba(110,150,210,.35);  --f:'Sora',sans-serif;
+  --t:rgba(240,246,255,.96);--t2:rgba(180,210,255,.62);--t3:rgba(110,150,210,.35);
+  --f:'Sora',sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;font-family:var(--f);background:#03060f;color:var(--t);overflow:hidden}
@@ -726,7 +727,7 @@ function ntdSys(){
       var mun=(s.municipio||s.municipio_norm||'').toUpperCase().trim();
       if(!mun)return;
       epsArr.forEach(function(e){
-        var en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').trim();
+        var en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();
         if(!en||en==='TODAS')return;
         if(!mapa[en])mapa[en]=new Set();
         mapa[en].add(mun);
@@ -989,7 +990,7 @@ async function ntdFCedula(txt){
   }
   const pn=(res.nombre||'').trim().split(/\s+/)[0];
   NTD.usuario={nombre:res.nombre||'',primerNombre:pn,cedula:NTD._ced,telefono:'',vip:!!res.vip,saludo:res.saludo||null,ciudad:res.ciudad||null,epsRegistrada:res.eps||null};
-  NTD.eps=(res.eps||'').replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA')||null; // EPS directo desde la BD — no preguntar
+  NTD.eps=(res.eps||'').replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim()||null; // EPS directo desde la BD — no preguntar
   if(res.vip&&res.saludo){NTD.vipCb=()=>ntdBienvenidaYEps();ntdShowVip(res.saludo);}
   else{ ntdBienvenidaYEps(); }
   ntdAbrirSesion(); // registrar sesión en Supabase
@@ -1456,11 +1457,20 @@ const NTD_MUN_COORDS = {
 };
 
 function ntdNormMun(txt){
-  const t=(txt||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-  if(MUNICIPIOS_MAP[t]) return MUNICIPIOS_MAP[t];
-  if(MUNICIPIOS_MAP[(txt||'').toLowerCase().trim()]) return MUNICIPIOS_MAP[(txt||'').toLowerCase().trim()];
-  return (txt||'').toUpperCase().trim()
-    .replace(/, ANTIOQUIA$/i,'')
+  // Limpiar prefijos comunes que el usuario puede escribir antes del municipio
+  var clean=(txt||'').trim()
+    .replace(/^(SEDE|SEDES|DIRECCION|DIRECCIÓN|PUNTO|PUNTOS|EN|PARA|MUNICIPIO|MUN\.?)[\s]+/i,'').trim();
+  // Intentar quitar ", Antioquia" o " Antioquia" solo si NO hace parte del nombre (ej: Santa Fe de Antioquia)
+  var cleanSinAnt=clean.replace(/,?\s*\bANTIOQUIA\b\s*$/i,'').trim();
+  // Probar sin "Antioquia" primero, luego con el texto completo
+  var tryList=[cleanSinAnt,clean];
+  for(var _i=0;_i<tryList.length;_i++){
+    var _c=tryList[_i];
+    var _t=_c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+    if(MUNICIPIOS_MAP[_t]) return MUNICIPIOS_MAP[_t];
+    if(MUNICIPIOS_MAP[_c.toLowerCase().trim()]) return MUNICIPIOS_MAP[_c.toLowerCase().trim()];
+  }
+  return cleanSinAnt.toUpperCase().trim()
     .replace(/[\u00C1\u00C0\u00C2\u00C4]/g,'A').replace(/[\u00C9\u00C8\u00CA\u00CB]/g,'E')
     .replace(/[\u00CD\u00CC\u00CE\u00CF]/g,'I').replace(/[\u00D3\u00D2\u00D4\u00D6]/g,'O')
     .replace(/[\u00DA\u00D9\u00DB\u00DC]/g,'U').replace(/\u00D1/g,'N');
@@ -1512,8 +1522,8 @@ async function ntdFetchSedes(mun){
         else try{arr=JSON.parse(t);}catch(e){arr=[];}
       }
       // Normalizar: SAVIA SALUD == SAVIA, SAVIA == SAVIA SALUD
-      const epsNorm=eps.replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA');
-      return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA');return en===epsNorm||en===eps;});
+      const epsNorm=eps.replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();
+      return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();return en===epsNorm||en===eps.replace(/\s*\([^)]*\)\s*/g,'').trim();});
     }catch(e){return false;}
   }):todasSedes;
 
@@ -1561,7 +1571,24 @@ async function ntdFetchSedes(mun){
     ntdEna('Por favor escriba su respuesta...');return;
   }
 
-  // No hay sedes en ese municipio → mostrar las más cercanas usando coordenadas
+  // No hay sedes en ese municipio con esa EPS → mostrar las más cercanas
+  // Primero verificar si hay sedes sin coords para este municipio (lat=0)
+  const sedesEnMunSinCoords=sedesPorEps.filter(s=>(s.municipio_norm||'').toUpperCase()===munNorm);
+  if(sedesEnMunSinCoords.length){
+    // Hay sede en ese municipio pero sin coordenadas — mostrarla igual
+    const sH0=sedesEnMunSinCoords.slice(0,4).map(s=>{
+      const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
+      return `<div class="ntd-ic" style="margin-top:6px">
+        <div class="ntd-ict">${s.nombre||'Sede'}</div>
+        <div class="ntd-ir"><span class="ntd-il">Municipio</span><span class="ntd-iv">${s.municipio_norm||s.ciudad||'—'}</span></div>
+        <div class="ntd-ir"><span class="ntd-il">Dirección</span><span class="ntd-iv">${s.direccion||'—'}</span></div>
+        <div class="ntd-ir"><span class="ntd-il">Horario</span><span class="ntd-iv">${s.horario||'—'}</span></div>
+        <div class="ntd-ir" style="border:none;padding-top:8px"><a href="${mu}" target="_blank" style="display:block;text-align:center;background:linear-gradient(90deg,#00c39a,#0891b2);color:#fff;font-weight:700;font-size:12px;border-radius:8px;padding:8px 0;text-decoration:none;width:100%">🗺️ Abrir en Google Maps</a></div>
+      </div>`;
+    }).join('');
+    ntdAddMsg('nova',`<p>Sedes de <strong>${eps||'su EPS'}</strong> en <strong>${munNorm}</strong> (${sedesEnMunSinCoords.length} encontradas):</p>${sH0}`,ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button>'));
+    ntdEna('Por favor escriba su respuesta...');return;
+  }
   const conCoords=sedesPorEps.filter(s=>parseFloat(s.lat||0)!==0&&parseFloat(s.lng||0)!==0);
   if(!conCoords.length){
     ntdAddMsg('nova',`<p>Confirmo que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>.</p>`+ntdCanalesContacto(),ntdBotonesFinales());
