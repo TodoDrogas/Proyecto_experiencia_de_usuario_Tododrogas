@@ -588,17 +588,15 @@ let CFG = {};
 const _bvParams = new URLSearchParams(window.location.search);
 (function(){
   const fromUrl = _bvParams.get('origen');
-  // Si NO viene ?origen= Y referrer está vacío → llegó escaneando QR físico impreso
-  // (cuando la cámara del móvil abre un QR, document.referrer queda vacío)
-  const esQrFisico = !fromUrl && !document.referrer;
-  const origenDetectado = fromUrl || (esQrFisico ? 'qr' : sessionStorage.getItem('td_origen') || 'web');
-  if(origenDetectado === 'qr') sessionStorage.setItem('td_origen', 'qr');
+  // El origen solo es 'qr' si viene explícito ?origen=qr en la URL del QR impreso.
+  // Sin parámetro siempre se limpia el sessionStorage para no contaminar sesiones web.
+  if(fromUrl === 'qr') sessionStorage.setItem('td_origen', 'qr');
   else sessionStorage.removeItem('td_origen');
 })();
 const _BV_ORIGEN = (() => {
   const fromUrl = _bvParams.get('origen');
-  const esQrFisico = !fromUrl && !document.referrer;
-  return fromUrl || (esQrFisico ? 'qr' : sessionStorage.getItem('td_origen') || 'web');
+  // Solo usar el valor de URL si viene explícito; de lo contrario siempre 'web'.
+  return fromUrl || 'web';
 })();
 let FORM_URL = window.location.origin + '/pqr_form.html';
 let _lastQrUrl = null;
