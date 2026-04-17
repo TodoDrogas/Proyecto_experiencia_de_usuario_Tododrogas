@@ -6451,7 +6451,13 @@ function renderNovaMetrics(){
   const novaMun = document.getElementById('novaFiltroMun')?.value||'';
   const novaEps = document.getElementById('novaFiltroEps')?.value||'';
 
-  const _esInterno=r=>(r.from_email||'').toLowerCase().includes('pqrsfd@tododrogas')||(r.from_name||'').toLowerCase().includes('pqrsfd');
+  // Correo 'interno/SIGI': llega del buzón sin datos de formulario (sin sede en body, sin cédula, sin ciudad)
+  const _esInterno=r=>{
+    const tieneSede=_parseSedeBody(r.body_content||'');
+    const tieneCedula=!!(r.cedula||r.cedula_paciente||'').trim();
+    const tieneCiudad=!!(r.ciudad_paciente||'').trim();
+    return !tieneSede&&!tieneCedula&&!tieneCiudad;
+  };
   const radWebF = (D.radWeb||[]).filter(r=>!_esInterno(r)&&(!wSede||fmtSede(r)===wSede)&&(!wTipo||(r.tipo_pqr||'')===wTipo));
   const radQrF  = (D.radQr||[]).filter(r=>!_esInterno(r)&&(!qrSede||fmtSede(r)===qrSede));
   const sesF    = allSesFlat.filter(s=>(!novaMun||(s.municipio||'')===novaMun)&&(!novaEps||(s.eps_paciente||s.eps||'')===novaEps));
@@ -6703,7 +6709,7 @@ async function exportWebExcel() {
   XLSX.utils.book_append_sheet(wb, ws_wEnc, 'WEB_Encuesta');
 
   // ── WEB_Radicacion ──────────────────────────────────────────────────
-  const _esInterno = r => (r.from_email||'').toLowerCase().includes('pqrsfd@tododrogas') || (r.from_name||'').toLowerCase().includes('pqrsfd');
+  const _esInterno = r => { const s=_parseSedeBody(r.body_content||''); const c=!!(r.cedula||r.cedula_paciente||'').trim(); const ci=!!(r.ciudad_paciente||'').trim(); return !s&&!c&&!ci; };
   const h_wRad = (D.radWeb||[]).filter(r=>!_esInterno(r)).map(r => ({
     'Fecha':       fmtD(r.received_at),
     'Hora':        fmtH(r.received_at),
@@ -6769,6 +6775,7 @@ async function exportQrExcel() {
   XLSX.utils.book_append_sheet(wb, ws_qEnc, 'QR_Encuesta');
 
   // ── QR_Radicacion ───────────────────────────────────────────────────
+  const _esInterno = r => { const s=_parseSedeBody(r.body_content||''); const c=!!(r.cedula||r.cedula_paciente||'').trim(); const ci=!!(r.ciudad_paciente||'').trim(); return !s&&!c&&!ci; };
   const h_qRad = (D.radQr||[]).filter(r=>!_esInterno(r)).map(r => ({
     'Fecha':       fmtD(r.received_at),
     'Hora':        fmtH(r.received_at),
