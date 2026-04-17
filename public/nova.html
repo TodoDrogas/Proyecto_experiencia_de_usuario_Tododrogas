@@ -774,6 +774,19 @@ function ntdSys(){
   s+='REGLA CONSULTAR: Si el usuario escribe ÚNICAMENTE un número de radicado (formato TD-xxxxx) o un correo electrónico para consultar estado, usa [CONSULTAR:valor]. NUNCA uses [CONSULTAR] cuando el mensaje contiene palabras como EPS, municipio, sede, piso, atención, cobertura — esos son preguntas de sedes.\n';
   s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
   s+='REGLA RADICAR: Si el usuario quiere radicar una PQRSFD, puede hacerlo con su número de cédula directamente en el formulario. Usa [FORMULARIO].\n';
+  // Inyectar reglas dinámicas desde Supabase (nova_reglas)
+  if(typeof window.NTD_REGLAS!=='undefined'&&window.NTD_REGLAS.length){
+    var msgUp=(NTD.hist.length?NTD.hist[NTD.hist.length-1].content||'':'').toUpperCase();
+    var reglasMatch=window.NTD_REGLAS.filter(function(r){
+      var trigs=Array.isArray(r.triggers)?r.triggers:[];
+      return trigs.some(function(t){ return msgUp.includes((t||'').toUpperCase()); });
+    });
+    if(reglasMatch.length){
+      s+='INSTRUCCIONES ESPECÍFICAS PARA ESTE CASO (PRIORIDAD MÁXIMA — seguir al pie de la letra):\n';
+      reglasMatch.forEach(function(r){ s+='- '+r.instruccion+'\n'; });
+      s+='\n';
+    }
+  }
   s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
   return s;
 }
@@ -2270,6 +2283,21 @@ async function ntdProcesarAudio(blob){
 
 /* Arranque automático */
 // ── CARGA DE SEDES DESDE SUPABASE ───────────────────────────
+// ── REGLAS DINÁMICAS DESDE SUPABASE ────────────────────────
+async function ntdCargarReglas(){
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    if(!sbUrl||!sbKey) return;
+    const r=await fetch(sbUrl+'/rest/v1/nova_reglas?activo=eq.true&select=triggers,instruccion,prioridad&order=prioridad.desc',{
+      headers:{apikey:sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'}
+    });
+    if(!r.ok) return;
+    const data=await r.json();
+    if(Array.isArray(data)&&data.length) window.NTD_REGLAS=data;
+  }catch(e){}
+}
+
 async function ntdCargarSedes(){
   try{
     const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
@@ -2295,7 +2323,7 @@ document.addEventListener('DOMContentLoaded', () => {
   var _ntdStarted=false;
   function _safeStart(){ if(!_ntdStarted){_ntdStarted=true;ntdStart();} }
   try{
-    ntdCargarSedes().then(function(){ _safeStart(); }).catch(function(){ _safeStart(); });
+    Promise.all([ntdCargarSedes(),ntdCargarReglas()]).then(function(){ _safeStart(); }).catch(function(){ _safeStart(); });
   }catch(e){ _safeStart(); }
   setTimeout(function(){ _safeStart(); }, 3000);
 });
