@@ -118,6 +118,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .badge.solucionado{background:var(--green-l);color:var(--green)}
 .badge.reabierto{background:var(--red-l);color:var(--red)}
 .badge.pendiente_firma{background:var(--purple-l);color:var(--purple)}
+.badge.informacion{background:#f0fdf4;color:#0891b2;border:1px solid #bae6fd}
+.email-item.bulk-selected{background:var(--blue-l)!important;border-left:3px solid var(--blue)}
 .btn-purple{background:var(--purple-l);color:var(--purple);border:1.5px solid var(--purple-l)}
 .btn-purple:hover{background:#ede9fe}
 .empty-state{padding:40px 16px;text-align:center;color:var(--ink3)}
@@ -648,6 +650,11 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         Solucionados
         <span class="folder-cnt" id="fc-solucionado">0</span>
       </div>
+      <div class="folder-item" onclick="setFolder('informacion',this)" style="color:#0891b2">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Información
+        <span class="folder-cnt" id="fc-informacion" style="background:#e0f2fe;color:#0891b2">0</span>
+      </div>
       <div class="folder-item" onclick="setFolder('pendiente_firma',this)" style="color:var(--purple)">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         Pte. por firma
@@ -701,6 +708,10 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <button class="btn btn-purple" onclick="abrirModalFirma()" style="display:none">
               <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
               Confirmar firma
+            </button>
+            <button class="btn" style="background:#e0f2fe;color:#0891b2;border:1px solid #bae6fd" onclick="marcarInformacion()">
+              <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              Información
             </button>
             <button class="btn btn-danger" onclick="reabrirTicket()">
               <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
@@ -1557,6 +1568,19 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 
 </div><!-- /app-body -->
 
+<!-- ══ BARRA ACCIONES MASIVAS ══ -->
+<div id="barraAccionesMasivas" style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e293b;border-radius:14px;padding:12px 20px;display:none;align-items:center;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,.35);z-index:9990;backdrop-filter:blur(8px)">
+  <span id="barraCount" style="color:#94a3b8;font-size:12px;font-weight:700;white-space:nowrap">0 seleccionados</span>
+  <div style="width:1px;height:20px;background:#334155"></div>
+  <select id="barraAgentSelect" style="background:#334155;border:1px solid #475569;color:#e2e8f0;padding:6px 10px;border-radius:8px;font-size:11px;font-family:'Poppins',sans-serif;outline:none">
+    <option value="">— Elegir agente —</option>
+  </select>
+  <button onclick="accionMasiva('asignar')" style="background:#2563eb;color:#fff;border:none;padding:7px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">Asignar</button>
+  <button onclick="accionMasiva('informacion')" style="background:#0891b2;color:#fff;border:none;padding:7px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">ℹ️ Información</button>
+  <button onclick="accionMasiva('pendiente')" style="background:#ca8a04;color:#fff;border:none;padding:7px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">Pendiente</button>
+  <button onclick="limpiarSeleccion()" style="background:none;border:1px solid #475569;color:#94a3b8;padding:7px 12px;border-radius:8px;font-size:11px;cursor:pointer;font-family:'Poppins',sans-serif">✕ Cancelar</button>
+</div>
+
 <!-- ══ MODAL: CREAR/EDITAR AGENTE ══ -->
 <div class="modal-backdrop" id="modalAgent" onclick="if(event.target===this)closeModal('modalAgent')">
   <div class="modal">
@@ -1577,7 +1601,13 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
   <div class="modal" style="max-width:520px">
     <button onclick="closeModal('modalAutoAsignar')" style="float:right;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:0;line-height:1">✕</button>
     <h3 style="margin-bottom:4px">⚡ Autoasignar tickets pendientes</h3>
-    <div class="modal-sub" style="margin-bottom:16px">Distribución equitativa round-robin — el agente con menos carga recibe el siguiente ticket</div>
+    <div class="modal-sub" style="margin-bottom:12px">Distribución equitativa round-robin — el agente con menos carga recibe el siguiente ticket</div>
+    <div style="background:var(--bg2);border-radius:var(--r2);padding:12px 14px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:8px">Agentes disponibles hoy</div>
+      <div id="autoAsignarAgentesCheck" style="display:flex;flex-wrap:wrap;gap:8px;min-height:32px">
+        <span style="color:var(--ink3);font-size:11px">Cargando agentes...</span>
+      </div>
+    </div>
     <!-- Estado: cargando preview -->
     <div id="autoAsignarLoading" style="padding:24px;text-align:center;color:var(--ink3);font-size:13px">
       <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite;vertical-align:middle;margin-right:6px"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg>
@@ -2024,6 +2054,7 @@ const state = {
   agents: [],
   historial: [],
   selectedId: null,
+  selectedIds: new Set(),
   folder: 'todos',
   sort: 'fecha',
   defaultActions: ['Observación añadida','Solicitud de información','Cliente contactado','Seguimiento','Escalado','En gestión','Solucionado','Correo respondido'],
@@ -2456,6 +2487,7 @@ async function exportarSIGI() {
     const h3 = agentesRaw.map(ag => {
       const asig   = correos.filter(c => c.agente_id === ag.id || (c.asignado_a||'').trim().toLowerCase() === ag.nombre.trim().toLowerCase());
       const sol    = asig.filter(c => c.estado==='solucionado' || c.estado==='gestionado').length;
+      const infoCount = asig.filter(c => c.estado==='informacion').length;
       const pend   = asig.filter(c => c.estado==='pendiente').length;
       const enG    = asig.filter(c => c.estado==='gestion').length;
       const alta   = asig.filter(c => c.prioridad==='alta' && ['pendiente','gestion'].includes(c.estado)).length;
@@ -3032,7 +3064,7 @@ function updateFolderCounts() {
   document.getElementById('fc-todos').textContent = state.emails.length; // hilos = lo que ve el usuario
   // Para estados: contar sobre allEmails para no perder correos dentro de hilos
   const _forCount = state.allEmails || state.emails;
-  ['pendiente','gestion','gestionado','solucionado','pendiente_firma'].forEach(s=>{
+  ['pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'].forEach(s=>{
     const el = document.getElementById('fc-'+s);
     if(el) el.textContent = _forCount.filter(e=>e.estado===s).length;
   });
@@ -3110,12 +3142,14 @@ function renderEmailList() {
   el.innerHTML = list.map(e=>{
     const agent = e.asignado_a ? state.agents.find(a=>a.id===e.asignado_a) : null;
     const prioColor = {alta:'#dc2626',media:'#ca8a04',baja:'#16a34a'}[e.prioridad||'']||'transparent';
-    return `<div class="email-item${e.id===state.selectedId?' selected':''}${!e.is_read?' unread':''}"
+    return `<div class="email-item${e.id===state.selectedId?' selected':''}${state.selectedIds.has(e.id)?' bulk-selected':''}${!e.is_read?' unread':''}"
       onclick="selectEmail('${e.id}')"
       ondblclick="abrirPreviewCorreo('${e.id}')"
       draggable="true"
       ondragstart="onDragStart(event,'${e.id}')"
+      style="position:relative"
       >
+      <div onclick="event.stopPropagation();toggleBulkSelect('${e.id}')" style="position:absolute;top:8px;right:8px;z-index:2;width:16px;height:16px;border-radius:4px;border:2px solid ${state.selectedIds.has(e.id)?'#2563eb':'#cbd5e1'};background:${state.selectedIds.has(e.id)?'#2563eb':'#fff'};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s" title="Seleccionar">${state.selectedIds.has(e.id)?'<svg width=\'10\' height=\'10\' fill=\'none\' stroke=\'#fff\' stroke-width=\'3\' viewBox=\'0 0 24 24\'><polyline points=\'20 6 9 17 4 12\'/></svg>':''}</div>
       ${!e.is_read?'<div class="unread-pip"></div>':''}
       ${e.prioridad?`<div style="position:absolute;right:6px;top:6px;width:6px;height:6px;border-radius:50%;background:${prioColor}"></div>`:''}
       ${(e.es_urgente||e.tipo_pqr||e.fecha_limite_sla)?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin:3px 0">${e.es_urgente?'<span style="background:#fee2e2;color:#dc2626;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px">⚠ URGENTE</span>':''}${e.tipo_pqr?'<span style="background:var(--bg2);color:var(--ink2);font-size:9px;font-weight:600;padding:1px 6px;border-radius:99px;text-transform:capitalize;border:1px solid var(--border)">'+e.tipo_pqr+'</span>':''}${e.fecha_limite_sla?(()=>{const fin=new Date(e.fecha_limite_sla).getTime();const ahora=Date.now();const hRest=Math.max(0,Math.round((fin-ahora)/3600000));const vencido=fin<ahora;const color=vencido?'#dc2626':hRest<24?'#ca8a04':'#16a34a';const bg=vencido?'#fee2e2':hRest<24?'#fef9c3':'#dcfce7';return '<span style="background:'+bg+';color:'+color+';font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px">'+(vencido?'⚠ Vencido':'⏱ '+hRest+'h')+'</span>';})():''}</div>`:''}
@@ -3136,7 +3170,7 @@ function renderEmailList() {
 }
 
 function estadoLabel(s){
-  return {pendiente:'Pendiente',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;
+  return {pendiente:'Pendiente',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma',informacion:'Información'}[s]||s;
 }
 
 // ──────────────────────────────────────────────
@@ -3597,6 +3631,20 @@ async function setPriority(prio, btn) {
   const em = state.emails.find(e=>e.id===id);
   if(em) em.prioridad = prio;
   showToast(`Prioridad: ${prio} ✓`,'success');
+}
+
+async function marcarInformacion() {
+  const id = state.selectedId;
+  if(!id) return;
+  if(!confirm('¿Marcar este correo como "Información"?\n\nNo se asignará a ningún agente y no contará en métricas de gestión.')) return;
+  await sb(`correos?id=eq.${id}`, 'PATCH', {estado:'informacion', agente_id:null, asignado_a:null});
+  await addHistorialEvent(id, state.emails.find(e=>e.id===id), 'informacion', {por:'admin', observaciones:'Marcado como informativo — no requiere gestión'});
+  const em = state.emails.find(e=>e.id===id);
+  if(em) { em.estado='informacion'; em.agente_id=null; em.asignado_a=null; }
+  document.getElementById('mgmtEstadoBadge').className='badge informacion';
+  document.getElementById('mgmtEstadoBadge').textContent='Información';
+  showToast('Correo marcado como Información ℹ️','info');
+  renderEmailList();
 }
 
 async function marcarSolucionado() {
@@ -5666,11 +5714,15 @@ async function _calcularAutoAsignacion() {
   // 2. Carga real desde correos activos (no casos_activos estático)
   const agentesRaw = await sb('agentes?activo=eq.true&select=id,nombre,email&order=nombre.asc') || [];
   if(!agentesRaw.length) throw new Error('No hay agentes activos en el sistema.');
+  // Filtrar por selección del admin
+  const checkedIds = [...document.querySelectorAll('#autoAsignarAgentesCheck input:checked')].map(i=>i.value);
+  const agentesFiltered = checkedIds.length ? agentesRaw.filter(a=>checkedIds.includes(a.id)) : agentesRaw;
+  if(!agentesFiltered.length) throw new Error('Selecciona al menos un agente disponible.');
   const correosActivos = await sb("correos?estado=in.(pendiente,gestion,pendiente_firma)&agente_id=not.is.null&select=agente_id") || [];
   const cargaMap = {};
   agentesRaw.forEach(a => cargaMap[a.id] = 0);
   correosActivos.forEach(c => { if(cargaMap[c.agente_id]!==undefined) cargaMap[c.agente_id]++; });
-  const agentes = agentesRaw.map(a => ({ ...a, carga_actual: cargaMap[a.id] || 0 }))
+  const agentes = agentesFiltered.map(a => ({ ...a, carga_actual: cargaMap[a.id] || 0 }))
     .sort((a,b) => a.carga_actual - b.carga_actual);
 
   // 3. Algoritmo round-robin ponderado
@@ -5716,6 +5768,17 @@ async function abrirModalAutoAsignar() {
   _autoAsignarEstado('Loading');
   document.getElementById('autoAsignarError').style.display = 'none';
   document.getElementById('modalAutoAsignar').classList.add('show');
+
+  // Poblar checkboxes de agentes
+  try {
+    const ags = await sb('agentes?activo=eq.true&select=id,nombre&order=nombre.asc') || [];
+    document.getElementById('autoAsignarAgentesCheck').innerHTML = ags.map(a=>
+      `<label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--ink);cursor:pointer;background:var(--surface);border:1px solid var(--border);padding:4px 10px;border-radius:99px">
+        <input type="checkbox" value="${a.id}" checked style="accent-color:var(--blue)">
+        ${esc(a.nombre.split(' ')[0])}
+      </label>`
+    ).join('');
+  } catch {}
 
   try {
     const data = await _calcularAutoAsignacion();
@@ -5989,6 +6052,75 @@ function setTema(t) {
       }
     } catch(e) {}
   });
+}
+
+function toggleBulkSelect(id) {
+  if(state.selectedIds.has(id)) state.selectedIds.delete(id);
+  else state.selectedIds.add(id);
+  actualizarBarraMasiva();
+  renderEmailList();
+}
+
+function limpiarSeleccion() {
+  state.selectedIds.clear();
+  actualizarBarraMasiva();
+  renderEmailList();
+}
+
+function actualizarBarraMasiva() {
+  const n = state.selectedIds.size;
+  const barra = document.getElementById('barraAccionesMasivas');
+  const count = document.getElementById('barraCount');
+  if(n > 0) {
+    barra.style.display = 'flex';
+    count.textContent = n + ' seleccionado' + (n>1?'s':'');
+    // Poblar select de agentes
+    const sel = document.getElementById('barraAgentSelect');
+    sel.innerHTML = '<option value="">— Elegir agente —</option>' +
+      (state.agents||[]).filter(a=>a.activo!==false).map(a=>
+        `<option value="${a.id}">${a.nombre}</option>`
+      ).join('');
+  } else {
+    barra.style.display = 'none';
+  }
+}
+
+async function accionMasiva(tipo) {
+  const ids = [...state.selectedIds];
+  if(!ids.length) return;
+  
+  let agId = null, agNombre = null;
+  if(tipo === 'asignar') {
+    const sel = document.getElementById('barraAgentSelect');
+    agId = sel.value;
+    if(!agId) { showToast('Selecciona un agente primero','error'); return; }
+    const ag = state.agents.find(a=>a.id===agId);
+    agNombre = ag?.nombre || '';
+  }
+
+  const labels = {asignar:'Asignando', informacion:'Marcando como Información', pendiente:'Marcando como Pendiente'};
+  showToast(`${labels[tipo]}... (${ids.length} correos)`, 'info');
+
+  let ok = 0;
+  for(const id of ids) {
+    try {
+      const patch = tipo === 'asignar'
+        ? {agente_id:agId, asignado_a:agNombre, estado:'gestion'}
+        : tipo === 'informacion'
+        ? {estado:'informacion', agente_id:null, asignado_a:null}
+        : {estado:'pendiente'};
+      await sb(`correos?id=eq.${id}`, 'PATCH', patch);
+      const evento = tipo==='asignar'?'asignado_manual':tipo==='informacion'?'informacion':'reabierto';
+      await addHistorialEvent(id, null, evento, {por:'admin (acción masiva)', agente_id:agId, agente_nombre:agNombre});
+      const em = state.emails.find(e=>e.id===id);
+      if(em) Object.assign(em, patch);
+      ok++;
+    } catch {}
+  }
+
+  showToast(`✅ ${ok} correos actualizados`, 'success');
+  limpiarSeleccion();
+  renderEmailList();
 }
 
 function logout(){sessionStorage.clear();window.location.href='login.html';}
