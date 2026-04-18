@@ -2404,6 +2404,7 @@ async function sendReply() {
     if(numGest === 0) {
       // Mostrar popup de primera gestión requerida
       const modal = document.createElement('div');
+      modal.id = '_modalPrimeraGestion';
       modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
       modal.innerHTML = `
         <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
@@ -2415,11 +2416,11 @@ async function sendReply() {
             Incluye EPS, tipo de solicitud, categoría y observaciones.
           </div>
           <div style="display:flex;gap:10px;justify-content:center">
-            <button onclick="this.closest('div[style*=fixed]').remove()" 
+            <button onclick="document.getElementById('_modalPrimeraGestion').remove()" 
               style="padding:10px 20px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;background:#fff;color:#64748b">
               Cancelar
             </button>
-            <button onclick="this.closest('div[style*=fixed]').remove();openGestionModal()" 
+            <button onclick="document.getElementById('_modalPrimeraGestion').remove();openGestionModal()" 
               style="padding:10px 20px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;background:#2563eb;color:#fff">
               + Añadir primera gestión
             </button>
@@ -2498,12 +2499,9 @@ async function sendReply() {
           .catch(err=>console.warn('[adjuntos-storage] Error general:',err.message));
       }
 
-      // Incrementar num_gestiones al responder
-      try {
-        const _freshResp = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
-        const _ngResp = (_freshResp?.[0]?.num_gestiones||0) + 1;
-        await sb(`correos?id=eq.${id}`,'PATCH',{num_gestiones:_ngResp});
-      } catch(e){}
+      // NOTA: num_gestiones se incrementa SOLO desde saveGestion(), no aquí.
+      // Incrementar aquí causaba que el popup de "primera gestión" dejara de aparecer
+      // después del primer envío, porque el contador ya no era 0.
       try{ await sb('historial_eventos','POST',{
         correo_id:id,
         agente_id:AGENT_ID,
