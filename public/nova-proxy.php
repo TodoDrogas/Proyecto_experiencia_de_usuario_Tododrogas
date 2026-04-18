@@ -1,175 +1,267 @@
 <?php
 /**
- * nova-proxy.php — Proxy seguro para OpenAI GPT-4o
- * La API key nunca se expone al navegador
+ * nova-proxy.php — Proxy seguro para Nova TD
+ * Maneja: Whisper (transcripción) + GPT (chat) + TTS (voz)
  */
 
-// ── PROTECCIÓN: Solo dominios autorizados ────────────────────
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-$allowed = ['https://tododrogas.online', 'https://www.tododrogas.online'];
-if (!in_array($origin, $allowed)) {
-    http_response_code(403);
-    echo json_encode(['error' => 'Origen no permitido']);
-    exit;
-}
-
+// ── CORS ──────────────────────────────────────────────────────────────
+$origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
+$allowed = ['https://tododrogas.online','https://www.tododrogas.online',
+            'http://localhost','http://127.0.0.1'];
+$originOk = empty($origin) || in_array($origin, $allowed);
+if (!$originOk) { http_response_code(403); echo json_encode(['error'=>'Origen no permitido']); exit; }
 header('Content-Type: application/json; charset=utf-8');
-header('Access-Control-Allow-Origin: ' . $origin);
+if (!empty($origin)) header('Access-Control-Allow-Origin: '.$origin);
 header('Access-Control-Allow-Methods: POST, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
+header('Access-Control-Allow-Headers: Content-Type, X-Nova-Token');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); echo json_encode(['error'=>'Solo POST']); exit; }
 
-// ── API KEY (inyectada por deploy.yml desde GitHub Secrets) ──
-$OPENAI_KEY = '__OPENAI_KEY__';
+// ── TOKEN ─────────────────────────────────────────────────────────────
+$NOVA_TOKEN  = '__NOVA_TOKEN__';    // reemplaza con tu token
+$OPENAI_KEY  = '__OPENAI_KEY__';    // reemplaza con tu key
 
-if (!$OPENAI_KEY || strlen($OPENAI_KEY) < 20) {
-    http_response_code(500);
-    echo json_encode(['error' => 'OpenAI key no configurada en el servidor']);
-    exit;
+$token = $_SERVER['HTTP_X_NOVA_TOKEN'] ?? '';
+if ($NOVA_TOKEN !== '__NOVA_TOKEN__' && $token !== $NOVA_TOKEN) {
+    http_response_code(401); echo json_encode(['error'=>'Token inválido']); exit;
 }
 
-// ── INPUT ──────────────────────────────────────────────────
-$body = json_decode(file_get_contents('php://input'), true);
-if (!$body) {
-    http_response_code(400);
-    echo json_encode(['error' => 'JSON inválido']);
-    exit;
-}
-
+// ── INPUT ─────────────────────────────────────────────────────────────
+$body   = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = $body['action'] ?? 'chat';
 
-// ── MODO WHISPER: Transcripción de audio ──────────────────
+// ══════════════════════════════════════════════════════════════════════
+// ACCIÓN: WHISPER — transcripción de audio
+// ══════════════════════════════════════════════════════════════════════
 if ($action === 'whisper') {
+
     $audio_b64 = $body['audio_base64'] ?? '';
     $mime_type = $body['mime_type']    ?? 'audio/webm';
+    $prompt    = $body['prompt']       ?? '';
+
     if (!$audio_b64) {
-        http_response_code(400);
-        echo json_encode(['error' => 'audio_base64 requerido']);
-        exit;
+        http_response_code(400); echo json_encode(['error'=>'audio_base64 requerido']); exit;
     }
+
+    // Decodificar audio de base64
     $audio_data = base64_decode($audio_b64);
-    if (!$audio_data || strlen($audio_data) < 100) {
-        http_response_code(400);
-        echo json_encode(['error' => 'audio inválido']);
-        exit;
+    if (!$audio_data) {
+        http_response_code(400); echo json_encode(['error'=>'Audio base64 inválido']); exit;
     }
-    $ext = match(true) {
-        str_contains($mime_type, 'webm') => 'webm',
-        str_contains($mime_type, 'mp4')  => 'mp4',
-        str_contains($mime_type, 'ogg')  => 'ogg',
-        str_contains($mime_type, 'wav')  => 'wav',
-        default => 'webm',
-    };
-    $tmp = tempnam(sys_get_temp_dir(), 'ntd_') . '.' . $ext;
-    file_put_contents($tmp, $audio_data);
+
+    // Determinar extensión según mime type
+    $ext_map = [
+        'audio/webm'       => 'webm',
+        'audio/webm;codecs=opus' => 'webm',
+        'audio/ogg'        => 'ogg',
+        'audio/mp4'        => 'mp4',
+        'audio/mpeg'       => 'mp3',
+        'audio/wav'        => 'wav',
+        'audio/x-wav'      => 'wav',
+    ];
+    $ext = $ext_map[strtolower($mime_type)] ?? 'webm';
+
+    // Guardar audio en archivo temporal
+    $tmpFile = sys_get_temp_dir() . '/nova_audio_' . uniqid() . '.' . $ext;
+    file_put_contents($tmpFile, $audio_data);
+
+    // ── Llamar a Whisper API con multipart/form-data ──────────────────
+    // CRÍTICO: Whisper requiere multipart, no JSON
+    $boundary = '----NovaBoundary' . uniqid();
+
+    // Construir multipart body manualmente para cURL
+    $postData = '';
+
+    // Campo: model
+    $postData .= "--{$boundary}\r\n";
+    $postData .= "Content-Disposition: form-data; name=\"model\"\r\n\r\n";
+    $postData .= "whisper-1\r\n";
+
+    // Campo: language = "es" — FORZAR español colombiano
+    $postData .= "--{$boundary}\r\n";
+    $postData .= "Content-Disposition: form-data; name=\"language\"\r\n\r\n";
+    $postData .= "es\r\n";
+
+    // Campo: temperature = 0 — ELIMINA alucinaciones
+    $postData .= "--{$boundary}\r\n";
+    $postData .= "Content-Disposition: form-data; name=\"temperature\"\r\n\r\n";
+    $postData .= "0\r\n";
+
+    // Campo: response_format
+    $postData .= "--{$boundary}\r\n";
+    $postData .= "Content-Disposition: form-data; name=\"response_format\"\r\n\r\n";
+    $postData .= "json\r\n";
+
+    // Campo: prompt — vocabulario de dominio (máx 224 tokens)
+    if ($prompt) {
+        $postData .= "--{$boundary}\r\n";
+        $postData .= "Content-Disposition: form-data; name=\"prompt\"\r\n\r\n";
+        $postData .= $prompt . "\r\n";
+    }
+
+    // Campo: file — el audio
+    $postData .= "--{$boundary}\r\n";
+    $postData .= "Content-Disposition: form-data; name=\"file\"; filename=\"audio.{$ext}\"\r\n";
+    $postData .= "Content-Type: {$mime_type}\r\n\r\n";
+    $postData .= $audio_data . "\r\n";
+    $postData .= "--{$boundary}--\r\n";
+
     $ch = curl_init('https://api.openai.com/v1/audio/transcriptions');
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => $postData,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 60,
-        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $OPENAI_KEY],
-        CURLOPT_POSTFIELDS     => [
-            'file'     => new CURLFile($tmp, $mime_type, 'audio.' . $ext),
-            'model'    => 'whisper-1',
-            'language' => 'es',
-            'prompt'   => 'Tododrogas, Nova TD, PQRSFD, Colombia, Antioquia, Medellin, Bogota, Cali, Barranquilla. EPS: COOSALUD, SAVIA SALUD, Salud Total, Nueva EPS, Preventiva, CEM, Angiosur, Comfama, Comfenalco, Medimas, Sanitas, Compensar, Famisanar, Mutual Ser, Asmet Salud, Emssanar, Capresoca, Cajacopi. Numeros y codigos: TD-2024, TD-2025, TD-2026, cero, uno, dos, tres, cuatro, cinco, seis, siete, ocho, nueve, cien, mil, cedula, numero de documento, identificacion, codigo de radicado, numero de radicado. Municipios Antioquia: Medellin, Turbo, Apartado, Caucasia, Rionegro, Yarumal, Segovia, El Bagre, Necocli, Carepa, Chigorodo, Mutata, Frontino, Dabeiba, Valdivia, Taraza, Caceres, Anori, Amalfi, Jerico, Andes, Ciudad Bolivar, Santa Barbara, Santa Fe de Antioquia, Amaga, Puerto Berrio, Zaragoza, Remedios, Yolombo, San Carlos, Guatape, Abejorral, Angostura, Armenia, Briceno, Caicedo, Copacabana, Girardota, Barbosa, La Ceja, La Union, Sabaneta, Marinilla, Concordia, Liborina, Olaya, Llanadas, San Jeronimo, Sopetran, Anza, Betulia, Hispania, Jardin, Pueblorrico, Sabanalarga, Uramita, Yali, Nechi, Peque, Puerto Nare, Samana. Departamentos: Antioquia, Cundinamarca, Valle del Cauca, Bolivar, Atlantico, Cordoba, Sucre, Santander, Huila, Tolima, Nariño, Cauca, Choco, Risaralda, Caldas, Quindio, Meta, Boyaca, Cesar, Magdalena. Medicamentos y farmacos: insulina, metformina, losartan, enalapril, atorvastatina, omeprazol, amoxicilina, azitromicina, ibuprofeno, acetaminofen, salbutamol, budesonida, fluticasona, levotiroxina, clonazepam, lorazepam, alprazolam, risperidona, quetiapina, haloperidol, warfarina, clopidogrel, aspirina, carvedilol, metoprolol, amlodipino, hidroclorotiazida, furosemida, espironolactona, atorvastatina, rosuvastatina, simvastatina, ranitidina, pantoprazol, lansoprazol, metoclopramida, ondansetron, ciprofloxacino, trimetoprim, sulfametoxazol, doxiciclina, clindamicina, cefalexina, ampicilina, eritromicina, fluconazol, itraconazol, aciclovir, oseltamivir, prednisona, dexametasona, betametasona, hidrocortisona, calcio, vitamina D, acido folico, hierro, vitamina B12, zinc, magnesio. Gestiones farmaceuticas: formula medica, dispensacion, tecnologia de salud, medicamento pendiente, entrega parcial, entrega total, historial de entregas, autorizacion de medicamento, gestion de autorizacion, tramite de autorizacion, medicamento no POS, medicamento POS, complementario, recobro, tutela, derecho de peticion, queja por medicamento, reclamo de medicamento, medicamento vencido, medicamento en mal estado, medicamento deteriorado, concentracion incorrecta, sustitucion de medicamento, cambio de medicamento, equivalente terapeutico, alternativa farmacologica, dispensacion domiciliaria, entrega a domicilio, punto de dispensacion, servicio farmaceutico, regencia de farmacia, quimica farmaceutica, tecnologo en regencia, auxiliar de farmacia. Tramites PQRSFD: radicar, radicado, solicitud, queja, reclamo, peticion, felicitacion, sugerencia, denuncia, consultar estado, numero de caso, numero de ticket, estado de solicitud, tiempo de respuesta, SLA, vencimiento, fecha limite, asesor asignado. Documentos: cedula de ciudadania, tarjeta de identidad, cedula de extranjeria, pasaporte, documento de identidad, historia clinica, autorizacion medica, orden medica, epicrisis, resumen de historia clinica, formula medica, receta. Frases frecuentes: donde puedo reclamar, puntos de dispensacion, sede mas cercana, requisitos para reclamar, encuesta de satisfaccion, horarios de atencion, cuales son los documentos, que necesito llevar, cuando llega mi medicamento, por que no me entregaron, me faltaron medicamentos, entregaron incompleto, medicamento pendiente, cuando esta disponible, como radicar una queja, como consultar mi radicado, hablar con un asesor, numero de telefono, whatsapp, correo electronico, BIC piso seis, primer piso, sede Medellin, cobertura EPS.',
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_HTTPHEADER     => [
+            "Authorization: Bearer {$OPENAI_KEY}",
+            "Content-Type: multipart/form-data; boundary={$boundary}",
         ],
     ]);
+
     $resp = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err  = curl_error($ch);
     curl_close($ch);
-    @unlink($tmp);
+
+    // Limpiar archivo temporal
+    @unlink($tmpFile);
+
+    if ($err) {
+        http_response_code(500);
+        echo json_encode(['error' => 'cURL error: '.$err]);
+        exit;
+    }
+
+    if ($code !== 200) {
+        http_response_code($code);
+        echo json_encode(['error' => 'Whisper error '.$code, 'detail' => $resp]);
+        exit;
+    }
+
     $data = json_decode($resp, true);
-    echo json_encode(['text' => $data['text'] ?? '', 'code' => $code]);
+    $text = trim($data['text'] ?? '');
+
+    // Post-procesamiento: corregir términos conocidos mal transcritos
+    $correcciones = [
+        // EPS
+        '/\bkuza(lud)?\b/i'           => 'COOSALUD',
+        '/\bsabi[ao]\b/i'             => 'SAVIA',
+        '/\bnueva e\.?p\.?s\.?\b/i'   => 'NUEVA EPS',
+        '/\bpreventi[vb]a\b/i'        => 'PREVENTIVA',
+        '/\bsalud total\b/i'          => 'SALUD TOTAL',
+        // Términos médicos frecuentes
+        '/\bformula\b/i'              => 'fórmula',
+        '/\bradicado\b/i'             => 'radicado',
+        '/\bdispensacion\b/i'         => 'dispensación',
+        '/\btutela\b/i'               => 'tutela',
+        '/\bglp\s*1\b/i'              => 'GLP1',
+        '/\bpqrs\w*/i'                => 'PQRSFD',
+    ];
+
+    foreach ($correcciones as $pattern => $replacement) {
+        $text = preg_replace($pattern, $replacement, $text);
+    }
+
+    echo json_encode(['text' => $text, 'raw' => $data['text'] ?? ''], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-// ── MODO TTS: OpenAI Text-to-Speech (shimmer) ─────────────
-if ($action === 'tts') {
-    $texto = trim($body['texto'] ?? '');
-    if (!$texto) {
-        http_response_code(400);
-        echo json_encode(['error' => 'texto requerido']);
+// ══════════════════════════════════════════════════════════════════════
+// ACCIÓN: CHAT — GPT para respuestas de Nova TD
+// ══════════════════════════════════════════════════════════════════════
+if ($action === 'chat' || !isset($body['action'])) {
+
+    $system   = $body['system']     ?? '';
+    $messages = $body['messages']   ?? [];
+    $maxTok   = intval($body['max_tokens'] ?? 1500);
+
+    if (empty($messages)) {
+        http_response_code(400); echo json_encode(['error'=>'messages requerido']); exit;
+    }
+
+    $payload = [
+        'model'       => 'gpt-4o-mini',
+        'max_tokens'  => min($maxTok, 2000),
+        'temperature' => 0.3,
+        'messages'    => array_merge(
+            $system ? [['role'=>'system','content'=>$system]] : [],
+            $messages
+        ),
+    ];
+
+    $ch = curl_init('https://api.openai.com/v1/chat/completions');
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($payload),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 45,
+        CURLOPT_HTTPHEADER     => [
+            "Authorization: Bearer {$OPENAI_KEY}",
+            'Content-Type: application/json',
+        ],
+    ]);
+
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($code !== 200) {
+        http_response_code($code);
+        echo json_encode(['error'=>'GPT error '.$code, 'detail'=>$resp]);
         exit;
     }
-    $texto = strip_tags($texto);
-    $texto = preg_replace('/[\x{1F000}-\x{1FFFF}]/u', '', $texto);
-    $texto = trim($texto);
-    if (!$texto) { echo json_encode(['audio_b64' => '']); exit; }
+
+    echo $resp; // reenviar respuesta de OpenAI directo
+    exit;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// ACCIÓN: TTS — texto a voz (OpenAI shimmer)
+// ══════════════════════════════════════════════════════════════════════
+if ($action === 'tts') {
+
+    $texto = trim($body['texto'] ?? '');
+    if (!$texto) {
+        http_response_code(400); echo json_encode(['error'=>'texto requerido']); exit;
+    }
+
+    // Limpiar texto para TTS (quitar markdown, emojis)
+    $texto = preg_replace('/\*\*(.+?)\*\*/s', '$1', $texto);
+    $texto = preg_replace('/[^\p{L}\p{N}\p{P}\s]/u', '', $texto);
+    $texto = mb_substr(trim($texto), 0, 4096);
 
     $ch = curl_init('https://api.openai.com/v1/audio/speech');
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => json_encode([
             'model' => 'tts-1',
+            'input' => $texto,
             'voice' => 'shimmer',
-            'input' => mb_substr($texto, 0, 4096),
-            'speed' => 0.95,
+            'speed' => 1.0,
         ]),
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 20,
+        CURLOPT_TIMEOUT        => 30,
         CURLOPT_HTTPHEADER     => [
-            'Authorization: Bearer ' . $OPENAI_KEY,
+            "Authorization: Bearer {$OPENAI_KEY}",
             'Content-Type: application/json',
         ],
     ]);
+
     $audio = curl_exec($ch);
     $code  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    if ($code === 200 && $audio) {
-        echo json_encode(['audio_b64' => base64_encode($audio), 'mime' => 'audio/mpeg']);
-    } else {
-        echo json_encode(['audio_b64' => '', 'error' => 'tts_failed_'.$code]);
+    if ($code !== 200 || !$audio) {
+        http_response_code(500);
+        echo json_encode(['error'=>'TTS error '.$code]);
+        exit;
     }
+
+    echo json_encode([
+        'audio_b64' => base64_encode($audio),
+        'mime'      => 'audio/mpeg',
+    ]);
     exit;
 }
 
-// ── MODO CHAT: GPT ─────────────────────────────────────────
-if (!isset($body['messages'])) {
-    http_response_code(400);
-    echo json_encode(['error' => 'messages requerido']);
-    exit;
-}
-
-$messages  = $body['messages'];
-$system    = $body['system']    ?? '';
-$max_tok   = min((int)($body['max_tokens'] ?? 1500), 4000);
-$model     = 'gpt-4o';
-
-$payload = [
-    'model'       => $model,
-    'max_tokens'  => $max_tok,
-    'temperature' => 0.3,
-    'messages'    => array_merge(
-        $system ? [['role' => 'system', 'content' => $system]] : [],
-        $messages
-    ),
-];
-
-$ch = curl_init('https://api.openai.com/v1/chat/completions');
-curl_setopt_array($ch, [
-    CURLOPT_POST           => true,
-    CURLOPT_POSTFIELDS     => json_encode($payload),
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 45,
-    CURLOPT_HTTPHEADER     => [
-        'Authorization: Bearer ' . $OPENAI_KEY,
-        'Content-Type: application/json',
-    ],
-]);
-
-$resp = curl_exec($ch);
-$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$err  = curl_error($ch);
-curl_close($ch);
-
-if ($err) {
-    http_response_code(502);
-    echo json_encode(['error' => 'curl: ' . $err]);
-    exit;
-}
-
-http_response_code($code);
-echo $resp;
+http_response_code(400);
+echo json_encode(['error' => 'Acción no reconocida: '.$action]);
