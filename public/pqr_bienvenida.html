@@ -2350,24 +2350,6 @@ function ntdShowRecUI(on){
   }
 }
 
-function ntdStartRecTimer(){
-  ntdRecSecs = 0;
-  clearInterval(ntdRecTimer);
-  ntdRecTimer = setInterval(()=>{
-    ntdRecSecs++;
-    const m = Math.floor(ntdRecSecs/60);
-    const s = String(ntdRecSecs%60).padStart(2,'0');
-    ntd$('ntdRecTime').textContent = m+':'+s;
-    // Límite 2 minutos
-    if(ntdRecSecs >= 120) ntdStopRec();
-  }, 1000);
-}
-
-function ntdStopRec(){
-  clearInterval(ntdRecTimer);
-  if(ntdRec) ntdRec.stop();
-}
-
 function ntdCancelRec(){
   clearInterval(ntdRecTimer);
   ntdRecActive = false;
@@ -2385,20 +2367,30 @@ async function ntdStartRec(){
     var stream=await navigator.mediaDevices.getUserMedia({audio:true});
     ntdRecChunks=[];
     var mime=MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/mp4';
+    console.log('[🎤 AUDIO] MimeType seleccionado:', mime);
     ntdRec=new MediaRecorder(stream,{mimeType:mime});
-    ntdRec.ondataavailable=function(e){if(e.data&&e.data.size>0)ntdRecChunks.push(e.data);};
+    ntdRec.ondataavailable=function(e){
+      if(e.data&&e.data.size>0) ntdRecChunks.push(e.data);
+    };
     ntdRec.onstop=async function(){
       stream.getTracks().forEach(function(t){t.stop();});
-      await ntdProcesarAudio(new Blob(ntdRecChunks,{type:mime}));
+      var blob=new Blob(ntdRecChunks,{type:mime});
+      console.log('[🎤 AUDIO] Grabación terminada — chunks:',ntdRecChunks.length,'| tamaño blob:',blob.size,'bytes | mime:',blob.type);
+      if(blob.size < 1000){
+        console.warn('[🎤 AUDIO] ⚠️ Blob muy pequeño ('+blob.size+' bytes) — posible audio vacío o error de mic');
+      }
+      await ntdProcesarAudio(blob);
     };
     ntdRec.start(200);
     ntdRecActive=true;ntdRecSecs=0;ntdShowRecUI(true);
+    console.log('[🎤 AUDIO] Grabando... (start(200))');
     ntdRecTimer=setInterval(function(){
       ntdRecSecs++;
       var el=ntd$('ntdRecTime');if(el)el.textContent=Math.floor(ntdRecSecs/60)+':'+(ntdRecSecs%60<10?'0':'')+ntdRecSecs%60;
       if(ntdRecSecs>=120)ntdStopRec();
     },1000);
   }catch(e){
+    console.error('[🎤 AUDIO] Error getUserMedia:', e.name, e.message);
     var t=document.createElement('div');
     t.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#dc2626;color:#fff;padding:8px 16px;border-radius:8px;font-size:12px;z-index:9999';
     t.textContent='Sin permiso de microfono';document.body.appendChild(t);setTimeout(function(){t.remove();},3000);
@@ -2406,6 +2398,7 @@ async function ntdStartRec(){
 }
 function ntdStopRec(){
   if(!ntdRecActive)return;
+  console.log('[🎤 AUDIO] Stop solicitado — segundos grabados:',ntdRecSecs);
   clearInterval(ntdRecTimer);ntdRecActive=false;ntdShowRecUI(false);
   if(ntdRec&&ntdRec.state!=='inactive')ntdRec.stop();
 }
@@ -2414,21 +2407,36 @@ async function ntdProcesarAudio(blob){
   try{
     var reader=new FileReader();
     var b64=await new Promise(function(res){reader.onload=function(e){res(e.target.result.split(',')[1]);};reader.readAsDataURL(blob);});
+    console.log('[🎤 WHISPER] Base64 generado — longitud:',b64.length,'chars (~',Math.round(b64.length*0.75/1024),'KB)');
     var prx=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
+    console.log('[🎤 WHISPER] Enviando a proxy:',prx,'| mime:',blob.type);
+    var payload={action:'whisper',audio_base64:b64,mime_type:blob.type||'audio/webm',
+      prompt:'Tododrogas CIA SAS, PQRSFD, EPS: COOSALUD, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, PREVENTIVA SALUD, CEM, ANGIOSUR. Medicamentos: fórmula médica, historia clínica, dispensación, radicado, direccionamiento, GLP1, hipolipemiante, autoinmune, magistral, vencido, pendiente, tutela, SIGI. Municipios: Medellín, Bello, Itagüí, Envigado, Rionegro, Apartadó, Turbo, Caucasia, Yarumal, Segovia, Chigorodó, Carepa, Santa Fe de Antioquia, Girardota, Barbosa. Consultas frecuentes: ¿Puedo ir antes por mis medicamentos? ¿Cuándo llega mi pedido? ¿Qué necesito para reclamar? ¿Tienen cobertura en mi municipio? ¿Cuál es el horario? Quiero radicar una queja. Mi medicamento está vencido. No me han entregado. ¿Cuántas cédulas necesito? App Solicitudes Web, Mantis, DESACATO, COOSALUD EVENTO, OPS, SAVIA-CAPITA.'};
+    console.log('[🎤 WHISPER] Prompt enviado ('+payload.prompt.length+' chars):', payload.prompt.slice(0,80)+'...');
+    var t0=Date.now();
     var r=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json','X-Nova-Token':(typeof window.NOVA_TOKEN!=='undefined'?window.NOVA_TOKEN:'__NOVA_TOKEN__')},
-      body:JSON.stringify({action:'whisper',audio_base64:b64,mime_type:blob.type||'audio/webm',
-        prompt:'EPS colombianas: COOSALUD, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, PREVENTIVA SALUD, CEM, ANGIOSUR. Municipios de Antioquia: Medellín, Rionegro, Apartadó, Turbo, Caucasia, Yarumal, Segovia, Santa Fe de Antioquia.'})});
-    var d=await r.json();var txt=(d.text||'').trim();
+      body:JSON.stringify(payload)});
+    console.log('[🎤 WHISPER] HTTP response status:',r.status,'| tiempo:',Date.now()-t0,'ms');
+    var rawText=await r.text();
+    console.log('[🎤 WHISPER] Respuesta raw del proxy:',rawText.slice(0,300));
+    var d;
+    try{ d=JSON.parse(rawText); }
+    catch(je){ console.error('[🎤 WHISPER] ❌ Respuesta no es JSON válido:',rawText); ntdRmSk();ntdTyping(false);ntdAddMsg('nova',ntdR2H('Error al procesar audio.'));ntdEna();return; }
+    console.log('[🎤 WHISPER] JSON parseado:',d);
+    var txt=(d.text||'').trim();
+    console.log('[🎤 WHISPER] Texto transcrito:',txt?'"'+txt+'"':'(vacío)');
     ntdRmSk();ntdTyping(false);
     if(txt){
       ntdAddMsg('user',ntdR2H(txt.toUpperCase()));
       NTD.hist.push({role:'user',content:txt.toUpperCase()});
       await ntdDispatch(txt.toUpperCase());
     }else{
+      console.warn('[🎤 WHISPER] ⚠️ Texto vacío — error del proxy:',d.error||'sin campo error');
       ntdAddMsg('nova',ntdR2H('No pude entender el audio. Escriba su mensaje.'));
       ntdEna();
     }
   }catch(e){
+    console.error('[🎤 WHISPER] ❌ Exception en ntdProcesarAudio:',e.message,e);
     ntdRmSk();ntdTyping(false);
     ntdAddMsg('nova',ntdR2H('Error al procesar audio.'));
     ntdEna();
