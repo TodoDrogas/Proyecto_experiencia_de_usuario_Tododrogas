@@ -1935,15 +1935,22 @@ async function generarConNovaTD(correoId) {
     ].filter(Boolean).join(' ');
     const extInfo = extraccion.paciente||extraccion.radicado ? `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:6px 12px;margin-bottom:6px;font-size:11px;color:var(--ink2)">${[extraccion.paciente?'👤 '+extraccion.paciente:'', extraccion.radicado?'📋 Rad: '+extraccion.radicado:'', extraccion.medicamento?'💊 '+extraccion.medicamento:'', extraccion.urgencia&&extraccion.urgencia!=='normal'?'⚡ '+extraccion.urgencia:''].filter(Boolean).join(' · ')}</div>` : '';
     area.innerHTML = `<div style="background:${bc};border-radius:6px;padding:8px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center"><span style="color:${tc};font-weight:700;font-size:12px">${msg}</span><span style="color:${tc};font-size:11px">Confianza: ${confianza}%</span></div>${fuentesBadges?`<div style="margin-bottom:6px;display:flex;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--ink3)">Fuentes: ${fuentesBadges}</div>`:''}${extInfo}${advertencias.length?`<ul style="margin:0 0 8px;padding:0 0 0 18px;font-size:12px;color:#ca8a04">${advertencias.map(a=>`<li>${a}</li>`).join('')}</ul>`:''}`;
-    // Fix: solo abrir reply si NO está ya abierto en modo 'reply' (evita el toggle que lo cierra)
+    // Abrir reply si no está abierto
     const _rArea=document.getElementById('replyBoxArea');
-    if(!_rArea||!_rArea.innerHTML||_rArea.dataset.modo!=='reply') toggleReply('reply');
-    // Fix: reintentar hasta 3 veces cada 200ms para dar tiempo al render
+    if(!_rArea||!_rArea.dataset.modo||_rArea.dataset.modo!=='reply') toggleReply('reply');
+    // Insertar HTML generado por Nova — reintentar hasta 5 veces
     (function _novaTDInsertar(intentos){
       const ed=document.querySelector('#replyBoxArea [contenteditable]');
-      if(!ed){ if(intentos>0) setTimeout(function(){_novaTDInsertar(intentos-1);},200); return; }
-      ed.innerHTML=html;
-    })(3);
+      if(!ed){
+        if(intentos>0) setTimeout(function(){_novaTDInsertar(intentos-1);},300);
+        return;
+      }
+      // Limpiar y asignar como HTML real
+      ed.focus();
+      ed.innerHTML = '';
+      // Usar insertAdjacentHTML para garantizar que el browser interprete como HTML
+      ed.insertAdjacentHTML('afterbegin', html);
+    })(5);
   } catch(err) {
     area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error Nova TD PHP — revisa el log del servidor.</div>`;
     console.error('Nova TD error:', err);
@@ -2389,6 +2396,39 @@ async function sendReply() {
   const body=editor?.innerHTML?.trim();
   if(!body||body==='<br>'){ showToast('Escribe un mensaje','info'); return; }
   if(!toInput){ showToast('Escribe un destinatario','info'); return; }
+
+  // ── Verificar primera gestión ──────────────────────────────────
+  try {
+    const fresh = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
+    const numGest = fresh?.[0]?.num_gestiones || 0;
+    if(numGest === 0) {
+      // Mostrar popup de primera gestión requerida
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+      modal.innerHTML = `
+        <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+          <div style="font-size:36px;margin-bottom:12px">📋</div>
+          <div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:8px">Completa la primera gestión</div>
+          <div style="font-size:13px;color:#64748b;line-height:1.6;margin-bottom:20px">
+            Antes de responder, registra la primera gestión del ticket.<br>
+            <strong style="color:#2563eb">Es la clave para llevar tus métricas a otro nivel.</strong><br><br>
+            Incluye EPS, tipo de solicitud, categoría y observaciones.
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center">
+            <button onclick="this.closest('div[style*=fixed]').remove()" 
+              style="padding:10px 20px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;background:#fff;color:#64748b">
+              Cancelar
+            </button>
+            <button onclick="this.closest('div[style*=fixed]').remove();openGestionModal()" 
+              style="padding:10px 20px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;background:#2563eb;color:#fff">
+              + Añadir primera gestión
+            </button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+      return;
+    }
+  } catch(e) { /* si falla la verificación, dejar continuar */ }
 
   // Construir hilo histórico
   const hiloHTML=`
