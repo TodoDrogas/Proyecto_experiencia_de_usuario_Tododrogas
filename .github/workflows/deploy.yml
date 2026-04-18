@@ -283,8 +283,8 @@ jobs:
             fi
             touch /var/log/sync-correos.log && chmod 644 /var/log/sync-correos.log
 
-      # ── 10. VERIFICAR SYNC — solo iniciar si NUNCA se ha iniciado ──
-      - name: Verificar sync (no reiniciar si ya tiene ciclo_inicio)
+      # ── 10. PROTEGER SYNC — NUNCA reiniciar si ya existe ciclo_inicio ──
+      - name: Proteger ciclo_inicio (no reiniciar si ya existe)
         uses: appleboy/ssh-action@v1
         with:
           host:     ${{ secrets.VPS_WEB_HOST }}
@@ -293,16 +293,22 @@ jobs:
           script: |
             SB_URL="${{ secrets.SUPABASE_URL }}"
             SB_KEY="${{ secrets.SUPABASE_KEY_SERVICE }}"
+            # Consultar Supabase — fuente de verdad absoluta
             SYNC_DATA=$(curl -s "${SB_URL}/rest/v1/configuracion_sistema?id=eq.main&select=data"               -H "apikey: ${SB_KEY}" -H "Authorization: Bearer ${SB_KEY}")
+            echo "Sync data: $SYNC_DATA"
             ACTIVO=$(echo "$SYNC_DATA" | grep -o '"activo":true' || true)
-            CICLO=$(echo "$SYNC_DATA" | grep -o '"ciclo_inicio":"[^"]*"' | grep -v 'null' || true)
-            if [ -n "$ACTIVO" ] && [ -n "$CICLO" ]; then
-              echo "✅ Sync activo con ciclo_inicio existente — NO se reinicia"
-              echo "   Ciclo: $CICLO"
+            CICLO=$(echo "$SYNC_DATA" | grep -o '"ciclo_inicio":"[^"]*"' | grep -v '"ciclo_inicio":null' || true)
+            echo "Activo: '$ACTIVO'"
+            echo "Ciclo: '$CICLO'"
+            if [ -n "$CICLO" ]; then
+              echo "✅ PROTEGIDO — ciclo_inicio existe, NO se reinicia bajo ninguna circunstancia"
+              echo "   $CICLO"
+              # Solo verificar que el cron está corriendo
+              crontab -l | grep -q "sincronizar-correos" && echo "✅ Cron activo" || echo "⚠️ Cron no encontrado"
             else
-              echo "⚡ Sin ciclo_inicio — iniciando por primera vez..."
+              echo "⚡ Primera instalación — iniciando sync por primera vez"
               curl -s "https://tododrogas.online/sincronizar-correos.php?accion=iniciar&token=${{ secrets.ADMIN_TOKEN }}"
-              echo "✅ Sync iniciado"
+              echo "✅ Sync iniciado por primera vez"
             fi
 
       # ── 11. VERIFICAR DEPLOY ────────────────────────────────────
