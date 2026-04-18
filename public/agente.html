@@ -3649,17 +3649,35 @@ function usarPlantilla(idx){
   cerrarPanelRR();
 }
 function insertarTextoEnReply(texto){
-  if(typeof toggleReply==='function')toggleReply('reply');
-  setTimeout(function(){
+  // Sin correo seleccionado — avisar y salir
+  if(!state.selectedId){
+    showToast('Selecciona un correo primero para usar una plantilla','info');
+    cerrarPanelRR();
+    return;
+  }
+  const area=document.getElementById('replyBoxArea');
+  // Fix toggle: solo abrir reply si NO está ya abierto en modo 'reply'
+  // (si está abierto y llamamos toggleReply de nuevo, lo CIERRA)
+  if(!area||!area.innerHTML||area.dataset.modo!=='reply'){
+    if(typeof toggleReply==='function') toggleReply('reply');
+  }
+  // Fix timeout: reintentar hasta 3 veces cada 200ms si el editor no está listo
+  function _insertar(intentos){
     const ed=document.querySelector('#replyBoxArea [contenteditable]');
-    if(!ed){cerrarPanelRR();return;}
+    if(!ed){
+      if(intentos>0) setTimeout(function(){_insertar(intentos-1);},200);
+      else cerrarPanelRR();
+      return;
+    }
     const html=texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/\n/g,'<br>')
       .replace(/\[([^\]]+)\]/g,'<span style="background:#fef08a;color:#854d0e;border-radius:3px;padding:0 3px;font-weight:700">[$1]</span>');
-    ed.innerHTML='<span style="color:#000000;font-family:\'Franklin Gothic Book\',Arial,sans-serif">'+html+'</span>';ed.focus();
+    ed.innerHTML='<span style="color:#000000;font-family:\'Franklin Gothic Book\',Arial,sans-serif">'+html+'</span>';
+    ed.focus();
     const v=ed.querySelector('span[style*="fef08a"]');
     if(v){const r=document.createRange();r.selectNodeContents(v);const s=window.getSelection();s.removeAllRanges();s.addRange(r);}
-  },350);
+  }
+  setTimeout(function(){_insertar(3);},400);
 }
 
 
