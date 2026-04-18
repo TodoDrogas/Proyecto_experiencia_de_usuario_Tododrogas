@@ -702,10 +702,8 @@ function startCarousel(){ renderCarousel(); cTimer = setInterval(nextSlide, 3500
 function goToForm(){ document.body.style.transition='opacity .35s ease'; document.body.style.opacity='0'; setTimeout(()=>{ window.location.href='pqr_form.html?origen='+_BV_ORIGEN; },350); }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-/* ══════════════════════════════════════════════════════
-   NOVA TD — MOTOR PRINCIPAL (v3 — BIENVENIDA INTEGRADA)
-   Sistema de salud colombiano · Emociones · Sedes CSV
-══════════════════════════════════════════════════════ */
+// _url_params, _BV_ORIGEN y _esQR ya definidos por bienvenida
+const _esQR=function(){return _BV_ORIGEN==='qr';};
 
 const NOVA_IMG_URL = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png';
 const NTD_C = {
@@ -727,136 +725,49 @@ const NTD={
   _modoVoz:false,
 };
 
-
-// ── MÉTRICAS: registro de sesión en Supabase ────────────────
-async function ntdAbrirSesion(){
-  if(NTD._sesionId) return;
-  NTD._sesionInicio = Date.now();
-  try{
-    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
-    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
-    const r=await fetch(sbUrl+'/rest/v1/rpc/registrar_sesion_nova',{
-      method:'POST',
-      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'},
-      body:JSON.stringify({
-        p_cedula:   NTD.usuario?.cedula||'',
-        p_nombre:   NTD.usuario?.nombre||'',
-        p_eps:      NTD.eps||'',
-        p_municipio:NTD.usuario?.ciudad||'',
-        p_es_vip:   !!NTD.usuario?.vip,
-        p_origen:   'nova_web'
-      })
-    });
-    if(r.ok){ const d=await r.json(); NTD._sesionId=d; }
-  }catch(e){}
+let _ntdCierreTimer = null;
+function ntdReset(){
+  // Limpia todo el estado de NTD y reinicia desde 0
+  clearTimeout(_ntdCierreTimer);
+  _ntdCierreTimer = null;
+  NTD.fase      = 'politica';
+  NTD.usuario   = null;
+  NTD.eps       = null;
+  NTD._ced      = null;
+  NTD._nom      = null;
+  NTD._tel      = null;
+  NTD._tipoDoc  = 'CÉDULA DE CIUDADANÍA';
+  NTD._enMenu   = false;
+  NTD.hist      = [];
+  NTD.busy      = false;
+  NTD.vipCb     = null;
+  NTD.arrancado = false;
+  // Resetear métricas de sesión
+  NTD._sesionId      = null;
+  NTD._sesionInicio  = null;
+  NTD._menuUsados    = [];
+  NTD._preguntasLibres = 0;
+  NTD._calificacion  = null;
+  NTD._consultas     = 0;
+  NTD._encuestaVista = false;
+  clearTimeout(_ntdResTimer);
+  _ntdOfrecioAyuda   = false;
+  // Limpiar mensajes del DOM
+  const m = ntd$('ntdMsgs');
+  if(m) m.innerHTML = '';
+  // Limpiar qbar
+  const q = ntd$('ntdQbar');
+  if(q){ q.innerHTML=''; q.style.display='none'; }
+  // Resetear progreso y header
+  ntdProg(4, 'Inicio');
+  // Limpiar input
+  const ta = ntd$('ntdTa');
+  if(ta){ ta.value=''; ta.style.height='auto'; ta.disabled=true; }
+  ntd$('ntdSBtn').disabled = true;
 }
 
-async function ntdCerrarSesion(motivo){
-  if(!NTD._sesionId) return;
-  const dur=Math.round((Date.now()-(NTD._sesionInicio||Date.now()))/1000);
-  try{
-    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
-    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
-    await fetch(sbUrl+'/rest/v1/rpc/cerrar_sesion_nova',{
-      method:'POST',
-      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'},
-      body:JSON.stringify({
-        p_id:               NTD._sesionId,
-        p_calificacion:     NTD._calificacion||'',
-        p_menu_elegido:     NTD._menuUsados.join(','),
-        p_consultas_count:  NTD._consultas,
-        p_preguntas_libres: NTD._preguntasLibres,
-        p_duracion_seg:     dur,
-        p_motivo_cierre:    motivo||'usuario'
-      })
-    });
-  }catch(e){}
-}
-
-function ntdSys(){
-  var eps=(NTD.eps||'').toUpperCase();
-  var mapa={'ANGIOSUR':'AMAGA,ANDES,CIUDAD BOLIVAR,EL BAGRE,MARINILLA,MEDELLIN,RIONEGRO,SANTA BARBARA,TAMESIS,YOLOMBO','CEM':'ABEJORRAL,AMAGA,ANDES,APARTADO,CAREPA,CAUCASIA,CHIGORODO,CIUDAD BOLIVAR,EL BAGRE,MEDELLIN,PUERTO BERRIO,RIONEGRO,SANTA BARBARA,SANTA FE DE ANTIOQUIA,TAMESIS,TURBO,YARUMAL,YOLOMBO,ZARAGOZA','COOSALUD':'ABEJORRAL,AMAGA,AMALFI,ANGOSTURA,ANORI,APARTADO,ARMENIA,BRICEÑO,CACERES,CAREPA,CAUCASIA,CHIGORODO,CIUDAD BOLIVAR,DABEIBA,EL BAGRE,FRONTINO,GIRALDO,HISPANIA,JERICO,MEDELLIN,MUTATA,NECHI,NECOCLI,PEQUE,PUEBLORRICO,PUERTO BERRIO,PUERTO NARE,REMEDIOS,RIONEGRO,SABANALARGA,SAMANA,SANTA BARBARA,SANTA FE DE ANTIOQUIA,SEGOVIA,TAMESIS,TARAZA,TURBO,URAMITA,VALDIVIA,YALI,YARUMAL,YOLOMBO,ZARAGOZA','NUEVA EPS':'BARBOSA,CAREPA,CAUCASIA,GIRARDOTA,LA CEJA,LA UNION,RIONEGRO,SABANETA,SANTA FE DE ANTIOQUIA,TAMESIS','PREVENTIVA':'MEDELLIN','SALUD TOTAL':'ABEJORRAL,AMAGA,AMALFI,ANDES,ANORI,APARTADO,CACERES,CAREPA,CAUCASIA,CHIGORODO,CIUDAD BOLIVAR,CONCORDIA,COPACABANA,EL BAGRE,FRONTINO,GIRARDOTA,MARINILLA,MEDELLIN,MUTATA,NECOCLI,PUERTO BERRIO,REMEDIOS,RIONEGRO,SANTA BARBARA,TAMESIS,TARAZA,TURBO,YARUMAL,YOLOMBO','SAVIA SALUD':'ABEJORRAL,AMAGA,AMALFI,ANDES,ANGOSTURA,ANORI,ANZA,APARTADO,ARMENIA,BETULIA,BRICEÑO,CACERES,CAICEDO,CAREPA,CAUCASIA,CHIGORODO,CIUDAD BOLIVAR,DABEIBA,EL BAGRE,FRONTINO,GIRALDO,HISPANIA,JARDIN,LIBORINA,MEDELLIN,MUTATA,NECHI,NECOCLI,OLAYA - LLANADAS,PEQUE,PUEBLORRICO,PUERTO BERRIO,REMEDIOS,RIONEGRO,SABANALARGA,SAN JERONIMO,SANTA BARBARA,SANTA FE DE ANTIOQUIA,SEGOVIA,SOPETRAN,TAMESIS,TARAZA,TURBO,VALDIVIA,YALI,YARUMAL,YOLOMBO,ZARAGOZA'};
-  var muns=eps&&mapa[eps]?mapa[eps]:'';
-  var s='Eres Nova TD, asistente virtual de Tododrogas .\n';
-  s+='USUARIO: '+(NTD.usuario&&NTD.usuario.nombre?NTD.usuario.nombre:'?');
-  s+=' | EPS: '+(NTD.eps||'Sin EPS')+' (SAVIA SALUD = SAVIA, PREVENTIVA SALUD = PREVENTIVA)\n';
-  s+=' | VIP: '+(NTD.usuario&&NTD.usuario.vip?'SI':'No')+'\n';
-  s+='TRATO: Siempre de USTED.\n';
-  s+='COBERTURA:\n  ANGIOSUR: AMAGA, ANDES, CIUDAD BOLIVAR, EL BAGRE, MARINILLA, MEDELLIN, RIONEGRO, SANTA BARBARA, TAMESIS, YOLOMBO\n  CEM: ABEJORRAL, AMAGA, ANDES, APARTADO, CAREPA, CAUCASIA, CHIGORODO, CIUDAD BOLIVAR, EL BAGRE, MEDELLIN, PUERTO BERRIO, RIONEGRO, SANTA BARBARA, SANTA FE DE ANTIOQUIA, TAMESIS, TURBO, YARUMAL, YOLOMBO, ZARAGOZA\n  COOSALUD: ABEJORRAL, AMAGA, AMALFI, ANGOSTURA, ANORI, APARTADO, ARMENIA, BRICEÑO, CACERES, CAREPA, CAUCASIA, CHIGORODO, CIUDAD BOLIVAR, DABEIBA, EL BAGRE, FRONTINO, GIRALDO, HISPANIA, JERICO, MEDELLIN, MUTATA, NECHI, NECOCLI, PEQUE, PUEBLORRICO, PUERTO BERRIO, PUERTO NARE, REMEDIOS, RIONEGRO, SABANALARGA, SAMANA, SANTA BARBARA, SANTA FE DE ANTIOQUIA, SEGOVIA, TAMESIS, TARAZA, TURBO, URAMITA, VALDIVIA, YALI, YARUMAL, YOLOMBO, ZARAGOZA\n  NUEVA EPS: BARBOSA, CAREPA, CAUCASIA, GIRARDOTA, LA CEJA, LA UNION, RIONEGRO, SABANETA, SANTA FE DE ANTIOQUIA, TAMESIS\n  SALUD TOTAL: ABEJORRAL, AMAGA, AMALFI, ANDES, ANORI, APARTADO, CACERES, CAREPA, CAUCASIA, CHIGORODO, CIUDAD BOLIVAR, CONCORDIA, COPACABANA, EL BAGRE, FRONTINO, GIRARDOTA, MARINILLA, MEDELLIN, MUTATA, NECOCLI, PUERTO BERRIO, REMEDIOS, RIONEGRO, SANTA BARBARA, TAMESIS, TARAZA, TURBO, YARUMAL, YOLOMBO\n  SAVIA: ABEJORRAL, AMAGA, AMALFI, ANDES, ANGOSTURA, ANORI, ANZA, APARTADO, ARMENIA, BETULIA, BRICEÑO, CACERES, CAICEDO, CAREPA, CAUCASIA, CHIGORODO, CIUDAD BOLIVAR, DABEIBA, EL BAGRE, FRONTINO, GIRALDO, HISPANIA, JARDIN, LIBORINA, MEDELLIN, MUTATA, NECHI, NECOCLI, OLAYA - LLANADAS, PEQUE, PUEBLORRICO, PUERTO BERRIO, REMEDIOS, RIONEGRO, SABANALARGA, SAN JERONIMO, SANTA BARBARA, SANTA FE DE ANTIOQUIA, SEGOVIA, SOPETRAN, TAMESIS, TARAZA, TURBO, VALDIVIA, YALI, YARUMAL, YOLOMBO, ZARAGOZA\n';
-  // Generar catálogo de sedes desde NTD_SEDES_LOCAL para que el LLM tenga datos reales
-  var catalogoSedes='CATÁLOGO DE SEDES (datos reales — usa esto para responder preguntas sobre qué EPS atiende en qué sede o municipio):\n';
-  if(typeof NTD_SEDES_LOCAL!=='undefined'){
-    NTD_SEDES_LOCAL.forEach(function(sede){
-      catalogoSedes+='- '+sede.nombre+' | Municipio: '+(sede.municipio||'')+'| EPS: '+(sede.eps||[]).join(', ')+'\n';
-    });
-  }
-  s+=catalogoSedes;
-  s+='REGLA SEDES ESPECIALES MEDELLÍN: Hay DOS sedes en Medellín en la misma dirección. Consulta SIEMPRE el catálogo para saber qué EPS atiende cada una — NUNCA inventes datos. Casos:\n';
-  s+='  1. "Qué EPS atiende en BIC Piso 6 / Primer Piso" → responde con las EPS del catálogo para esa sede, sin usar [SEDES].\n';
-  s+='  2. "Me atienden en BIC Piso 6 / Primer Piso?" (usuario con EPS conocida) → verifica en catálogo si su EPS está → si SÍ confirma y usa [SEDES:MEDELLIN] → si NO indica que esa sede no atiende su EPS e indica cuál sí lo hace según catálogo, luego usa [SEDES:MEDELLIN].\n';
-  s+='  3. Pregunta general de sedes en Medellín sin mencionar sede específica → usa [SEDES:MEDELLIN] directamente.\n';
-  s+='REGLA MEDICAMENTOS Y MEDICINA: Para CUALQUIER pregunta sobre medicamentos, dosis, enfermedades, tratamientos, reacciones, interacciones — responde con tu conocimiento médico-farmacéutico general de forma clara. Si el usuario menciona medicamento malo, vencido, deteriorado, dañado, equivocado, en mal estado → di SIEMPRE primero: "No lo consuma. Por su seguridad NO utilice ese medicamento." → luego ofrece los datos de contacto: PBX 604 322 2432 / WA 304 341 2431 → luego usa [SEDES:municipio] para mostrar la sede más cercana donde reportarlo.\n';
-  if(muns)s+='EPS '+eps+' cubre: '+muns+'. Municipio fuera=sin cobertura.\n';
-  s+='HORARIOS SEDES: Los horarios exactos están en la ficha de cada sede. Guíate siempre por ellos.\n';
-  s+='- SEDES PROPIAS (Tododrogas): Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m.\n';
-  s+='- SEDES IN HOUSE (dentro de hospitales/IPS): Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am.\n';
-  s+='TODAS las sedes abren sábados. Si el usuario pregunta por horario de sábado confirmar según el tipo de sede.\n';
-  s+='SEDES ESPECIALES POR NOMBRE:\n';
-  s+='- Servicio Farmacéutico Tododrogas Medellín BIC Piso 6 · Calle 50 # 48-03 Piso 6 · EPS: SALUD TOTAL, CEM, PREVENTIVA · Lun-Vie 7am-5:30pm | Sáb 8am-12m\n';
-  s+='- Servicio Farmacéutico Tododrogas Medellín Primer Piso · Carrera 48 # 49-57 · EPS: COOSALUD, SAVIA, ANGIOSUR, PREVENTIVA · Lun-Vie 7am-5:30pm | Sáb 8am-12m\n';
-  s+='Si pregunta por SALUD TOTAL, CEM o PREVENTIVA en Medellín → BIC Piso 6. Si es COOSALUD o SAVIA → Primer Piso.\n';
-  s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
-  s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
-  s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, mal concentración, deteriorado o equivocado — di SIEMPRE: No lo consuma. Por su seguridad NO utilice ese medicamento. Acérquese al punto más cercano o llame al PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] o [ESCALAR].\n';
-  s+='REGLA SEDES: Usa [SEDES:municipio] cuando el usuario pregunta por sedes, dónde retirar, cobertura, o si puede reclamar en un municipio. Si hay cobertura en ese municipio → responde que SÍ tiene cobertura Y usa [SEDES:municipio] para mostrar las sedes. Si NO hay cobertura → indícalo brevemente y usa [SEDES:municipio] con EL MISMO municipio que mencionó el usuario (el sistema automáticamente mostrará las más cercanas). NUNCA cambies el municipio por otro diferente al que mencionó el usuario. Si el usuario NO menciona municipio, PREGÚNTALE primero. Si menciona EPS diferente usa [SEDES:municipio:EPSMENCIONADA]. NUNCA respondas solo con texto cuando hay un municipio mencionado — siempre usa [SEDES:municipio]. IMPORTANTE: palabras como "PISO", "BIC", "sede", "dispensario" NO son radicados — si aparecen junto a un municipio siempre usa [SEDES].\n';
-  s+='REGLA CONSULTAR: Si el usuario escribe un número de radicado (ej: TD-xxxxx) o correo para consultar estado, usa SIEMPRE [CONSULTAR:valor] al final con el valor exacto que escribió.\n';
-  s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
-  s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
-  return s;
-}
-
-const ntdNOW=()=>new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
-const ntdDelay=ms=>new Promise(r=>setTimeout(r,ms));
-const ntd$=id=>document.getElementById(id);
-function ntdAH(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px';}
-function ntdUS(){
-  const hasTxt = !!ntd$('ntdTa').value.trim();
-  const sBtn = ntd$('ntdSBtn');
-  const vBtn = ntd$('ntdVBtn');
-  sBtn.disabled = !hasTxt || NTD.busy;
-  // Mostrar flecha si hay texto, micrófono si está vacío
-  if(!ntdRecActive){
-    sBtn.style.display = hasTxt ? 'flex' : 'none';
-    vBtn.style.display = hasTxt ? 'none' : 'flex';
-  }
-}
-function ntdOnKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ntdSend();}}
-function ntdScroll(){const m=ntd$('ntdMsgs');setTimeout(()=>m.scrollTo({top:m.scrollHeight,behavior:'smooth'}),55);}
-function ntdProg(p,l){ntd$('ntdPFill').style.width=p+'%';ntd$('ntdStep').textContent=l;}
-function ntdTyping(v){ntd$('ntdDots').classList.toggle('on',v);ntd$('ntdTxt').style.display=v?'none':'';}
-function ntdEna(ph='Por favor escriba su respuesta...'){const t=ntd$('ntdTa');t.disabled=false;t.placeholder=ph;t.style.display='';t.focus();ntdUS();}
-function ntdDis(){ntd$('ntdTa').disabled=true;ntd$('ntdSBtn').disabled=true;}
-
-function ntdR2H(raw){
-  let t=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,'<a href="$2" target="_blank">$1</a>');
-  const lines=t.split('\n'),out=[];let ul=false;
-  for(const l of lines){const tr=l.trim();
-    if(tr.startsWith('• ')||tr.startsWith('- ')){
-      if(!ul){out.push('<ul>');ul=true;}out.push('<li>'+tr.slice(2)+'</li>');
-    }else{if(ul){out.push('</ul>');ul=false;}if(tr)out.push('<p>'+tr+'</p>');}}
-  if(ul)out.push('</ul>');
-  return out.join('');
-}
-
-function ntdSep(l='Hoy'){
-  const e=document.createElement('div');e.className='ntd-sep';e.textContent=l;
-  ntd$('ntdMsgs').appendChild(e);
-}
-// ── TTS: Nova habla con voz shimmer de OpenAI ────────────
+// ── TTS ──
 let _ttsQueue=[], _ttsPlaying=false;
-
 function ntdHablar(texto){
   if(!NTD._modoVoz) return;
   // Limpiar HTML y emojis
@@ -905,12 +816,170 @@ function ntdDetenerVoz(){
 
 
 
-function ntdAddMsg(who,html,chips=''){
-  // TTS: narrar mensajes de Nova en modo voz
-  if(who!=='user' && NTD._modoVoz && typeof ntdHablar==='function'){
-    const _tmp=document.createElement('div');_tmp.innerHTML=html||'';
-    ntdHablar(_tmp.textContent||_tmp.innerText||'');
+
+
+
+// ── MÉTRICAS: registro de sesión en Supabase ────────────────
+async function ntdAbrirSesion(){
+  if(NTD._sesionId) return;
+  NTD._sesionInicio = Date.now();
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    const r=await fetch(sbUrl+'/rest/v1/rpc/registrar_sesion_nova',{
+      method:'POST',
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        p_cedula:   NTD.usuario?.cedula||'',
+        p_nombre:   NTD.usuario?.nombre||'',
+        p_eps:      NTD.eps||'',
+        p_municipio:NTD.usuario?.ciudad||'',
+        p_es_vip:   !!NTD.usuario?.vip,
+        p_origen:   (typeof _BV_ORIGEN!=='undefined'?_BV_ORIGEN:'nova_web')
+      })
+    });
+    if(r.ok){ const d=await r.json(); NTD._sesionId=d; }
+  }catch(e){}
+}
+
+async function ntdCerrarSesion(motivo){
+  if(!NTD._sesionId) return;
+  const dur=Math.round((Date.now()-(NTD._sesionInicio||Date.now()))/1000);
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    await fetch(sbUrl+'/rest/v1/rpc/cerrar_sesion_nova',{
+      method:'POST',
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'},
+      body:JSON.stringify({
+        p_id:               NTD._sesionId,
+        p_calificacion:     NTD._calificacion||'',
+        p_menu_elegido:     NTD._menuUsados.join(','),
+        p_consultas_count:  NTD._consultas,
+        p_preguntas_libres: NTD._preguntasLibres,
+        p_duracion_seg:     dur,
+        p_motivo_cierre:    motivo||'usuario'
+      })
+    });
+  }catch(e){}
+}
+
+function ntdSys(){
+  var eps=(NTD.eps||'').toUpperCase();
+  // Generar mapa dinamicamente desde NTD_SEDES_LOCAL
+  var mapa={};
+  if(typeof NTD_SEDES_LOCAL!=='undefined'){
+    NTD_SEDES_LOCAL.forEach(function(s){
+      var epsArr=Array.isArray(s.eps)?s.eps:(typeof s.eps==='string'?JSON.parse(s.eps||'[]'):[]);
+      var mun=(s.municipio||s.municipio_norm||'').toUpperCase().trim();
+      if(!mun)return;
+      epsArr.forEach(function(e){
+        var en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();
+        if(!en||en==='TODAS')return;
+        if(!mapa[en])mapa[en]=new Set();
+        mapa[en].add(mun);
+      });
+    });
+    Object.keys(mapa).forEach(function(k){mapa[k]=Array.from(mapa[k]).sort().join(',');});
   }
+  var muns=eps&&mapa[eps]?mapa[eps]:'';
+  var _hoy=new Date().toLocaleDateString('es-CO',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  var s='Eres Nova TD, asistente virtual de Tododrogas CIA SAS.\n';
+  s+='FECHA DE HOY: '+_hoy+'\n';
+  s+='USUARIO: '+(NTD.usuario&&NTD.usuario.nombre?NTD.usuario.nombre:'?');
+  s+=' | EPS: '+(NTD.eps||'Sin EPS')+' (SAVIA SALUD = SAVIA, PREVENTIVA SALUD = PREVENTIVA)\n';
+  s+=' | VIP: '+(NTD.usuario&&NTD.usuario.vip?'SI':'No')+'\n';
+  s+='TRATO: Siempre de USTED.\n';
+    // Generar COBERTURA dinamicamente desde NTD_SEDES_LOCAL
+  var coberturaStr='COBERTURA:\n';
+  if(typeof NTD_SEDES_LOCAL!=='undefined'&&Object.keys(mapa).length){
+    Object.keys(mapa).sort().forEach(function(epsKey){
+      coberturaStr+=('  '+epsKey+': '+mapa[epsKey].replace(/,/g,', ')+'\n');
+    });
+  }
+  s+=coberturaStr;
+    if(muns)s+='EPS '+eps+' cubre: '+muns+'. Municipio fuera=sin cobertura.\n';
+  s+='HORARIOS SEDES: Los horarios exactos están en la ficha de cada sede. Guíate siempre por ellos.\n';
+  s+='- SEDES PROPIAS (Tododrogas): Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m.\n';
+  s+='- SEDES IN HOUSE (dentro de hospitales/IPS): Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am.\n';
+  s+='TODAS las sedes abren sábados. Si el usuario pregunta por horario de sábado confirmar según el tipo de sede.\n';
+  // Generar catálogo de sedes desde NTD_SEDES_LOCAL para que el LLM tenga datos reales
+  var catalogoSedes='CATÁLOGO DE SEDES (datos reales — usa esto para responder preguntas sobre qué EPS atiende en qué sede o municipio):\n';
+  if(typeof NTD_SEDES_LOCAL!=='undefined'){
+    NTD_SEDES_LOCAL.forEach(function(sede){
+      catalogoSedes+='- '+sede.nombre+' | Municipio: '+(sede.municipio||'')+'| EPS: '+(sede.eps||[]).join(', ')+'\n';
+    });
+  }
+  s+=catalogoSedes;
+  s+='REGLA SEDES ESPECIALES MEDELLÍN: Hay DOS sedes en Medellín en la misma dirección. Consulta SIEMPRE el catálogo para saber qué EPS atiende cada una — NUNCA inventes datos. Casos:\n';
+  s+='  1. "Qué EPS atiende en BIC Piso 6 / Primer Piso" → responde con las EPS del catálogo para esa sede, sin usar [SEDES].\n';
+  s+='  2. "Me atienden en BIC Piso 6 / Primer Piso?" (usuario con EPS conocida) → verifica en catálogo si su EPS está → si SÍ confirma y usa [SEDES:MEDELLIN] → si NO indica que esa sede no atiende su EPS e indica cuál sí lo hace según catálogo, luego usa [SEDES:MEDELLIN].\n';
+  s+='  3. Pregunta general de sedes en Medellín sin mencionar sede específica → usa [SEDES:MEDELLIN] directamente.\n';
+  s+='REGLA MEDICAMENTOS Y MEDICINA: Para CUALQUIER pregunta sobre medicamentos, dosis, enfermedades, tratamientos, reacciones, interacciones — responde con tu conocimiento médico-farmacéutico general de forma clara. Si el usuario menciona medicamento malo, vencido, deteriorado, dañado, equivocado, en mal estado → di SIEMPRE primero: "No lo consuma. Por su seguridad NO utilice ese medicamento." → luego ofrece los datos de contacto: PBX 604 322 2432 / WA 304 341 2431 → luego usa [SEDES:municipio] para mostrar la sede más cercana donde reportarlo.\n';
+  s+='PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n';
+  s+='Max 100 palabras.1 emoji.NUNCA el menu,usa [MENU].Un tag al final.\n';
+  s+='REGLA MEDICAMENTOS DEFECTUOSOS: Si el usuario menciona medicamento vencido, malo, en mal estado, mal concentración, deteriorado, equivocado, dañado, defectuoso — di SIEMPRE: "No lo consuma. Por su seguridad NO utilice ese medicamento." Luego ofrece contacto: PBX 604 322 2432 / WA 304 341 2431. Luego usa [SEDES:municipio] si mencionó municipio, o pregúntale en qué municipio está para mostrarle la sede más cercana.\n';
+  s+='REGLA SEDES — OBLIGATORIA:\n  PASO 1 — DETECTAR EPS A CONSULTAR:\n    - Si el usuario menciona explícitamente una EPS (NUEVA EPS, COOSALUD, SAVIA, etc.) → usar ESA EPS, NO la del usuario registrado.\n    - Ejemplos: "SI SOY NUEVA EPS" → EPS=NUEVA EPS. "SALUD TOTAL PUEDE RECLAMAR" → EPS=SALUD TOTAL.\n    - Si NO menciona EPS → usar la EPS del usuario registrado.\n  PASO 2 — CONSTRUIR EL TAG:\n    - Si EPS mencionada ≠ EPS del usuario → OBLIGATORIO usar [SEDES:municipio:EPSMENCIONADA]\n    - Si EPS = EPS del usuario o no mencionó EPS → usar [SEDES:municipio]\n  PASO 3 — NUNCA omitir el tag. SIEMPRE incluirlo al final de la respuesta.\n  CASO ESPECIAL — QUÉ EPS ATIENDEN EN UN MUNICIPIO:\n    Si el usuario pregunta "qué EPS atienden en X", "qué EPS hay en X", "qué EPS tienen en X": NO buscar la EPS del usuario. Consultar el CATÁLOGO DE SEDES para ese municipio y listar TODAS las EPS disponibles. Usar [SEDES:municipio:TODAS].\n    Ejemplo: "QUÉ EPS ATIENDEN EN GIRARDOTA" → responder: En Girardota atienden: SALUD TOTAL, NUEVA EPS. Luego [SEDES:GIRARDOTA:TODAS]\n  EJEMPLOS CORRECTOS:\n    "NUEVA EPS puede reclamar en NECHI" → [SEDES:NECHI:NUEVA EPS]\n    "SALUD TOTAL en BARBOSA" → [SEDES:BARBOSA:SALUD TOTAL]\n    "puedo reclamar en RIONEGRO" (usuario COOSALUD) → [SEDES:RIONEGRO]\n    "QUÉ EPS ATIENDEN EN GIRARDOTA" → [SEDES:GIRARDOTA:TODAS]\n    Usuario sin municipio → preguntar municipio primero.\n';
+  s+='REGLA CONSULTAR: Si el usuario escribe ÚNICAMENTE un número de radicado (formato TD-xxxxx) o un correo electrónico para consultar estado, usa [CONSULTAR:valor]. NUNCA uses [CONSULTAR] cuando el mensaje contiene palabras como EPS, municipio, sede, piso, atención, cobertura — esos son preguntas de sedes.\n';
+  s+='REGLA MEDICAMENTOS VS REQUISITOS:\n  - Si pregunta QUÉ LLEVAR, QUÉ NECESITA, QUÉ LE PIDEN, DOCUMENTOS, REQUISITOS para reclamar → usa [REQUISITOS]\n  - Si pregunta por ESTADO de medicamento, DEMORA, PENDIENTE, CUÁNDO LLEGA, historial → usa [MEDICAMENTOS]\n  - Sinónimos de requisitos: qué me piden, qué debo llevar, qué necesito para retirar, qué documentos\n';
+  s+='REGLA RADICAR: Si el usuario quiere radicar una PQRSFD, puede hacerlo con su número de cédula directamente en el formulario. Usa [FORMULARIO].\n';
+  // Inyectar reglas dinámicas desde Supabase (nova_reglas)
+  if(typeof window.NTD_REGLAS!=='undefined'&&window.NTD_REGLAS.length){
+    var msgUp=(NTD.hist.length?NTD.hist[NTD.hist.length-1].content||'':'').toUpperCase();
+    var reglasMatch=window.NTD_REGLAS.filter(function(r){
+      var trigs=Array.isArray(r.triggers)?r.triggers:[];
+      return trigs.some(function(t){ return msgUp.includes((t||'').toUpperCase()); });
+    });
+    if(reglasMatch.length){
+      s+='INSTRUCCIONES ESPECÍFICAS PARA ESTE CASO (PRIORIDAD MÁXIMA — seguir al pie de la letra):\n';
+      reglasMatch.forEach(function(r){ s+='- '+r.instruccion+'\n'; });
+      s+='\n';
+    }
+  }
+  s+='TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]';
+  return s;
+}
+
+const ntdNOW=()=>new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+const ntdDelay=ms=>new Promise(r=>setTimeout(r,ms));
+const ntd$=id=>document.getElementById(id);
+function ntdAH(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,100)+'px';}
+function ntdUS(){
+  const hasTxt = !!ntd$('ntdTa').value.trim();
+  const sBtn = ntd$('ntdSBtn');
+  const vBtn = ntd$('ntdVBtn');
+  sBtn.disabled = !hasTxt || NTD.busy;
+  // Mostrar flecha si hay texto, micrófono si está vacío
+  if(!ntdRecActive){
+    sBtn.style.display = hasTxt ? 'flex' : 'none';
+    vBtn.style.display = hasTxt ? 'none' : 'flex';
+  }
+}
+function ntdOnKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ntdSend();}}
+function ntdScroll(){const m=ntd$('ntdMsgs');setTimeout(()=>m.scrollTo({top:m.scrollHeight,behavior:'smooth'}),55);}
+function ntdProg(p,l){ntd$('ntdPFill').style.width=p+'%';ntd$('ntdStep').textContent=l;}
+function ntdTyping(v){ntd$('ntdDots').classList.toggle('on',v);ntd$('ntdTxt').style.display=v?'none':'';}
+function ntdEna(ph='Por favor escriba su respuesta...'){const t=ntd$('ntdTa');t.disabled=false;t.placeholder=ph;t.style.display='';t.focus();ntdUS();}
+function ntdDis(){ntd$('ntdTa').disabled=true;ntd$('ntdSBtn').disabled=true;}
+
+function ntdR2H(raw){
+  let t=raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g,'<a href="$2" target="_blank">$1</a>');
+  const lines=t.split('\n'),out=[];let ul=false;
+  for(const l of lines){const tr=l.trim();
+    if(tr.startsWith('• ')||tr.startsWith('- ')){
+      if(!ul){out.push('<ul>');ul=true;}out.push('<li>'+tr.slice(2)+'</li>');
+    }else{if(ul){out.push('</ul>');ul=false;}if(tr)out.push('<p>'+tr+'</p>');}}
+  if(ul)out.push('</ul>');
+  return out.join('');
+}
+
+function ntdSep(l='Hoy'){
+  const e=document.createElement('div');e.className='ntd-sep';e.textContent=l;
+  ntd$('ntdMsgs').appendChild(e);
+}
+function ntdAddMsg(who,html,chips=''){
   const isN=who!=='user';
   const row=document.createElement('div');row.className='ntd-mr'+(isN?'':' u');
   const avHtml = isN
@@ -954,48 +1023,6 @@ function ntdResetInact(){
   }, 5 * 60 * 1000); // 5 minutos
 }
 
-
-function ntdReset(){
-  // Limpia todo el estado de NTD y reinicia desde 0
-  clearTimeout(_ntdCierreTimer);
-  _ntdCierreTimer = null;
-  NTD.fase      = 'politica';
-  NTD.usuario   = null;
-  NTD.eps       = null;
-  NTD._ced      = null;
-  NTD._nom      = null;
-  NTD._tel      = null;
-  NTD._tipoDoc  = 'CÉDULA DE CIUDADANÍA';
-  NTD._enMenu   = false;
-  NTD.hist      = [];
-  NTD.busy      = false;
-  NTD.vipCb     = null;
-  NTD.arrancado = false;
-  // Resetear métricas de sesión
-  NTD._sesionId      = null;
-  NTD._sesionInicio  = null;
-  NTD._menuUsados    = [];
-  NTD._preguntasLibres = 0;
-  NTD._calificacion  = null;
-  NTD._consultas     = 0;
-  NTD._encuestaVista = false;
-  clearTimeout(_ntdResTimer);
-  _ntdOfrecioAyuda   = false;
-  // Limpiar mensajes del DOM
-  const m = ntd$('ntdMsgs');
-  if(m) m.innerHTML = '';
-  // Limpiar qbar
-  const q = ntd$('ntdQbar');
-  if(q){ q.innerHTML=''; q.style.display='none'; }
-  // Resetear progreso y header
-  ntdProg(4, 'Inicio');
-  // Limpiar input
-  const ta = ntd$('ntdTa');
-  if(ta){ ta.value=''; ta.style.height='auto'; ta.disabled=true; }
-  ntd$('ntdSBtn').disabled = true;
-}
-
-
 function ntdNuevoChat(){
   ntdCerrarSesion('nuevo_chat'); // cerrar sesión actual antes de reiniciar
   ntdReset();                    // resetea TODO incluyendo _sesionId
@@ -1021,22 +1048,8 @@ async function ntdSend(){
 
 async function ntdDispatch(txt){
   if(NTD.fase==='politica')    return ntdFPolitica(txt);
+  if(NTD.fase==='ident_ced')   return ntdFCedula(txt);
   if(NTD.fase==='eps')         return ntdFEps(txt);
-  if(NTD.fase==='ident_ced'){
-    // En modo voz: convertir palabras numéricas a dígitos
-    let txtCed = txt;
-    if(NTD._modoVoz){
-      const _palabras={'cero':'0','uno':'1','una':'1','dos':'2','tres':'3','cuatro':'4',
-        'cinco':'5','seis':'6','siete':'7','ocho':'8','nueve':'9','diez':'10',
-        'once':'11','doce':'12','trece':'13','catorce':'14','quince':'15'};
-      txtCed = txtCed.toLowerCase()
-        .replace(/\b(cero|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve)\b/gi,
-          m=>_palabras[m.toLowerCase()]||m)
-        .replace(/[^\d]/g,'');
-      if(txtCed.length>=5) txt=txtCed;
-    }
-    return ntdFCedula(txt);
-  }
 
   // Captura municipio para búsqueda de sedes
   if(NTD.fase==='municipio_sedes'){
@@ -1059,10 +1072,16 @@ async function ntdDispatch(txt){
     };
     if(opc[n]){NTD.busy=false;opc[n]();return;}
   }
-  // Si parece radicado (TD-xxxxxx o correo), consultar directo sin pasar por GPT
+  // Si parece radicado TD- o correo, consultar directo
   if(/^TD-[\d\-]+$/i.test(txt.trim())||/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(txt.trim())){
     ntdAddMsg('nova',ntdR2H('Consultando tu radicado...'));
     await ntdFetchRadicado(txt.trim());
+    return;
+  }
+  // Si parece cédula (solo dígitos 6-12), buscar radicados por cédula
+  if(/^\d{6,12}$/.test(txt.trim())){
+    ntdAddMsg('nova',ntdR2H('Consultando tus radicados con esa cédula...'));
+    await ntdFetchRadicadosCedula(txt.trim());
     return;
   }
   return ntdFLibre(txt);
@@ -1071,7 +1090,7 @@ async function ntdDispatch(txt){
 function ntdStart(){
   ntdSep();
   ntdAddMsg('nova',
-    `<p>¡Hola! 👋 Bienvenido/a a la línea de atención virtual de <strong>Tododrogas </strong>.</p>
+    `<p>¡Hola! 👋 Bienvenido/a a la línea de atención virtual de <strong>Tododrogas CIA SAS</strong>.</p>
      <p>Soy <strong>Nova TD</strong>, tu asistente. Gracias por ponerte en contacto con nosotros.</p>
      <p>Antes de iniciar, es necesario que aceptes nuestras políticas de tratamiento de datos. Si deseas conocerlas, ingresa aquí: <a href="${NTD_C.polUrl}" target="_blank" style="color:#93c5fd;text-decoration:underline">📄 Ver política</a></p>
      <p style="margin-top:6px"><strong>Para continuar elige:</strong></p>`,
@@ -1133,7 +1152,7 @@ async function ntdFCedula(txt){
   }
   const pn=(res.nombre||'').trim().split(/\s+/)[0];
   NTD.usuario={nombre:res.nombre||'',primerNombre:pn,cedula:NTD._ced,telefono:'',vip:!!res.vip,saludo:res.saludo||null,ciudad:res.ciudad||null,epsRegistrada:res.eps||null};
-  NTD.eps=(res.eps||'').replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA')||null; // EPS directo desde la BD — no preguntar
+  NTD.eps=(res.eps||'').replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim()||null; // EPS directo desde la BD — no preguntar
   if(res.vip&&res.saludo){NTD.vipCb=()=>ntdBienvenidaYEps();ntdShowVip(res.saludo);}
   else{ ntdBienvenidaYEps(); }
   ntdAbrirSesion(); // registrar sesión en Supabase
@@ -1143,14 +1162,14 @@ async function ntdBienvenidaYEps(){
   const nombre=NTD.usuario.primerNombre||NTD.usuario.nombre||'estimado/a usuario/a';
   const eps=NTD.eps||'';
   ntdAddMsg('nova', ntdR2H(
-    `✅ **¡Bienvenido/a, ${nombre}!**\n\nEs un gusto atenderle. Mi nombre es **Nova TD**, la asistente virtual de **Tododrogas **, y estoy aquí para ayudarle con todo lo relacionado a sus medicamentos y servicios farmacéuticos.\n\nIdentificamos que usted está afiliado/a a **${eps}**.`
+    `✅ **¡Bienvenido/a, ${nombre}!**\n\nEs un gusto atenderle. Soy **Nova TD**, la asistente virtual de **Tododrogas CIA SAS**.\n\nIdentificamos que usted está afiliado/a a **${eps}**.`
   ));
   await ntdDelay(700);
   ntdAddMsg('nova',
     `<p>⏱ <strong>Aviso:</strong> Si hay más de <strong>5 minutos de inactividad</strong>, la conversación se cerrará automáticamente.</p>`
   );
   await ntdDelay(500);
-  // Ir directo al menú — sedes se consultan desde opción 2
+  // Ir directo al menú — las sedes se consultan desde la opción 2
   ntdMostrarMenu();
 }
 
@@ -1187,26 +1206,11 @@ function ntdCardSede(s, badge){
     <div style="font-weight:700;font-size:13px;color:#e2e8f0;margin-bottom:6px;line-height:1.3">${s.nombre||'Sede'}${dist}${badgeHtml}</div>
     <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">🏙️ ${mun}</div>
     <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">📌 ${s.direccion||'—'}</div>
-    <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">🕐 ${s.horario||'Lunes-Viernes 7:00a.m-5:30 p.m.|Sáb 8:00am-12:00m'}</div>
-    <a href="${mu}" target="_blank" style="display:block;text-align:center;background:linear-gradient(90deg,#00c39a,#0891b2);color:#fff;font-weight:700;font-size:12px;border-radius:8px;padding:8px 0;text-decoration:none;letter-spacing:.3px">🗺️ Abrir en Google Maps</a>
-  </div>`;
-}
-
-// ── Mapa DANE código → nombre municipio ──────────────────
-
-function ntdCardSede(s, badge){
-  const mun=(s.municipio_norm||s.ciudad||'').replace(/, Antioquia$/i,'');
-  const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+mun+', Antioquia, Colombia')}`;
-  const dist=s._dist&&s._dist<9000?`<span style="font-size:10px;background:rgba(56,189,248,.15);color:#38bdf8;border-radius:20px;padding:2px 8px;margin-left:6px">📍 ${s._dist.toFixed(1)} km</span>`:'';
-  const badgeHtml=badge?`<span style="font-size:10px;background:rgba(0,195,154,.2);color:#00c39a;border-radius:20px;padding:2px 8px;margin-left:4px">${badge}</span>`:'';
-  return `<div style="background:linear-gradient(135deg,#0f2044 80%,#1a3a6b);border:1px solid rgba(56,189,248,.2);border-radius:14px;padding:14px 14px 10px;margin:4px 0;font-family:'Sora',sans-serif">
-    <div style="font-weight:700;font-size:13px;color:#e2e8f0;margin-bottom:6px;line-height:1.3">${s.nombre||'Sede'}${dist}${badgeHtml}</div>
-    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">🏙️ ${mun}</div>
-    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">📌 ${s.direccion||'—'}</div>
     <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">🕐 ${s.horario||'Lun-Vie 7:00 AM – 5:30 PM'}</div>
     <a href="${mu}" target="_blank" style="display:block;text-align:center;background:linear-gradient(90deg,#00c39a,#0891b2);color:#fff;font-weight:700;font-size:12px;border-radius:8px;padding:8px 0;text-decoration:none;letter-spacing:.3px">🗺️ Abrir en Google Maps</a>
   </div>`;
 }
+
 
 // ── Mapa DANE código → nombre municipio ──────────────────
 const DANE_MUNICIPIOS = {
@@ -1302,7 +1306,7 @@ async function ntdBienvenidaConSede(eps){
     'ITAGUI':{lat:6.1847,lng:-75.5989},'ENVIGADO':{lat:6.1728,lng:-75.5803},
     'SABANETA':{lat:6.1519,lng:-75.6175},'LA ESTRELLA':{lat:6.1569,lng:-75.6439},
     'CALDAS':{lat:6.0922,lng:-75.6394},'COPACABANA':{lat:6.3503,lng:-75.5103},
-    'GIRARDOTA':{lat:6.3789,lng:-75.4458},'BARBOSA':{lat:6.4383,lng:-75.3317},
+    'GIRARDOTA':{lat:6.3789,lng:-75.4458},'BARBOSA':{lat:6.1886,lng:-75.3316},
     'RIONEGRO':{lat:6.155,lng:-75.3736},'MARINILLA':{lat:6.1775,lng:-75.3336},
     'EL PEÑOL':{lat:6.2178,lng:-75.2411},'PENOL':{lat:6.2178,lng:-75.2411},
     'GUATAPE':{lat:6.2317,lng:-75.1572},'SAN CARLOS':{lat:6.1883,lng:-74.9996},
@@ -1328,7 +1332,7 @@ async function ntdBienvenidaConSede(eps){
     'CAMPAMENTO':{lat:6.9683,lng:-75.2869},'CAROLINA':{lat:6.7386,lng:-75.3272},
     'GOMEZ PLATA':{lat:6.6369,lng:-75.2014},'GUADALUPE':{lat:6.9731,lng:-75.4217},
     'ITUANGO':{lat:7.1661,lng:-75.7628},'TOLEDO':{lat:7.3208,lng:-75.5628},
-    'BRICEÑO':{lat:7.2861,lng:-75.5233},'BRICENO':{lat:7.2861,lng:-75.5233},
+    'BRICEÑO':{lat:7.2861,lng:-75.5233},'BRICENO':{lat:7.2861,lng:-75.5233},'JARDIN':{lat:5.5975,lng:-75.8181},'PEQUE':{lat:6.9233,lng:-76.0},'OLAYA - LLANADAS':{lat:6.6317,lng:-75.8583},
     'SEGOVIA':{lat:7.0819,lng:-74.7039},'REMEDIOS':{lat:7.0275,lng:-74.6906},
     'YALI':{lat:6.8914,lng:-74.8672},'VEGACHI':{lat:6.8169,lng:-74.7789},
     'AMALFI':{lat:6.9122,lng:-75.0758},'YOLOMBO':{lat:6.5975,lng:-75.0153},
@@ -1410,7 +1414,7 @@ async function ntdBienvenidaConSede(eps){
       ntdAddMsg('nova',ntdR2H(`Hay **${sedesEnCiudad.length} sedes** de **${eps}** en **${ciudadInscrita}**. Puede consultarlas desde el menú → Puntos de dispensación.`));
     }
   } else {
-    // Sin cobertura en ciudad inscrita → 2 más cercanas por distancia
+    // Sin sede en ciudad inscrita → mostrar más cercanas sin negar
     const msg=ciudadInscrita
       ?`${nombre}, estas son las sedes de **${eps}** más cercanas a **${ciudadInscrita}**:`
       :`${nombre}, estas son las sedes más cercanas para **${eps}**:`;
@@ -1455,14 +1459,6 @@ function ntdMostrarMenu(){
   c+='<button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdFinalizarChat()">9️⃣ &nbsp;✖ Finalizar chat</button>';
   c+='</div>';
   ntdAddMsg('nova','<p>En que le puedo ayudar, <strong>'+n+'</strong>?</p>',c);
-  // En modo voz: narrar menú resumido y activar mic
-  if(NTD._modoVoz){
-    setTimeout(function(){
-      ntdHablar('En qué le puedo ayudar? Dígame: medicamentos, sedes, requisitos, radicar, radicado, horarios o encuesta.');
-      // Activar mic después de narrar
-      setTimeout(function(){if(!ntdRecActive)ntdStartRec();},3500);
-    },300);
-  }
   ntdSetQbar([{e:'1️⃣',l:'Medicamentos',t:'1'},{e:'2️⃣',l:'Sedes',t:'2'},
     {e:'4️⃣',l:'Radicar',t:'4'},{e:'5️⃣',l:'Radicado',t:'5'},{e:'7️⃣',l:'Encuesta',t:'7'}]);
   ntdEna('Por favor escriba el número de la opción...');
@@ -1486,8 +1482,9 @@ function ntdMedicamentos(){
        </p>
      </div>`,
 `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Preguntarle a Nova TD</button>
+       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px;text-decoration:none">1️⃣ &nbsp;🔗 Consultar en App Solicitudes Web →</a>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdConsultaPersonalizada()">3️⃣ &nbsp;💬 Preguntarle a Nova TD</button>
      </div>`);
   ntdPreguntarResolucion();
 }
@@ -1496,7 +1493,7 @@ function ntdMedicamentosPendientes(){
   ntdAddMsg('nova',
     ntdR2H(`Para registrar un medicamento pendiente o incompleto necesito los siguientes datos:\n\n• **Nombre del medicamento** o tecnología de salud\n• **Fecha de solicitud** o entrega anterior\n• **Punto de dispensación** donde lo solicitas\n\nPor favor escríbelos y un asesor verificará el estado en el sistema.`),
 `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button>
+       <a href="${MANTIS_URL}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px">1️⃣ &nbsp;Ver en App Solicitudes →</a>
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdEscalarAgente()">2️⃣ &nbsp;Hablar con un asesor</button>
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">🏠 Menú principal</button>
      </div>`);
@@ -1516,7 +1513,7 @@ function ntdRequisitosReclamar(){
     +'<p style="font-weight:700;margin-top:12px;margin-bottom:6px">¿Va a recoger en nombre de alguien?</p>'
     +'<ul style="margin:0;padding-left:18px;line-height:2">'
     +'<li>📋 Fórmula médica + Historia clínica</li>'
-    +'<li>🪪 Su documento original + el del usuario</li>'
+    +'<li>🪪 Su documento original + documento original del usuario</li>'
     +'<li style="font-size:12px;color:rgba(190,215,255,.6)">💡 Sin el doc del usuario, traiga una carta de autorización firmada por él/ella</li>'
     +'</ul>'
     +'<p style="margin-top:10px;font-size:12px;color:rgba(190,215,255,.55)">Recuerde que puede consultar el estado de sus medicamentos en la App Solicitudes Web 👇</p>'
@@ -1530,7 +1527,7 @@ function ntdRequisitosReclamar(){
 
 // Funciones directas para el menú numerado (sin pasar por ntdSend)
 // ── SEDES LOCALES ──────────────────────────────
-const NTD_SEDES_LOCAL=[{"id": "040f8ff0-e1f7-4397-b7a1-98866dfd734b", "nombre": "DROGUERIA BIENESTAR CACERES - COOSALUD", "municipio": "CACERES", "direccion": "Calle 49 N 51-36 Barrio Centro", "lat": 7.5742, "lng": -75.3464, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "0627805d-b095-41b1-8579-65071bc05e1b", "nombre": "Servicio Farmaceutico Tododrogas Girardota", "municipio": "GIRARDOTA", "direccion": "Calle 9 #14-62 Local Comercial Primer Piso Edificio Los Angeles P.H- Del Municipio De Girardota", "lat": 0.0, "lng": 0.0, "eps": ["SALUD TOTAL", "NUEVA EPS"]}, {"id": "083d9388-7eec-412a-8bf8-69961d7ec976", "nombre": "E.S.E. Hospital San Juan De Dios De Marinilla", "municipio": "MARINILLA", "direccion": "Carrera 36 # 28-85 Marinilla (Antioquia-Colombia)", "lat": 0.0, "lng": 0.0, "eps": ["SALUD TOTAL", "ANGIOSUR"]}, {"id": "0877800a-1c68-4806-aac6-7c29aa6c573c", "nombre": "DROGUERIA SAN RAFAEL ANORI", "municipio": "ANORI", "direccion": "Carrera 30 # 30-27 Nucleo Zonal 01-Zona Urbana", "lat": 7.0714, "lng": -75.1403, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "11dbbaaf-0e57-414a-bf17-221020d3a881", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS YARUMAL", "municipio": "YARUMAL", "direccion": "Carrera 21 # 17-17- Local 102-Mall Comercial Cubox", "lat": 7.0, "lng": -75.4194, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "12b9d713-6d35-4cf0-ac1b-03a069d08de6", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CHIGORODO", "municipio": "CHIGORODO", "direccion": "Calle 95 # 97 - 04 Apto 202 Municipio de Chigorodó.", "lat": 7.6728, "lng": -76.6836, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "1372f7fc-50d5-428a-b39f-57875c745449", "nombre": "SERVICIO FARMACEUTICO TODO DROGAS SOPETRAN", "municipio": "SOPETRAN", "direccion": "Carrera 10 número 11- 65 –Primer Piso-Local Comercial- Municipio de Sopetrán-Antioquia", "lat": 6.5036, "lng": -75.7403, "eps": ["SAVIA"]}, {"id": "1542377d-96fb-4992-9c34-b609ab594d2d", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CAUCASIA", "municipio": "CAUCASIA", "direccion": "Carrera 20 # 3-76 CC Cauca Centro A1-locales 122-123", "lat": 7.9839, "lng": -75.1953, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM"]}, {"id": "18a91581-16d8-4933-8805-5afb3ff7b896", "nombre": "DROGUERIA COOPRIACHON ANGOSTURA", "municipio": "ANGOSTURA", "direccion": "CARRERA 10 # 9-20", "lat": 6.8722, "lng": -75.3406, "eps": ["COOSALUD", "SAVIA"]}, {"id": "1f2c4a77-3817-4ef5-8306-c4dfd4276d5c", "nombre": "Servicio Farmaceutico Tododrogas La Union", "municipio": "LA UNION", "direccion": "Calle 7 A # 4ª – 05 Lote 8 # 102 (Urbanizacion Villa Carmelo)-La Union De Antioquia", "lat": 0.0, "lng": 0.0, "eps": ["NUEVA EPS"]}, {"id": "217d2472-3688-4e69-a553-04c5971f5527", "nombre": "EMPRESA SOCIAL DEL ESTADO HOSPITAL SAN MIGUEL", "municipio": "OLAYA - LLANADAS", "direccion": "Carrera 10 #10-34 Corregimiento Llanadas (Antioquia-Colombia)", "lat": 6.6317, "lng": -75.8583, "eps": ["SAVIA"]}, {"id": "2f7e4a20-86ca-4296-b018-9cadbcab5c52", "nombre": "EMPRESA SOCIAL DEL ESTAFO SAN MARTIN DE PORRES", "municipio": "ARMENIA", "direccion": "CALLE 11 # 6-69", "lat": 5.7447, "lng": -75.6822, "eps": ["COOSALUD", "SAVIA"]}, {"id": "38794671-72a4-46e8-936b-53cf1ac37c04", "nombre": "HOSPITAL OCTAVIO ALVAREZ", "municipio": "PUERTO NARE", "direccion": "CARRERA 5 # 45-103", "lat": 6.2064, "lng": -74.5906, "eps": ["COOSALUD"]}, {"id": "3a4215b3-ccae-4a38-b548-d0f46ce99499", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS SANTA BARBARA", "municipio": "SANTA BARBARA", "direccion": "Carrera 50 numero 48 – 17 Municipio de Santa Bárbara-Antioquia", "lat": 5.875, "lng": -75.5714, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "3d05fd19-cb95-4c8b-9da2-dfe228d8e63f", "nombre": "DROGUERIA FARMAVIDA", "municipio": "AMALFI", "direccion": "Calle 23 # 29-054 Local 101-Barrio Pueblo Nuevo-Amalfi", "lat": 6.9122, "lng": -75.0758, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "434b7cab-0a09-4bbf-acf7-83a8aa3e12bc", "nombre": "DROGUERIA LA AMISTAD", "municipio": "SABANALARGA", "direccion": "Calle 17# 18-06 Sabanalarga (Antioquia-Colombia)", "lat": 6.8856, "lng": -75.7128, "eps": ["COOSALUD", "SAVIA"]}, {"id": "4536d699-068d-43a9-a54d-7e792777d067", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CAREPA", "municipio": "CAREPA", "direccion": "Calle 81 con carrera 74-12/14 Apartamento 101, Barrio Pueblo Nuevo-Carepa", "lat": 7.7586, "lng": -76.6542, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM"]}, {"id": "4599e0aa-252d-4721-a5c2-c4b20337d0d6", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS TURBO", "municipio": "TURBO", "direccion": "Calle 101 con carrera 15-Barrio Baltazar -Municipio de Turbo-Antioquia", "lat": 8.0972, "lng": -76.7294, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "48655827-b8db-4e95-a059-c64ebc959df9", "nombre": "DROGUERIA LA NUESTRA", "municipio": "CONCORDIA", "direccion": "Carrera 19 # 19 30/32 Concordia(Antioquia-Colombia)", "lat": 6.0469, "lng": -75.9058, "eps": ["SALUD TOTAL"]}, {"id": "48d8bd2b-3f87-47f5-bd2d-1c68763fb81b", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS APARTADO", "municipio": "APARTADO", "direccion": "Carrera 102 # 92 - 16/18 (esquina) Del Municipio de Apartadó", "lat": 7.88, "lng": -76.6258, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "4f6cb17a-4046-4327-b5b9-90a1e5aa5107", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS YOLOMBO", "municipio": "YOLOMBO", "direccion": "Carrera 24 Calle 18 - 04 - Local # 4- Edificio S Y S -Municipio de Yolombo.", "lat": 6.5975, "lng": -75.0153, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "4fc76e07-27bd-482b-98f5-8a21e4d42a13", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CIUDAD BOLIVAR", "municipio": "CIUDAD BOLIVAR", "direccion": "Direccion Calle 49 # 50-57 local # 104", "lat": 5.8597, "lng": -76.0186, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "52664ce5-682d-4745-826e-fa2f1b11a609", "nombre": "Servicio Farmaceutico Tododrogas Sabaneta", "municipio": "SABANETA", "direccion": "Carrera 45 A Calle 79 SUR 146, Sector Prados De Sabaneta -Municipio De Sabaneta", "lat": 0.0, "lng": 0.0, "eps": ["NUEVA EPS"]}, {"id": "53fb5e51-b0fd-4032-9dbd-895a0fc47a58", "nombre": "DROGUERIA FRONTIFARMA", "municipio": "FRONTINO", "direccion": "Calle 28 # 30-50", "lat": 6.7747, "lng": -76.1344, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "5566d0b6-174b-46ad-89a2-cdb883276005", "nombre": "EMPRESA SOCIAL DEL ESTADO HOSPITAL SAN ISIDRO", "municipio": "GIRALDO", "direccion": "CARRERA 10 # 11-05", "lat": 6.4747, "lng": -75.9164, "eps": ["COOSALUD", "SAVIA"]}, {"id": "560c5a8f-c9c9-4e24-8b55-82bd518baf1b", "nombre": "DROGURIA SANTA TERESITA DE SAN JERONIMO", "municipio": "SAN JERONIMO", "direccion": "Carrera 11# 21-73 –Sector La Carreterita -San Jerónimo (Antioquia-Colombia)", "lat": 6.4933, "lng": -75.7136, "eps": ["SAVIA"]}, {"id": "567ccf71-f8d7-4d7b-85d2-9235311227a1", "nombre": "DROGUERIA LA PILDORA", "municipio": "NECOCLI", "direccion": "Calle 51 # 48-38-Centro", "lat": 8.4281, "lng": -76.7833, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "56ffda4c-3573-4d53-9dad-0c5682a25394", "nombre": "E.S.E HOSPITAL EL SAGRADO CORAZON", "municipio": "BRICEÑO", "direccion": "CALLE 11 # 8-31", "lat": 7.2861, "lng": -75.5233, "eps": ["COOSALUD", "SAVIA"]}, {"id": "6ab4e5eb-1113-4ec3-8133-e270c31c8424", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS PUERTO BERRIO", "municipio": "PUERTO BERRIO", "direccion": "Direccion Barrio el Hoyo, Calle 48 con Carrera quinta # 4-56", "lat": 6.4914, "lng": -74.4083, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "77ebf770-1a3a-4a72-8747-2344f60f0677", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS TAMESIS", "municipio": "TAMESIS", "direccion": "Carrera 10 # 9-47-Primer Piso-Local # 1- Edificio Embera", "lat": 5.67, "lng": -75.7133, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM", "ANGIOSUR"]}, {"id": "7d633e9e-1c2a-450f-b34f-a846417eb1a1", "nombre": "E.S.E Hospital Guillermo Gaviria Correa", "municipio": "CAICEDO", "direccion": "Carrera 5 # 3 - 23 Caicedo (Antioquia-Colombia)", "lat": 6.3933, "lng": -76.0433, "eps": ["SAVIA"]}, {"id": "849d4112-f173-4ea6-950a-02728e740f95", "nombre": "DROGUERIA SAN GABRIEL", "municipio": "LIBORINA", "direccion": "Carrera 9 #8-4 Parque Principal Liborina (Antioquia-Colombia)", "lat": 6.6897, "lng": -75.8606, "eps": ["SAVIA"]}, {"id": "9003074a-9813-40c6-85ab-234eb7d727a1", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS AMAGA", "municipio": "AMAGA", "direccion": "Calle 52 con la 51 # 50-Municipio de Amagá -Antioquia", "lat": 6.0386, "lng": -75.7022, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "a1a36e36-5c99-454e-9b47-ff663202567c", "nombre": "GALLEGO SMV S.A.S. (Drogueria Familiar S.G.)", "municipio": "PUEBLORRICO", "direccion": "Carrera 30 # 30-56 Local 101", "lat": 0.0, "lng": 0.0, "eps": ["COOSALUD", "SAVIA"]}, {"id": "a338f2ea-a3b8-4464-852e-75260110a433", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS NECHI", "municipio": "NECHI", "direccion": "Barrio San Nicolás, manzana 24, lote 02, con dirección catastral Calle 25 N° 31 A – 16", "lat": 8.1017, "lng": -74.77, "eps": ["COOSALUD", "SAVIA"]}, {"id": "abd75112-521b-4fc5-a730-4fb093edf818", "nombre": "FARMACIA D´ANDREÉ", "municipio": "PEQUE", "direccion": "Carrera Bolivar 11-19", "lat": 6.9233, "lng": -76.0, "eps": ["COOSALUD", "SAVIA"]}, {"id": "b60c5e55-2ceb-41d5-9b18-c8c40b71d69c", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN 2", "municipio": "MEDELLIN", "direccion": "Carrera 48 # 49-57", "lat": 6.2518, "lng": -75.5636, "eps": ["SALUD TOTAL", "CEM", "PREVENTIVA"]}, {"id": "bca6c6c3-3bb3-4f1c-af4f-87e5c34206d4", "nombre": "DROGUERIA DONDE NATALIA", "municipio": "DABEIBA", "direccion": "Carrera 10 # 06-70-Dabeiba (Antioquia-Colombia)", "lat": 7.005, "lng": -76.2644, "eps": ["COOSALUD", "SAVIA"]}, {"id": "be495057-03e1-442e-bfea-5aad172e9c95", "nombre": "DROGUERIA SAN ANTONIO", "municipio": "JERICO", "direccion": "CARRERA 5 #6 -09", "lat": 5.7897, "lng": -75.7792, "eps": ["COOSALUD"]}, {"id": "c6d1f89f-d9d3-4278-805a-733d038075e0", "nombre": "DROGUERIA SAN MARTIN 712", "municipio": "ANZA", "direccion": "Carrera 8 # 7-51 Anzá (Antioquia-Colombia)", "lat": 6.3136, "lng": -75.9444, "eps": ["SAVIA"]}, {"id": "c6d97b63-c2dd-4e6c-8a5b-58ca39ab5ff7", "nombre": "DROGUERIA FAMIDROGAS", "municipio": "BETULIA", "direccion": "Calle 21 # 21-42 Betulia (Antioquia-Colombia)", "lat": 6.1097, "lng": -75.9792, "eps": ["SAVIA"]}, {"id": "ce1f6da2-6623-4b8d-a6ee-be541fe8c5fc", "nombre": "DROGUERIA KIRIUS LA BOMBA TARAZA - COOSALUD", "municipio": "TARAZA", "direccion": "Carrera 28 #27-26.15/25", "lat": 7.5833, "lng": -75.4, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "d09e52ab-c27c-44a9-b305-39c2ce40e4ae", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS SEGOVIA", "municipio": "SEGOVIA", "direccion": "Calle El Bolsillo O El Palo - Primer piso -Municipio de Segovia", "lat": 7.0819, "lng": -74.7039, "eps": ["COOSALUD", "SAVIA"]}, {"id": "d53c27c4-1660-40d1-9f93-ef110bbab77e", "nombre": "DROGUERIA MACEFARMA DROGUERIA", "municipio": "VALDIVIA", "direccion": "Calle Libertador # 9-92– Valdivia", "lat": 7.1656, "lng": -75.4411, "eps": ["COOSALUD", "SAVIA"]}, {"id": "d5ef42fa-6b9f-41ef-8e0a-040c24458be6", "nombre": "DROGUERIA BIOMEDIC", "municipio": "HISPANIA", "direccion": "CALLE 50 TOLEDO # 50-12", "lat": 5.8294, "lng": -75.9169, "eps": ["COOSALUD", "SAVIA"]}, {"id": "dba9884e-d564-4d7a-a7ef-d6feaf736765", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS ANDES", "municipio": "ANDES", "direccion": "Carrera 50 # 49-68 Local 102 Edificio El Tesoro-Municipio De Andes", "lat": 5.6558, "lng": -75.8786, "eps": ["SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "dddb5ccc-dad8-4beb-83a6-6a353284303c", "nombre": "DROGUERIA EL REGALO DE DIOS", "municipio": "YALI", "direccion": "Calle 20 # 19-71 -Barrio La Plaza –-Yali", "lat": 6.8914, "lng": -74.8672, "eps": ["COOSALUD", "SAVIA"]}, {"id": "df0e1703-3288-46b3-acc9-7c175cff2584", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS SANTA FE ANTIOQUIA", "municipio": "SANTA FE DE ANTIOQUIA", "direccion": "Calle 10 # 7-49- Primer piso -Municipio de Santa Fe De Antioquia", "lat": 6.5558, "lng": -75.8258, "eps": ["COOSALUD", "SAVIA", "NUEVA EPS", "CEM"]}, {"id": "e274f42a-ae58-4445-8c4b-fbcb35ec11eb", "nombre": "DROGUERIA MACRODESCUENTOS # 9", "municipio": "JARDIN", "direccion": "Calle 9 # 2-59 Jardín (Antioquia-Colombia)", "lat": 5.5975, "lng": -75.8181, "eps": ["SAVIA"]}, {"id": "e4b15856-796a-4f9b-b7ee-18645f90765b", "nombre": "FARMAX LA DROGUERIA S.A.S", "municipio": "REMEDIOS", "direccion": "CALLE 11 # 8-12 CALLE SAN ANTONIO", "lat": 7.0275, "lng": -74.6906, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "e6396be6-ba87-454c-a73e-1421ad40f51c", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS ZARAGOZA", "municipio": "ZARAGOZA", "direccion": "Calle 35 # 36-17-Barrio San Gregorio-Municipio de Zaragoza-Antioquia", "lat": 7.495, "lng": -74.8656, "eps": ["COOSALUD", "SAVIA", "CEM"]}, {"id": "e9604883-b834-42ff-b796-809822479206", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CEJA", "municipio": "LA CEJA", "direccion": "Carrera 24 # 19-40, sector Fátima – Municipio La Ceja", "lat": 6.0225, "lng": -75.4303, "eps": ["NUEVA EPS"]}, {"id": "eb2529ee-046d-4821-ad5b-b9a95e1f9218", "nombre": "EMPRESA SOCIAL DEL ESTADO SAN JOSE SAMANÁ", "municipio": "SAMANA", "direccion": "Carrera 9 # 4-79 Calle De La Vida", "lat": 5.9008, "lng": -74.9956, "eps": ["COOSALUD"]}, {"id": "eeacee92-88cc-4130-82dd-bebf8fcd69b8", "nombre": "Servicio Farmaceutico Tododrogas Barbosa", "municipio": "BARBOSA", "direccion": "Calle 17 N° 9-44, local 103 -Barbosa, Antioquia", "lat": 0.0, "lng": 0.0, "eps": ["NUEVA EPS"]}, {"id": "ef87ed82-4fc4-427d-b670-5e02ed61e881", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS EL BAGRE", "municipio": "EL BAGRE", "direccion": "Calle 50 número 47 A 31 -Barrio Bijao -Municipio de el Bagre-Antioquia", "lat": 7.5917, "lng": -74.8097, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "efc2ab91-2fc1-4097-8b16-1d3e3b86140b", "nombre": "DROGUERIA H. RAMIREZ", "municipio": "URAMITA", "direccion": "CARRERA 20 #20-67", "lat": 6.8669, "lng": -76.1747, "eps": ["COOSALUD"]}, {"id": "f41611f5-75c2-49ab-a771-5b5f1d53cf3f", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS RIONEGRO", "municipio": "RIONEGRO", "direccion": "Calle 52 #45-70 LC 2006-Centro Comercial Rionegro Plaza", "lat": 6.155, "lng": -75.3736, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM", "ANGIOSUR"]}, {"id": "f5e75097-821a-4a65-bb1c-637687335152", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS ABEJORRAL", "municipio": "ABEJORRAL", "direccion": "Carrera 50 Nro. 48-71 -Municipio de Abejorral-Antioquia", "lat": 5.7917, "lng": -75.4328, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "faecda99-e997-4013-93fa-be0beebc3938", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN", "municipio": "MEDELLIN", "direccion": "Carrera 48 # 49-57", "lat": 6.2518, "lng": -75.5636, "eps": ["COOSALUD", "SAVIA", "ANGIOSUR", "PREVENTIVA"]}, {"id": "fc26678b-5b99-446d-947d-9633995a2577", "nombre": "DROGUERIA ALMA SALUD 1", "municipio": "COPACABANA", "direccion": "Calle 40  Carrera # 84 -18 Copacabana (Antioquia-Colombia)", "lat": 6.3503, "lng": -75.5103, "eps": ["SALUD TOTAL"]}, {"id": "ff3ae196-a1ad-477d-aacf-6277d07ddeaf", "nombre": "DROGUERIA FAMILIAR EDDY", "municipio": "MUTATA", "direccion": "Carrera 10 # 10-41-43 –Mutatá (Antioquia-Colombia)", "lat": 7.245, "lng": -76.435, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}];
+const NTD_SEDES_LOCAL=[{"id": "040f8ff0-e1f7-4397-b7a1-98866dfd734b", "nombre": "DROGUERIA BIENESTAR CACERES - COOSALUD", "municipio": "CACERES", "direccion": "Calle 49 N 51-36 Barrio Centro", "lat": 7.5742, "lng": -75.3464, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "0627805d-b095-41b1-8579-65071bc05e1b", "nombre": "Servicio Farmaceutico Tododrogas Girardota", "municipio": "GIRARDOTA", "direccion": "Calle 9 #14-62 Local Comercial Primer Piso Edificio Los Angeles P.H- Del Municipio De Girardota", "lat": 6.3789, "lng": -75.4458, "eps": ["SALUD TOTAL", "NUEVA EPS"]}, {"id": "083d9388-7eec-412a-8bf8-69961d7ec976", "nombre": "E.S.E. Hospital San Juan De Dios De Marinilla", "municipio": "MARINILLA", "direccion": "Carrera 36 # 28-85 Marinilla (Antioquia-Colombia)", "lat": 6.1775, "lng": -75.3336, "eps": ["SALUD TOTAL", "ANGIOSUR"]}, {"id": "0877800a-1c68-4806-aac6-7c29aa6c573c", "nombre": "DROGUERIA SAN RAFAEL ANORI", "municipio": "ANORI", "direccion": "Carrera 30 # 30-27 Nucleo Zonal 01-Zona Urbana", "lat": 7.0714, "lng": -75.1403, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "11dbbaaf-0e57-414a-bf17-221020d3a881", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS YARUMAL", "municipio": "YARUMAL", "direccion": "Carrera 21 # 17-17- Local 102-Mall Comercial Cubox", "lat": 7.0, "lng": -75.4194, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "12b9d713-6d35-4cf0-ac1b-03a069d08de6", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CHIGORODO", "municipio": "CHIGORODO", "direccion": "Calle 95 # 97 - 04 Apto 202 Municipio de Chigorodó.", "lat": 7.6728, "lng": -76.6836, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "1372f7fc-50d5-428a-b39f-57875c745449", "nombre": "SERVICIO FARMACEUTICO TODO DROGAS SOPETRAN", "municipio": "SOPETRAN", "direccion": "Carrera 10 número 11- 65 –Primer Piso-Local Comercial- Municipio de Sopetrán-Antioquia", "lat": 6.5036, "lng": -75.7403, "eps": ["SAVIA"]}, {"id": "1542377d-96fb-4992-9c34-b609ab594d2d", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CAUCASIA", "municipio": "CAUCASIA", "direccion": "Carrera 20 # 3-76 CC Cauca Centro A1-locales 122-123", "lat": 7.9839, "lng": -75.1953, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM"]}, {"id": "18a91581-16d8-4933-8805-5afb3ff7b896", "nombre": "DROGUERIA COOPRIACHON ANGOSTURA", "municipio": "ANGOSTURA", "direccion": "CARRERA 10 # 9-20", "lat": 6.8722, "lng": -75.3406, "eps": ["COOSALUD", "SAVIA"]}, {"id": "1f2c4a77-3817-4ef5-8306-c4dfd4276d5c", "nombre": "Servicio Farmaceutico Tododrogas La Union", "municipio": "LA UNION", "direccion": "Calle 7 A # 4ª – 05 Lote 8 # 102 (Urbanizacion Villa Carmelo)-La Union De Antioquia", "lat": 5.9747, "lng": -75.3625, "eps": ["NUEVA EPS"]}, {"id": "217d2472-3688-4e69-a553-04c5971f5527", "nombre": "EMPRESA SOCIAL DEL ESTADO HOSPITAL SAN MIGUEL", "municipio": "OLAYA - LLANADAS", "direccion": "Carrera 10 #10-34 Corregimiento Llanadas (Antioquia-Colombia)", "lat": 6.6317, "lng": -75.8583, "eps": ["SAVIA"]}, {"id": "2f7e4a20-86ca-4296-b018-9cadbcab5c52", "nombre": "EMPRESA SOCIAL DEL ESTAFO SAN MARTIN DE PORRES", "municipio": "ARMENIA", "direccion": "CALLE 11 # 6-69", "lat": 5.7447, "lng": -75.6822, "eps": ["COOSALUD", "SAVIA"]}, {"id": "38794671-72a4-46e8-936b-53cf1ac37c04", "nombre": "HOSPITAL OCTAVIO ALVAREZ", "municipio": "PUERTO NARE", "direccion": "CARRERA 5 # 45-103", "lat": 6.2064, "lng": -74.5906, "eps": ["COOSALUD"]}, {"id": "3a4215b3-ccae-4a38-b548-d0f46ce99499", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS SANTA BARBARA", "municipio": "SANTA BARBARA", "direccion": "Carrera 50 numero 48 – 17 Municipio de Santa Bárbara-Antioquia", "lat": 5.875, "lng": -75.5714, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "3d05fd19-cb95-4c8b-9da2-dfe228d8e63f", "nombre": "DROGUERIA FARMAVIDA", "municipio": "AMALFI", "direccion": "Calle 23 # 29-054 Local 101-Barrio Pueblo Nuevo-Amalfi", "lat": 6.9122, "lng": -75.0758, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "434b7cab-0a09-4bbf-acf7-83a8aa3e12bc", "nombre": "DROGUERIA LA AMISTAD", "municipio": "SABANALARGA", "direccion": "Calle 17# 18-06 Sabanalarga (Antioquia-Colombia)", "lat": 6.8856, "lng": -75.7128, "eps": ["COOSALUD", "SAVIA"]}, {"id": "4536d699-068d-43a9-a54d-7e792777d067", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CAREPA", "municipio": "CAREPA", "direccion": "Calle 81 con carrera 74-12/14 Apartamento 101, Barrio Pueblo Nuevo-Carepa", "lat": 7.7586, "lng": -76.6542, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM"]}, {"id": "4599e0aa-252d-4721-a5c2-c4b20337d0d6", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS TURBO", "municipio": "TURBO", "direccion": "Calle 101 con carrera 15-Barrio Baltazar -Municipio de Turbo-Antioquia", "lat": 8.0972, "lng": -76.7294, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "48655827-b8db-4e95-a059-c64ebc959df9", "nombre": "DROGUERIA LA NUESTRA", "municipio": "CONCORDIA", "direccion": "Carrera 19 # 19 30/32 Concordia(Antioquia-Colombia)", "lat": 6.0469, "lng": -75.9058, "eps": ["SALUD TOTAL"]}, {"id": "48d8bd2b-3f87-47f5-bd2d-1c68763fb81b", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS APARTADO", "municipio": "APARTADO", "direccion": "Carrera 102 # 92 - 16/18 (esquina) Del Municipio de Apartadó", "lat": 7.88, "lng": -76.6258, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "4f6cb17a-4046-4327-b5b9-90a1e5aa5107", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS YOLOMBO", "municipio": "YOLOMBO", "direccion": "Carrera 24 Calle 18 - 04 - Local # 4- Edificio S Y S -Municipio de Yolombo.", "lat": 6.5975, "lng": -75.0153, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "4fc76e07-27bd-482b-98f5-8a21e4d42a13", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CIUDAD BOLIVAR", "municipio": "CIUDAD BOLIVAR", "direccion": "Direccion Calle 49 # 50-57 local # 104", "lat": 5.8597, "lng": -76.0186, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "52664ce5-682d-4745-826e-fa2f1b11a609", "nombre": "Servicio Farmaceutico Tododrogas Sabaneta", "municipio": "SABANETA", "direccion": "Carrera 45 A Calle 79 SUR 146, Sector Prados De Sabaneta -Municipio De Sabaneta", "lat": 6.1519, "lng": -75.6175, "eps": ["NUEVA EPS"]}, {"id": "53fb5e51-b0fd-4032-9dbd-895a0fc47a58", "nombre": "DROGUERIA FRONTIFARMA", "municipio": "FRONTINO", "direccion": "Calle 28 # 30-50", "lat": 6.7747, "lng": -76.1344, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "5566d0b6-174b-46ad-89a2-cdb883276005", "nombre": "EMPRESA SOCIAL DEL ESTADO HOSPITAL SAN ISIDRO", "municipio": "GIRALDO", "direccion": "CARRERA 10 # 11-05", "lat": 6.4747, "lng": -75.9164, "eps": ["COOSALUD", "SAVIA"]}, {"id": "560c5a8f-c9c9-4e24-8b55-82bd518baf1b", "nombre": "DROGURIA SANTA TERESITA DE SAN JERONIMO", "municipio": "SAN JERONIMO", "direccion": "Carrera 11# 21-73 –Sector La Carreterita -San Jerónimo (Antioquia-Colombia)", "lat": 6.4933, "lng": -75.7136, "eps": ["SAVIA"]}, {"id": "567ccf71-f8d7-4d7b-85d2-9235311227a1", "nombre": "DROGUERIA LA PILDORA", "municipio": "NECOCLI", "direccion": "Calle 51 # 48-38-Centro", "lat": 8.4281, "lng": -76.7833, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "56ffda4c-3573-4d53-9dad-0c5682a25394", "nombre": "E.S.E HOSPITAL EL SAGRADO CORAZON", "municipio": "BRICEÑO", "direccion": "CALLE 11 # 8-31", "lat": 7.2861, "lng": -75.5233, "eps": ["COOSALUD", "SAVIA"]}, {"id": "6ab4e5eb-1113-4ec3-8133-e270c31c8424", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS PUERTO BERRIO", "municipio": "PUERTO BERRIO", "direccion": "Direccion Barrio el Hoyo, Calle 48 con Carrera quinta # 4-56", "lat": 6.4914, "lng": -74.4083, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "77ebf770-1a3a-4a72-8747-2344f60f0677", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS TAMESIS", "municipio": "TAMESIS", "direccion": "Carrera 10 # 9-47-Primer Piso-Local # 1- Edificio Embera", "lat": 5.67, "lng": -75.7133, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM", "ANGIOSUR"]}, {"id": "7d633e9e-1c2a-450f-b34f-a846417eb1a1", "nombre": "E.S.E Hospital Guillermo Gaviria Correa", "municipio": "CAICEDO", "direccion": "Carrera 5 # 3 - 23 Caicedo (Antioquia-Colombia)", "lat": 6.3933, "lng": -76.0433, "eps": ["SAVIA"]}, {"id": "849d4112-f173-4ea6-950a-02728e740f95", "nombre": "DROGUERIA SAN GABRIEL", "municipio": "LIBORINA", "direccion": "Carrera 9 #8-4 Parque Principal Liborina (Antioquia-Colombia)", "lat": 6.6897, "lng": -75.8606, "eps": ["SAVIA"]}, {"id": "9003074a-9813-40c6-85ab-234eb7d727a1", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS AMAGA", "municipio": "AMAGA", "direccion": "Calle 52 con la 51 # 50-Municipio de Amagá -Antioquia", "lat": 6.0386, "lng": -75.7022, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "a1a36e36-5c99-454e-9b47-ff663202567c", "nombre": "GALLEGO SMV S.A.S. (Drogueria Familiar S.G.)", "municipio": "PUEBLORRICO", "direccion": "Carrera 30 # 30-56 Local 101", "lat": 5.7944, "lng": -75.9483, "eps": ["COOSALUD", "SAVIA"]}, {"id": "a338f2ea-a3b8-4464-852e-75260110a433", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS NECHI", "municipio": "NECHI", "direccion": "Barrio San Nicolás, manzana 24, lote 02, con dirección catastral Calle 25 N° 31 A – 16", "lat": 8.1017, "lng": -74.77, "eps": ["COOSALUD", "SAVIA"]}, {"id": "abd75112-521b-4fc5-a730-4fb093edf818", "nombre": "FARMACIA D´ANDREÉ", "municipio": "PEQUE", "direccion": "Carrera Bolivar 11-19", "lat": 6.9233, "lng": -76.0, "eps": ["COOSALUD", "SAVIA"]}, {"id": "b60c5e55-2ceb-41d5-9b18-c8c40b71d69c", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN (BIC PISO 6)", "municipio": "MEDELLIN", "direccion": "Carrera 48 # 49-57", "lat": 6.2518, "lng": -75.5636, "eps": ["SALUD TOTAL", "CEM", "PREVENTIVA"]}, {"id": "bca6c6c3-3bb3-4f1c-af4f-87e5c34206d4", "nombre": "DROGUERIA DONDE NATALIA", "municipio": "DABEIBA", "direccion": "Carrera 10 # 06-70-Dabeiba (Antioquia-Colombia)", "lat": 7.005, "lng": -76.2644, "eps": ["COOSALUD", "SAVIA"]}, {"id": "be495057-03e1-442e-bfea-5aad172e9c95", "nombre": "DROGUERIA SAN ANTONIO", "municipio": "JERICO", "direccion": "CARRERA 5 #6 -09", "lat": 5.7897, "lng": -75.7792, "eps": ["COOSALUD"]}, {"id": "c6d1f89f-d9d3-4278-805a-733d038075e0", "nombre": "DROGUERIA SAN MARTIN 712", "municipio": "ANZA", "direccion": "Carrera 8 # 7-51 Anzá (Antioquia-Colombia)", "lat": 6.3136, "lng": -75.9444, "eps": ["SAVIA"]}, {"id": "c6d97b63-c2dd-4e6c-8a5b-58ca39ab5ff7", "nombre": "DROGUERIA FAMIDROGAS", "municipio": "BETULIA", "direccion": "Calle 21 # 21-42 Betulia (Antioquia-Colombia)", "lat": 6.1097, "lng": -75.9792, "eps": ["SAVIA"]}, {"id": "ce1f6da2-6623-4b8d-a6ee-be541fe8c5fc", "nombre": "DROGUERIA KIRIUS LA BOMBA TARAZA - COOSALUD", "municipio": "TARAZA", "direccion": "Carrera 28 #27-26.15/25", "lat": 7.5833, "lng": -75.4, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "d09e52ab-c27c-44a9-b305-39c2ce40e4ae", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS SEGOVIA", "municipio": "SEGOVIA", "direccion": "Calle El Bolsillo O El Palo - Primer piso -Municipio de Segovia", "lat": 7.0819, "lng": -74.7039, "eps": ["COOSALUD", "SAVIA"]}, {"id": "d53c27c4-1660-40d1-9f93-ef110bbab77e", "nombre": "DROGUERIA MACEFARMA DROGUERIA", "municipio": "VALDIVIA", "direccion": "Calle Libertador # 9-92– Valdivia", "lat": 7.1656, "lng": -75.4411, "eps": ["COOSALUD", "SAVIA"]}, {"id": "d5ef42fa-6b9f-41ef-8e0a-040c24458be6", "nombre": "DROGUERIA BIOMEDIC", "municipio": "HISPANIA", "direccion": "CALLE 50 TOLEDO # 50-12", "lat": 5.8294, "lng": -75.9169, "eps": ["COOSALUD", "SAVIA"]}, {"id": "dba9884e-d564-4d7a-a7ef-d6feaf736765", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS ANDES", "municipio": "ANDES", "direccion": "Carrera 50 # 49-68 Local 102 Edificio El Tesoro-Municipio De Andes", "lat": 5.6558, "lng": -75.8786, "eps": ["SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "dddb5ccc-dad8-4beb-83a6-6a353284303c", "nombre": "DROGUERIA EL REGALO DE DIOS", "municipio": "YALI", "direccion": "Calle 20 # 19-71 -Barrio La Plaza –-Yali", "lat": 6.8914, "lng": -74.8672, "eps": ["COOSALUD", "SAVIA"]}, {"id": "df0e1703-3288-46b3-acc9-7c175cff2584", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS SANTA FE ANTIOQUIA", "municipio": "SANTA FE DE ANTIOQUIA", "direccion": "Calle 10 # 7-49- Primer piso -Municipio de Santa Fe De Antioquia", "lat": 6.5558, "lng": -75.8258, "eps": ["COOSALUD", "SAVIA", "NUEVA EPS", "CEM"]}, {"id": "e274f42a-ae58-4445-8c4b-fbcb35ec11eb", "nombre": "DROGUERIA MACRODESCUENTOS # 9", "municipio": "JARDIN", "direccion": "Calle 9 # 2-59 Jardín (Antioquia-Colombia)", "lat": 5.5975, "lng": -75.8181, "eps": ["SAVIA"]}, {"id": "e4b15856-796a-4f9b-b7ee-18645f90765b", "nombre": "FARMAX LA DROGUERIA S.A.S", "municipio": "REMEDIOS", "direccion": "CALLE 11 # 8-12 CALLE SAN ANTONIO", "lat": 7.0275, "lng": -74.6906, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}, {"id": "e6396be6-ba87-454c-a73e-1421ad40f51c", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS ZARAGOZA", "municipio": "ZARAGOZA", "direccion": "Calle 35 # 36-17-Barrio San Gregorio-Municipio de Zaragoza-Antioquia", "lat": 7.495, "lng": -74.8656, "eps": ["COOSALUD", "SAVIA", "CEM"]}, {"id": "e9604883-b834-42ff-b796-809822479206", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS CEJA", "municipio": "LA CEJA", "direccion": "Carrera 24 # 19-40, sector Fátima – Municipio La Ceja", "lat": 6.0225, "lng": -75.4303, "eps": ["NUEVA EPS"]}, {"id": "eb2529ee-046d-4821-ad5b-b9a95e1f9218", "nombre": "EMPRESA SOCIAL DEL ESTADO SAN JOSE SAMANÁ", "municipio": "SAMANA", "direccion": "Carrera 9 # 4-79 Calle De La Vida", "lat": 5.9008, "lng": -74.9956, "eps": ["COOSALUD"]}, {"id": "eeacee92-88cc-4130-82dd-bebf8fcd69b8", "nombre": "Servicio Farmaceutico Tododrogas Barbosa", "municipio": "BARBOSA", "direccion": "Calle 17 N° 9-44, local 103 -Barbosa, Antioquia", "lat": 6.1886, "lng": -75.3316, "eps": ["NUEVA EPS"]}, {"id": "ef87ed82-4fc4-427d-b670-5e02ed61e881", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS EL BAGRE", "municipio": "EL BAGRE", "direccion": "Calle 50 número 47 A 31 -Barrio Bijao -Municipio de el Bagre-Antioquia", "lat": 7.5917, "lng": -74.8097, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM", "ANGIOSUR"]}, {"id": "efc2ab91-2fc1-4097-8b16-1d3e3b86140b", "nombre": "DROGUERIA H. RAMIREZ", "municipio": "URAMITA", "direccion": "CARRERA 20 #20-67", "lat": 6.8669, "lng": -76.1747, "eps": ["COOSALUD"]}, {"id": "f41611f5-75c2-49ab-a771-5b5f1d53cf3f", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS RIONEGRO", "municipio": "RIONEGRO", "direccion": "Calle 52 #45-70 LC 2006-Centro Comercial Rionegro Plaza", "lat": 6.155, "lng": -75.3736, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "NUEVA EPS", "CEM", "ANGIOSUR"]}, {"id": "f5e75097-821a-4a65-bb1c-637687335152", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS ABEJORRAL", "municipio": "ABEJORRAL", "direccion": "Carrera 50 Nro. 48-71 -Municipio de Abejorral-Antioquia", "lat": 5.7917, "lng": -75.4328, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL", "CEM"]}, {"id": "faecda99-e997-4013-93fa-be0beebc3938", "nombre": "SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN (PISO 1)", "municipio": "MEDELLIN", "direccion": "Carrera 48 # 49-57", "lat": 6.2518, "lng": -75.5636, "eps": ["COOSALUD", "SAVIA", "ANGIOSUR", "PREVENTIVA"]}, {"id": "fc26678b-5b99-446d-947d-9633995a2577", "nombre": "DROGUERIA ALMA SALUD 1", "municipio": "COPACABANA", "direccion": "Calle 40  Carrera # 84 -18 Copacabana (Antioquia-Colombia)", "lat": 6.3503, "lng": -75.5103, "eps": ["SALUD TOTAL"]}, {"id": "ff3ae196-a1ad-477d-aacf-6277d07ddeaf", "nombre": "DROGUERIA FAMILIAR EDDY", "municipio": "MUTATA", "direccion": "Carrera 10 # 10-41-43 –Mutatá (Antioquia-Colombia)", "lat": 7.245, "lng": -76.435, "eps": ["COOSALUD", "SAVIA", "SALUD TOTAL"]}];
 function ntdNorm(s){return(s||'').toUpperCase().trim().replace(/[ÁÀÂÄ]/g,'A').replace(/[ÉÈÊË]/g,'E').replace(/[ÍÌÎÏ]/g,'I').replace(/[ÓÒÔÖ]/g,'O').replace(/[ÚÙÛÜ]/g,'U').replace(/Ñ/g,'N');}
 function ntdHaversine(a,b,c,d){var R=6371,dA=(c-a)*Math.PI/180,dB=(d-b)*Math.PI/180;var x=Math.sin(dA/2)*Math.sin(dA/2)+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dB/2)*Math.sin(dB/2);return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
 function ntdSedesPorEps(){var eps=ntdNorm(NTD.eps||'');if(!eps)return NTD_SEDES_LOCAL;return NTD_SEDES_LOCAL.filter(function(s){return s.eps.some(function(e){var en=ntdNorm(e);return en.includes(eps)||eps.includes(en);});});}
@@ -1540,7 +1537,7 @@ const MUNICIPIOS_MAP = {
   'medellin':'MEDELLIN','medellín':'MEDELLIN','medelln':'MEDELLIN',
   'apartado':'APARTADO','apartadó':'APARTADO','turbo':'TURBO','caucasia':'CAUCASIA','carepa':'CAREPA',
   'chigorodo':'CHIGORODO','chigorodó':'CHIGORODO','rionegro':'RIONEGRO','la ceja':'LA CEJA','laceja':'LA CEJA',
-  'el bagre':'EL BAGRE','elbagre':'EL BAGRE','puerto nare':'PUERTO NARE','puertonare':'PUERTO NARE',
+  'el bagre':'EL BAGRE','elbagre':'EL BAGRE','puerto nare':'PUERTO NARE','puertonare':'PUERTO NARE','puerto berrio':'PUERTO BERRIO','puerto berrío':'PUERTO BERRIO','olaya - llanadas':'OLAYA - LLANADAS',
   'santa barbara':'SANTA BARBARA','santabarbara':'SANTA BARBARA',
   'santa fe de antioquia':'SANTA FE DE ANTIOQUIA','santafe':'SANTA FE DE ANTIOQUIA',
   'ciudad bolivar':'CIUDAD BOLIVAR','ciudadbolivar':'CIUDAD BOLIVAR',
@@ -1622,8 +1619,23 @@ const NTD_MUN_COORDS = {
 };
 
 function ntdNormMun(txt){
-  const t=(txt||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
-  return MUNICIPIOS_MAP[t]||MUNICIPIOS_MAP[(txt||'').toLowerCase().trim()]||(txt||'').toUpperCase().trim();
+  // Limpiar prefijos comunes que el usuario puede escribir antes del municipio
+  var clean=(txt||'').trim()
+    .replace(/^(SEDE|SEDES|DIRECCION|DIRECCIÓN|PUNTO|PUNTOS|EN|PARA|MUNICIPIO|MUN\.?)[\s]+/i,'').trim();
+  // Intentar quitar ", Antioquia" o " Antioquia" solo si NO hace parte del nombre (ej: Santa Fe de Antioquia)
+  var cleanSinAnt=clean.replace(/,?\s*\bANTIOQUIA\b\s*$/i,'').trim();
+  // Probar sin "Antioquia" primero, luego con el texto completo
+  var tryList=[cleanSinAnt,clean];
+  for(var _i=0;_i<tryList.length;_i++){
+    var _c=tryList[_i];
+    var _t=_c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+    if(MUNICIPIOS_MAP[_t]) return MUNICIPIOS_MAP[_t];
+    if(MUNICIPIOS_MAP[_c.toLowerCase().trim()]) return MUNICIPIOS_MAP[_c.toLowerCase().trim()];
+  }
+  return cleanSinAnt.toUpperCase().trim()
+    .replace(/[\u00C1\u00C0\u00C2\u00C4]/g,'A').replace(/[\u00C9\u00C8\u00CA\u00CB]/g,'E')
+    .replace(/[\u00CD\u00CC\u00CE\u00CF]/g,'I').replace(/[\u00D3\u00D2\u00D4\u00D6]/g,'O')
+    .replace(/[\u00DA\u00D9\u00DB\u00DC]/g,'U').replace(/\u00D1/g,'N');
 }
 
 const ntdHav2=(lat1,lng1,lat2,lng2)=>{
@@ -1632,16 +1644,17 @@ const ntdHav2=(lat1,lng1,lat2,lng2)=>{
   return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 };
 
-async function ntdFetchSedes(mun){
+async function ntdFetchSedes(mun, epsParam){
   NTD.fase='libre';
-  // Si no hay municipio → pedir ubicación o escribir municipio
   if(!mun||!mun.trim()){
     ntdRmSk();ntdTyping(false);
     ntdSedes();
     return;
   }
   ntdTyping(true);ntdAddSk();
-  const eps=(NTD.eps||'').toUpperCase().trim();
+  const epsRaw=(epsParam||NTD.eps||'').toUpperCase().replace(/\s*\([^)]*\)\s*/g,'').trim();
+  const eps=epsRaw;
+  const mostrarTodas=(epsRaw==='TODAS');
   const munNorm=ntdNormMun(mun);
 
   // Consultar Supabase directamente — traer TODAS las sedes activas
@@ -1663,20 +1676,22 @@ async function ntdFetchSedes(mun){
   }
 
   // Filtrar por EPS en el cliente (campo eps es array JSON en Supabase)
-  const sedesPorEps=eps?todasSedes.filter(s=>{
-    try{
-      let arr=[];
-      if(Array.isArray(s.eps)) arr=s.eps;
-      else if(typeof s.eps==='string'){
-        const t=s.eps.trim();
-        if(t.startsWith('{')) arr=t.slice(1,-1).split(',').map(e=>e.trim().replace(/"/g,''));
-        else try{arr=JSON.parse(t);}catch(e){arr=[];}
-      }
-      // Normalizar: SAVIA SALUD == SAVIA, SAVIA == SAVIA SALUD
-      const epsNorm=eps.replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA');
-      return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA');return en===epsNorm||en===eps;});
-    }catch(e){return false;}
-  }):todasSedes;
+  let sedesPorEps=todasSedes;
+  if(!mostrarTodas&&eps){
+    sedesPorEps=todasSedes.filter(s=>{
+      try{
+        let arr=[];
+        if(Array.isArray(s.eps)) arr=s.eps;
+        else if(typeof s.eps==='string'){
+          const t=s.eps.trim();
+          if(t.startsWith('{')) arr=t.slice(1,-1).split(',').map(e=>e.trim().replace(/"/g,''));
+          else try{arr=JSON.parse(t);}catch(e){arr=[];}
+        }
+        const epsNorm=eps.replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();
+        return arr.some(e=>{const en=(e||'').toUpperCase().replace('SAVIA SALUD','SAVIA').replace('PREVENTIVA SALUD','PREVENTIVA').replace(/\s*\([^)]*\)\s*/g,'').trim();return en===epsNorm||en===eps.replace(/\s*\([^)]*\)\s*/g,'').trim();});
+      }catch(e){return false;}
+    });
+  }
 
   // Obtener coordenadas de referencia: GPS del usuario o coordenadas del municipio consultado
   let refLat=NTD._geoLat, refLng=NTD._geoLng;
@@ -1722,7 +1737,24 @@ async function ntdFetchSedes(mun){
     ntdEna('Por favor escriba su respuesta...');return;
   }
 
-  // No hay sedes en ese municipio → mostrar las más cercanas usando coordenadas
+  // No hay sedes en ese municipio con esa EPS → mostrar las más cercanas
+  // Primero verificar si hay sedes sin coords para este municipio (lat=0)
+  const sedesEnMunSinCoords=sedesPorEps.filter(s=>(s.municipio_norm||'').toUpperCase()===munNorm);
+  if(sedesEnMunSinCoords.length){
+    // Hay sede en ese municipio pero sin coordenadas — mostrarla igual
+    const sH0=sedesEnMunSinCoords.slice(0,4).map(s=>{
+      const mu=`https://maps.google.com/?q=${encodeURIComponent((s.direccion||s.nombre||'')+', '+(s.municipio_norm||s.ciudad||'')+', Antioquia, Colombia')}`;
+      return `<div class="ntd-ic" style="margin-top:6px">
+        <div class="ntd-ict">${s.nombre||'Sede'}</div>
+        <div class="ntd-ir"><span class="ntd-il">Municipio</span><span class="ntd-iv">${s.municipio_norm||s.ciudad||'—'}</span></div>
+        <div class="ntd-ir"><span class="ntd-il">Dirección</span><span class="ntd-iv">${s.direccion||'—'}</span></div>
+        <div class="ntd-ir"><span class="ntd-il">Horario</span><span class="ntd-iv">${s.horario||'—'}</span></div>
+        <div class="ntd-ir" style="border:none;padding-top:8px"><a href="${mu}" target="_blank" style="display:block;text-align:center;background:linear-gradient(90deg,#00c39a,#0891b2);color:#fff;font-weight:700;font-size:12px;border-radius:8px;padding:8px 0;text-decoration:none;width:100%">🗺️ Abrir en Google Maps</a></div>
+      </div>`;
+    }).join('');
+    ntdAddMsg('nova',`<p>Sedes de <strong>${eps||'su EPS'}</strong> en <strong>${munNorm}</strong> (${sedesEnMunSinCoords.length} encontradas):</p>${sH0}`,ntdBotonesFinales('<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Buscar en otro municipio</button>'));
+    ntdEna('Por favor escriba su respuesta...');return;
+  }
   const conCoords=sedesPorEps.filter(s=>parseFloat(s.lat||0)!==0&&parseFloat(s.lng||0)!==0);
   if(!conCoords.length){
     ntdAddMsg('nova',`<p>Confirmo que <strong>${eps}</strong> no presta servicio en <strong>${munNorm}</strong>.</p>`+ntdCanalesContacto(),ntdBotonesFinales());
@@ -1875,7 +1907,7 @@ function ntdConsultarRadicado(){
 function ntdEncuesta(){
   const encBase = (typeof ENC_URL !== 'undefined' ? ENC_URL : NTD_C.encuesta);
   const encSep  = encBase.includes('?') ? '&' : '?';
-  const encParams = new URLSearchParams({origen:'nova_web',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
+  const encParams = new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
   const encUrl = encBase + encSep + encParams.toString();
   const qrUrl  = 'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data='+encodeURIComponent(encUrl)+'&bgcolor=141e30&color=fcd34d&qzone=1';
   ntdAddMsg('nova',
@@ -1991,7 +2023,7 @@ function ntdMostrarEncuestaFinal(forzar){
   ntdAddMsg('nova',
     ntdR2H(
       'Ha sido un honor acompañarle, **'+n+'**. 🌟\n\n'
-      +'Su satisfacción es nuestra mayor motivación en **Tododrogas **. '
+      +'Su satisfacción es nuestra mayor motivación en **Tododrogas CIA SAS**. '
       +'¿Cómo calificaría la atención recibida hoy?'
     ),
     '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:6px">'
@@ -2009,7 +2041,7 @@ function ntdCalificar(tipo){
     ntdAddMsg('nova', ntdR2H(
       '¡Eso nos llena de orgullo, **'+n+'**! 🌟💙\n\n'
       +'Saber que superamos sus expectativas es el mejor reconocimiento para nuestro equipo. '
-      +'En **Tododrogas ** trabajamos cada día para brindarle la mejor experiencia. '
+      +'En **Tododrogas CIA SAS** trabajamos cada día para brindarle la mejor experiencia. '
       +'¡Hasta pronto y que tenga un día extraordinario! ✨'
     ),
     '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
@@ -2018,7 +2050,7 @@ function ntdCalificar(tipo){
   } else if(tipo==='buena'){
     ntdAddMsg('nova', ntdR2H(
       '¡Muchas gracias, **'+n+'**! 💙\n\n'
-      +'Me alegra mucho haberle podido ayudar hoy. Su confianza en **Tododrogas ** '
+      +'Me alegra mucho haberle podido ayudar hoy. Su confianza en **Tododrogas CIA SAS** '
       +'es muy valiosa para nosotros. ¡Hasta pronto y que esté muy bien! 😊'
     ),
     '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
@@ -2061,7 +2093,7 @@ function ntdIrARadicar(){
   ntdAddMsg('nova',
     `<p>Para radicar tu solicitud PQRSFD toca el botón:</p>`,
     `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:4px">
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_web',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">1️⃣ &nbsp;📋 Radicar mi solicitud →</button>
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">1️⃣ &nbsp;📋 Radicar mi solicitud →</button>
        <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
      </div>`);
   ntdPreguntarResolucion();
@@ -2069,7 +2101,7 @@ function ntdIrARadicar(){
 
 function ntdMostrarQR(){
   const base = window.location.origin + '/' + NTD_C.pqrForm;
-  const params = new URLSearchParams({origen:'nova_web',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
+  const params = new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});
   const url = base + '?' + params.toString();
   ntdAddMsg('nova',
     `<p>Escanea este código QR con tu celular para radicar tu solicitud desde cualquier punto de atención:</p>
@@ -2079,7 +2111,7 @@ function ntdMostrarQR(){
        <p style="font-size:11px;color:var(--ntd-t3);margin-top:6px">O toca el botón para ir directamente</p>
      </div>`,
 ntdBotonesFinales(`
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_web',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">3️⃣ &nbsp;Radicar ahora →</button>`));
+       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:8px 14px" onclick="(()=>{const p=new URLSearchParams({origen:'nova_directo',nombre:NTD.usuario?.nombre||'',cedula:NTD.usuario?.cedula||'',eps:NTD.eps||''});window.location.href=NTD_C.pqrForm+'?'+p.toString();})()">3️⃣ &nbsp;Radicar ahora →</button>`));
 }
 
 // Escalar a asesor — siempre de último
@@ -2088,8 +2120,8 @@ function ntdEscalarAgente(){
   ntdAddMsg('nova',
     ntdR2H('Por supuesto, **'+n+'**. Con mucho gusto le conecto con uno de nuestros asesores. Están disponibles **Lun-Vie 7:00am-5:30pm · Sáb 8:00-12:00m**:\n\nEscoja el canal que prefiera:'),
     '<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">'
-    +'<button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px">1️⃣ &nbsp;💬 WhatsApp: 304 341 2431</button>'
-    +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px">2️⃣ &nbsp;📞 PBX: 604 322 2432</button>'
+    +'<a href="https://wa.me/573043412431" target="_blank" class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none;display:flex;align-items:center">1️⃣ &nbsp;💬 WhatsApp: 304 341 2431 →</a>'
+    +'<a href="tel:6043222432" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none;display:flex;align-items:center">2️⃣ &nbsp;📞 PBX: 604 322 2432</a>'
     +'<a href="mailto:pqrsfd@tododrogas.com.co" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none;display:flex;align-items:center">3️⃣ &nbsp;✉️ pqrsfd@tododrogas.com.co</a>'
     +'<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">4️⃣ &nbsp;🏠 Menú principal</button>'
     +'</div>');
@@ -2102,7 +2134,7 @@ async function ntdFLibre(txt){
   try{
     const ntdProxy=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
     const resp=await fetch(ntdProxy,{
-      method:'POST',headers:{'Content-Type':'application/json'},
+      method:'POST',headers:{'Content-Type':'application/json','X-Nova-Token':(typeof window.NOVA_TOKEN!=='undefined'?window.NOVA_TOKEN:'__NOVA_TOKEN__')},
       body:JSON.stringify({system:ntdSys(),messages:NTD.hist.slice(-20),max_tokens:1500})
     });
     if(!resp.ok)throw new Error('HTTP '+resp.status);
@@ -2135,11 +2167,11 @@ async function ntdFLibre(txt){
       // dat puede ser "municipio" o "municipio:EPS"
       const _partes=(dat||'').split(':');
       const _mun=_partes[0].trim();
-      const _epsOverride=_partes[1]?_partes[1].trim().toUpperCase():null;
-      const _epsOriginal=NTD.eps;
-      if(_epsOverride) NTD.eps=_epsOverride;
-      await ntdFetchSedes(_mun);
-      if(_epsOverride) NTD.eps=_epsOriginal;
+      const _epsOverride=_partes[1]?_partes[1].trim().toUpperCase()
+        .replace('PREVENTIVA SALUD','PREVENTIVA').replace('SAVIA SALUD','SAVIA')
+        .replace(/\s*\([^)]*\)\s*/g,'').trim():null;
+      // NO cambiar NTD.eps permanentemente — solo usar para esta consulta
+      await ntdFetchSedes(_mun, _epsOverride||null);
       break;}
     case 'REQUISITOS':
       ntdRequisitosReclamar();break;
@@ -2165,12 +2197,12 @@ function ntdParseAct(raw){
 }
 
 function ntdCambiarEps(){
-  NTD.eps=null;NTD.fase='eps';
-  var pn=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';
+  NTD.eps=null;NTD.fase='cambio_eps';
+  var pn=NTD.usuario&&NTD.usuario.primerNombre?NTD.usuario.primerNombre:'';;
   var labels=['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣'];
   var epsButtons='<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">';
   NTD_EPS.forEach(function(e,i){
-    epsButtons+='<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSU(\''+e.replace(/'/g,"\\'")+'\')">'+(labels[i]||'>')+' &nbsp;'+e+'</button>';
+    epsButtons+='<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetEps(\''+e.replace(/'/g,"\\'")+'\')">'+(labels[i]||'>')+' &nbsp;'+e+'</button>';
   });
   epsButtons+='</div>';
   ntdAddMsg('nova',ntdR2H('Con cual EPS desea actualizar, '+pn+'?'),epsButtons);
@@ -2183,6 +2215,48 @@ function ntdSetEps(eps){
   ntdAddMsg('nova',ntdR2H(`EPS actualizada a **${eps}** ✅`),
     `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSedes()">3️⃣ &nbsp;🏥 Ver puntos de dispensación</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button></div>`);
   ntdEna('Escribe tu mensaje...');
+}
+
+async function ntdFetchRadicadosCedula(cedula){
+  ntdTyping(true);ntdAddSk();
+  let d;
+  try{
+    const r=await fetch(NTD_C.consulta,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({accion:'radicados_cedula',cedula:cedula})});
+    d=await r.json();
+  }catch(e){d={encontrado:false};}
+  ntdRmSk();ntdTyping(false);
+  if(!d.encontrado||!d.radicados?.length){
+    ntdAddMsg('nova',
+      `<p>No encontramos radicados asociados a la cédula <strong>${cedula}</strong>.</p>
+       <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.6)">Verifica que el número sea correcto o consulta en nuestra plataforma.</p>`,
+      ntdBotonesFinales(`<a href="${NTD_C.consultaUrl}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">1️⃣ &nbsp;🔍 Consultar en plataforma →</a>`));
+    return;
+  }
+  const lista=d.radicados.slice(0,5).map((r,i)=>{
+    const est=r.estado||'pendiente';
+    const bc=est==='solucionado'?'ntd-bg':(est==='urgente'?'ntd-br':'ntd-by');
+    const tipo=r.tipo||'—';
+    const fecha=r.creado?new Date(r.creado).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'—';
+    return `<div class="ntd-ir" style="cursor:pointer" onclick="ntdVerRadicado('${r.ticket_id||r.id}')">
+      <span class="ntd-il">${r.ticket_id||'Sin ticket'}</span>
+      <span class="ntd-badge ${bc}">${est.toUpperCase()}</span>
+    </div>
+    <div style="font-size:11px;color:rgba(190,215,255,.5);padding:0 4px 6px">${tipo} · ${fecha}${r.mensaje_ux?'<br><span style="color:rgba(100,220,150,.8)">'+r.mensaje_ux+'</span>':''}</div>`;
+  }).join('');
+  ntdAddMsg('nova',
+    `<p>Encontré <strong>${d.total}</strong> radicado${d.total>1?'s':''} para la cédula ${cedula}:</p>
+     <div class="ntd-ic">${lista}</div>`,
+    ntdBotonesFinales(`<a href="${NTD_C.consultaUrl}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">🔍 &nbsp;Ver detalle completo →</a>`));
+}
+
+function ntdVerRadicado(ticket_id){
+  if(!ticket_id)return;
+  ntdConsultarRadicado();
+  setTimeout(()=>{
+    const ta=document.getElementById('ntdTa');
+    if(ta){ta.value=ticket_id;ntdSend();}
+  },300);
 }
 
 async function ntdFetchRadicado(ticket){
@@ -2341,7 +2415,7 @@ async function ntdProcesarAudio(blob){
     var reader=new FileReader();
     var b64=await new Promise(function(res){reader.onload=function(e){res(e.target.result.split(',')[1]);};reader.readAsDataURL(blob);});
     var prx=(typeof window.NOVA_PROXY!=='undefined'?window.NOVA_PROXY:'/nova-proxy.php');
-    var r=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json'},
+    var r=await fetch(prx,{method:'POST',headers:{'Content-Type':'application/json','X-Nova-Token':(typeof window.NOVA_TOKEN!=='undefined'?window.NOVA_TOKEN:'__NOVA_TOKEN__')},
       body:JSON.stringify({action:'whisper',audio_base64:b64,mime_type:blob.type||'audio/webm',
         prompt:'EPS colombianas: COOSALUD, SAVIA SALUD, SALUD TOTAL, NUEVA EPS, PREVENTIVA SALUD, CEM, ANGIOSUR. Municipios de Antioquia: Medellín, Rionegro, Apartadó, Turbo, Caucasia, Yarumal, Segovia, Santa Fe de Antioquia.'})});
     var d=await r.json();var txt=(d.text||'').trim();
@@ -2349,24 +2423,10 @@ async function ntdProcesarAudio(blob){
     if(txt){
       ntdAddMsg('user',ntdR2H(txt.toUpperCase()));
       NTD.hist.push({role:'user',content:txt.toUpperCase()});
-      // En modo voz: mapear palabras habladas a opciones de menú
-      let txtFinal = txt.toUpperCase();
-      if(NTD._modoVoz){
-        if(/MEDIC|ENTREG|ESTADO|PEDIDO/i.test(txt)) { ntdOpc(1); return; }
-        if(/SEDE|PUNTO|DISPEN|D[OÓ]NDE|CERCA|RECLAMAR/i.test(txt)) { ntdOpc(2); return; }
-        if(/REQUIS|LLEVAR|PIDEN|DOCUM/i.test(txt)) { ntdOpc(3); return; }
-        if(/RADIC[AO]R|QUEJA|RECLAM[AO]|PQR|SOLICIT/i.test(txt)) { ntdOpc(4); return; }
-        if(/RADICADO|ESTADO.*QUEJA|CONSUL.*PQR|NUM.*RADIC/i.test(txt)) { ntdOpc(5); return; }
-        if(/HORARIO|CONTACT|TEL[EÉ]FONO|CORREO|CANAL/i.test(txt)) { ntdOpc(6); return; }
-        if(/ENCUESTA|CALIFIC|SATISF/i.test(txt)) { ntdOpc(7); return; }
-      }
-      await ntdDispatch(txtFinal);
-      // En modo voz: el mic se reactiva automáticamente via TTS onend
+      await ntdDispatch(txt.toUpperCase());
     }else{
-      const noAudio = NTD._modoVoz ? 'No escuché bien. Por favor intente de nuevo.' : 'No pude entender el audio. Por favor escríbalo.';
-      ntdAddMsg('nova',ntdR2H(noAudio));
-      if(NTD._modoVoz) setTimeout(()=>{if(!ntdRecActive)ntdStartRec();},1200);
-      else ntdEna();
+      ntdAddMsg('nova',ntdR2H('No pude entender el audio. Escriba su mensaje.'));
+      ntdEna();
     }
   }catch(e){
     ntdRmSk();ntdTyping(false);
@@ -2377,7 +2437,41 @@ async function ntdProcesarAudio(blob){
 /* FIN NOVA TD */
 
 /* Arranque automático */
-let _ntdCierreTimer = null;
+// ── CARGA DE SEDES DESDE SUPABASE ───────────────────────────
+// ── REGLAS DINÁMICAS DESDE SUPABASE ────────────────────────
+async function ntdCargarReglas(){
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    if(!sbUrl||!sbKey) return;
+    const r=await fetch(sbUrl+'/rest/v1/nova_reglas?activo=eq.true&select=triggers,instruccion,prioridad&order=prioridad.desc',{
+      headers:{apikey:sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'}
+    });
+    if(!r.ok) return;
+    const data=await r.json();
+    if(Array.isArray(data)&&data.length) window.NTD_REGLAS=data;
+  }catch(e){}
+}
+
+async function ntdCargarSedes(){
+  try{
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    if(!sbUrl||!sbKey) return;
+    const r=await fetch(sbUrl+'/rest/v1/sedes?activa=eq.true&select=id,nombre,municipio_norm,direccion,telefono,lat,lng,eps,modelo,horario',{
+      headers:{apikey:sbKey,'Authorization':'Bearer '+sbKey,'Content-Type':'application/json'}
+    });
+    if(!r.ok) return;
+    const data=await r.json();
+    if(Array.isArray(data)&&data.length){
+      // Normalizar campo municipio para que coincida con lo que usa el resto del código
+      data.forEach(function(s){ if(!s.municipio) s.municipio=s.municipio_norm||''; });
+      window.NTD_SEDES_LOCAL=data;
+    }
+  }catch(e){
+    // Si falla, NTD_SEDES_LOCAL queda con el array hardcodeado como fallback
+  }
+}
 
 function openChat(){
   clearTimeout(_ntdCierreTimer);_ntdCierreTimer=null;
