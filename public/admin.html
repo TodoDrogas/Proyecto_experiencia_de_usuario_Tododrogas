@@ -3061,7 +3061,7 @@ function setSort(s, el) {
 function updateFolderCounts() {
   // Contar sobre allEmails (individuales) no sobre hilos agrupados
   const _all = state.allEmails || state.emails;
-  document.getElementById('fc-todos').textContent = state.emails.length; // hilos = lo que ve el usuario
+  document.getElementById('fc-todos').textContent = state.emails.filter(e=>e.estado!=='informacion').length;
   // Para estados: contar sobre allEmails para no perder correos dentro de hilos
   const _forCount = state.allEmails || state.emails;
   ['pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'].forEach(s=>{
@@ -3103,7 +3103,10 @@ function renderEmailList() {
   if(state.folder.startsWith('agent_')) {
     const agId = state.folder.replace('agent_','');
     list = list.filter(e=>e.agente_id===agId||e.asignado_a===agId);
-  } else if(state.folder !== 'todos') {
+  } else if(state.folder === 'todos') {
+    // Todos: excluir informacion (tiene su propia carpeta)
+    list = list.filter(e=>e.estado!=='informacion');
+  } else {
     list = list.filter(e=>e.estado===state.folder);
   }
 
@@ -3639,11 +3642,15 @@ async function marcarInformacion() {
   if(!confirm('¿Marcar este correo como "Información"?\n\nNo se asignará a ningún agente y no contará en métricas de gestión.')) return;
   await sb(`correos?id=eq.${id}`, 'PATCH', {estado:'informacion', agente_id:null, asignado_a:null});
   await addHistorialEvent(id, state.emails.find(e=>e.id===id), 'informacion', {por:'admin', observaciones:'Marcado como informativo — no requiere gestión'});
-  const em = state.emails.find(e=>e.id===id);
-  if(em) { em.estado='informacion'; em.agente_id=null; em.asignado_a=null; }
+  // Actualizar state.emails Y state.allEmails
+  [state.emails, state.allEmails||[]].forEach(arr => {
+    const em = arr.find(e=>e.id===id);
+    if(em) { em.estado='informacion'; em.agente_id=null; em.asignado_a=null; }
+  });
   document.getElementById('mgmtEstadoBadge').className='badge informacion';
   document.getElementById('mgmtEstadoBadge').textContent='Información';
   showToast('Correo marcado como Información ℹ️','info');
+  updateFolderCounts();
   renderEmailList();
 }
 
