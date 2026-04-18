@@ -2476,7 +2476,18 @@ async function ntdCargarSedes(){
 function openChat(){
   clearTimeout(_ntdCierreTimer);_ntdCierreTimer=null;
   document.getElementById('overlay').classList.add('open');
-  if(!NTD.arrancado){NTD.arrancado=true;ntdStart();}
+  if(!NTD.arrancado){
+    NTD.arrancado=true;
+    // Cargar sedes y reglas antes de arrancar — igual que nova_F
+    var _started=false;
+    function _safeStart(){ if(!_started){_started=true;ntdStart();} }
+    try{
+      Promise.all([ntdCargarSedes(),ntdCargarReglas()])
+        .then(function(){_safeStart();})
+        .catch(function(){_safeStart();});
+    }catch(e){_safeStart();}
+    setTimeout(function(){_safeStart();},3000);
+  }
   if(typeof ntdResetInact==='function')ntdResetInact();
 }
 
