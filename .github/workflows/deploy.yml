@@ -283,22 +283,26 @@ jobs:
             fi
             touch /var/log/sync-correos.log && chmod 644 /var/log/sync-correos.log
 
-      # ── 10. INICIAR SYNC AUTOMÁTICAMENTE SI NO ESTÁ ACTIVO ──────
-      - name: Iniciar sync si no está activo
+      # ── 10. VERIFICAR SYNC — solo iniciar si NUNCA se ha iniciado ──
+      - name: Verificar sync (no reiniciar si ya tiene ciclo_inicio)
         uses: appleboy/ssh-action@v1
         with:
           host:     ${{ secrets.VPS_WEB_HOST }}
           username: root
           key:      ${{ secrets.VPS_SSH_KEY }}
           script: |
-            RESP=$(curl -s "https://tododrogas.online/sincronizar-correos.php?accion=estado&token=${{ secrets.ADMIN_TOKEN }}")
-            ACTIVO=$(echo "$RESP" | grep -o '"activo":true' || true)
-            if [ -z "$ACTIVO" ]; then
-              echo "⚡ Sync no activo — iniciando automáticamente..."
+            SB_URL="${{ secrets.SUPABASE_URL }}"
+            SB_KEY="${{ secrets.SUPABASE_KEY_SERVICE }}"
+            SYNC_DATA=$(curl -s "${SB_URL}/rest/v1/configuracion_sistema?id=eq.main&select=data"               -H "apikey: ${SB_KEY}" -H "Authorization: Bearer ${SB_KEY}")
+            ACTIVO=$(echo "$SYNC_DATA" | grep -o '"activo":true' || true)
+            CICLO=$(echo "$SYNC_DATA" | grep -o '"ciclo_inicio":"[^"]*"' | grep -v 'null' || true)
+            if [ -n "$ACTIVO" ] && [ -n "$CICLO" ]; then
+              echo "✅ Sync activo con ciclo_inicio existente — NO se reinicia"
+              echo "   Ciclo: $CICLO"
+            else
+              echo "⚡ Sin ciclo_inicio — iniciando por primera vez..."
               curl -s "https://tododrogas.online/sincronizar-correos.php?accion=iniciar&token=${{ secrets.ADMIN_TOKEN }}"
               echo "✅ Sync iniciado"
-            else
-              echo "✅ Sync ya estaba activo"
             fi
 
       # ── 11. VERIFICAR DEPLOY ────────────────────────────────────
