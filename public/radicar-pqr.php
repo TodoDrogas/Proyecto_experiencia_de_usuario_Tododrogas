@@ -420,6 +420,8 @@ if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
     $subject = "[{$ticket_id}] {$origen_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } elseif ($origen === 'qr') {
     $subject = "[{$ticket_id}] 📷 QR | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
+} elseif ($origen === 'web') {
+    $subject = "[{$ticket_id}] 💻 WEB | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } else {
     $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 }
@@ -435,9 +437,11 @@ if ($token) {
     // Cuerpo del correo HTML
     $fecha_fmt  = date('d/m/Y H:i', strtotime($now));
     if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
-        $canal_txt = $origen === 'nova_directo' ? 'Asistente Virtual Nova TD (acceso directo)' : 'Asistente Virtual Nova TD (módulo web)';
+        $canal_txt = $origen === 'nova_directo' ? 'Asistente Virtual Nova TD (acceso directo)' : 'Asistente Virtual Nova TD (pantalla bienvenida)';
     } elseif ($origen === 'qr') {
         $canal_txt = 'Código QR';
+    } elseif ($origen === 'web') {
+        $canal_txt = 'Formulario web';
     } else {
         $canal_txt = ['audio' => 'mensaje de voz', 'canvas' => 'escritura con lápiz inteligente', 'escrito' => 'texto escrito'][$canal] ?? 'formulario web';
     }
@@ -449,6 +453,8 @@ if ($token) {
     $badge_canal = "<span style='background:#ede9fe;color:#5b21b6;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$lbl_nova}</span>";
 } elseif ($origen === 'qr') {
     $badge_canal = "<span style='background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>📷 QR</span>";
+} elseif ($origen === 'web') {
+    $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>💻 WEB</span>";
 } else {
     $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} " . mb_strtoupper($canal, "UTF-8") . "</span>";
 }
