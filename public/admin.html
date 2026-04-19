@@ -1865,7 +1865,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           <div class="gm-field">
             <label class="gm-label">Ciudad</label>
             <div class="gm-search-wrap">
-              <input class="gm-input" id="gCiudadSearch" type="text" placeholder="Buscar ciudad…" oninput="gFiltrarCiudad(this.value)" autocomplete="off">
+              <input class="gm-input" id="gCiudadSearch" type="text" placeholder="Buscar ciudad de sede…" oninput="gFiltrarCiudad(this.value)" onfocus="gFiltrarCiudad(this.value)" onblur="setTimeout(()=>{document.getElementById('gCiudadDropdown').style.display='none'},200)" autocomplete="off">
               <button class="gm-clear" onclick="gLimpiarCiudad()">×</button>
               <div id="gCiudadDropdown" class="gm-dropdown"></div>
             </div>
@@ -4032,18 +4032,31 @@ function gLimpiarDepto() {
   document.getElementById('gDeptoVal').value    = '';
   document.getElementById('gDeptoDropdown').style.display = 'none';
 }
-function gFiltrarCiudad(q) {
-  const dd       = document.getElementById('gCiudadDropdown');
-  const depto    = document.getElementById('gDeptoVal').value;
-  // Si hay departamento seleccionado, filtrar sus ciudades; si no, buscar en todas
-  let ciudades;
-  if(depto && G_CIUDADES_CO[depto]) {
-    ciudades = G_CIUDADES_CO[depto];
-  } else {
-    ciudades = Object.values(G_CIUDADES_CO).flat().sort();
+// ── Ciudades de SEDE (cargadas desde tabla sedes) ──
+let G_CIUDADES_SEDES = [];
+
+async function gCargarCiudadesSedes() {
+  if (G_CIUDADES_SEDES.length > 0) return;
+  try {
+    const rows = await sb('sedes?activa=eq.true&select=ciudad,municipio_norm&order=ciudad.asc');
+    if (!rows) return;
+    const set = new Set();
+    rows.forEach(r => {
+      const val = (r.municipio_norm || r.ciudad || '').toUpperCase().trim();
+      if (val) set.add(val);
+    });
+    G_CIUDADES_SEDES = Array.from(set).sort();
+  } catch(e) {
+    console.warn('[gCargarCiudadesSedes] Error:', e.message);
   }
-  if(q.length > 0) ciudades = ciudades.filter(c => c.toLowerCase().includes(q.toLowerCase()));
-  if(!ciudades.length) { dd.style.display='none'; return; }
+}
+
+function gFiltrarCiudad(q) {
+  const dd = document.getElementById('gCiudadDropdown');
+  let ciudades = G_CIUDADES_SEDES.length > 0 ? G_CIUDADES_SEDES
+    : Object.values(G_CIUDADES_CO).flat().sort();
+  if (q && q.length > 0) ciudades = ciudades.filter(c => c.toLowerCase().includes(q.toLowerCase()));
+  if (!ciudades.length) { dd.style.display='none'; return; }
   dd.style.display='block';
   dd.innerHTML = ciudades.slice(0,20).map(c=>
     `<div class="gm-dd-item" onmousedown="gSelectCiudad('${esc(c)}')">${esc(c)}</div>`
@@ -4159,9 +4172,18 @@ function gAgregarMed() {
           <option value="PARCIAL">Parcial</option>
         </select>
       </div>
-      <div class="gm-field" style="grid-column:1/-1">
-        <label class="gm-label">Descripción (desde catálogo)</label>
-        <input class="gm-input" id="gMedDesc_${idx}" type="text" placeholder="Nombre del medicamento">
+      <div class="gm-field" style="grid-column:1/-1;position:relative">
+        <label class="gm-label">Descripción (buscar por nombre)</label>
+        <div class="gm-search-wrap">
+          <input class="gm-input" id="gMedDesc_${idx}" type="text" placeholder="Escriba el nombre del medicamento…"
+            oninput="gBuscarMedicamentoNombre(this.value,${idx})"
+            autocomplete="off"
+            onfocus="if(this.value.length>=2)gBuscarMedicamentoNombre(this.value,${idx})"
+            onblur="setTimeout(()=>{var d=document.getElementById('gMedDescDd_${idx}');if(d)d.style.display='none'},200)">
+          <button class="gm-clear" onclick="gLimpiarMed(${idx})">×</button>
+          <div id="gMedDescDd_${idx}" class="gm-dropdown"></div>
+        </div>
+        <input type="hidden" id="gMedCodHidden_${idx}">
       </div>
       <div class="gm-field" style="grid-column:1/-1">
         <label class="gm-label">Descripción escrita / artículo</label>
@@ -4175,43 +4197,78 @@ function gAgregarMed() {
   document.getElementById('gMedLista').appendChild(wrap);
 }
 
-// ── Autocompletar PBS y descripción desde tabla medicamentos ──
+// ── Autocompletar medicamentos por NOMBRE desde Supabase ──
 const _medTimers = {};
-function gBuscarMedicamento(codigo, idx) {
-  // Debounce 500ms — esperar que el usuario termine de escribir
+
+function gBuscarMedicamentoNombre(q, idx) {
   clearTimeout(_medTimers[idx]);
-  _medTimers[idx] = setTimeout(() => _gBuscarMedicamentoExec(codigo, idx), 500);
+  const dd = document.getElementById(`gMedDescDd_${idx}`);
+  if (!q || q.length < 2) { if(dd) dd.style.display='none'; return; }
+  _medTimers[idx] = setTimeout(() => _gBuscarMedNombreExec(q, idx), 300);
 }
-async function _gBuscarMedicamentoExec(codigo, idx) {
-  if(!codigo || codigo.length < 3) return;
+
+async function _gBuscarMedNombreExec(q, idx) {
+  const dd = document.getElementById(`gMedDescDd_${idx}`);
+  if (!dd) return;
   try {
-    const res  = await fetch('admin-buscar-medicamento.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ codigo }),
-    });
-    const data = await res.json();
-    if(data.ok) {
-      const descEl = document.getElementById(`gMedDesc_${idx}`);
-      const pbsEl  = document.getElementById(`gMedPbs_${idx}`);
-      if(descEl) descEl.value = data.nombre || '';
-      if(pbsEl && data.pbs) {
-        for(let op of pbsEl.options) {
-          if(op.value === data.pbs) { op.selected = true; break; }
-        }
-      }
-    } else {
-      console.info('[gBuscarMedicamento] No encontrado:', codigo);
-    }
-  } catch(e) { console.warn('[gBuscarMedicamento] Error:', e.message); }
+    const rows = await sb(
+      'medicamentos?Nombre=ilike.*' + encodeURIComponent(q) + '*&select=Codigo,Nombre,Articulo_PBS&limit=15'
+    );
+    if (!rows || !rows.length) { dd.style.display='none'; return; }
+    dd.style.display = 'block';
+    dd.innerHTML = rows.map(r => {
+      const nom = esc(r.Nombre  || '');
+      const cod = esc(r.Codigo  || '');
+      const pbs = esc(r.Articulo_PBS || '');
+      return `<div class="gm-dd-item" onmousedown="gSelectMedicamento('${nom}','${cod}','${pbs}',${idx})">
+        ${nom}
+        <div class="gm-dd-sub">Cód: ${cod}${pbs ? ' · PBS: '+pbs : ''}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    console.warn('[gBuscarMedNombre] Error:', e.message);
+    if(dd) dd.style.display='none';
+  }
 }
+
+function gSelectMedicamento(nombre, codigo, pbs, idx) {
+  const descEl = document.getElementById(`gMedDesc_${idx}`);
+  const codEl  = document.getElementById(`gMedCod_${idx}`);
+  const codHEl = document.getElementById(`gMedCodHidden_${idx}`);
+  const pbsEl  = document.getElementById(`gMedPbs_${idx}`);
+  const dd     = document.getElementById(`gMedDescDd_${idx}`);
+  if (descEl) descEl.value = nombre;
+  if (codEl)  codEl.value  = codigo;
+  if (codHEl) codHEl.value = codigo;
+  if (pbsEl && pbs) {
+    const pbsNorm = pbs.toUpperCase().trim();
+    for (let op of pbsEl.options) {
+      if (op.value === pbsNorm || op.value.startsWith(pbsNorm.charAt(0))) { op.selected = true; break; }
+    }
+  }
+  if (dd) dd.style.display='none';
+}
+
+function gLimpiarMed(idx) {
+  const descEl = document.getElementById(`gMedDesc_${idx}`);
+  const codEl  = document.getElementById(`gMedCod_${idx}`);
+  const codHEl = document.getElementById(`gMedCodHidden_${idx}`);
+  const dd     = document.getElementById(`gMedDescDd_${idx}`);
+  if (descEl) descEl.value = '';
+  if (codEl)  codEl.value  = '';
+  if (codHEl) codHEl.value = '';
+  if (dd) dd.style.display='none';
+}
+
+// Mantener compatibilidad si algún lugar llama gBuscarMedicamento
+function gBuscarMedicamento(codigo, idx) { /* ya no se usa — búsqueda por nombre */ }
 
 function gRecolectarMeds() {
   const meds = [];
   for(let i=1; i<=_gMedCount; i++) {
     const el = document.getElementById(`gMed_${i}`);
     if(!el) continue;
-    const cod  = document.getElementById(`gMedCod_${i}`)?.value?.trim()||'';
+    const cod  = document.getElementById(`gMedCodHidden_${i}`)?.value?.trim() || document.getElementById(`gMedCod_${i}`)?.value?.trim()||'';
     const desc = document.getElementById(`gMedDesc_${i}`)?.value?.trim()||'';
     const descE= document.getElementById(`gMedDescEsc_${i}`)?.value?.trim()||'';
     const cant = document.getElementById(`gMedCant_${i}`)?.value||'';
@@ -4414,6 +4471,8 @@ async function openGestionModal(mode) {
   if(!state.sedes||!state.sedes.length) {
     sb('sedes?order=nombre.asc').then(d=>{ state.sedes=d||[]; }).catch(()=>{});
   }
+  // Cargar ciudades de sedes para el buscador de ciudad
+  gCargarCiudadesSedes();
 
   document.getElementById('modalGestion').classList.add('show');
 }
