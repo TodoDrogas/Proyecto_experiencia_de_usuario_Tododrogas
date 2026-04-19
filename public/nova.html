@@ -904,6 +904,31 @@ async function ntdDispatch(txt){
   if(NTD.fase==='ident_ced')   return ntdFCedula(txt);
   if(NTD.fase==='eps')         return ntdFEps(txt);
 
+  // Captura cédula/radicado/correo para consulta de radicados inline
+  if(NTD.fase==='consulta_cedula'){
+    const cedLimpia = txt.replace(/\D/g,'');
+    const esCedula  = /^\d{6,12}$/.test(cedLimpia);
+    const esRadicado= /^TD-[\d\-]+$/i.test(txt.trim());
+    const esCorreo  = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(txt.trim());
+    if(esCedula){
+      NTD.fase='libre';
+      ntdAddMsg('nova',ntdR2H('Buscando tus radicados con la cédula **'+cedLimpia+'**...'));
+      await ntdFetchRadicadosCedula(cedLimpia);
+    }else if(esRadicado){
+      NTD.fase='libre';
+      ntdAddMsg('nova',ntdR2H('Consultando el radicado **'+txt.trim()+'**...'));
+      await ntdFetchRadicado(txt.trim());
+    }else if(esCorreo){
+      NTD.fase='libre';
+      ntdAddMsg('nova',ntdR2H('Consultando radicados para **'+txt.trim()+'**...'));
+      await ntdFetchRadicado(txt.trim());
+    }else{
+      ntdAddMsg('nova',ntdR2H('⚠️ No reconocí ese dato. Por favor escribe tu **número de cédula** (solo dígitos), un **número de radicado** (ej: TD-20260401-1234) o tu **correo electrónico**:'));
+      ntdEna('Escribe tu número de cédula...');
+    }
+    return;
+  }
+
   // Captura municipio para búsqueda de sedes
   if(NTD.fase==='municipio_sedes'){
     ntdAddMsg('nova', ntdR2H(`Buscando sedes en **${txt}** para **${NTD.eps||'tu EPS'}**...`));
@@ -1747,14 +1772,12 @@ function ntdAutorizacion(){
 }
 
 function ntdConsultarRadicado(){
+  NTD.fase = 'consulta_cedula';
   ntdAddMsg('nova',
-    `<p>Para consultar el estado de tu solicitud PQRSFD ingresa principalmente tu <strong>número de cédula</strong>, el <strong>número de radicado</strong> (ej: TD-20260401-1234) o tu <strong>correo electrónico</strong>:</p>`,
-    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
-       <a href="${NTD_C.consultaUrl}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">1️⃣ &nbsp;🔍 Consultar en plataforma →</a>
-       <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">2️⃣ &nbsp;🏠 Menú principal</button>
-     </div>`);
-  ntdPreguntarResolucion();
-  ntdEna('Por favor escriba su número de radicado...');
+    `<p>Para consultar el estado de tu solicitud PQRSFD, por favor <strong>digita tu número de cédula</strong>:</p>
+     <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.55)">También puedes escribir directamente un número de radicado (ej: TD-20260401-1234) o tu correo electrónico.</p>`);
+  ntdProg(72, 'Consulta radicado');
+  ntdEna('Escribe tu número de cédula...');
 }
 
 function ntdEncuesta(){
