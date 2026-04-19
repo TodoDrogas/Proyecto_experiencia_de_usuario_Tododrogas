@@ -4214,31 +4214,11 @@ async function _gBuscarMedNombreExec(q, idx) {
   dd.innerHTML = '<div class="gm-dd-item" style="color:var(--ink3);font-style:italic">Buscando…</div>';
   dd.style.display = 'block';
 
-  const headers = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Accept': 'application/json' };
-  const qEnc = encodeURIComponent(q);
-  const base = SB_URL + '/rest/v1/medicamentos';
-
-  const intentos = [
-    `${base}?select=Codigo,Nombre,Articulo_PBS&Nombre=ilike.*${qEnc}*&limit=15`,
-    `${base}?select=Codigo,Nombre,Articulo_PBS&Nombre=ilike.%25${qEnc}%25&limit=15`,
-    `${base}?select=id,Codigo,Nombre,Articulo_PBS&Nombre=ilike.*${qEnc}*&limit=15`,
-    `${base}?select=Codigo,Nombre,Articulo_PBS&limit=100`,
-  ];
-
   let rows = null;
-  for (let i = 0; i < intentos.length; i++) {
-    try {
-      const r = await fetch(intentos[i], { headers });
-      if (r.ok) {
-        const data = await r.json();
-        if (Array.isArray(data) && data.length > 0) {
-          rows = i === intentos.length - 1
-            ? data.filter(x => (x.Nombre||'').toLowerCase().includes(q.toLowerCase()))
-            : data;
-          if (rows.length > 0) break;
-        }
-      }
-    } catch(e) { /* siguiente */ }
+  try {
+    rows = await sb('rpc/buscar_medicamentos', 'POST', { q });
+  } catch(e) {
+    console.warn('[buscar_med] RPC falló:', e.message);
   }
 
   if (!rows || !rows.length) {
@@ -4246,13 +4226,18 @@ async function _gBuscarMedNombreExec(q, idx) {
     return;
   }
 
-  dd.innerHTML = rows.slice(0,15).map(r => {
-    const nom = r.Nombre  || r.nombre  || '';
-    const cod = r.Codigo  || r.codigo  || '';
+  dd.innerHTML = rows.map(r => {
+    const nom = r.Nombre       || r.nombre       || '';
+    const cod = r.Codigo       || r.codigo       || '';
     const pbs = r.Articulo_PBS || r.articulo_pbs || '';
-    return `<div class="gm-dd-item" data-nom="${nom.replace(/"/g,'&quot;')}" data-cod="${esc(cod)}" data-pbs="${esc(pbs)}" data-idx="${idx}" onmousedown="gSelectMedicamentoEl(this)">
+    return `<div class="gm-dd-item"
+      data-nom="${nom.replace(/"/g,'&quot;')}"
+      data-cod="${esc(cod)}"
+      data-pbs="${esc(pbs)}"
+      data-idx="${idx}"
+      onmousedown="gSelectMedicamentoEl(this)">
       ${esc(nom)}
-      <div class="gm-dd-sub">Cód: ${esc(cod)}${pbs ? ' · PBS: '+esc(pbs) : ''}</div>
+      <div class="gm-dd-sub">Cód: ${esc(cod)}${pbs ? ' · PBS: ' + esc(pbs) : ''}</div>
     </div>`;
   }).join('');
 }
