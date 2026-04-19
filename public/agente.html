@@ -1826,16 +1826,17 @@ function gAgregarMed() {
           <option value="PARCIAL">Parcial</option>
         </select>
       </div>
-      <div class="gm-field" style="grid-column:1/-1;position:relative">
+      <div class="gm-field" style="grid-column:1/-1">
         <label class="gm-label">Descripción (buscar por nombre)</label>
-        <div class="gm-search-wrap">
+        <div class="gm-search-wrap" style="position:relative">
           <input class="gm-input" id="gMedDesc_${idx}" type="text" placeholder="Escriba el nombre del medicamento…"
             oninput="gBuscarMedicamentoNombre(this.value,${idx})"
             autocomplete="off"
             onfocus="if(this.value.length>=2)gBuscarMedicamentoNombre(this.value,${idx})"
-            onblur="setTimeout(()=>{var d=document.getElementById('gMedDescDd_${idx}');if(d)d.style.display='none'},200)">
-          <button class="gm-clear" onclick="gLimpiarMed(${idx})">×</button>
-          <div id="gMedDescDd_${idx}" class="gm-dropdown"></div>
+            onblur="setTimeout(()=>{var d=document.getElementById('gMedDescDd_${idx}');if(d)d.style.display='none'},200)"
+            style="padding-right:28px">
+          <button class="gm-clear" onclick="gLimpiarMed(${idx})" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink3);font-size:14px;line-height:1;padding:0;display:none" onmouseover="this.style.display='block'" id="gMedClearBtn_${idx}">×</button>
+          <div id="gMedDescDd_${idx}" class="gm-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r2) var(--r2);max-height:220px;overflow-y:auto;font-size:12px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.15)"></div>
         </div>
         <input type="hidden" id="gMedCodHidden_${idx}">
       </div>
@@ -1865,25 +1866,46 @@ async function _gBuscarMedNombreExec(q, idx) {
   const dd = document.getElementById(`gMedDescDd_${idx}`);
   if (!dd) return;
   try {
-    // Buscar en tabla medicamentos por nombre (ilike) — trae hasta 15 resultados
-    const rows = await sb(
-      'medicamentos?Nombre=ilike.*' + encodeURIComponent(q) + '*&select=Codigo,Nombre,Articulo_PBS&limit=15'
-    );
-    if (!rows || !rows.length) { dd.style.display='none'; return; }
+    // Columna "Nombre" tiene mayúscula → necesita comillas dobles codificadas en PostgREST
+    // Probamos primero con comillas, fallback sin comillas
+    let rows = null;
+    try {
+      rows = await sb(
+        'medicamentos?%22Nombre%22=ilike.*' + encodeURIComponent(q) + '*&select=%22Codigo%22,%22Nombre%22,%22Articulo_PBS%22&limit=15'
+      );
+    } catch(e1) { rows = null; }
+    // Fallback: columnas sin comillas (por si el proyecto tiene nombres en minúsculas)
+    if (!rows || !rows.length) {
+      try {
+        rows = await sb(
+          'medicamentos?Nombre=ilike.*' + encodeURIComponent(q) + '*&select=Codigo,Nombre,Articulo_PBS&limit=15'
+        );
+      } catch(e2) { rows = []; }
+    }
+    if (!rows || !rows.length) { dd.innerHTML='<div class="gm-dd-item" style="color:var(--ink3);font-style:italic">Sin resultados para "'+esc(q)+'"</div>'; dd.style.display='block'; return; }
     dd.style.display = 'block';
-    dd.innerHTML = rows.map(r => {
-      const nom  = esc(r.Nombre  || '');
-      const cod  = esc(r.Codigo  || '');
-      const pbs  = esc(r.Articulo_PBS || '');
-      return `<div class="gm-dd-item" onmousedown="gSelectMedicamento('${nom}','${cod}','${pbs}',${idx})">
-        ${nom}
-        <div class="gm-dd-sub">Cód: ${cod}${pbs ? ' · PBS: '+pbs : ''}</div>
+    dd.innerHTML = rows.map((r,i) => {
+      const nom  = r.Nombre  || '';
+      const cod  = r.Codigo  || '';
+      const pbs  = r.Articulo_PBS || '';
+      return `<div class="gm-dd-item" data-nom="${nom.replace(/"/g,'&quot;')}" data-cod="${cod}" data-pbs="${pbs}" data-idx="${idx}" onmousedown="gSelectMedicamentoEl(this)">
+        ${esc(nom)}
+        <div class="gm-dd-sub">Cód: ${esc(cod)}${pbs ? ' · PBS: '+esc(pbs) : ''}</div>
       </div>`;
     }).join('');
   } catch(e) {
     console.warn('[gBuscarMedNombre] Error:', e.message);
-    if(dd) dd.style.display='none';
+    dd.innerHTML='<div class="gm-dd-item" style="color:var(--red);font-size:11px">Error: '+esc(e.message)+'</div>';
+    dd.style.display='block';
   }
+}
+
+function gSelectMedicamentoEl(el) {
+  const idx    = el.dataset.idx;
+  const nombre = el.dataset.nom || '';
+  const codigo = el.dataset.cod || '';
+  const pbs    = el.dataset.pbs || '';
+  gSelectMedicamento(nombre, codigo, pbs, idx);
 }
 
 function gSelectMedicamento(nombre, codigo, pbs, idx) {
