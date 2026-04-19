@@ -1893,6 +1893,11 @@ function gestionEvidenciaAdd(file) {
 async function generarConNovaTD(correoId) {
   const email = state.emails.find(e=>e.id===correoId);
   if(!email) return;
+  // ── Bloquear si no hay primera gestión ──────────────────────────
+  try {
+    const _fg = await sb(`correos?id=eq.${correoId}&select=num_gestiones&limit=1`);
+    if((_fg?.[0]?.num_gestiones || 0) === 0) { _mostrarModalPrimeraGestion(); return; }
+  } catch(e) { /* red error — dejar pasar */ }
   const area = document.getElementById('replyBoxArea');
   area.innerHTML = `<div style="background:#f5f3ff;border:1px solid #7c3aed;border-radius:8px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border:2px solid #7c3aed;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><span style="color:#7c3aed;font-weight:600;font-size:13px">✦ Nova TD generando respuesta...</span></div>`;
   try {
@@ -2278,12 +2283,56 @@ async function saveGestion() {
 // SISTEMA DE ADJUNTOS ESTILO OUTLOOK
 // ─────────────────────────────────────────────────────────
 
+// ══════════════════════════════════════════════════════════
+// HELPER: Modal "Primera gestión requerida"
+// Llamado desde toggleReply, generarConNovaTD, abrirPanelRR
+// y como último escudo en sendReply.
+// ══════════════════════════════════════════════════════════
+function _mostrarModalPrimeraGestion() {
+  // Evitar duplicados
+  const existing = document.getElementById('_modalPrimeraGestion');
+  if(existing) return;
+  const modal = document.createElement('div');
+  modal.id = '_modalPrimeraGestion';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:430px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+      <div style="font-size:40px;margin-bottom:12px">📋</div>
+      <div style="font-size:17px;font-weight:800;color:#0f172a;margin-bottom:8px">Primero registra la gestión</div>
+      <div style="font-size:13px;color:#64748b;line-height:1.7;margin-bottom:22px">
+        Antes de responder o usar plantillas, debes registrar<br>
+        la <strong style="color:#2563eb">primera gestión</strong> de este ticket.<br><br>
+        Incluye EPS, tipo de solicitud, categoría y observaciones.
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center">
+        <button id="_modalPGCancelar"
+          style="padding:10px 22px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;background:#fff;color:#64748b">
+          Cancelar
+        </button>
+        <button id="_modalPGAbrir"
+          style="padding:10px 22px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;background:#2563eb;color:#fff">
+          + Añadir primera gestión
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('_modalPGCancelar').onclick = function() { modal.remove(); };
+  document.getElementById('_modalPGAbrir').onclick = function() { modal.remove(); openGestionModal(); };
+}
+
 // Reply
-function toggleReply(modo) {
+async function toggleReply(modo) {
   modo = modo || 'reply';
   const area = document.getElementById('replyBoxArea');
   // Si ya está abierto con el mismo modo, cerrar
   if(area.innerHTML && area.dataset.modo === modo) { area.innerHTML=''; return; }
+  // ── Bloquear si no hay primera gestión ──────────────────────────
+  if(state.selectedId) {
+    try {
+      const _fg = await sb(`correos?id=eq.${state.selectedId}&select=num_gestiones&limit=1`);
+      if((_fg?.[0]?.num_gestiones || 0) === 0) { _mostrarModalPrimeraGestion(); return; }
+    } catch(e) { /* red error — dejar pasar */ }
+  }
   area.dataset.modo = modo;
   window._replyModo = modo;
 
@@ -2397,38 +2446,11 @@ async function sendReply() {
   if(!body||body==='<br>'){ showToast('Escribe un mensaje','info'); return; }
   if(!toInput){ showToast('Escribe un destinatario','info'); return; }
 
-  // ── Verificar primera gestión ──────────────────────────────────
+  // ── Último escudo (el bloqueo real ocurre ANTES en toggleReply/Nova/Rápidas) ──
   try {
     const fresh = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
     const numGest = fresh?.[0]?.num_gestiones || 0;
-    if(numGest === 0) {
-      // Mostrar popup de primera gestión requerida
-      const modal = document.createElement('div');
-      modal.id = '_modalPrimeraGestion';
-      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
-      modal.innerHTML = `
-        <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
-          <div style="font-size:36px;margin-bottom:12px">📋</div>
-          <div style="font-size:16px;font-weight:800;color:#0f172a;margin-bottom:8px">Completa la primera gestión</div>
-          <div style="font-size:13px;color:#64748b;line-height:1.6;margin-bottom:20px">
-            Antes de responder, registra la primera gestión del ticket.<br>
-            <strong style="color:#2563eb">Es la clave para llevar tus métricas a otro nivel.</strong><br><br>
-            Incluye EPS, tipo de solicitud, categoría y observaciones.
-          </div>
-          <div style="display:flex;gap:10px;justify-content:center">
-            <button onclick="document.getElementById('_modalPrimeraGestion').remove()" 
-              style="padding:10px 20px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif;background:#fff;color:#64748b">
-              Cancelar
-            </button>
-            <button onclick="document.getElementById('_modalPrimeraGestion').remove();openGestionModal()" 
-              style="padding:10px 20px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;background:#2563eb;color:#fff">
-              + Añadir primera gestión
-            </button>
-          </div>
-        </div>`;
-      document.body.appendChild(modal);
-      return;
-    }
+    if(numGest === 0) { _mostrarModalPrimeraGestion(); return; }
   } catch(e) { /* si falla la verificación, dejar continuar */ }
 
   // Construir hilo histórico
@@ -2499,9 +2521,7 @@ async function sendReply() {
           .catch(err=>console.warn('[adjuntos-storage] Error general:',err.message));
       }
 
-      // NOTA: num_gestiones se incrementa SOLO desde saveGestion(), no aquí.
-      // Incrementar aquí causaba que el popup de "primera gestión" dejara de aparecer
-      // después del primer envío, porque el contador ya no era 0.
+      // num_gestiones se incrementa SOLO desde saveGestion() — no aquí
       try{ await sb('historial_eventos','POST',{
         correo_id:id,
         agente_id:AGENT_ID,
@@ -3648,9 +3668,16 @@ const RR_PLANTILLAS = [
   {cat:'tiques',label:'Solicitud OPS — TUTELA COOSALUD',preview:'Ingresar EVENTO-COOSALUD solicitud OPS TUTELA...',texto:'Por favor ingresar a EVENTO-COOSALUD [MEDICAMENTO]\n- solicitud OPS [NOMBRE USUARIO] CC [CC] - TUTELA COOSALUD'},
 ];
 
-function abrirPanelRR(){
+async function abrirPanelRR(){
   const p=document.getElementById('panelRR');
   if(!p)return;
+  // ── Bloquear si no hay primera gestión ──────────────────────────
+  if(state.selectedId) {
+    try {
+      const _fg = await sb(`correos?id=eq.${state.selectedId}&select=num_gestiones&limit=1`);
+      if((_fg?.[0]?.num_gestiones || 0) === 0) { _mostrarModalPrimeraGestion(); return; }
+    } catch(e) { /* red error — dejar pasar */ }
+  }
   p.style.visibility='visible';p.style.opacity='1';p.style.pointerEvents='auto';
   _rrCat='todas';
   renderRRCats();
