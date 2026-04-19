@@ -1865,39 +1865,54 @@ function gBuscarMedicamentoNombre(q, idx) {
 async function _gBuscarMedNombreExec(q, idx) {
   const dd = document.getElementById(`gMedDescDd_${idx}`);
   if (!dd) return;
-  try {
-    // Columna "Nombre" tiene mayúscula → necesita comillas dobles codificadas en PostgREST
-    // Probamos primero con comillas, fallback sin comillas
-    let rows = null;
+  dd.innerHTML = '<div class="gm-dd-item" style="color:var(--ink3);font-style:italic">Buscando…</div>';
+  dd.style.display = 'block';
+
+  const headers = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Accept': 'application/json' };
+  const qEnc = encodeURIComponent(q);
+  const base = SB_URL + '/rest/v1/medicamentos';
+
+  // Columnas exactas: Codigo, Nombre, Articulo_PBS (PascalCase, sin tildes)
+  // PostgREST acepta ilike con % o con * — probamos ambas formas
+  const intentos = [
+    `${base}?select=Codigo,Nombre,Articulo_PBS&Nombre=ilike.*${qEnc}*&limit=15`,
+    `${base}?select=Codigo,Nombre,Articulo_PBS&Nombre=ilike.%25${qEnc}%25&limit=15`,
+    `${base}?select=id,Codigo,Nombre,Articulo_PBS&Nombre=ilike.*${qEnc}*&limit=15`,
+    // fallback: traer todo y filtrar en cliente
+    `${base}?select=Codigo,Nombre,Articulo_PBS&limit=100`,
+  ];
+
+  let rows = null;
+  for (let i = 0; i < intentos.length; i++) {
     try {
-      rows = await sb(
-        'medicamentos?%22Nombre%22=ilike.*' + encodeURIComponent(q) + '*&select=%22Codigo%22,%22Nombre%22,%22Articulo_PBS%22&limit=15'
-      );
-    } catch(e1) { rows = null; }
-    // Fallback: columnas sin comillas (por si el proyecto tiene nombres en minúsculas)
-    if (!rows || !rows.length) {
-      try {
-        rows = await sb(
-          'medicamentos?Nombre=ilike.*' + encodeURIComponent(q) + '*&select=Codigo,Nombre,Articulo_PBS&limit=15'
-        );
-      } catch(e2) { rows = []; }
-    }
-    if (!rows || !rows.length) { dd.innerHTML='<div class="gm-dd-item" style="color:var(--ink3);font-style:italic">Sin resultados para "'+esc(q)+'"</div>'; dd.style.display='block'; return; }
-    dd.style.display = 'block';
-    dd.innerHTML = rows.map((r,i) => {
-      const nom  = r.Nombre  || '';
-      const cod  = r.Codigo  || '';
-      const pbs  = r.Articulo_PBS || '';
-      return `<div class="gm-dd-item" data-nom="${nom.replace(/"/g,'&quot;')}" data-cod="${cod}" data-pbs="${pbs}" data-idx="${idx}" onmousedown="gSelectMedicamentoEl(this)">
-        ${esc(nom)}
-        <div class="gm-dd-sub">Cód: ${esc(cod)}${pbs ? ' · PBS: '+esc(pbs) : ''}</div>
-      </div>`;
-    }).join('');
-  } catch(e) {
-    console.warn('[gBuscarMedNombre] Error:', e.message);
-    dd.innerHTML='<div class="gm-dd-item" style="color:var(--red);font-size:11px">Error: '+esc(e.message)+'</div>';
-    dd.style.display='block';
+      const r = await fetch(intentos[i], { headers });
+      if (r.ok) {
+        const data = await r.json();
+        if (Array.isArray(data) && data.length > 0) {
+          // Si es el fallback (último intento), filtrar en cliente
+          rows = i === intentos.length - 1
+            ? data.filter(x => (x.Nombre||'').toLowerCase().includes(q.toLowerCase()))
+            : data;
+          if (rows.length > 0) break;
+        }
+      }
+    } catch(e) { /* siguiente */ }
   }
+
+  if (!rows || !rows.length) {
+    dd.innerHTML = '<div class="gm-dd-item" style="color:var(--ink3);font-style:italic">Sin resultados para "' + esc(q) + '"</div>';
+    return;
+  }
+
+  dd.innerHTML = rows.slice(0,15).map(r => {
+    const nom = r.Nombre  || r.nombre  || '';
+    const cod = r.Codigo  || r.codigo  || '';
+    const pbs = r.Articulo_PBS || r.articulo_pbs || '';
+    return `<div class="gm-dd-item" data-nom="${nom.replace(/"/g,'&quot;')}" data-cod="${esc(cod)}" data-pbs="${esc(pbs)}" data-idx="${idx}" onmousedown="gSelectMedicamentoEl(this)">
+      ${esc(nom)}
+      <div class="gm-dd-sub">Cód: ${esc(cod)}${pbs ? ' · PBS: '+esc(pbs) : ''}</div>
+    </div>`;
+  }).join('');
 }
 
 function gSelectMedicamentoEl(el) {
