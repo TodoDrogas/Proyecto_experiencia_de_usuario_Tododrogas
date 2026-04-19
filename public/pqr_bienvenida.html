@@ -738,6 +738,7 @@ function ntdReset(){
   NTD._tel      = null;
   NTD._tipoDoc  = 'CÉDULA DE CIUDADANÍA';
   NTD._enMenu   = false;
+  NTD._noAcepto  = 0;
   NTD.hist      = [];
   NTD.busy      = false;
   NTD.vipCb     = null;
@@ -1126,17 +1127,38 @@ function ntdStart(){
 
 async function ntdFPolitica(txt){
   const t=txt.toLowerCase().trim();
-  if(t.includes('acepto')||t==='si'||t==='sí'||t==='1'||t.includes('ok')){
+  const esNo  = t.includes('no') || t==='2';
+  const esSi  = !esNo && (t.includes('acepto')||t==='si'||t==='sí'||t==='1'||t.includes('ok'));
+  if(esSi){
     ntdAddMsg('nova',ntdR2H('¡Gracias por aceptar! ✅'));
     await ntdDelay(500);
     NTD.fase='ident_ced';ntdProg(16,'Verificación');
     ntdAddMsg('nova',
       `<p>Selecciona el tipo de documento del usuario que necesita el servicio:</p>`,
       `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetTipoDoc('CÉDULA DE CIUDADANÍA')">1️⃣ &nbsp;🪪 Cédula de ciudadanía</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetTipoDoc('TARJETA DE IDENTIDAD')">2️⃣ &nbsp;📋 Tarjeta de identidad</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetTipoDoc('CÉDULA DE EXTRANJERÍA')">3️⃣ &nbsp;🌐 Cédula de extranjería</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSetTipoDoc('PASAPORTE')">4️⃣ &nbsp;📕 Pasaporte</button></div>`);
-    ntdDis(); // espera que toque un chip
-  }else if(t.includes('no')){
-    ntdAddMsg('nova',ntdR2H('Entendido. Sin aceptar no puedo continuar. Comunícate con nosotros:'),
-      ntdBotonesFinales());ntdDis();
+    ntdDis();
+  }else if(esNo){
+    // Primera negativa: recordar que debe aceptar para continuar
+    NTD._noAcepto = (NTD._noAcepto||0) + 1;
+    if(NTD._noAcepto >= 2){
+      // Segunda negativa: finalizar
+      ntdAddMsg('nova',
+        ntdR2H('Entendido. Sin aceptar las políticas no es posible continuar. ¡Hasta pronto! 👋'),
+        `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+           <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdNuevoChat()">🔄 &nbsp;Iniciar de nuevo</button>
+         </div>`);
+      ntdDis();
+    }else{
+      // Primera negativa: invitar a reconsiderar
+      ntdAddMsg('nova',
+        `<p>Para poder ayudarte, es necesario que aceptes nuestras <strong>políticas de tratamiento de datos</strong>.</p>
+         <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.55)">Si no las aceptas, no podremos continuar con la atención. ¿Deseas aceptarlas?</p>`,
+        `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
+           <button class="ntd-ch g" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSU('ACEPTO')">1️⃣ &nbsp;✅ Sí, acepto la política</button>
+           <button class="ntd-ch r" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdSU('NO ACEPTO')">2️⃣ &nbsp;✗ No acepto — finalizar</button>
+         </div>`);
+      ntdEna('Por favor escriba Acepto o No acepto...');
+    }
   }else{
     ntdAddMsg('nova',ntdR2H('Por favor responde **"Acepto"** o **"No acepto"** para continuar.'));
     ntdEna('Por favor escriba Acepto o No acepto...');
@@ -2243,7 +2265,107 @@ function ntdSetEps(eps){
   ntdEna('Escribe tu mensaje...');
 }
 
+
+// ══════════════════════════════════════════════════════
+// CONSULTA RADICADOS — replica fiel de consulta.html
+// ══════════════════════════════════════════════════════
+
+// Estados y colores (mirror de consulta.html)
+const NTD_ESTADOS = {
+  abierto:         {label:'📬 Recibido',              cls:'eb-recibido'},
+  pendiente:       {label:'📬 Recibido',              cls:'eb-recibido'},
+  en_gestion:      {label:'🔍 En gestión prioritaria',cls:'eb-gestion'},
+  gestion:         {label:'🔍 En gestión prioritaria',cls:'eb-gestion'},
+  gestionado:      {label:'🔍 En gestión prioritaria',cls:'eb-gestion'},
+  respondido:      {label:'✅ Solucionado',            cls:'eb-solucionado'},
+  cerrado:         {label:'✅ Solucionado',            cls:'eb-solucionado'},
+  solucionado:     {label:'✅ Solucionado',            cls:'eb-solucionado'},
+  pendiente_firma: {label:'🔍 En gestión prioritaria',cls:'eb-gestion'},
+  escalado:        {label:'🔍 En gestión prioritaria',cls:'eb-gestion'},
+};
+
+const NTD_MSGS_ESTADO = {
+  solucionado:{default:{icon:'✅',msg:'Tu solicitud fue atendida y resuelta exitosamente. Gracias por comunicarte con Tododrogas.'}},
+  respondido: {default:{icon:'✅',msg:'Tu caso fue atendido y solucionado. Gracias por comunicarte con Tododrogas.'}},
+  cerrado:    {default:{icon:'✅',msg:'Tu caso fue cerrado exitosamente.'}},
+  gestion:    {default:{icon:'🔍',msg:'Tu caso está siendo gestionado activamente por nuestro equipo.'}},
+  gestionado: {default:{icon:'🔍',msg:'Tu caso está siendo gestionado activamente por nuestro equipo.'}},
+  en_gestion: {default:{icon:'🔍',msg:'Tu caso está siendo gestionado activamente.'}},
+  pendiente:  {default:{icon:'⏳',msg:'Tu solicitud está registrada y pendiente de gestión.'}},
+  abierto:    {default:{icon:'📋',msg:'Tu solicitud está registrada en nuestro sistema.'}},
+  pendiente_firma:{default:{icon:'🔍',msg:'Tu caso está en gestión prioritaria. Un agente se comunicará contigo pronto.'}},
+};
+function ntdGetMsgEstado(estado,tipo){
+  const g=NTD_MSGS_ESTADO[estado]||NTD_MSGS_ESTADO['abierto'];
+  return g[tipo]||g['default']||{icon:'📋',msg:'Tu solicitud está registrada en nuestro sistema.'};
+}
+
+function ntdFmtFecha(iso){
+  if(!iso)return'—';
+  return new Date(iso).toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'});
+}
+function ntdFmtFechaHora(iso){
+  if(!iso)return'—';
+  const d=new Date(iso);
+  return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})+' '+d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+}
+
+// CSS de las tarjetas inyectado una sola vez
+let _ntdConsultaCSS=false;
+function ntdInjectConsultaCSS(){
+  if(_ntdConsultaCSS)return;
+  _ntdConsultaCSS=true;
+  const s=document.createElement('style');
+  s.textContent=`
+  .ntd-card-radicado{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);border-radius:14px;
+    padding:13px 15px;margin-bottom:9px;cursor:pointer;transition:box-shadow .15s,border-color .15s;display:flex;flex-direction:column;gap:5px;}
+  .ntd-card-radicado:hover{box-shadow:0 4px 18px rgba(37,99,235,.22);border-color:rgba(37,99,235,.45);}
+  .ntd-card-top{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .ntd-ticket-id{font-size:13px;font-weight:700;color:#e2e8f0;font-family:'JetBrains Mono',monospace;}
+  .ntd-est-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;}
+  .eb-recibido{background:rgba(37,99,235,.15);color:#93c5fd;border:1px solid rgba(37,99,235,.3);}
+  .eb-gestion{background:rgba(245,158,11,.13);color:#fcd34d;border:1px solid rgba(245,158,11,.3);}
+  .eb-solucionado{background:rgba(16,185,129,.13);color:#6ee7b7;border:1px solid rgba(16,185,129,.3);}
+  .ntd-card-tipo{font-size:11px;color:rgba(190,215,255,.5);}
+  .ntd-card-fecha{font-size:11px;color:rgba(190,215,255,.35);}
+  .ntd-card-msg{font-size:11px;color:rgba(100,210,160,.8);font-weight:500;margin-top:2px;}
+  /* Detalle */
+  .ntd-det-wrap{width:100%;}
+  .ntd-det-header{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:12px;padding:12px 14px;margin-bottom:8px;}
+  .ntd-det-id-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+  .ntd-det-id{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#93c5fd;}
+  .ntd-det-resumen{font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:3px;line-height:1.3;}
+  .ntd-det-meta{font-size:11px;color:rgba(190,215,255,.4);}
+  .ntd-det-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;}
+  .ntd-det-cell{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:6px 10px;}
+  .ntd-det-lbl{font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:rgba(190,215,255,.3);margin-bottom:3px;}
+  .ntd-det-val{font-size:12px;font-weight:600;color:#e2e8f0;}
+  /* Timeline */
+  .ntd-tl-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;overflow:hidden;}
+  .ntd-tl-head{padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.07);display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.03);}
+  .ntd-tl-title{font-size:12px;font-weight:700;color:#e2e8f0;}
+  .ntd-tl-count{font-size:10px;color:rgba(190,215,255,.4);background:rgba(255,255,255,.06);border-radius:20px;padding:2px 10px;border:1px solid rgba(255,255,255,.07);}
+  .ntd-tl-body{padding:4px 0;}
+  .ntd-tl-item{display:flex;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.04);}
+  .ntd-tl-item:last-child{border-bottom:none;}
+  .ntd-tl-spine{display:flex;flex-direction:column;align-items:center;flex-shrink:0;}
+  .ntd-tl-dot{width:9px;height:9px;border-radius:50%;border:2px solid #04080f;flex-shrink:0;margin-top:2px;box-shadow:0 0 0 1px currentColor;}
+  .ntd-tl-dot.blue{color:#2563eb;background:#2563eb;}
+  .ntd-tl-dot.green{color:#10b981;background:#10b981;}
+  .ntd-tl-dot.yellow{color:#f59e0b;background:#f59e0b;}
+  .ntd-tl-dot.grey{color:#4b5563;background:#4b5563;}
+  .ntd-tl-line{width:2px;flex:1;background:rgba(255,255,255,.08);margin-top:4px;}
+  .ntd-tl-ev{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#93c5fd;margin-bottom:2px;}
+  .ntd-tl-desc{font-size:12px;color:rgba(190,215,255,.7);line-height:1.4;}
+  .ntd-tl-time{font-size:10px;color:rgba(190,215,255,.3);font-family:'JetBrains Mono',monospace;margin-top:3px;}
+  .ntd-volver-lista{background:none;border:none;color:#93c5fd;cursor:pointer;font-size:12px;font-weight:600;padding:0;margin-bottom:10px;display:block;font-family:'Sora',sans-serif;}
+  `;
+  document.head.appendChild(s);
+}
+
+// ── Lista de radicados por cédula ──────────────────────────────
 async function ntdFetchRadicadosCedula(cedula){
+  ntdInjectConsultaCSS();
   ntdTyping(true);ntdAddSk();
   let d;
   try{
@@ -2252,40 +2374,57 @@ async function ntdFetchRadicadosCedula(cedula){
     d=await r.json();
   }catch(e){d={encontrado:false};}
   ntdRmSk();ntdTyping(false);
+
   if(!d.encontrado||!d.radicados?.length){
     ntdAddMsg('nova',
       `<p>No encontramos radicados asociados a la cédula <strong>${cedula}</strong>.</p>
-       <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.6)">Verifica que el número sea correcto o consulta en nuestra plataforma.</p>`,
-      ntdBotonesFinales(`<a href="${NTD_C.consultaUrl}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">1️⃣ &nbsp;🔍 Consultar en plataforma →</a>`));
+       <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.55)">Verifica que el número sea correcto.</p>`,
+      ntdBotonesFinales());
+    ntdPreguntarResolucion();
     return;
   }
-  const lista=d.radicados.slice(0,5).map((r,i)=>{
-    const est=r.estado||'pendiente';
-    const bc=est==='solucionado'?'ntd-bg':(est==='urgente'?'ntd-br':'ntd-by');
-    const tipo=r.tipo||'—';
-    const fecha=r.creado?new Date(r.creado).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'—';
-    return `<div class="ntd-ir" style="cursor:pointer" onclick="ntdVerRadicado('${r.ticket_id||r.id}')">
-      <span class="ntd-il">${r.ticket_id||'Sin ticket'}</span>
-      <span class="ntd-badge ${bc}">${est.toUpperCase()}</span>
-    </div>
-    <div style="font-size:11px;color:rgba(190,215,255,.5);padding:0 4px 6px">${tipo} · ${fecha}${r.mensaje_ux?'<br><span style="color:rgba(100,220,150,.8)">'+r.mensaje_ux+'</span>':''}</div>`;
+
+  // Guardar para navegación
+  NTD._radicadosCedula = cedula;
+  NTD._radicadosNombre = d.nombre || '';
+
+  const saludo = d.nombre ? `Hola, <strong>${d.nombre.split(' ')[0]}</strong> 👋 — ` : '';
+  const tarjetas = d.radicados.map(r=>{
+    const est  = NTD_ESTADOS[r.estado]||{label:r.estado,cls:'eb-recibido'};
+    const tipo = r.tipo?r.tipo.charAt(0).toUpperCase()+r.tipo.slice(1):'';
+    const fecha= ntdFmtFecha(r.creado);
+    const msg  = ntdGetMsgEstado(r.estado, r.tipo||'default');
+    const resumen = r.resumen?`<div style="font-size:12px;color:rgba(190,215,255,.6);margin-top:2px">${r.resumen}</div>`:'';
+    const msgUx = r.mensaje_ux
+      ? `<div class="ntd-card-msg">${r.mensaje_ux}</div>`
+      : `<div class="ntd-card-msg" style="color:rgba(190,215,255,.4)">${msg.icon} ${msg.msg}</div>`;
+    return `<div class="ntd-card-radicado" onclick="ntdVerRadicado('${r.ticket_id||r.id}')">
+      <div class="ntd-card-top">
+        <div class="ntd-ticket-id">${r.ticket_id||'—'}</div>
+        <div class="ntd-est-badge ${est.cls}">${est.label}</div>
+      </div>
+      <div class="ntd-card-tipo">${tipo}${r.categoria?' · '+r.categoria:''}</div>
+      <div class="ntd-card-fecha">${fecha}</div>
+      ${resumen}${msgUx}
+    </div>`;
   }).join('');
+
   ntdAddMsg('nova',
-    `<p>Encontré <strong>${d.total}</strong> radicado${d.total>1?'s':''} para la cédula ${cedula}:</p>
-     <div class="ntd-ic">${lista}</div>`,
-    ntdBotonesFinales(`<a href="${NTD_C.consultaUrl}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">🔍 &nbsp;Ver detalle completo →</a>`));
+    `<p>${saludo}Encontré <strong>${d.total||d.radicados.length}</strong> radicado${(d.total||d.radicados.length)>1?'s':''} — toca uno para ver el detalle:</p>${tarjetas}`,
+    ntdBotonesFinales());
+  ntdPreguntarResolucion();
 }
 
+// ── Ver detalle de radicado (onclick en tarjeta) ───────────────
 function ntdVerRadicado(ticket_id){
   if(!ticket_id)return;
-  ntdConsultarRadicado();
-  setTimeout(()=>{
-    const ta=document.getElementById('ntdTa');
-    if(ta){ta.value=ticket_id;ntdSend();}
-  },300);
+  ntdTyping(true);ntdAddSk();
+  ntdFetchRadicado(ticket_id);
 }
 
+// ── Traer y mostrar detalle completo — replica consulta.html ──
 async function ntdFetchRadicado(ticket){
+  ntdInjectConsultaCSS();
   ntdTyping(true);ntdAddSk();
   let d;
   try{
@@ -2294,41 +2433,162 @@ async function ntdFetchRadicado(ticket){
     d=await r.json();
   }catch(e){d={encontrado:false};}
   ntdRmSk();ntdTyping(false);
+
   if(!d.encontrado){
     ntdAddMsg('nova',
       `<p>No encontré el radicado <strong>${ticket}</strong>.</p>
-       <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.6)">Verifica que el número sea correcto (ej: TD-20260401-1234) o consulta directamente en nuestra plataforma.</p>`,
-      `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px">
-         <a href="${NTD_C.consultaUrl}?ticket=${encodeURIComponent(ticket)}" target="_blank" class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px;text-decoration:none">1️⃣ &nbsp;🔍 Consultar en plataforma →</a>
-         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">2️⃣ &nbsp;Intentar con otro número</button>
-         <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">3️⃣ &nbsp;🏠 Menú principal</button>
-       </div>`);return;
+       <p style="margin-top:4px;font-size:12px;color:rgba(190,215,255,.55)">Verifica que el número sea correcto (ej: TD-20260401-1234).</p>`,
+      ntdBotonesFinales(`<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">🔍 &nbsp;Intentar con otro número</button>`));
+    return;
   }
-  const est=d.estado||'pendiente';
-  const bc=est==='cerrado'?'ntd-bg':(est==='urgente'||d.sla_vencido?'ntd-br':'ntd-by');
-  const fl=d.fecha_limite?new Date(d.fecha_limite).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'—';
-  let hH='';
-  if(d.historial?.length){
-    hH=`<div style="margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.04)">
-      <div style="font-size:9px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:rgba(130,165,220,.35);margin-bottom:4px">Últimos eventos</div>
-      ${d.historial.map(h=>`<div style="font-size:11px;color:rgba(190,215,255,.6);padding:1px 0">
-        <span style="color:rgba(130,165,220,.35)">${new Date(h.created_at).toLocaleDateString('es-CO',{day:'2-digit',month:'short'})}</span> · ${h.evento}: ${h.descripcion}</div>`).join('')}
-    </div>`;
+
+  const est  = NTD_ESTADOS[d.estado]||{label:d.estado,cls:'eb-recibido'};
+  const fl   = d.fecha_limite?new Date(d.fecha_limite).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'}):'—';
+  const metaParts=[];
+  if(d.agente)  metaParts.push('👤 '+d.agente);
+  if(d.creado)  metaParts.push('📅 '+ntdFmtFecha(d.creado));
+  if(fl!=='—')  metaParts.push('⏰ Límite: '+fl+(d.sla_vencido?' ⚠️':''));
+
+  // Header tarjeta
+  const headerHTML=`
+  <div class="ntd-det-wrap">
+    <div class="ntd-det-header">
+      <div class="ntd-det-id-row">
+        <div class="ntd-det-id">${d.ticket_id||'—'}</div>
+        <div class="ntd-est-badge ${est.cls}">${est.label}</div>
+      </div>
+      ${d.resumen?`<div class="ntd-det-resumen">${d.resumen}</div>`:''}
+      <div class="ntd-det-meta">${metaParts.join(' · ')}</div>
+    </div>
+    <div class="ntd-det-grid">
+      <div class="ntd-det-cell"><div class="ntd-det-lbl">Tipo</div><div class="ntd-det-val">${d.tipo||'—'}</div></div>
+      <div class="ntd-det-cell"><div class="ntd-det-lbl">Canal</div><div class="ntd-det-val">${d.canal||'—'}</div></div>
+    </div>
+    <div class="ntd-tl-card" id="ntd-tl-box-${d.ticket_id}">
+      <div class="ntd-tl-head">
+        <div class="ntd-tl-title">📋 Historial de gestiones</div>
+        <div class="ntd-tl-count" id="ntd-tl-count-${d.ticket_id}">—</div>
+      </div>
+      <div class="ntd-tl-body" id="ntd-tl-body-${d.ticket_id}"></div>
+    </div>
+  </div>`;
+
+  const volverBtn = NTD._radicadosCedula
+    ? `<button class="ntd-volver-lista" onclick="ntdFetchRadicadosCedula('${NTD._radicadosCedula}')">← Ver todos mis radicados</button>`
+    : '';
+
+  ntdAddMsg('nova', volverBtn + headerHTML,
+    ntdBotonesFinales(`<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">🔍 &nbsp;Consultar otro radicado</button>`));
+
+  // Renderizar timeline (igual que consulta.html)
+  ntdRenderTimelineNova(d.historial||[], d.estado, d, [], d.ticket_id);
+
+  // Si solucionado, buscar adjuntos en Supabase y actualizar
+  const estadosSolucion=['cerrado','respondido','solucionado','cerrado_automatico','firma_confirmada','correo_respondido'];
+  const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+  const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+  if(estadosSolucion.includes(d.estado) && d.ticket_id && sbUrl && sbKey){
+    const hdr={headers:{apikey:sbKey,Authorization:'Bearer '+sbKey}};
+    fetch(sbUrl+'/rest/v1/correos?ticket_id=eq.'+encodeURIComponent(d.ticket_id)+'&select=id&limit=1',hdr)
+      .then(r=>r.json())
+      .then(rows=>{
+        const cid=rows&&rows[0]&&rows[0].id;
+        if(!cid)return Promise.resolve([[],[]]);
+        return Promise.all([
+          fetch(sbUrl+'/rest/v1/adjuntos?correo_id=eq.'+cid+'&direccion=eq.saliente&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido&order=created_at.desc&limit=10',hdr).then(r=>r.json()).catch(()=>[]),
+          fetch(sbUrl+'/rest/v1/adjuntos?correo_id=eq.'+cid+'&direccion=eq.firma_cierre&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido&order=created_at.desc&limit=5',hdr).then(r=>r.json()).catch(()=>[])
+        ]);
+      })
+      .then(results=>{
+        if(!results)return;
+        const adjs=[...(results[0]||[]),...(results[1]||[])];
+        if(adjs.length) ntdRenderTimelineNova(d.historial||[], d.estado, d, adjs, d.ticket_id);
+      })
+      .catch(()=>{});
   }
-  ntdAddMsg('nova',
-    `<p>Aquí está tu radicado 📋</p>
-     <div class="ntd-ic">
-       <div class="ntd-ict">Ticket ${d.ticket_id}</div>
-       <div class="ntd-ir"><span class="ntd-il">Estado</span><span class="ntd-badge ${bc}">${est.toUpperCase()}</span></div>
-       <div class="ntd-ir"><span class="ntd-il">Tipo</span><span class="ntd-iv">${d.tipo||'—'}</span></div>
-       <div class="ntd-ir"><span class="ntd-il">Prioridad</span><span class="ntd-iv">${d.prioridad||'media'}</span></div>
-       <div class="ntd-ir"><span class="ntd-il">Agente</span><span class="ntd-iv">${d.agente||'Sin asignar'}</span></div>
-       <div class="ntd-ir"><span class="ntd-il">Límite SLA</span><span class="ntd-iv">${fl}${d.sla_vencido?' ⚠️':''}</span></div>
-       ${d.resumen?`<div class="ntd-ir"><span class="ntd-il">Resumen</span><span class="ntd-iv">${d.resumen}</span></div>`:''}
-       ${hH}
-     </div>`,
-    `<div class="ntd-chips" style="flex-direction:column;align-items:stretch;gap:5px"><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultarRadicado()">3️⃣ &nbsp;🔍 Consultar otro radicado</button>${est!=='cerrado'?`<button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdEscalarAgente()">4️⃣ &nbsp;👤 Hablar con asesor</button>`:''} <button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdMostrarMenu()">1️⃣ &nbsp;🏠 Menú principal</button><button class="ntd-ch b" style="width:100%;justify-content:flex-start;border-radius:10px;padding:9px 14px" onclick="ntdConsultaPersonalizada()">2️⃣ &nbsp;💬 Realizar pregunta personalizada a Nova TD</button></div>`);
+
+  ntdPreguntarResolucion();
 }
+
+// ── Timeline — replica exacta de renderTimeline de consulta.html ──
+function ntdRenderTimelineNova(eventos, estado, c, adjuntos, ticketId){
+  const body=document.getElementById('ntd-tl-body-'+ticketId);
+  const countEl=document.getElementById('ntd-tl-count-'+ticketId);
+  if(!body)return;
+  body.innerHTML='';
+
+  const estadosFinal=['cerrado','respondido','solucionado','cerrado_automatico','firma_confirmada','correo_respondido'];
+  const esSolucionado=estadosFinal.includes(estado);
+  const enGestion=['gestion','en_gestion','asignado','pendiente_firma','escalado','gestionado'].includes(estado)
+    ||eventos.some(e=>['asignado','asignado_manual','en_gestion','gestion','observacion','escalado','pendiente_firma','respondido'].includes(e.evento));
+
+  const evAsignado=eventos.find(e=>['asignado_manual','asignado','asignado_automatico'].includes(e.evento));
+  const evFirma=eventos.find(e=>e.evento==='firma_confirmada');
+  const fechaAsignado=evAsignado?.created_at||null;
+  const fechaSolucion=evFirma?.created_at||(esSolucionado?(c?.actualizado||c?.creado):null);
+
+  // Adjuntos HTML
+  let adjHTML='';
+  if(esSolucionado&&adjuntos&&adjuntos.length){
+    const links=adjuntos.map(a=>{
+      const bytes=a.tamano_bytes||0;
+      const size=bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':bytes>=1024?Math.round(bytes/1024)+' KB':bytes+' B';
+      const ext=(a.nombre||'').split('.').pop().toLowerCase();
+      const icon=ext==='pdf'?'📄':['png','jpg','jpeg','gif','webp'].includes(ext)?'🖼️':['mp3','ogg','wav','m4a'].includes(ext)?'🎵':['zip','rar'].includes(ext)?'🗜️':'📎';
+      return '<a href="'+a.storage_url+'" target="_blank" rel="noopener" '
+        +'style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;'
+        +'background:rgba(16,185,129,.13);border:1.5px solid rgba(16,185,129,.35);border-radius:8px;'
+        +'padding:6px 12px;text-decoration:none;color:#6ee7b7;font-size:11px;font-weight:600;">'
+        +icon+' '+a.nombre
+        +' <span style="color:rgba(16,185,129,.6);font-size:10px">('+size+')</span>'
+        +' <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">'
+        +'<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
+        +'<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>'
+        +'</a>';
+    }).join('');
+    adjHTML='<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">'+links+'</div>';
+  }
+
+  const pasos=[
+    {col:'blue',done:true,
+     lbl:'📩 Correo recibido',
+     desc:'Tu solicitud fue radicada exitosamente en nuestra plataforma.',
+     fecha:c?.creado},
+    {col:enGestion&&!esSolucionado?'yellow':(esSolucionado?'green':'grey'),
+     done:enGestion||esSolucionado,
+     lbl:'🔍 En gestión',
+     desc:'Un agente especializado está atendiendo su caso con prioridad.',
+     fecha:fechaAsignado},
+    {col:esSolucionado?'green':'grey',
+     done:esSolucionado,
+     lbl:'✅ Solucionado',
+     desc:'Tu caso fue atendido exitosamente. Gracias por comunicarte con Tododrogas.',
+     fecha:fechaSolucion,
+     extra:adjHTML}
+  ];
+
+  if(countEl) countEl.textContent=pasos.filter(p=>p.done).length+' de 3 etapas completadas';
+
+  pasos.forEach((paso,i)=>{
+    const isLast=i===pasos.length-1;
+    const div=document.createElement('div');
+    div.className='ntd-tl-item';
+    div.style.opacity=paso.done?'1':'0.35';
+    div.innerHTML=
+      '<div class="ntd-tl-spine">'
+        +'<div class="ntd-tl-dot '+paso.col+'"></div>'
+        +(isLast?'':`<div class="ntd-tl-line"></div>`)
+      +'</div>'
+      +'<div style="flex:1;min-width:0">'
+        +'<div class="ntd-tl-ev">'+paso.lbl+'</div>'
+        +(paso.done?'<div class="ntd-tl-desc">'+paso.desc+'</div>':'')
+        +(paso.fecha?'<div class="ntd-tl-time">'+ntdFmtFechaHora(paso.fecha)+'</div>':'')
+        +(paso.extra||'')
+      +'</div>';
+    body.appendChild(div);
+  });
+}
+
 
 
 
