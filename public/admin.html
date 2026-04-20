@@ -118,6 +118,9 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .badge.solucionado{background:var(--green-l);color:var(--green)}
 .badge.reabierto{background:var(--red-l);color:var(--red)}
 .badge.pendiente_firma{background:var(--purple-l);color:var(--purple)}
+.badge.borrador{background:var(--bg2);color:var(--ink3);border:1px solid var(--border)}
+.badge.enviado{background:#dbeafe;color:#2563eb}
+.badge.sin_asignar{background:#f1f5f9;color:#64748b}
 .badge.informacion{background:#f0fdf4;color:#0891b2;border:1px solid #bae6fd}
 .email-item.bulk-selected{background:var(--blue-l)!important;border-left:3px solid var(--blue)}
 .btn-purple{background:var(--purple-l);color:var(--purple);border:1.5px solid var(--purple-l)}
@@ -3080,6 +3083,8 @@ function updateFolderCounts() {
     const el = document.getElementById('fc-'+s);
     if(el) el.textContent = _forCount.filter(e=>e.estado===s).length;
   });
+  const urgEl=document.getElementById('fc-urgente');
+  if(urgEl){ const _allU=state.allEmails||state.emails; urgEl.textContent=_allU.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length; }
   const envEl=document.getElementById('fc-enviado');
   const borEl=document.getElementById('fc-borrador');
   if(envEl) envEl.textContent=_all2.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
@@ -3132,6 +3137,8 @@ function renderEmailList() {
   if(state.folder.startsWith('agent_')) {
     const agId = state.folder.replace('agent_','');
     list = list.filter(e=>e.agente_id===agId||e.asignado_a===agId);
+  } else if(state.folder === 'urgente') {
+    list = list.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
   } else if(state.folder === 'todos') {
     list = list.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
   } else if(state.folder === 'enviado') {
@@ -3197,7 +3204,7 @@ function renderEmailList() {
         <span class="ei-time">${formatDate(new Date(e.fecha))}</span>
         <div class="ei-badges">
           ${agent?`<span style="font-size:10px;color:var(--ink3)">${esc(agent.nombre.split(' ')[0])}</span>`:''}
-          <span class="badge ${e.estado}">${estadoLabel(e.estado)}</span>
+          <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':!e.agente_id&&e.estado==='pendiente'?'sin_asignar':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':!e.agente_id&&e.estado==='pendiente'?'Sin asignar':estadoLabel(e.estado)}</span>
         </div>
       </div>
     </div>`;
@@ -3205,7 +3212,7 @@ function renderEmailList() {
 }
 
 function estadoLabel(s){
-  return {pendiente:'Pendiente',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma',informacion:'Información'}[s]||s;
+  return {pendiente:'Pendiente',sin_asignar:'Sin asignar',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma',informacion:'Información'}[s]||s;
 }
 
 // ──────────────────────────────────────────────
@@ -4849,7 +4856,7 @@ async function toggleReplyDraft() {
   }, 150);
 }
 
-function toggleReply(modo) {
+async function toggleReply(modo) {
   modo = modo || 'reply';
   const area = document.getElementById('replyBoxArea');
   // Si ya está abierto con el mismo modo, cerrar
