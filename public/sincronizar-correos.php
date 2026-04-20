@@ -568,7 +568,7 @@ foreach ($todos_correos as $c) {
         $nuevo_cursor = $received_raw;
         continue;
     }
-    if ($r['code'] === 409) {
+if ($r['code'] === 409) {
     // Actualizar destinatarios aunque el correo ya exista
     sbPatch('correos', "message_id=eq.$msg_id", [
         'to_recipients'  => $to_recipients,
@@ -578,7 +578,7 @@ foreach ($todos_correos as $c) {
     log_msg("  ⚠️  Duplicado — destinatarios actualizados {$msg_id}");
     $nuevo_cursor = $received_raw;
     continue;
-    }
+}
     }
 
     $fila    = $r['data'][0] ?? null;
