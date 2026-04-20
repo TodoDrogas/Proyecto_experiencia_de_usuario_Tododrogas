@@ -2513,6 +2513,11 @@ async function toggleReply(modo) {
       </div>
       <div style="display:flex;justify-content:flex-end;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:var(--bg)">
         <button class="btn btn-ghost" onclick="document.getElementById('replyBoxArea').innerHTML=''">Cancelar</button>
+        <button id="replyImportantBtn" onclick="replyToggleImportant()" title="Marcar como importante" style="background:none;border:1.5px solid var(--border);border-radius:var(--r2);padding:5px 10px;cursor:pointer;font-size:14px;transition:all .15s" onmouseover="this.style.borderColor='#dc2626'" onmouseout="if(!window._replyImportant)this.style.borderColor='var(--border)'">❗</button>
+        <button class="btn btn-ghost" onclick="saveDraft()" title="Guardar borrador">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Borrador
+        </button>
         <button class="btn btn-primary" onclick="(window.top||window).sendReply()" style="background:${titleColor};border-color:${titleColor}">
           <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           ${modo==='forward'?'Reenviar':'Enviar'}
@@ -2528,6 +2533,90 @@ async function toggleReply(modo) {
   // Activar autocompletado (sin delay — los inputs ya existen en el DOM)
   _acInit(document.getElementById('replyTo'));
   _acInit(document.getElementById('replyCC'));
+}
+
+// ── Importancia del correo ────────────────────────────────────────
+window._replyImportant = false;
+function replyToggleImportant() {
+  window._replyImportant = !window._replyImportant;
+  const btn = document.getElementById('replyImportantBtn');
+  if (!btn) return;
+  if (window._replyImportant) {
+    btn.style.background    = '#fee2e2';
+    btn.style.borderColor   = '#dc2626';
+    btn.title               = 'Marcado como IMPORTANTE — clic para quitar';
+    showToast('Correo marcado como importante ❗','info');
+  } else {
+    btn.style.background    = 'none';
+    btn.style.borderColor   = 'var(--border)';
+    btn.title               = 'Marcar como importante';
+  }
+}
+
+// ── Guardar borrador en Graph + Supabase ──────────────────────────
+async function saveDraft() {
+  const id      = state.selectedId;
+  const email   = state.emails.find(e=>e.id===id);
+  const toInput = document.getElementById('replyTo')?.value?.trim();
+  const ccInput = document.getElementById('replyCC')?.value?.trim();
+  const subject = document.getElementById('replySubject')?.value?.trim();
+  const editor  = document.getElementById('replyEditor');
+  const body    = editor?.innerHTML?.trim();
+
+  if (!body || body === '<br>') { showToast('Escribe algo antes de guardar el borrador','info'); return; }
+
+  const btn = document.querySelector('#replyBoxArea .btn-ghost:nth-child(3)');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
+
+  try {
+    const token  = await getGraphToken();
+    const userId = window.GRAPH_USER_ID || '';
+
+    // Crear borrador en Graph (Drafts folder)
+    const draftPayload = {
+      subject:      subject || ('RE: '+(email?.asunto||'')),
+      body:         { contentType: 'HTML', content: body },
+      toRecipients: toInput ? [{emailAddress:{address:toInput}}] : [],
+      importance:   window._replyImportant ? 'high' : 'normal',
+      isDraft:      true,
+    };
+    if (ccInput) draftPayload.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+
+    const r = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages`, {
+      method:  'POST',
+      headers: { 'Authorization': 'Bearer '+token, 'Content-Type': 'application/json' },
+      body:    JSON.stringify(draftPayload),
+    });
+    if (!r.ok) throw new Error('Graph: '+(await r.text()).substring(0,80));
+    const draft = await r.json();
+
+    // Guardar en Supabase como borrador
+    try {
+      await sb('correos','POST',{
+        message_id:     draft.id,
+        from_email:     userId,
+        from_name:      AGENT_NAME || 'Agente',
+        subject:        draftPayload.subject,
+        body_content:   body,
+        body_type:      'html',
+        origen:         'borrador',
+        estado:         'borrador',
+        is_draft:       true,
+        importance:     window._replyImportant ? 'high' : 'normal',
+        conversation_id: email?.raw?.conversation_id || null,
+        received_at:    new Date().toISOString(),
+        canal_contacto: 'correo',
+        agente_id:      AGENT_ID || null,
+      });
+    } catch(e2){ console.warn('[borrador-supabase]', e2.message); }
+
+    showToast('Borrador guardado ✓','success');
+    document.getElementById('replyBoxArea').innerHTML = '';
+
+  } catch(e) {
+    showToast('Error al guardar borrador: '+e.message.substring(0,60),'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Borrador'; }
+  }
 }
 
 async function sendReply() {
@@ -2583,9 +2672,10 @@ async function sendReply() {
     }
 
     const messagePayload={
-      subject: subject||('RE: '+email.asunto),
-      body:{contentType:'HTML',content:`<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`},
+      subject:    subject||('RE: '+email.asunto),
+      body:       {contentType:'HTML',content:`<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`},
       toRecipients:[{emailAddress:{address:toInput}}],
+      importance: window._replyImportant ? 'high' : 'normal',
     };
     if(ccInput){
       messagePayload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
@@ -2615,6 +2705,27 @@ async function sendReply() {
           })
           .catch(err=>console.warn('[adjuntos-storage] Error general:',err.message));
       }
+
+      // Guardar correo enviado en Supabase (opción 2 — aparece en hilo al instante)
+      try {
+        await sb('correos','POST',{
+          from_email: userId,
+          from_name:  AGENT_NAME || 'Agente',
+          subject:    subject || ('RE: '+(email?.asunto||'')),
+          body_content: body,
+          body_type:  'html',
+          origen:     'saliente',
+          estado:     'enviado',
+          conversation_id: email?.raw?.conversation_id || null,
+          received_at: new Date().toISOString(),
+          sent_at:    new Date().toISOString(),
+          importance: window._replyImportant ? 'high' : 'normal',
+          canal_contacto: 'correo',
+          agente_id:  AGENT_ID || null,
+          asignado_a: AGENT_NAME || null,
+        });
+      } catch(e2){ console.warn('[correo-saliente]', e2.message); }
+      window._replyImportant = false;
 
       // num_gestiones se incrementa SOLO desde saveGestion() — no aquí
       try{ await sb('historial_eventos','POST',{
@@ -3455,6 +3566,59 @@ function _acInit(inp) {
 
 function limpiarHilo(){const a=document.getElementById('hiloArea');if(a){a.innerHTML='';a.dataset.conv='';}}
 
+async function hiloToggleMsg(msgId) {
+  const bodyEl   = document.getElementById('hilo-body-'+msgId);
+  const previewEl= document.getElementById('hilo-preview-'+msgId);
+  const arrowEl  = document.getElementById('hilo-arrow-'+msgId);
+  if (!bodyEl) return;
+  if (bodyEl.style.display !== 'none') {
+    bodyEl.style.display = 'none';
+    if (previewEl) previewEl.style.display = '';
+    if (arrowEl) arrowEl.textContent = '▼';
+    return;
+  }
+  bodyEl.style.display = '';
+  if (previewEl) previewEl.style.display = 'none';
+  if (arrowEl) arrowEl.textContent = '▲';
+  bodyEl.innerHTML = '<div style="padding:12px;color:var(--ink3);font-size:11px;display:flex;align-items:center;gap:6px"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Cargando mensaje…</div>';
+  try {
+    const token  = await getGraphToken();
+    const userId = window.GRAPH_USER_ID || '';
+    const rMsg = await fetch(
+      'https://graph.microsoft.com/v1.0/users/'+userId+'/messages/'+encodeURIComponent(msgId)+'?$select=body,hasAttachments',
+      { headers: { 'Authorization': 'Bearer '+token } }
+    );
+    const msgData = await rMsg.json();
+    const bodyHtml = msgData.body?.content || '';
+    const bodyType = msgData.body?.contentType || 'text';
+    const hasAdj   = msgData.hasAttachments || false;
+    let adjHtml = '';
+    if (hasAdj) {
+      const rAdj = await fetch(
+        'https://graph.microsoft.com/v1.0/users/'+userId+'/messages/'+encodeURIComponent(msgId)+'/attachments?$select=id,name,contentType,size,isInline',
+        { headers: { 'Authorization': 'Bearer '+token } }
+      );
+      const adjData = await rAdj.json();
+      const visibles = (adjData.value||[]).filter(a=>!a.isInline);
+      if (visibles.length) {
+        adjHtml = '<div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 0;border-top:1px solid var(--border);margin-top:8px">';
+        visibles.forEach(a => {
+          const url = '/adj-proxy.php?url='+encodeURIComponent('https://graph.microsoft.com/v1.0/users/'+userId+'/messages/'+msgId+'/attachments/'+a.id+'/$value');
+          const size = a.size>=1048576?(a.size/1048576).toFixed(1)+' MB':Math.round(a.size/1024)+' KB';
+          adjHtml += '<div onclick="mpPreviewAdjunto(''+url+'',''+esc(a.name)+'',''+esc(a.contentType)+'',this)" style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:11px;transition:all .15s" onmouseover="this.style.borderColor='var(--blue)';this.style.background='var(--blue-l)'" onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--surface)'" title="'+esc(a.name)+'"><span style="font-size:16px">'+getFileIcon(a.name)+'</span><div><div style="font-weight:600;color:var(--ink);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(a.name)+'</div><div style="color:var(--ink3);font-size:10px">'+size+'</div></div></div>';
+        });
+        adjHtml += '</div>';
+      }
+    }
+    const cuerpoHtml = bodyType==='html'
+      ? '<iframe srcdoc="'+bodyHtml.replace(/"/g,'&quot;')+'" sandbox="allow-same-origin" style="width:100%;min-height:200px;border:none;border-radius:6px;display:block" onload="try{this.style.height=this.contentDocument.body.scrollHeight+20+'px'}catch(e){}"></iframe>'
+      : '<pre style="font-family:'Poppins',sans-serif;font-size:12px;white-space:pre-wrap;word-break:break-word;color:var(--ink)">'+esc(bodyHtml)+'</pre>';
+    bodyEl.innerHTML = '<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--surface)">'+(adjHtml?'<div style="padding:8px 12px;background:var(--bg2)">'+adjHtml+'</div>':'')+'<div style="padding:10px 12px">'+cuerpoHtml+'</div></div>';
+  } catch(e) {
+    bodyEl.innerHTML = '<div style="padding:10px;background:var(--red-l);color:var(--red);border-radius:6px;font-size:11px">⚠️ Error: '+esc(e.message)+'</div>';
+  }
+}
+
 async function descargarEML(messageId, asunto) {
   if(!messageId) { showToast('No hay ID de mensaje para descargar','error'); return; }
   const userId = window.GRAPH_USER_ID || '';
@@ -3562,34 +3726,38 @@ async function verHiloCompleto(conversationId, correoId) {
       area.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--ink3);background:var(--bg2);border-radius:var(--r2);margin-top:8px">No se encontraron mensajes en este hilo.</div>';
       return;
     }
+    // Guardar msgs globalmente para expandir (lazy load por clic)
+    window._hiloMsgsMap = {};
+    msgs.forEach(m => { window._hiloMsgsMap[m.id] = m; });
+
     let rows = '';
     msgs.forEach((m,i) => {
       const de = m.from?.emailAddress?.address || '';
       const deNombre = m.from?.emailAddress?.name || de;
       const fecha = m.receivedDateTime||m.sentDateTime||'';
       const esEnviado = de.toLowerCase().includes((window.GRAPH_USER_ID||'').split('@')[0].toLowerCase());
-      const subjectSafe = (m.subject||'correo').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      rows += '<div style="padding:10px 14px;border-bottom:1px solid var(--border);'+(i===msgs.length-1?'border-bottom:none':'')+'">';
-      rows += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
+      rows += `<div id="hilo-msg-${m.id}" style="border-bottom:1px solid var(--border);${i===msgs.length-1?'border-bottom:none':''}">`;
+      rows += `<div onclick="hiloToggleMsg('${m.id}')" style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;transition:background .1s" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">`;
       rows += '<div style="display:flex;align-items:center;gap:8px;min-width:0">';
-      rows += '<span style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:'+(esEnviado?'var(--blue)':'var(--green)')+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff">'+esc(deNombre).charAt(0).toUpperCase()+'</span>';
+      rows += `<span style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:${esEnviado?'var(--blue)':'var(--green)'};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff">${esc(deNombre).charAt(0).toUpperCase()}</span>`;
       rows += '<div style="min-width:0">';
-      rows += '<div style="font-size:11px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(deNombre)+(esEnviado?' <span style="background:var(--blue-l);color:var(--blue);font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">ENVIADO</span>':'')+'</div>';
-      rows += '<div style="font-size:10px;color:var(--ink3)">'+(fecha?new Date(fecha).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'')+' </div>';
+      rows += `<div style="font-size:11px;font-weight:700;color:var(--ink)">${esc(deNombre)}${esEnviado?' <span style="background:var(--blue-l);color:var(--blue);font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">ENVIADO</span>':''}</div>`;
+      rows += `<div style="font-size:10px;color:var(--ink3)">${fecha?new Date(fecha).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):''}</div>`;
       rows += '</div></div>';
-      rows += '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center">';
-      rows += (m.hasAttachments?'<span style="font-size:10px;color:var(--ink3)" title="Tiene adjuntos">📎</span>':'');
-      rows += '<button data-mid="'+m.id+'" data-sub="'+encodeURIComponent(m.subject||'correo')+'" onclick="descargarEML(this.dataset.mid,decodeURIComponent(this.dataset.sub))" title="Descargar como .eml" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2);display:flex;align-items:center;gap:4px">';
-      rows += '<svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> EML</button>';
+      rows += '<div style="display:flex;gap:6px;flex-shrink:0;align-items:center">';
+      rows += m.hasAttachments ? '<span style="font-size:12px" title="Tiene adjuntos">📎</span>' : '';
+      rows += `<button data-mid="${m.id}" data-sub="${encodeURIComponent(m.subject||'correo')}" onclick="event.stopPropagation();descargarEML(this.dataset.mid,decodeURIComponent(this.dataset.sub))" title="Descargar .eml" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2)">EML</button>`;
+      rows += `<span id="hilo-arrow-${m.id}" style="color:var(--ink3);font-size:10px;transition:transform .2s">▼</span>`;
       rows += '</div></div>';
-      rows += '<div style="margin-top:5px;font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.bodyPreview||'')+'</div>';
+      rows += `<div id="hilo-preview-${m.id}" style="padding:0 14px 8px;font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.bodyPreview||'')}</div>`;
+      rows += `<div id="hilo-body-${m.id}" style="display:none;padding:0 14px 12px"></div>`;
       rows += '</div>';
     });
     area.innerHTML = '<div style="margin-top:10px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
       +'<div style="background:var(--bg2);padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px">'
       +'<span style="font-size:11px;font-weight:700;color:var(--ink2)">🧵 Hilo completo · '+msgs.length+' mensaje'+(msgs.length>1?'s':'')+'</span>'
       +'<div style="display:flex;gap:6px;align-items:center">'
-      +'<button onclick="descargarHiloEML(window._hiloMsgs,window._hiloAsunto)" title="Descargar hilo completo como un solo .eml (igual que Outlook)" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2);display:flex;align-items:center;gap:4px"><svg width=\'10\' height=\'10\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'2.5\' viewBox=\'0 0 24 24\'><path d=\'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4\'/><polyline points=\'7 10 12 15 17 10\'/><line x1=\'12\' y1=\'15\' x2=\'12\' y2=\'3\'/></svg> ⬇ Hilo completo</button>'
+      +'<button onclick="descargarHiloEML(window._hiloMsgs,window._hiloAsunto)" title="Descargar hilo completo" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2)">⬇ Hilo completo</button>'
       +'<button onclick="limpiarHilo()" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px">✕</button>'
       +'</div></div>'+rows+'</div>';
   } catch(e) {
