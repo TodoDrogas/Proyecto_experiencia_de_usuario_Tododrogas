@@ -499,20 +499,20 @@ foreach ($todos_correos as $c) {
     $flag_st     = $c['flag']['flagStatus'] ?? 'notFlagged';
 
     // ── Destinatarios — FIX: guardar to/cc/bcc ────────────────────────
-    $to_recipients = json_encode(array_map(fn($r) => [
+    $to_recipients = array_map(fn($r) => [
         'name'    => $r['emailAddress']['name']    ?? '',
         'address' => $r['emailAddress']['address'] ?? '',
-    ], $c['toRecipients'] ?? []));
+    ], $c['toRecipients'] ?? []);
 
-    $cc_recipients = json_encode(array_map(fn($r) => [
+    $cc_recipients = array_map(fn($r) => [
         'name'    => $r['emailAddress']['name']    ?? '',
         'address' => $r['emailAddress']['address'] ?? '',
-    ], $c['ccRecipients'] ?? []));
+    ], $c['ccRecipients'] ?? []);
 
-    $bcc_recipients = json_encode(array_map(fn($r) => [
+    $bcc_recipients = array_map(fn($r) => [
         'name'    => $r['emailAddress']['name']    ?? '',
         'address' => $r['emailAddress']['address'] ?? '',
-    ], $c['bccRecipients'] ?? []));
+    ], $c['bccRecipients'] ?? []);
 
     // ── Ticket ID ─────────────────────────────────────────────────────
     $ticket_id = null;
