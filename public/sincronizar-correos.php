@@ -564,21 +564,15 @@ foreach ($todos_correos as $c) {
     $r = sbUpsert('correos', [$payload], 'message_id');
 
     if ($r['code'] === 409) {
-        log_msg("  ⚠️  Duplicado ignorado {$msg_id}");
+        // Actualizar destinatarios aunque el correo ya exista
+        sbPatch('correos', "message_id=eq.$msg_id", [
+            'to_recipients'  => $to_recipients,
+            'cc_recipients'  => $cc_recipients,
+            'bcc_recipients' => $bcc_recipients,
+        ]);
+        log_msg("  ⚠️  Duplicado — destinatarios actualizados {$msg_id}");
         $nuevo_cursor = $received_raw;
         continue;
-    }
-if ($r['code'] === 409) {
-    // Actualizar destinatarios aunque el correo ya exista
-    sbPatch('correos', "message_id=eq.$msg_id", [
-        'to_recipients'  => $to_recipients,
-        'cc_recipients'  => $cc_recipients,
-        'bcc_recipients' => $bcc_recipients,
-    ]);
-    log_msg("  ⚠️  Duplicado — destinatarios actualizados {$msg_id}");
-    $nuevo_cursor = $received_raw;
-    continue;
-}
     }
 
     $fila    = $r['data'][0] ?? null;
