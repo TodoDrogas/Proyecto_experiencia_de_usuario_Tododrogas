@@ -321,10 +321,21 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
       Pte. por firma
       <span class="folder-cnt" id="fc-pendiente_firma" style="background:var(--purple-l);color:var(--purple)">0</span>
     </div>
-    <div class="folder-item folder-urgente" onclick="setFolder('urgente',this)">
+    <div class="folder-item folder-urgente" onclick="setFolder('urgente',this)" style="color:var(--red)">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
       Urgentes
-      <span class="folder-cnt" id="fc-urgente">0</span>
+      <span class="folder-cnt" id="fc-urgente" style="background:var(--red-l);color:var(--red)">0</span>
+    </div>
+    <div style="height:1px;background:var(--border);margin:6px 0"></div>
+    <div class="folder-item" onclick="setFolder('enviado',this)" style="color:var(--blue)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      Enviados
+      <span class="folder-cnt" id="fc-enviado" style="background:var(--blue-l);color:var(--blue)">0</span>
+    </div>
+    <div class="folder-item" onclick="setFolder('borrador',this)" style="color:var(--ink3)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Borradores
+      <span class="folder-cnt" id="fc-borrador">0</span>
     </div>
   </div>
 
@@ -846,7 +857,12 @@ let _gestionForSolucionado = false;
 // ──────────────────────────────────────────────
 async function loadEmails() {
   try {
-    const data = await sb(`correos?agente_id=eq.${AGENT_ID}&order=received_at.desc&limit=200`);
+    // Traer tickets asignados + enviados/borradores del agente
+    const [dataIn, dataOut] = await Promise.all([
+      sb(`correos?agente_id=eq.${AGENT_ID}&order=received_at.desc&limit=200`),
+      sb(`correos?or=(origen.eq.saliente,origen.eq.borrador,estado.eq.enviado,estado.eq.borrador)&agente_id=eq.${AGENT_ID}&order=received_at.desc&limit=50`).catch(()=>[]),
+    ]);
+    const data = [...(dataIn||[]), ...(dataOut||[])].filter((e,i,arr)=>arr.findIndex(x=>x.id===e.id)===i);
     state.emails = (data||[]).map(e=>({
       id: e.id,
       message_id: e.message_id,
@@ -869,6 +885,7 @@ async function loadEmails() {
       body_content: e.body_content || e.body_preview || '',
       body_type: e.body_type || 'text',
       has_attachments: e.has_attachments || false,
+      is_draft: e.is_draft || false,
       is_read: e.is_read || false,
       to_recipients: _arr(e.to_recipients),
       cc_recipients: _arr(e.cc_recipients),
@@ -889,14 +906,19 @@ async function loadEmails() {
 // FOLDERS
 // ──────────────────────────────────────────────
 function updateFolderCounts() {
-  document.getElementById('fc-todos').textContent = state.emails.length;
+  document.getElementById('fc-todos').textContent = state.emails.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador').length;
   ['pendiente','gestion','solucionado','pendiente_firma'].forEach(s=>{
     const el=document.getElementById('fc-'+s);
     if(el) el.textContent=state.emails.filter(e=>e.estado===s).length;
   });
-  // Urgentes = alta prioridad no solucionados ni pendiente_firma
+  // Urgentes
   const urg = state.emails.filter(e=>e.prioridad==='alta'&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length;
   document.getElementById('fc-urgente').textContent=urg;
+  // Enviados y Borradores
+  const envEl=document.getElementById('fc-enviado');
+  const borEl=document.getElementById('fc-borrador');
+  if(envEl) envEl.textContent=state.emails.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
+  if(borEl) borEl.textContent=state.emails.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true).length;
 }
 
 function setFolder(f, el) {
@@ -914,8 +936,14 @@ function renderEmailList() {
   const search = document.getElementById('searchInput')?.value?.toLowerCase()||'';
 
   if(state.folder==='urgente') {
-    list = list.filter(e=>e.prioridad==='alta'&&e.estado!=='solucionado');
-  } else if(state.folder!=='todos') {
+    list = list.filter(e=>e.prioridad==='alta'&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
+  } else if(state.folder==='enviado') {
+    list = list.filter(e=>e.origen==='saliente'||e.estado==='enviado');
+  } else if(state.folder==='borrador') {
+    list = list.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true);
+  } else if(state.folder==='todos') {
+    list = list.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
+  } else {
     list = list.filter(e=>e.estado===state.folder);
   }
   if(search) list = list.filter(e=>
