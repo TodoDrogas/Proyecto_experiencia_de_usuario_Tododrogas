@@ -661,6 +661,17 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         <span class="folder-cnt" id="fc-pendiente_firma" style="background:var(--purple-l);color:var(--purple)">0</span>
       </div>
       <div class="folders-divider"></div>
+      <div class="folder-item" onclick="setFolder('enviado',this)" style="color:var(--blue)">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Enviados
+        <span class="folder-cnt" id="fc-enviado" style="background:var(--blue-l);color:var(--blue)">0</span>
+      </div>
+      <div class="folder-item" onclick="setFolder('borrador',this)" style="color:var(--ink3)">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Borradores
+        <span class="folder-cnt" id="fc-borrador">0</span>
+      </div>
+      <div class="folders-divider"></div>
       <div class="folders-title" style="margin-top:8px">Por agente</div>
       <div id="folderAgents"></div>
     </div>
@@ -2109,7 +2120,7 @@ async function loadSigiMetrics() {
   try {
     // Traer correos con gestiones en el período
     const correos = await sb(
-      `correos?num_gestiones=gt.0&created_at=gte.${desde}T00:00:00&created_at=lte.${hasta}T23:59:59` +
+      `correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false&created_at=gte.${desde}T00:00:00&created_at=lte.${hasta}T23:59:59` +
       `&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente,created_at` +
       `&order=created_at.desc&limit=500`
     ) || [];
@@ -2249,7 +2260,7 @@ async function exportarSIGI() {
   try {
     // ── Cargar datos frescos (no depender de state para agentes/eps) ──
     const correos = await sb(
-      `correos?num_gestiones=gt.0&created_at=gte.${desde}T00:00:00&created_at=lte.${hasta}T23:59:59` +
+      `correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false&created_at=gte.${desde}T00:00:00&created_at=lte.${hasta}T23:59:59` +
       `&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,tipo_documento,` +
       `direccion_paciente,telefono_contacto,eps_id,origen,estado,prioridad,agente_id,asignado_a,` +
       `fecha_resolucion,created_at,num_gestiones,tiene_tutela,categoria_sigi,categoria_ia,` +
@@ -2957,6 +2968,7 @@ async function loadEmails(horasVentana = 0) {
       body_content: e.body_content || e.body_preview || '',
       body_type: e.body_type || 'text',
       has_attachments: e.has_attachments || false,
+      is_draft: e.is_draft || false,
       is_read: e.is_read || false,
       to_recipients: _arr(e.to_recipients),
       cc_recipients: _arr(e.cc_recipients),
@@ -3061,26 +3073,43 @@ function setSort(s, el) {
 function updateFolderCounts() {
   // Contar sobre allEmails (individuales) no sobre hilos agrupados
   const _all = state.allEmails || state.emails;
-  document.getElementById('fc-todos').textContent = state.emails.filter(e=>e.estado!=='informacion').length;
-  // Para estados: contar sobre allEmails para no perder correos dentro de hilos
+  const _all2 = state.allEmails || state.emails;
+  document.getElementById('fc-todos').textContent = _all2.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
   const _forCount = state.allEmails || state.emails;
   ['pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'].forEach(s=>{
     const el = document.getElementById('fc-'+s);
     if(el) el.textContent = _forCount.filter(e=>e.estado===s).length;
   });
+  const envEl=document.getElementById('fc-enviado');
+  const borEl=document.getElementById('fc-borrador');
+  if(envEl) envEl.textContent=_all2.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
+  if(borEl) borEl.textContent=_all2.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true).length;
 }
 
 function renderFolderAgents() {
   const el = document.getElementById('folderAgents');
+  if (!el) return;
   const activos = state.agents.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
   const COLORS = ['#2563eb','#16a34a','#ea580c','#7c3aed','#ca8a04','#dc2626'];
+  const all = state.allEmails || state.emails;
   el.innerHTML = activos.map((a,i)=>{
-    const cnt = state.emails.filter(e=>e.agente_id===a.id).length;
-    const ini = (a.nombre||'?').charAt(0).toUpperCase();
-    return `<div class="folder-item" onclick="setAgentFolder('${a.id}',this)" style="gap:8px">
-      <div style="width:20px;height:20px;border-radius:50%;background:${COLORS[i%COLORS.length]};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${ini}</div>
-      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.nombre.split(' ')[0])}</span>
-      <span class="folder-cnt">${cnt}</span>
+    const mis      = all.filter(e=>e.agente_id===a.id&&e.origen!=='saliente'&&e.origen!=='borrador');
+    const pendiente= mis.filter(e=>e.estado==='pendiente').length;
+    const gestion  = mis.filter(e=>e.estado==='gestion').length;
+    const total    = mis.length;
+    const ini      = (a.nombre||'?').charAt(0).toUpperCase();
+    const color    = COLORS[i%COLORS.length];
+    return `<div class="folder-item" onclick="setAgentFolder('${a.id}',this)" style="gap:6px;flex-direction:column;align-items:flex-start;padding:6px 8px">
+      <div style="display:flex;align-items:center;gap:6px;width:100%">
+        <div style="width:20px;height:20px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${ini}</div>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-weight:600">${esc(a.nombre.split(' ')[0])}</span>
+        <span class="folder-cnt">${total}</span>
+      </div>
+      <div style="display:flex;gap:4px;padding-left:26px">
+        ${pendiente>0?`<span style="background:#fef9c3;color:#854d0e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px">⏳ ${pendiente} pend.</span>`:''}
+        ${gestion>0?`<span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px">✏️ ${gestion} gest.</span>`:''}
+        ${pendiente===0&&gestion===0?`<span style="color:var(--ink3);font-size:9px">sin activos</span>`:''}
+      </div>
     </div>`;
   }).join('');
 }
@@ -3104,8 +3133,11 @@ function renderEmailList() {
     const agId = state.folder.replace('agent_','');
     list = list.filter(e=>e.agente_id===agId||e.asignado_a===agId);
   } else if(state.folder === 'todos') {
-    // Todos: excluir informacion (tiene su propia carpeta)
-    list = list.filter(e=>e.estado!=='informacion');
+    list = list.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
+  } else if(state.folder === 'enviado') {
+    list = list.filter(e=>e.origen==='saliente'||e.estado==='enviado');
+  } else if(state.folder === 'borrador') {
+    list = list.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true);
   } else {
     list = list.filter(e=>e.estado===state.folder);
   }
@@ -3221,6 +3253,16 @@ async function selectEmail(id) {
         <span style="display:inline-flex;align-items:center;gap:5px;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">🔒 Ticket cerrado · solo lectura</span>
       ` : email.estado==='pendiente_firma' ? `
         <span style="display:inline-flex;align-items:center;gap:5px;background:var(--purple-l);color:var(--purple);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">✍️ Pendiente por firma · adjunta la firma para cerrar</span>
+      ` : (email.origen==='saliente'||email.estado==='enviado') ? `
+        <span style="display:inline-flex;align-items:center;gap:5px;background:#dbeafe;color:#2563eb;font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">📤 Correo enviado — historial disponible a la derecha</span>
+      ` : (email.origen==='borrador'||email.estado==='borrador'||email.is_draft) ? `
+      <button class="btn btn-ghost" onclick="toggleReply('reply')">↩ Responder</button>
+      <button class="btn btn-ghost" onclick="toggleReply('replyAll')">↩↩ Resp. a todos</button>
+      <button class="btn btn-ghost" onclick="toggleReply('forward')">↪ Reenviar</button>
+      <button class="btn btn-ghost" onclick="toggleReplyDraft()" style="background:#dbeafe;color:#2563eb;border-color:#bfdbfe">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Editar y enviar borrador
+      </button>
       ` : `
       <button class="btn btn-ghost" onclick="toggleReply('reply')" title="Responder al remitente">
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
@@ -3619,7 +3661,10 @@ async function assignAgent() {
   const agId = document.getElementById('mgmtAgentSelect').value;
   const agent = agId ? state.agents.find(a=>a.id===agId) : null;
   const email = state.emails.find(e=>e.id===id);
-  await sb(`correos?id=eq.${id}`, 'PATCH', {agente_id:agId||null, asignado_a:agId?state.agents.find(a=>a.id===agId)?.nombre||null:null, estado: agId?'gestion':'pendiente'});
+  // Al asignar agente el estado queda en 'pendiente' — solo cambia a 'gestion' al agregar la primera gestion
+  const estadoActual = email?.estado || 'pendiente';
+  const nuevoEstado  = estadoActual === 'pendiente' ? 'pendiente' : estadoActual;
+  await sb(`correos?id=eq.${id}`, 'PATCH', {agente_id:agId||null, asignado_a:agId?state.agents.find(a=>a.id===agId)?.nombre||null:null, estado: nuevoEstado});
   await addHistorialEvent(id, email, 'asignado_manual', {agente_id:agId,agente_nombre:agent?.nombre||'Sin asignar',por:'admin'});
   showToast(agent?`Asignado a ${agent.nombre} ✓`:'Agente removido','success');
   await loadEmails();
@@ -4241,20 +4286,31 @@ async function _gBuscarMedNombreExec(q, idx) {
     return;
   }
 
-  dd.innerHTML = rows.map(r => {
+  // Guardar en global para evitar problemas con comillas/caracteres especiales
+  window._medRows = window._medRows || {};
+  window._medRows[idx] = rows;
+
+  dd.innerHTML = rows.map((r, i) => {
     const nom = r.Nombre       || r.nombre       || '';
     const cod = r.Codigo       || r.codigo       || '';
     const pbs = r.Articulo_PBS || r.articulo_pbs || '';
-    return `<div class="gm-dd-item"
-      data-nom="${nom.replace(/"/g,'&quot;')}"
-      data-cod="${esc(cod)}"
-      data-pbs="${esc(pbs)}"
-      data-idx="${idx}"
-      onmousedown="gSelectMedicamentoEl(this)">
-      ${esc(nom)}
-      <div class="gm-dd-sub">Cód: ${esc(cod)}${pbs ? ' · PBS: ' + esc(pbs) : ''}</div>
-    </div>`;
+    return '<div class="gm-dd-item" data-rowidx="'+i+'" data-medidx="'+idx+'" onmousedown="gSelectMedByIndex('+i+','+idx+')" onclick="gSelectMedByIndex('+i+','+idx+')">'
+      + esc(nom)
+      + '<div class="gm-dd-sub">Cód: '+esc(cod)+(pbs?' · PBS: '+esc(pbs):'')+' </div>'
+      + '</div>';
   }).join('');
+}
+
+function gSelectMedByIndex(rowIdx, medIdx) {
+  const rows = window._medRows && window._medRows[medIdx];
+  if (!rows || !rows[rowIdx]) return;
+  const r = rows[rowIdx];
+  gSelectMedicamento(
+    r.Nombre       || r.nombre       || '',
+    r.Codigo       || r.codigo       || '',
+    r.Articulo_PBS || r.articulo_pbs || '',
+    medIdx
+  );
 }
 
 function gSelectMedicamentoEl(el) {
@@ -4295,7 +4351,20 @@ function gLimpiarMed(idx) {
 }
 
 // Mantener compatibilidad si algún lugar llama gBuscarMedicamento
-function gBuscarMedicamento(codigo, idx) { /* ya no se usa — búsqueda por nombre */ }
+function gBuscarMedicamento(codigo, idx) {
+  if (!codigo || codigo.length < 3) return;
+  window._codTimers = window._codTimers || {};
+  clearTimeout(window._codTimers[idx]);
+  window._codTimers[idx] = setTimeout(async () => {
+    try {
+      const rows = await sb('rpc/buscar_medicamentos', 'POST', { q: codigo });
+      if (!rows || !rows.length) return;
+      const exact = rows.find(r => (r.Codigo||r.codigo||'').toLowerCase() === codigo.toLowerCase());
+      const r = exact || rows[0];
+      if (r) gSelectMedicamento(r.Nombre||r.nombre||'', r.Codigo||r.codigo||'', r.Articulo_PBS||r.articulo_pbs||'', idx);
+    } catch(e) { console.warn('[buscar-cod]', e.message); }
+  }, 500);
+}
 
 function gRecolectarMeds() {
   const meds = [];
@@ -4764,6 +4833,22 @@ async function _guardarAdjuntosEnStorage(correoId,archivos,enviadoPor){
   return resultados;
 }
 
+async function toggleReplyDraft() {
+  const id    = state.selectedId;
+  const email = state.emails.find(e=>e.id===id);
+  if (!email) return;
+  await toggleReply('reply');
+  setTimeout(() => {
+    const editor  = document.getElementById('replyEditor');
+    const toInp   = document.getElementById('replyTo');
+    const subjInp = document.getElementById('replySubject');
+    if (editor && email.body_content) editor.innerHTML = email.body_content;
+    if (toInp && email.remitente && !toInp.value) toInp.value = email.remitente;
+    if (subjInp && email.asunto) subjInp.value = email.asunto;
+    if (editor) editor.focus();
+  }, 150);
+}
+
 function toggleReply(modo) {
   modo = modo || 'reply';
   const area = document.getElementById('replyBoxArea');
@@ -4854,6 +4939,11 @@ function toggleReply(modo) {
       </div>
       <div style="display:flex;justify-content:flex-end;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:var(--bg)">
         <button class="btn btn-ghost" onclick="document.getElementById('replyBoxArea').innerHTML=''">Cancelar</button>
+        <button id="replyImportantBtn" onclick="replyToggleImportant()" title="Marcar como importante" style="background:none;border:1.5px solid var(--border);border-radius:var(--r2);padding:5px 10px;cursor:pointer;font-size:14px;line-height:1">!</button>
+        <button class="btn btn-ghost" onclick="saveDraft()" title="Guardar como borrador">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          Borrador
+        </button>
         <button class="btn btn-primary" onclick="sendReply()" style="background:${titleColor};border-color:${titleColor}">
           <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           ${modo==='forward'?'Reenviar':'Enviar'}
@@ -4869,6 +4959,129 @@ function toggleReply(modo) {
   // Activar autocompletado (sin delay — los inputs ya existen en el DOM)
   _acInit(document.getElementById('replyTo'));
   _acInit(document.getElementById('replyCC'));
+}
+
+
+window._replyImportant = false;
+function replyToggleImportant() {
+  window._replyImportant = !window._replyImportant;
+  const btn = document.getElementById('replyImportantBtn');
+  if (!btn) return;
+  if (window._replyImportant) {
+    btn.style.cssText = 'background:#fee2e2;border:1.5px solid #dc2626;border-radius:var(--r2);padding:5px 10px;cursor:pointer;font-size:16px;line-height:1;color:#dc2626';
+    showToast('Marcado como importante !','info');
+  } else {
+    btn.style.cssText = 'background:none;border:1.5px solid var(--border);border-radius:var(--r2);padding:5px 10px;cursor:pointer;font-size:14px;line-height:1';
+  }
+}
+
+async function saveDraft() {
+  const id=state.selectedId;
+  const email=state.emails.find(e=>e.id===id);
+  const toInput=document.getElementById('replyTo')?.value?.trim();
+  const ccInput=document.getElementById('replyCC')?.value?.trim();
+  const subject=document.getElementById('replySubject')?.value?.trim();
+  const body=document.getElementById('replyEditor')?.innerHTML?.trim();
+  if(!body||body==='<br>'){ showToast('Escribe algo antes de guardar','info'); return; }
+  try {
+    const token=await getGraphToken();
+    if(!token) throw new Error('No se pudo obtener token. Recarga la pagina.');
+    const userId=window.GRAPH_USER_ID||'';
+    if(!userId) throw new Error('GRAPH_USER_ID no configurado.');
+    const dp={
+      subject:subject||('RE: '+(email?.asunto||'')),
+      body:{contentType:'HTML',content:body},
+      toRecipients:toInput?[{emailAddress:{address:toInput}}]:[],
+      importance:window._replyImportant?'high':'normal',
+      isDraft:true,
+    };
+    if(ccInput) dp.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+    const r=await fetch('https://graph.microsoft.com/v1.0/users/'+userId+'/messages',{
+      method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+      body:JSON.stringify(dp),
+    });
+    if(!r.ok) throw new Error('Graph: '+(await r.text()).substring(0,80));
+    const draft=await r.json();
+    try {
+      await sb('correos','POST',{
+        message_id:draft.id, from_email:userId, from_name:'Admin',
+        subject:dp.subject, body_content:body, body_type:'html',
+        origen:'borrador', estado:'borrador', is_draft:true,
+        importance:window._replyImportant?'high':'normal',
+        conversation_id:email?.raw?.conversation_id||null,
+        received_at:new Date().toISOString(), canal_contacto:'correo',
+      });
+    } catch(e2){ console.warn('[borrador-sb]',e2.message); }
+    showToast('Borrador guardado ok','success');
+    document.getElementById('replyBoxArea').innerHTML='';
+  } catch(e){ showToast('Error borrador: '+e.message.substring(0,60),'error'); }
+}
+
+async function hiloToggleMsg(msgId) {
+  const bodyEl=document.getElementById('hilo-body-'+msgId);
+  const previewEl=document.getElementById('hilo-preview-'+msgId);
+  const arrowEl=document.getElementById('hilo-arrow-'+msgId);
+  if(!bodyEl) return;
+  if(bodyEl.style.display!=='none'){
+    bodyEl.style.display='none';
+    if(previewEl) previewEl.style.display='';
+    if(arrowEl) arrowEl.innerHTML='&#9660;';
+    return;
+  }
+  bodyEl.style.display='';
+  if(previewEl) previewEl.style.display='none';
+  if(arrowEl) arrowEl.innerHTML='&#9650;';
+  bodyEl.innerHTML='<div style="padding:12px;color:var(--ink3);font-size:11px">Cargando...</div>';
+  try {
+    const token=await getGraphToken();
+    const userId=window.GRAPH_USER_ID||'';
+    const rMsg=await fetch('https://graph.microsoft.com/v1.0/users/'+userId+'/messages/'+encodeURIComponent(msgId)+'?$select=body,hasAttachments',{headers:{'Authorization':'Bearer '+token}});
+    const mData=await rMsg.json();
+    const bHtml=mData.body?.content||'';
+    const bType=mData.body?.contentType||'text';
+    const hasAdj=mData.hasAttachments||false;
+    let adjHtml='';
+    if(hasAdj){
+      const rAdj=await fetch('https://graph.microsoft.com/v1.0/users/'+userId+'/messages/'+encodeURIComponent(msgId)+'/attachments?$select=id,name,contentType,size,isInline',{headers:{'Authorization':'Bearer '+token}});
+      const aData=await rAdj.json();
+      const vis=(aData.value||[]).filter(a=>!a.isInline);
+      if(vis.length){
+        adjHtml='<div style="display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;background:var(--bg2);border-bottom:1px solid var(--border)">';
+        vis.forEach(a=>{
+          const sz=a.size>=1048576?(a.size/1048576).toFixed(1)+' MB':Math.round(a.size/1024)+' KB';
+          const icons={pdf:'PDF',doc:'DOC',docx:'DOC',xls:'XLS',xlsx:'XLS',png:'IMG',jpg:'IMG',jpeg:'IMG',zip:'ZIP'};
+          const ext=(a.name||'').split('.').pop().toLowerCase();
+          const ico=icons[ext]||'FILE';
+          adjHtml+='<div data-adjurl="'+encodeURIComponent('https://graph.microsoft.com/v1.0/users/'+userId+'/messages/'+msgId+'/attachments/'+a.id+'/$value')+'" data-adjnom="'+encodeURIComponent(a.name||'adjunto')+'" onclick="descargarAdjHiloAdmin(this)" style="display:flex;align-items:center;gap:5px;padding:4px 10px;background:#fff;border:1.5px solid var(--border);border-radius:6px;cursor:pointer;font-size:11px" onmouseover="this.style.borderColor=\'var(--blue)\'" onmouseout="this.style.borderColor=\'var(--border)\'"><b style="font-size:9px;background:var(--bg2);padding:1px 4px;border-radius:3px">'+ico+'</b><span style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">'+esc(a.name)+'</span><span style="color:var(--ink3)">'+sz+'</span></div>';
+        });
+        adjHtml+='</div>';
+      }
+    }
+    const cuerpo=bType==='html'
+      ?'<iframe srcdoc="'+bHtml.replace(/"/g,'&quot;')+'" sandbox="allow-same-origin" style="width:100%;min-height:200px;border:none;display:block" onload="try{this.style.height=this.contentDocument.body.scrollHeight+20+\'px\'}catch(e){}"></iframe>'
+      :'<pre style="font-family:Poppins,sans-serif;font-size:12px;white-space:pre-wrap;word-break:break-word;padding:10px">'+esc(bHtml)+'</pre>';
+    bodyEl.innerHTML=adjHtml+'<div style="padding:10px 12px">'+cuerpo+'</div>';
+  } catch(e){
+    bodyEl.innerHTML='<div style="padding:10px;background:var(--red-l);color:var(--red);border-radius:6px;font-size:11px">Error: '+esc(e.message)+'</div>';
+  }
+}
+
+async function descargarAdjHiloAdmin(el) {
+  const url=decodeURIComponent(el.dataset.adjurl||'');
+  const nombre=decodeURIComponent(el.dataset.adjnom||'adjunto');
+  if(!url){ showToast('URL no disponible','error'); return; }
+  try {
+    const token=await getGraphToken();
+    const r=await fetch(url,{headers:{'Authorization':'Bearer '+token}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const blob=await r.blob();
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=nombre;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  } catch(e){ showToast('Error descargando: '+e.message,'error'); }
 }
 
 async function sendReply() {
@@ -4902,9 +5115,10 @@ async function sendReply() {
       attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:base64});
     }
     const messagePayload = {
-      subject: subject||('RE: '+email.asunto),
-      body:{contentType:'HTML',content:`<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`},
+      subject:    subject||('RE: '+email.asunto),
+      body:       {contentType:'HTML',content:`<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`},
       toRecipients:[{emailAddress:{address:toInput}}],
+      importance: window._replyImportant ? 'high' : 'normal',
     };
     if(ccInput) messagePayload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
     if(attachments.length>0) messagePayload.attachments=attachments;
@@ -4926,6 +5140,27 @@ async function sendReply() {
           .catch(err=>console.warn('[adjuntos-storage]',err.message));
       }
       await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,100)});
+      try {
+        await sb('correos','POST',{
+          from_email:'admin@tododrogas.com.co', from_name:'Admin',
+          subject: subject||('RE: '+(email?.asunto||'')),
+          body_content:body, body_type:'html', origen:'saliente', estado:'enviado',
+          conversation_id:email?.raw?.conversation_id||null,
+          received_at:new Date().toISOString(), sent_at:new Date().toISOString(),
+          importance:window._replyImportant?'high':'normal', canal_contacto:'correo',
+        });
+      } catch(e2){ console.warn('[correo-saliente-admin]',e2.message); }
+      try {
+        const corrOrig=state.emails.find(e=>e.raw?.conversation_id===email?.raw?.conversation_id&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
+        const idGest=corrOrig?.id||id;
+        const freshG=await sb(`correos?id=eq.${idGest}&select=num_gestiones&limit=1`);
+        await sb(`correos?id=eq.${idGest}`,'PATCH',{num_gestiones:(freshG?.[0]?.num_gestiones||0)+1});
+      } catch(e3){ console.warn('[gestiones-admin]',e3.message); }
+      // Si el correo actual era borrador, marcarlo como enviado
+      if (email?.origen==='borrador'||email?.estado==='borrador'||email?.is_draft) {
+        try { await sb(`correos?id=eq.${id}`,'PATCH',{estado:'enviado',origen:'saliente',is_draft:false}); } catch(e4){}
+      }
+      window._replyImportant=false;
       _attachedFiles.clear();
       document.getElementById('replyBoxArea').innerHTML='';
     } else throw new Error(await r.text());
@@ -5736,29 +5971,38 @@ async function verHiloCompleto(conversationId, correoId) {
       area.innerHTML = '<div style="padding:12px;font-size:12px;color:var(--ink3);background:var(--bg2);border-radius:var(--r2);margin-top:8px">No se encontraron mensajes en este hilo.</div>';
       return;
     }
+    window._hiloMsgsMap = {};
+    msgs.forEach(m => { window._hiloMsgsMap[m.id] = m; });
+
     let rows = '';
     msgs.forEach((m,i) => {
-      const de = m.from?.emailAddress?.address || '';
-      const deNombre = m.from?.emailAddress?.name || de;
-      const fecha = m.receivedDateTime||m.sentDateTime||'';
-      const esEnviado = de.toLowerCase().includes((window.GRAPH_USER_ID||'').split('@')[0].toLowerCase());
-      const esFocus = correoId && state.emails.find(e=>e.id===correoId&&e.message_id===m.id);
-      const subjectSafe = (m.subject||'correo').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      rows += '<div style="padding:10px 14px;border-bottom:1px solid var(--border);'+(esFocus?'background:var(--blue-l);':'')+(i===msgs.length-1?'border-bottom:none':'')+'">';
-      rows += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">';
-      rows += '<div style="display:flex;align-items:center;gap:8px;min-width:0">';
-      rows += '<span style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:'+(esEnviado?'var(--blue)':'var(--green)')+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff">'+esc(deNombre).charAt(0).toUpperCase()+'</span>';
-      rows += '<div style="min-width:0">';
-      rows += '<div style="font-size:11px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(deNombre)+(esEnviado?' <span style="background:var(--blue-l);color:var(--blue);font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">ENVIADO</span>':'')+'</div>';
-      rows += '<div style="font-size:10px;color:var(--ink3)">'+(fecha?new Date(fecha).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'')+' </div>';
-      rows += '</div></div>';
-      rows += '<div style="display:flex;gap:4px;flex-shrink:0;align-items:center">';
-      rows += (m.hasAttachments?'<span style="font-size:10px;color:var(--ink3)" title="Tiene adjuntos">📎</span>':'');
-      rows += '<button data-mid="'+m.id+'" data-sub="'+encodeURIComponent(m.subject||'correo')+'" onclick="descargarEML(this.dataset.mid,decodeURIComponent(this.dataset.sub))" title="Descargar como .eml" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2);display:flex;align-items:center;gap:4px">';
-      rows += '<svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> EML</button>';
-      rows += '</div></div>';
-      rows += '<div style="margin-top:5px;font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.bodyPreview||'')+'</div>';
-      rows += '</div>';
+      const de=m.from?.emailAddress?.address||'';
+      const deNombre=m.from?.emailAddress?.name||de;
+      const fecha=m.receivedDateTime||m.sentDateTime||'';
+      const esEnviado=de.toLowerCase().includes((window.GRAPH_USER_ID||'').split('@')[0].toLowerCase());
+      const esFocus=correoId&&state.emails.find(e=>e.id===correoId&&e.message_id===m.id);
+      const mid=m.id;
+      const bg=esEnviado?'var(--blue)':'var(--green)';
+      const ini=esc(deNombre).charAt(0).toUpperCase();
+      const fStr=fecha?new Date(fecha).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'';
+      const bb=i===msgs.length-1?'none':'1px solid var(--border)';
+      const fbg=esFocus?'background:var(--blue-l);':'';
+      rows+='<div id="hilo-msg-'+mid+'" style="border-bottom:'+bb+';'+fbg+'">';
+      rows+='<div data-hiloid="'+mid+'" onclick="hiloToggleMsg(this.dataset.hiloid)" style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\''+'">';
+      rows+='<div style="display:flex;align-items:center;gap:8px;min-width:0">';
+      rows+='<span style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff">'+ini+'</span>';
+      rows+='<div style="min-width:0">';
+      rows+='<div style="font-size:11px;font-weight:700;color:var(--ink)">'+esc(deNombre)+(esEnviado?' <span style="background:var(--blue-l);color:var(--blue);font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">ENVIADO</span>':'')+' </div>';
+      rows+='<div style="font-size:10px;color:var(--ink3)">'+fStr+'</div>';
+      rows+='</div></div>';
+      rows+='<div style="display:flex;gap:6px;flex-shrink:0;align-items:center">';
+      rows+=(m.hasAttachments?'<span style="font-size:12px" title="Tiene adjuntos">&#128206;</span>':'');
+      rows+='<button data-mid="'+mid+'" data-sub="'+encodeURIComponent(m.subject||'correo')+'" onclick="event.stopPropagation();descargarEML(this.dataset.mid,decodeURIComponent(this.dataset.sub))" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;color:var(--ink2)">EML</button>';
+      rows+='<span id="hilo-arrow-'+mid+'" style="color:var(--ink3);font-size:10px">&#9660;</span>';
+      rows+='</div></div>';
+      rows+='<div id="hilo-preview-'+mid+'" style="padding:0 14px 8px;font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(m.bodyPreview||'')+'</div>';
+      rows+='<div id="hilo-body-'+mid+'" style="display:none;padding:0 14px 12px"></div>';
+      rows+='</div>';
     });
     area.innerHTML = '<div style="margin-top:10px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
       +'<div style="background:var(--bg2);padding:8px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px">'
