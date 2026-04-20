@@ -857,12 +857,10 @@ let _gestionForSolucionado = false;
 // ──────────────────────────────────────────────
 async function loadEmails() {
   try {
-    // Traer tickets asignados + enviados/borradores del agente
-    const [dataIn, dataOut] = await Promise.all([
-      sb(`correos?agente_id=eq.${AGENT_ID}&order=received_at.desc&limit=200`),
-      sb(`correos?or=(origen.eq.saliente,origen.eq.borrador,estado.eq.enviado,estado.eq.borrador)&agente_id=eq.${AGENT_ID}&order=received_at.desc&limit=50`).catch(()=>[]),
-    ]);
-    const data = [...(dataIn||[]), ...(dataOut||[])].filter((e,i,arr)=>arr.findIndex(x=>x.id===e.id)===i);
+    // Traer tickets asignados — incluye enviados/borradores que tengan agente_id
+    // Una sola query para evitar duplicados
+    const dataIn = await sb(`correos?agente_id=eq.${AGENT_ID}&order=received_at.desc&limit=300`);
+    const data = dataIn || [];
     state.emails = (data||[]).map(e=>({
       id: e.id,
       message_id: e.message_id,
@@ -887,6 +885,7 @@ async function loadEmails() {
       has_attachments: e.has_attachments || false,
       is_draft: e.is_draft || false,
       is_read: e.is_read || false,
+      origen: e.origen || '',
       to_recipients: _arr(e.to_recipients),
       cc_recipients: _arr(e.cc_recipients),
       sent_at: e.sent_at || e.received_at || e.created_at,
@@ -906,7 +905,7 @@ async function loadEmails() {
 // FOLDERS
 // ──────────────────────────────────────────────
 function updateFolderCounts() {
-  document.getElementById('fc-todos').textContent = state.emails.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador').length;
+  document.getElementById('fc-todos').textContent = state.emails.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
   ['pendiente','gestion','solucionado','pendiente_firma'].forEach(s=>{
     const el=document.getElementById('fc-'+s);
     if(el) el.textContent=state.emails.filter(e=>e.estado===s).length;
@@ -1026,9 +1025,9 @@ async function selectEmail(id) {
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
         Reenviar
       </button>
-      <button class="btn btn-ghost" onclick="(window.top||window).toggleReply('reply')" style="background:#dbeafe;color:#2563eb;border-color:#bfdbfe">
+      <button class="btn btn-ghost" onclick="(window.top||window).toggleReplyDraft()" style="background:#dbeafe;color:#2563eb;border-color:#bfdbfe">
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        Enviar borrador
+        Editar y enviar borrador
       </button>
       ` : `
       <button class="btn btn-ghost" onclick="(window.top||window).toggleReply('reply')" title="Responder al remitente">
@@ -2519,7 +2518,37 @@ function _mostrarModalPrimeraGestion() {
 }
 
 // Reply
-async function toggleReply(modo) {
+async // ── Abrir borrador en el editor con su contenido precargado ────────
+async function toggleReplyDraft() {
+  const id    = state.selectedId;
+  const email = state.emails.find(e=>e.id===id);
+  if (!email) return;
+
+  // Primero abrir el reply box normal
+  await toggleReply('reply');
+
+  // Luego precargar el contenido del borrador en el editor
+  setTimeout(() => {
+    const editor  = document.getElementById('replyEditor');
+    const toInp   = document.getElementById('replyTo');
+    const ccInp   = document.getElementById('replyCC');
+    const subjInp = document.getElementById('replySubject');
+
+    if (editor && email.body_content) {
+      editor.innerHTML = email.body_content;
+    }
+    // Precargar destinatarios si los tiene
+    if (toInp && email.remitente && !toInp.value) {
+      toInp.value = email.remitente;
+    }
+    if (subjInp && email.asunto) {
+      subjInp.value = email.asunto;
+    }
+    if (editor) editor.focus();
+  }, 150);
+}
+
+function toggleReply(modo) {
   modo = modo || 'reply';
   const area = document.getElementById('replyBoxArea');
   // Si ya está abierto con el mismo modo, cerrar
@@ -2706,6 +2735,7 @@ async function saveDraft() {
         conversation_id: email?.raw?.conversation_id||null,
         received_at: new Date().toISOString(), canal_contacto: 'correo',
         agente_id: AGENT_ID||null,
+        num_gestiones: 0,
       });
     } catch(e2){ console.warn('[borrador-sb]',e2.message); }
     showToast('Borrador guardado \u2713','success');
@@ -2862,7 +2892,7 @@ async function sendReply() {
           .catch(err=>console.warn('[adjuntos-storage] Error general:',err.message));
       }
 
-      // Guardar correo enviado en Supabase (aparece en hilo al instante)
+      // Guardar correo enviado en Supabase
       try {
         await sb('correos','POST',{
           from_email:      userId,
@@ -2881,6 +2911,12 @@ async function sendReply() {
           asignado_a:      AGENT_NAME || null,
         });
       } catch(e2){ console.warn('[correo-saliente]', e2.message); }
+      // Si el correo actual era un borrador, eliminarlo de Supabase al enviarse
+      if (email?.origen==='borrador'||email?.estado==='borrador'||email?.is_draft) {
+        try {
+          await sb(`correos?id=eq.${id}`, 'PATCH', { estado:'enviado', origen:'saliente', is_draft:false });
+        } catch(e3){ console.warn('[borrador-enviado]', e3.message); }
+      }
       // Responder correo cuenta como gestión en el ticket original
       try {
         const corrOrig = state.emails.find(e=>
@@ -4388,6 +4424,7 @@ async function cargarMetricasAgente() {
   var correos = [];
   try {
     correos = await sb('correos?agente_id=eq.' + AGENT_ID + '&num_gestiones=gt.0' +
+      '&origen=neq.saliente&origen=neq.borrador&is_draft=is.false' +
       '&received_at=gte.' + desde + 'T00:00:00-05:00&received_at=lte.' + hasta + 'T23:59:59-05:00' +
       '&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente,created_at' +
       '&order=created_at.desc&limit=500') || [];
@@ -4402,7 +4439,7 @@ async function cargarMetricasAgente() {
   document.getElementById('agKpiGest').textContent = totalG;
   document.getElementById('agKpiProm').textContent = total ? (totalG/total).toFixed(1) : '0';
   document.getElementById('agKpiTutela').textContent = correos.filter(function(c){return c.tiene_tutela===true;}).length;
-  document.getElementById('agKpiCerrados').textContent = correos.filter(function(c){return c.estado==='solucionado';}).length;
+  document.getElementById('agKpiCerrados').textContent = correos.filter(function(c){return c.estado==='solucionado'||c.estado==='gestionado';}).length;
   var PAL = ['#60a5fa','#4ade80','#a78bfa','#fb923c','#f472b6','#38bdf8','#facc15','#94a3b8'];
   function contar(arr,k){return arr.reduce(function(a,c){var v=c[k]||'Sin dato';a[v]=(a[v]||0)+1;return a;},{});}
   function topN(obj,n){return Object.entries(obj).sort(function(a,b){return b[1]-a[1];}).slice(0,n);}
