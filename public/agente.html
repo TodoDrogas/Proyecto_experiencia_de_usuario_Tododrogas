@@ -2028,7 +2028,25 @@ function gLimpiarMed(idx) {
 
 // Mantener compatibilidad si algún lugar aún llama gBuscarMedicamento con código
 function gBuscarMedicamento(codigo, idx) {
-  // ya no se usa — la búsqueda es por nombre
+  if (!codigo || codigo.length < 3) return;
+  clearTimeout(window._codTimers = window._codTimers || {});
+  window._codTimers[idx] = setTimeout(async () => {
+    try {
+      const rows = await sb('rpc/buscar_medicamentos', 'POST', { q: codigo });
+      if (!rows || !rows.length) return;
+      // Buscar coincidencia exacta por código primero
+      const exact = rows.find(r => (r.Codigo||r.codigo||'').toLowerCase() === codigo.toLowerCase());
+      const r = exact || rows[0];
+      if (r) {
+        gSelectMedicamento(
+          r.Nombre       || r.nombre       || '',
+          r.Codigo       || r.codigo       || '',
+          r.Articulo_PBS || r.articulo_pbs || '',
+          idx
+        );
+      }
+    } catch(e) { console.warn('[buscar-cod]', e.message); }
+  }, 500);
 }
 
 function gRecolectarMeds() {
