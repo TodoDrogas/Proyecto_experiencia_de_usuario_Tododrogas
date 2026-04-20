@@ -2083,10 +2083,16 @@ function gestionEvidenciaAdd(file) {
 async function generarConNovaTD(correoId) {
   const email = state.emails.find(e=>e.id===correoId);
   if(!email) return;
-  // ── Bloquear si no hay primera gestión ──────────────────────────
+  // ── Bloquear si no hay primera gestión (salvo borradores) ─────────
   try {
-    const _fg = await sb(`correos?id=eq.${correoId}&select=num_gestiones&limit=1`);
-    if((_fg?.[0]?.num_gestiones || 0) === 0) { _mostrarModalPrimeraGestion(); return; }
+    const _emNova = state.emails.find(e=>e.id===correoId);
+    const _esBorrNova = _emNova?.origen==='borrador'||_emNova?.estado==='borrador'||_emNova?.is_draft;
+    if (!_esBorrNova) {
+      const _fg = await sb(`correos?id=eq.${correoId}&select=num_gestiones&limit=1`);
+      const _emRap = state.emails.find(e=>e.id===state.selectedId);
+      const _esRapBorr = _emRap?.origen==='borrador'||_emRap?.estado==='borrador'||_emRap?.is_draft;
+      if(!_esRapBorr && (_fg?.[0]?.num_gestiones || 0) === 0) { _mostrarModalPrimeraGestion(); return; }
+    }
   } catch(e) { /* red error — dejar pasar */ }
   const area = document.getElementById('replyBoxArea');
   area.innerHTML = `<div style="background:#f5f3ff;border:1px solid #7c3aed;border-radius:8px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border:2px solid #7c3aed;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><span style="color:#7c3aed;font-weight:600;font-size:13px">✦ Nova TD generando respuesta...</span></div>`;
@@ -2518,11 +2524,22 @@ async function toggleReply(modo) {
   const area = document.getElementById('replyBoxArea');
   // Si ya está abierto con el mismo modo, cerrar
   if(area.innerHTML && area.dataset.modo === modo) { area.innerHTML=''; return; }
-  // ── Bloquear si no hay primera gestión ──────────────────────────
+  // ── Bloquear si no hay primera gestión (salvo borradores) ─────────
   if(state.selectedId) {
     try {
-      const _fg = await sb(`correos?id=eq.${state.selectedId}&select=num_gestiones&limit=1`);
-      if((_fg?.[0]?.num_gestiones || 0) === 0) { _mostrarModalPrimeraGestion(); return; }
+      const _emChk = state.emails.find(e=>e.id===state.selectedId);
+      const _esBorrador = _emChk?.origen==='borrador'||_emChk?.estado==='borrador'||_emChk?.is_draft;
+      if (!_esBorrador) {
+        // Buscar ticket original del hilo si es saliente/borrador
+        const _corrOrig = state.emails.find(e=>
+          e.raw?.conversation_id===_emChk?.raw?.conversation_id &&
+          e.origen!=='saliente'&&e.origen!=='borrador'&&
+          e.estado!=='enviado'&&e.estado!=='borrador'&&!e.is_draft
+        );
+        const _idChk = _corrOrig?.id || state.selectedId;
+        const _fg = await sb(`correos?id=eq.${_idChk}&select=num_gestiones&limit=1`);
+        if((_fg?.[0]?.num_gestiones || 0) === 0) { _mostrarModalPrimeraGestion(); return; }
+      }
     } catch(e) { /* red error — dejar pasar */ }
   }
   area.dataset.modo = modo;
@@ -2758,20 +2775,19 @@ async function sendReply() {
   if(!body||body==='<br>'){ showToast('Escribe un mensaje','info'); return; }
   if(!toInput){ showToast('Escribe un destinatario','info'); return; }
 
-  // ── Último escudo — NO aplicar si es borrador o el correo original tiene gestiones ──
+  // ── Último escudo — NO aplicar si es borrador ───────────────────────
   try {
     const emailActual = state.emails.find(e=>e.id===id);
-    const esBorrador = emailActual?.origen==='borrador' || emailActual?.estado==='borrador' || emailActual?.is_draft;
+    const esBorrador = emailActual?.origen==='borrador'||emailActual?.estado==='borrador'||emailActual?.is_draft;
     if (!esBorrador) {
-      // Buscar el correo original del hilo (no el borrador)
       const correoOriginal = state.emails.find(e=>
-        e.raw?.conversation_id === emailActual?.raw?.conversation_id &&
-        e.origen !== 'borrador' && e.estado !== 'borrador' && !e.is_draft
+        e.raw?.conversation_id===emailActual?.raw?.conversation_id &&
+        e.origen!=='saliente'&&e.origen!=='borrador'&&
+        e.estado!=='enviado'&&e.estado!=='borrador'&&!e.is_draft
       );
       const idCheck = correoOriginal?.id || id;
       const fresh = await sb(`correos?id=eq.${idCheck}&select=num_gestiones&limit=1`);
-      const numGest = fresh?.[0]?.num_gestiones || 0;
-      if(numGest === 0) { _mostrarModalPrimeraGestion(); return; }
+      if((fresh?.[0]?.num_gestiones||0) === 0) { _mostrarModalPrimeraGestion(); return; }
     }
   } catch(e) { /* si falla la verificación, dejar continuar */ }
 
