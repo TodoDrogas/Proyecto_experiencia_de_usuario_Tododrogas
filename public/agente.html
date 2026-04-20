@@ -1002,6 +1002,8 @@ async function selectEmail(id) {
       ${email.tipo_pqr?`<span class="meta-chip" style="text-transform:capitalize">${email.tipo_pqr}</span>`:''}
       ${(()=>{const t=email.tono||'';const s=email.sentimiento||'neutro';const tonoMap={enojado:{bg:'#fee2e2',c:'#991b1b',e:'😤'},frustrado:{bg:'#fff7ed',c:'#9a3412',e:'😤'},triste:{bg:'#eff6ff',c:'#1e40af',e:'😢'},ansioso:{bg:'#fefce8',c:'#854d0e',e:'😰'},neutro:{bg:'#f3f4f6',c:'#374151',e:'😐'},satisfecho:{bg:'#f0fdf4',c:'#166534',e:'😊'},agradecido:{bg:'#f0fdf4',c:'#166534',e:'🙏'}};const info=tonoMap[t]||tonoMap['neutro'];return t&&t!=='neutro'?`<span style="display:inline-flex;align-items:center;gap:3px;background:${info.bg};color:${info.c};font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px" title="Tono detectado por IA">${info.e} ${t.toUpperCase()}</span>`:''})()}
       ${email.fecha_limite_sla?`<span class="meta-chip" style="color:${new Date(email.fecha_limite_sla)<new Date()?'#dc2626':new Date(email.fecha_limite_sla)<new Date(Date.now()+86400000)?'#ca8a04':'#16a34a'};font-weight:600">⏱ SLA: ${new Date(email.fecha_limite_sla).toLocaleDateString('es-CO',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:''}
+      ${email.origen==='saliente'||email.estado==='enviado'?`<span class="meta-chip" style="background:#dbeafe;color:#2563eb">📤 Enviado</span>`:''}
+      ${email.origen==='borrador'||email.estado==='borrador'||email.is_draft?`<span class="meta-chip" style="background:var(--bg2);color:var(--ink3)">📝 Borrador</span>`:''}
     </div>
     ${email.fecha_limite_sla?`<div style="margin-bottom:12px">${(()=>{const fin=new Date(email.fecha_limite_sla).getTime();const inicio=new Date(email.fecha).getTime();const ahora=Date.now();const pct=Math.max(0,Math.min(100,Math.round((ahora-inicio)/(fin-inicio)*100)));const color=pct>=90?'#dc2626':pct>=70?'#ca8a04':'#16a34a';const restante=fin-ahora;const hRest=Math.max(0,Math.round(restante/3600000));return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);margin-bottom:4px"><span>Progreso SLA · '+email.horas_sla+'h</span><span style="color:'+color+';font-weight:600">'+(restante>0?hRest+'h restantes':'⚠️ Vencido')+'</span></div><div style="height:6px;background:var(--border);border-radius:99px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:99px"></div></div>'})()}</div>`:''}
     <div class="ev-actions">
@@ -1009,6 +1011,25 @@ async function selectEmail(id) {
         <span style="display:inline-flex;align-items:center;gap:5px;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">🔒 Ticket cerrado · solo lectura</span>
       ` : email.estado==='pendiente_firma' ? `
         <span style="display:inline-flex;align-items:center;gap:5px;background:var(--purple-l);color:var(--purple);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">✍️ Pendiente por firma · adjunta la firma para cerrar</span>
+      ` : (email.origen==='saliente'||email.estado==='enviado') ? `
+        <span style="display:inline-flex;align-items:center;gap:5px;background:#dbeafe;color:#2563eb;font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">📤 Correo enviado — historial disponible a la derecha</span>
+      ` : (email.origen==='borrador'||email.estado==='borrador'||email.is_draft) ? `
+      <button class="btn btn-ghost" onclick="(window.top||window).toggleReply('reply')" title="Responder">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        Responder
+      </button>
+      <button class="btn btn-ghost" onclick="(window.top||window).toggleReply('replyAll')">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><polyline points="14 17 9 12 14 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        Resp. a todos
+      </button>
+      <button class="btn btn-ghost" onclick="(window.top||window).toggleReply('forward')">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+        Reenviar
+      </button>
+      <button class="btn btn-ghost" onclick="(window.top||window).toggleReply('reply')" style="background:#dbeafe;color:#2563eb;border-color:#bfdbfe">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Enviar borrador
+      </button>
       ` : `
       <button class="btn btn-ghost" onclick="(window.top||window).toggleReply('reply')" title="Responder al remitente">
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
@@ -1116,10 +1137,29 @@ async function loadTicketTimeline(correoId) {
   el.innerHTML = '<div class="empty-state"><p>Cargando...</p></div>';
   try {
     let events = [];
+    // Si es enviado/borrador, buscar el correo original del mismo hilo
+    const emailActual = state.emails.find(e=>e.id===correoId);
+    const esSaliente  = emailActual?.origen==='saliente'||emailActual?.estado==='enviado'||
+                        emailActual?.origen==='borrador'||emailActual?.estado==='borrador'||emailActual?.is_draft;
+    let idBuscar = correoId;
+    if (esSaliente && emailActual?.raw?.conversation_id) {
+      // Buscar correo original del hilo (el que tiene gestiones)
+      const corrOrig = state.emails.find(e=>
+        e.raw?.conversation_id === emailActual.raw.conversation_id &&
+        e.origen !== 'saliente' && e.origen !== 'borrador' &&
+        e.estado !== 'enviado' && e.estado !== 'borrador' && !e.is_draft
+      );
+      if (corrOrig) idBuscar = corrOrig.id;
+    }
     try {
-      events = await sb(`historial_eventos?correo_id=eq.${correoId}&order=created_at.asc`)||[];
+      events = await sb(`historial_eventos?correo_id=eq.${idBuscar}&order=created_at.asc`)||[];
+      // Si es enviado, también incluir historial del correo enviado mismo
+      if (esSaliente && idBuscar !== correoId) {
+        const evEnv = await sb(`historial_eventos?correo_id=eq.${correoId}&order=created_at.asc`)||[];
+        events = [...events, ...evEnv].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+      }
     } catch {
-      events = await sb(`historial?correo_id=eq.${correoId}&order=fecha.asc`)||[];
+      events = await sb(`historial?correo_id=eq.${idBuscar}&order=fecha.asc`)||[];
     }
     renderTimeline(events, el);
   } catch { el.innerHTML='<div class="empty-state"><p>Error al cargar</p></div>'; }
@@ -2689,11 +2729,21 @@ async function sendReply() {
   if(!body||body==='<br>'){ showToast('Escribe un mensaje','info'); return; }
   if(!toInput){ showToast('Escribe un destinatario','info'); return; }
 
-  // ── Último escudo (el bloqueo real ocurre ANTES en toggleReply/Nova/Rápidas) ──
+  // ── Último escudo — NO aplicar si es borrador o el correo original tiene gestiones ──
   try {
-    const fresh = await sb(`correos?id=eq.${id}&select=num_gestiones&limit=1`);
-    const numGest = fresh?.[0]?.num_gestiones || 0;
-    if(numGest === 0) { _mostrarModalPrimeraGestion(); return; }
+    const emailActual = state.emails.find(e=>e.id===id);
+    const esBorrador = emailActual?.origen==='borrador' || emailActual?.estado==='borrador' || emailActual?.is_draft;
+    if (!esBorrador) {
+      // Buscar el correo original del hilo (no el borrador)
+      const correoOriginal = state.emails.find(e=>
+        e.raw?.conversation_id === emailActual?.raw?.conversation_id &&
+        e.origen !== 'borrador' && e.estado !== 'borrador' && !e.is_draft
+      );
+      const idCheck = correoOriginal?.id || id;
+      const fresh = await sb(`correos?id=eq.${idCheck}&select=num_gestiones&limit=1`);
+      const numGest = fresh?.[0]?.num_gestiones || 0;
+      if(numGest === 0) { _mostrarModalPrimeraGestion(); return; }
+    }
   } catch(e) { /* si falla la verificación, dejar continuar */ }
 
   // Construir hilo histórico
@@ -2721,7 +2771,9 @@ async function sendReply() {
 
   try {
     const token=await getGraphToken();
+    if(!token) throw new Error('No se pudo obtener el token de autenticación. Recarga la página.');
     const userId=window.GRAPH_USER_ID||'';
+    if(!userId) throw new Error('GRAPH_USER_ID no configurado. Verifica config.js.');
 
     // Adjuntos pequeños → base64 inline
     const attachments=[];
@@ -2784,6 +2836,18 @@ async function sendReply() {
           asignado_a:      AGENT_NAME || null,
         });
       } catch(e2){ console.warn('[correo-saliente]', e2.message); }
+      // Responder correo cuenta como gestión en el ticket original
+      try {
+        const corrOrig = state.emails.find(e=>
+          e.raw?.conversation_id === email?.raw?.conversation_id &&
+          e.origen !== 'saliente' && e.origen !== 'borrador' &&
+          e.estado !== 'enviado' && e.estado !== 'borrador'
+        );
+        const idGest = corrOrig?.id || id;
+        const freshG = await sb(`correos?id=eq.${idGest}&select=num_gestiones&limit=1`);
+        const numG   = (freshG?.[0]?.num_gestiones || 0) + 1;
+        await sb(`correos?id=eq.${idGest}`, 'PATCH', { num_gestiones: numG });
+      } catch(e3){ console.warn('[gestiones-reply]', e3.message); }
       window._replyImportant = false;
 
       // num_gestiones se incrementa SOLO desde saveGestion() — no aquí
