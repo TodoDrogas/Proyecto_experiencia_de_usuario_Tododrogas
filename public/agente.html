@@ -1962,20 +1962,31 @@ async function _gBuscarMedNombreExec(q, idx) {
     return;
   }
 
-  dd.innerHTML = rows.map(r => {
+  // Guardar rows en variable global para evitar problemas con comillas en atributos
+  window._medRows = window._medRows || {};
+  window._medRows[idx] = rows;
+
+  dd.innerHTML = rows.map((r, i) => {
     const nom = r.Nombre       || r.nombre       || '';
     const cod = r.Codigo       || r.codigo       || '';
     const pbs = r.Articulo_PBS || r.articulo_pbs || '';
-    return `<div class="gm-dd-item"
-      data-nom="${nom.replace(/"/g,'&quot;')}"
-      data-cod="${esc(cod)}"
-      data-pbs="${esc(pbs)}"
-      data-idx="${idx}"
-      onmousedown="gSelectMedicamentoEl(this)">
-      ${esc(nom)}
-      <div class="gm-dd-sub">Cód: ${esc(cod)}${pbs ? ' · PBS: ' + esc(pbs) : ''}</div>
-    </div>`;
+    return '<div class="gm-dd-item" data-rowidx="'+i+'" data-medidx="'+idx+'" onmousedown="gSelectMedByIndex('+i+','+idx+')">'
+      + esc(nom)
+      + '<div class="gm-dd-sub">Cód: '+esc(cod)+(pbs?' · PBS: '+esc(pbs):'')+' </div>'
+      + '</div>';
   }).join('');
+}
+
+function gSelectMedByIndex(rowIdx, medIdx) {
+  const rows = window._medRows && window._medRows[medIdx];
+  if (!rows || !rows[rowIdx]) return;
+  const r = rows[rowIdx];
+  gSelectMedicamento(
+    r.Nombre       || r.nombre       || '',
+    r.Codigo       || r.codigo       || '',
+    r.Articulo_PBS || r.articulo_pbs || '',
+    medIdx
+  );
 }
 
 function gSelectMedicamentoEl(el) {
