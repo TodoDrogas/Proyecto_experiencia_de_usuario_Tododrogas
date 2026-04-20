@@ -99,6 +99,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .badge.gestionado{background:var(--orange-l);color:var(--orange)}
 .badge.solucionado{background:var(--green-l);color:var(--green)}
 .badge.pendiente_firma{background:var(--purple-l);color:var(--purple)}
+.badge.borrador{background:var(--bg2);color:var(--ink3);border:1px solid var(--border)}
+.badge.enviado{background:#dbeafe;color:#2563eb}
 .btn-purple{background:var(--purple-l);color:var(--purple);border:1.5px solid var(--purple-l)}
 .btn-purple:hover{background:#ede9fe}
 .empty-state{padding:36px 12px;text-align:center;color:var(--ink3)}
@@ -911,13 +913,13 @@ function updateFolderCounts() {
     if(el) el.textContent=state.emails.filter(e=>e.estado===s).length;
   });
   // Urgentes
-  const urg = state.emails.filter(e=>e.prioridad==='alta'&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length;
+  const urg = state.emails.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length;
   document.getElementById('fc-urgente').textContent=urg;
   // Enviados y Borradores
   const envEl=document.getElementById('fc-enviado');
   const borEl=document.getElementById('fc-borrador');
   if(envEl) envEl.textContent=state.emails.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
-  if(borEl) borEl.textContent=state.emails.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true).length;
+  if(borEl) borEl.textContent=state.emails.filter(e=>(e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true)&&(e.raw?.agente_id===AGENT_ID||!e.raw?.agente_id||e.raw?.from_email===window.GRAPH_USER_ID)).length;
 }
 
 function setFolder(f, el) {
@@ -935,11 +937,11 @@ function renderEmailList() {
   const search = document.getElementById('searchInput')?.value?.toLowerCase()||'';
 
   if(state.folder==='urgente') {
-    list = list.filter(e=>e.prioridad==='alta'&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
+    list = list.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
   } else if(state.folder==='enviado') {
     list = list.filter(e=>e.origen==='saliente'||e.estado==='enviado');
   } else if(state.folder==='borrador') {
-    list = list.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true);
+    list = list.filter(e=>(e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true)&&(e.raw?.agente_id===AGENT_ID||!e.raw?.agente_id||e.raw?.from_email===window.GRAPH_USER_ID));
   } else if(state.folder==='todos') {
     list = list.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
   } else {
@@ -967,7 +969,7 @@ function renderEmailList() {
       <div class="ei-subj">${esc(e.asunto)}</div>
       <div class="ei-foot">
         <span class="ei-time">${formatDate(new Date(e.fecha))}</span>
-        <span class="badge ${e.estado}">${estadoLabel(e.estado)}</span>
+        <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':estadoLabel(e.estado)}</span>
       </div>
     </div>`).join('');
 }
@@ -3016,7 +3018,7 @@ async function syncAll() {
 // ──────────────────────────────────────────────
 // UTILS
 // ──────────────────────────────────────────────
-function estadoLabel(s){return {pendiente:'Pendiente',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;}
+function estadoLabel(s){return {pendiente:'Pendiente',sin_asignar:'Sin asignar',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 
 function _arr(v){if(!v)return[];if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch(e){return[];}}
