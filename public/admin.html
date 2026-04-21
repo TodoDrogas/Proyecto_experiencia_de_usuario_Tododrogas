@@ -2082,7 +2082,8 @@ const state = {
 // Chart instances
 let chartEstados=null,chartAgentes=null,chartTendencia=null,chartPrioridad=null,
     chartResolucion=null,chartAcciones=null,chartHoras=null,chartDiaSemana=null,
-    chartPrioBacklog=null,chartAgentSol=null,chartAntiguedad=null,chartTramos=null;
+    chartPrioBacklog=null,chartAgentSol=null,chartAntiguedad=null,chartTramos=null,
+    chartAgSol=null,chartAgTiempo=null,chartAgGest=null;
 
 function destroyChart(c){if(c){try{c.destroy();}catch{}}return null;}
 
@@ -2096,7 +2097,7 @@ function showMTab(tab, el) {
 }
 function renderMTab(tab){
   if(tab==='web' || tab==='qr' || tab==='nova' || tab==='global') loadNovaMetrics();
-  if(tab==='asesores') loadAgentesMetrics();
+  if(tab==='asesores') { initAsesorFechas(); loadAgentesMetrics(); }
   if(tab==='sigi') { initSigiFechas(); loadSigiMetrics(); }
 }
 
@@ -2106,6 +2107,13 @@ function renderMTab(tab){
 let _sigiChartNombre=null, _sigiChartCategoria=null, _sigiChartEps=null,
     _sigiChartDepto=null,  _sigiChartTendencia=null;
 
+function initAsesorFechas() {
+  if(document.getElementById('agDesde')?.value) return;
+  const hoy   = new Date();
+  const desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  document.getElementById('agDesde').value = desde.toISOString().slice(0,10);
+  document.getElementById('agHasta').value = hoy.toISOString().slice(0,10);
+}
 function initSigiFechas() {
   if(document.getElementById('sigiDesde').value) return;
   const hoy   = new Date();
@@ -3131,16 +3139,7 @@ function setAgentFolder(agentId, el) {
 // EMAIL LIST RENDER
 // ──────────────────────────────────────────────
 function renderEmailList() {
-  // Para carpetas que muestran correos individuales (sin_asignar, pendiente_firma, etc.)
-  // usamos state.allEmails para no colapsar hilos y mostrar cada correo por separado.
-  // Para 'todos' y carpetas de agente mantenemos la vista agrupada por hilo.
-  const CARPETAS_INDIVIDUALES = ['sin_asignar','pendiente_firma','gestionado','solucionado','informacion'];
-  const usarIndividual = CARPETAS_INDIVIDUALES.includes(state.folder) ||
-    (state.folder === 'pendiente') ||
-    (state.folder === 'gestion');
-  let list = usarIndividual
-    ? [...(state.allEmails || state.emails)]
-    : [...state.emails];
+  let list = [...state.emails];
   const search = document.getElementById('searchInput')?.value?.toLowerCase()||'';
 
   // Folder filter
@@ -7795,7 +7794,7 @@ async function loadAgentesMetrics(){
   };
 
   const [correos, eventos, agentes] = await Promise.all([
-    sb(qC('correos?select=id,ticket_id,subject,from_email,from_name,nombre,cedula,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
+    sb(qC('correos?origen=neq.saliente&origen=neq.borrador&is_draft=is.false&estado=neq.enviado&estado=neq.borrador&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
     sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=5000','created_at')).catch(()=>[]),
     sb('agentes?select=id,nombre,email,activo,sede&order=nombre.asc').catch(()=>[]),
   ]);
