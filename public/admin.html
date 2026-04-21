@@ -633,6 +633,11 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         Todos
         <span class="folder-cnt" id="fc-todos">0</span>
       </div>
+      <div class="folder-item" onclick="setFolder('sin_asignar',this)" style="color:#ca8a04">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7"/><line x1="16" y1="17" x2="22" y2="17"/></svg>
+        Sin asignar
+        <span class="folder-cnt" id="fc-sin_asignar" style="background:#fef9c3;color:#854d0e">0</span>
+      </div>
       <div class="folder-item" onclick="setFolder('pendiente',this)">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         Pendientes
@@ -668,11 +673,6 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Enviados
         <span class="folder-cnt" id="fc-enviado" style="background:var(--blue-l);color:var(--blue)">0</span>
-      </div>
-      <div class="folder-item" onclick="setFolder('borrador',this)" style="color:var(--ink3)">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Borradores
-        <span class="folder-cnt" id="fc-borrador">0</span>
       </div>
       <div class="folders-divider"></div>
       <div class="folders-title" style="margin-top:8px">Por agente</div>
@@ -3080,6 +3080,9 @@ function updateFolderCounts() {
   const _all2 = state.allEmails || state.emails;
   document.getElementById('fc-todos').textContent = _all2.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
   const _forCount = state.allEmails || state.emails;
+  // Sin asignar = correos sin agente_id que no sean saliente/borrador/enviado
+  const sinAsEl = document.getElementById('fc-sin_asignar');
+  if(sinAsEl) sinAsEl.textContent = (_forCount).filter(e=>!e.agente_id&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
   ['pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'].forEach(s=>{
     const el = document.getElementById('fc-'+s);
     if(el) el.textContent = _forCount.filter(e=>e.estado===s&&e.origen!=='saliente'&&e.origen!=='borrador').length;
@@ -3087,9 +3090,9 @@ function updateFolderCounts() {
   const urgEl=document.getElementById('fc-urgente');
   if(urgEl){ const _allU=state.allEmails||state.emails; urgEl.textContent=_allU.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length; }
   const envEl=document.getElementById('fc-enviado');
-  const borEl=document.getElementById('fc-borrador');
   if(envEl) envEl.textContent=_all2.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
-  if(borEl) borEl.textContent=_all2.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true).length;
+  const saEl=document.getElementById('fc-sin_asignar');
+  if(saEl) saEl.textContent=_all2.filter(e=>!e.agente_id&&e.estado!=='solucionado'&&e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
 }
 
 function renderFolderAgents() {
@@ -3142,10 +3145,10 @@ function renderEmailList() {
     list = list.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
   } else if(state.folder === 'todos') {
     list = list.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
+  } else if(state.folder === 'sin_asignar') {
+    list = list.filter(e=>!e.agente_id&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
   } else if(state.folder === 'enviado') {
     list = list.filter(e=>e.origen==='saliente'||e.estado==='enviado');
-  } else if(state.folder === 'borrador') {
-    list = list.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true);
   } else {
     list = list.filter(e=>e.estado===state.folder);
   }
@@ -3205,7 +3208,7 @@ function renderEmailList() {
         <span class="ei-time">${formatDate(new Date(e.fecha))}</span>
         <div class="ei-badges">
           ${agent?`<span style="font-size:10px;color:var(--ink3)">${esc(agent.nombre.split(' ')[0])}</span>`:''}
-          <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':!e.agente_id&&e.estado==='pendiente'?'sin_asignar':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':!e.agente_id&&e.estado==='pendiente'?'Sin asignar':estadoLabel(e.estado)}</span>
+          <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':e.estado==='sin_asignar'||(!e.agente_id&&e.estado==='pendiente')?'sin_asignar':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':e.estado==='sin_asignar'||(!e.agente_id&&e.estado==='pendiente')?'Sin asignar':estadoLabel(e.estado)}</span>
         </div>
       </div>
     </div>`;
@@ -3672,9 +3675,9 @@ async function assignAgent() {
   const agId = document.getElementById('mgmtAgentSelect').value;
   const agent = agId ? state.agents.find(a=>a.id===agId) : null;
   const email = state.emails.find(e=>e.id===id);
-  // Al asignar agente el estado queda en 'pendiente' — solo cambia a 'gestion' al agregar la primera gestion
-  const estadoActual = email?.estado || 'pendiente';
-  const nuevoEstado  = estadoActual === 'pendiente' ? 'pendiente' : estadoActual;
+  // Al asignar agente: siempre estado=pendiente (cambia a 'gestion' solo con primera gestión)
+  // Si se quita el agente: estado=sin_asignar (en DB también lo guardamos como sin_asignar)
+  const nuevoEstado = agId ? 'pendiente' : 'sin_asignar';
   await sb(`correos?id=eq.${id}`, 'PATCH', {agente_id:agId||null, asignado_a:agId?state.agents.find(a=>a.id===agId)?.nombre||null:null, estado: nuevoEstado});
   await addHistorialEvent(id, email, 'asignado_manual', {agente_id:agId,agente_nombre:agent?.nombre||'Sin asignar',por:'admin'});
   showToast(agent?`Asignado a ${agent.nombre} ✓`:'Agente removido','success');
@@ -5405,7 +5408,7 @@ async function onDropToAgent(e, agentId, agentName) {
   e.currentTarget.classList.remove('drag-over');
   if(!_dragEmailId) return;
   const email = state.emails.find(em=>em.id===_dragEmailId);
-  await sb(`correos?id=eq.${_dragEmailId}`, 'PATCH', {agente_id:agentId, asignado_a:state.agents.find(a=>a.id===agentId)?.nombre||agentId, estado:'gestion'});
+  await sb(`correos?id=eq.${_dragEmailId}`, 'PATCH', {agente_id:agentId, asignado_a:state.agents.find(a=>a.id===agentId)?.nombre||agentId, estado:'pendiente'});
   await addHistorialEvent(_dragEmailId, email, 'asignado_manual', {agente_id:agentId,agente_nombre:agentName,por:'admin (drag&drop)'});
   showToast(`Asignado a ${agentName} ✓`,'success');
   _dragEmailId = null;
