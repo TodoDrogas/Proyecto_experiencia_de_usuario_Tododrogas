@@ -3131,7 +3131,16 @@ function setAgentFolder(agentId, el) {
 // EMAIL LIST RENDER
 // ──────────────────────────────────────────────
 function renderEmailList() {
-  let list = [...state.emails];
+  // Para carpetas que muestran correos individuales (sin_asignar, pendiente_firma, etc.)
+  // usamos state.allEmails para no colapsar hilos y mostrar cada correo por separado.
+  // Para 'todos' y carpetas de agente mantenemos la vista agrupada por hilo.
+  const CARPETAS_INDIVIDUALES = ['sin_asignar','pendiente_firma','gestionado','solucionado','informacion'];
+  const usarIndividual = CARPETAS_INDIVIDUALES.includes(state.folder) ||
+    (state.folder === 'pendiente') ||
+    (state.folder === 'gestion');
+  let list = usarIndividual
+    ? [...(state.allEmails || state.emails)]
+    : [...state.emails];
   const search = document.getElementById('searchInput')?.value?.toLowerCase()||'';
 
   // Folder filter
