@@ -7794,7 +7794,7 @@ async function loadAgentesMetrics(){
   };
 
   const [correos, eventos, agentes] = await Promise.all([
-    sb(qC('correos?origen=neq.saliente&origen=neq.borrador&is_draft=is.false&estado=neq.enviado&estado=neq.borrador&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
+    sb(qC('correos?origen=neq.saliente&origen=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
     sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=5000','created_at')).catch(()=>[]),
     sb('agentes?select=id,nombre,email,activo,sede&order=nombre.asc').catch(()=>[]),
   ]);
@@ -7816,10 +7816,11 @@ function renderAgentes(){
   const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!sedeFiltro||esc(a.sede||'')=== sedeFiltro||a.sede===sedeFiltro));
 
   // ── KPIs GLOBALES ──
-  const total   = E.length;
-  const solv    = E.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
-  const backlog = E.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
-  const resol   = E.filter(e=>e.fecha_resolucion&&e.received_at);
+  const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
+  const total   = E.filter(e=>_pqr(e)&&e.estado!=='informacion').length;
+  const solv    = E.filter(e=>_pqr(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
+  const backlog = E.filter(e=>_pqr(e)&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
+  const resol   = E.filter(e=>_pqr(e)&&e.fecha_resolucion&&e.received_at);
   const avgH    = resol.length>0
     ? (resol.reduce((a,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return a+(h>0?h:0);},0)/resol.length).toFixed(1)+'h'
     : '—';
@@ -7895,9 +7896,10 @@ function renderAgentes(){
 
   // ── TABLA MAESTRA ──
   const COLS=['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
-  const maxC=Math.max(...act.map(a=>E.filter(e=>e.agente_id===a.id).length),1);
+  const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
+  const maxC=Math.max(...act.map(a=>E.filter(e=>e.agente_id===a.id&&_pqrAg(e)).length),1);
   document.getElementById('agTableBody').innerHTML = act.map((a,i)=>{
-    const myE  = E.filter(e=>e.agente_id===a.id);
+    const myE  = E.filter(e=>e.agente_id===a.id&&_pqrAg(e));
     const myH  = H.filter(h=>h.agente_id===a.id);
     const tot  = myE.length;
     const pend = myE.filter(e=>e.estado==='pendiente').length;
