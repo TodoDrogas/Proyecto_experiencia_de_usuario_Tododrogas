@@ -633,11 +633,6 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         Todos
         <span class="folder-cnt" id="fc-todos">0</span>
       </div>
-      <div class="folder-item" onclick="setFolder('sin_asignar',this)" style="color:#64748b">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        Sin asignar
-        <span class="folder-cnt" id="fc-sin_asignar" style="background:#f1f5f9;color:#64748b">0</span>
-      </div>
       <div class="folder-item" onclick="setFolder('pendiente',this)">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         Pendientes
@@ -673,6 +668,11 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Enviados
         <span class="folder-cnt" id="fc-enviado" style="background:var(--blue-l);color:var(--blue)">0</span>
+      </div>
+      <div class="folder-item" onclick="setFolder('borrador',this)" style="color:var(--ink3)">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Borradores
+        <span class="folder-cnt" id="fc-borrador">0</span>
       </div>
       <div class="folders-divider"></div>
       <div class="folders-title" style="margin-top:8px">Por agente</div>
@@ -2953,7 +2953,7 @@ async function loadEmails(horasVentana = 0) {
       remitente: e.from_email || '',
       remitente_nombre: e.from_name || '',
       fecha: e.received_at || e.created_at,
-      estado: e.estado || 'sin_asignar',
+      estado: e.estado || (e.agente_id ? 'pendiente' : 'sin_asignar'),
       asignado_a: e.asignado_a || null,
       agente_id: e.agente_id || null,
       agente_id: e.agente_id || null,
@@ -3079,14 +3079,16 @@ function updateFolderCounts() {
   const _all2 = state.allEmails || state.emails;
   document.getElementById('fc-todos').textContent = _all2.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
   const _forCount = state.allEmails || state.emails;
-  ['sin_asignar','pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'].forEach(s=>{
+  ['pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'].forEach(s=>{
     const el = document.getElementById('fc-'+s);
-    if(el) el.textContent = _forCount.filter(e=>e.estado===s).length;
+    if(el) el.textContent = _forCount.filter(e=>e.estado===s&&e.origen!=='saliente'&&e.origen!=='borrador').length;
   });
   const urgEl=document.getElementById('fc-urgente');
   if(urgEl){ const _allU=state.allEmails||state.emails; urgEl.textContent=_allU.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length; }
   const envEl=document.getElementById('fc-enviado');
+  const borEl=document.getElementById('fc-borrador');
   if(envEl) envEl.textContent=_all2.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
+  if(borEl) borEl.textContent=_all2.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true).length;
 }
 
 function renderFolderAgents() {
@@ -3137,8 +3139,6 @@ function renderEmailList() {
     list = list.filter(e=>e.agente_id===agId||e.asignado_a===agId);
   } else if(state.folder === 'urgente') {
     list = list.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
-  } else if(state.folder === 'sin_asignar') {
-    list = list.filter(e=>e.estado==='sin_asignar'||(e.estado==='pendiente'&&!e.agente_id));
   } else if(state.folder === 'todos') {
     list = list.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
   } else if(state.folder === 'enviado') {
@@ -3146,11 +3146,7 @@ function renderEmailList() {
   } else if(state.folder === 'borrador') {
     list = list.filter(e=>e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true);
   } else {
-    if(state.folder === 'pendiente') {
-      list = list.filter(e=>e.estado==='pendiente'&&!!e.agente_id);
-    } else {
-      list = list.filter(e=>e.estado===state.folder);
-    }
+    list = list.filter(e=>e.estado===state.folder);
   }
 
   // Search
@@ -3175,7 +3171,7 @@ function renderEmailList() {
     const prio = {critica:0,alta:1,media:2,baja:3,'':4};
     list.sort((a,b)=>(prio[a.prioridad||'']||4)-(prio[b.prioridad||'']||4));
   } else if(state.sort==='estado') {
-    const ord = {sin_asignar:0,pendiente:1,gestion:2,gestionado:3,pendiente_firma:4,solucionado:5};
+    const ord = {pendiente:0,gestion:1,gestionado:2,pendiente_firma:3,solucionado:4};
     list.sort((a,b)=>(ord[a.estado]||0)-(ord[b.estado]||0));
   }
 
@@ -3208,7 +3204,7 @@ function renderEmailList() {
         <span class="ei-time">${formatDate(new Date(e.fecha))}</span>
         <div class="ei-badges">
           ${agent?`<span style="font-size:10px;color:var(--ink3)">${esc(agent.nombre.split(' ')[0])}</span>`:''}
-          <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':(e.estado==='sin_asignar'||(!e.agente_id&&e.estado==='pendiente'))?'sin_asignar':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':(e.estado==='sin_asignar'||(!e.agente_id&&e.estado==='pendiente'))?'Sin asignar':estadoLabel(e.estado)}</span>
+          <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':!e.agente_id&&e.estado==='pendiente'?'sin_asignar':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':!e.agente_id&&e.estado==='pendiente'?'Sin asignar':estadoLabel(e.estado)}</span>
         </div>
       </div>
     </div>`;
@@ -3262,8 +3258,6 @@ async function selectEmail(id) {
     <div class="ev-actions">
       ${email.estado==='solucionado' ? `
         <span style="display:inline-flex;align-items:center;gap:5px;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">🔒 Ticket cerrado · solo lectura</span>
-      ` : email.estado==='pendiente_firma' ? `
-        <span style="display:inline-flex;align-items:center;gap:5px;background:var(--purple-l);color:var(--purple);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">✍️ Pendiente por firma · adjunta la firma para cerrar</span>
       ` : (email.origen==='saliente'||email.estado==='enviado') ? `
         <span style="display:inline-flex;align-items:center;gap:5px;background:#dbeafe;color:#2563eb;font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">📤 Correo enviado — historial disponible a la derecha</span>
       ` : (email.origen==='borrador'||email.estado==='borrador'||email.is_draft) ? `
@@ -3275,6 +3269,7 @@ async function selectEmail(id) {
         Editar y enviar borrador
       </button>
       ` : `
+      ${email.estado==='pendiente_firma'?`<span style="display:inline-flex;align-items:center;gap:5px;background:var(--purple-l);color:var(--purple);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">✍️ Pendiente por firma</span>`:''}
       <button class="btn btn-ghost" onclick="toggleReply('reply')" title="Responder al remitente">
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
         Responder
@@ -3672,16 +3667,11 @@ async function assignAgent() {
   const agId = document.getElementById('mgmtAgentSelect').value;
   const agent = agId ? state.agents.find(a=>a.id===agId) : null;
   const email = state.emails.find(e=>e.id===id);
-  // Al asignar: estado pasa a 'pendiente'. Al desasignar: vuelve a 'sin_asignar'
-  const estadoActual = email?.estado || 'sin_asignar';
-  let nuevoEstado;
-  if (agId) {
-    nuevoEstado = (estadoActual === 'sin_asignar' || estadoActual === 'pendiente') ? 'pendiente' : estadoActual;
-  } else {
-    nuevoEstado = (estadoActual === 'pendiente' || estadoActual === 'sin_asignar') ? 'sin_asignar' : estadoActual;
-  }
+  // Al asignar agente el estado queda en 'pendiente' — solo cambia a 'gestion' al agregar la primera gestion
+  const estadoActual = email?.estado || 'pendiente';
+  const nuevoEstado  = estadoActual === 'pendiente' ? 'pendiente' : estadoActual;
   await sb(`correos?id=eq.${id}`, 'PATCH', {agente_id:agId||null, asignado_a:agId?state.agents.find(a=>a.id===agId)?.nombre||null:null, estado: nuevoEstado});
-  await addHistorialEvent(id, email, agId ? 'asignado_manual' : 'desasignado', {agente_id:agId,agente_nombre:agent?.nombre||'Sin asignar',por:'admin'});
+  await addHistorialEvent(id, email, 'asignado_manual', {agente_id:agId,agente_nombre:agent?.nombre||'Sin asignar',por:'admin'});
   showToast(agent?`Asignado a ${agent.nombre} ✓`:'Agente removido','success');
   await loadEmails();
   await loadEncuestas();
@@ -3827,9 +3817,7 @@ async function reabrirTicket() {
   if(!id) return;
   if(!confirm('¿Reabrir este ticket?')) return;
   const email = state.emails.find(e=>e.id===id);
-  const emailReabrir = state.emails.find(e=>e.id===id);
-  const estadoReabrir = emailReabrir?.agente_id ? 'pendiente' : 'sin_asignar';
-  await sb(`correos?id=eq.${id}`, 'PATCH', {estado:estadoReabrir, fecha_resolucion:null});
+  await sb(`correos?id=eq.${id}`, 'PATCH', {estado:'pendiente', fecha_resolucion:null});
   await addHistorialEvent(id, email, 'reabierto', {por:'admin',razon:'Reapertura manual'});
   showToast('Ticket reabierto','info');
   await loadEmails();
@@ -4714,7 +4702,7 @@ async function saveGestion() {
     if(_gestionForSolucionado) {
       patchCorreo.estado           = 'solucionado';
       patchCorreo.fecha_resolucion = new Date().toISOString();
-    } else if(email?.estado==='pendiente' || email?.estado==='sin_asignar') {
+    } else if(email?.estado==='pendiente') {
       patchCorreo.estado = 'gestion';
     }
 
@@ -4958,6 +4946,7 @@ async function toggleReply(modo) {
       <div style="display:flex;justify-content:flex-end;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:var(--bg)">
         <button class="btn btn-ghost" onclick="document.getElementById('replyBoxArea').innerHTML=''">Cancelar</button>
         <button id="replyImportantBtn" onclick="replyToggleImportant()" title="Marcar como importante" style="background:none;border:1.5px solid var(--border);border-radius:var(--r2);padding:5px 10px;cursor:pointer;font-size:14px;line-height:1">!</button>
+
         <button class="btn btn-primary" onclick="sendReply()" style="background:${titleColor};border-color:${titleColor}">
           <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           ${modo==='forward'?'Reenviar':'Enviar'}
@@ -5568,22 +5557,14 @@ async function mpGuardarAgente() {
   const agente = state.agents.find(a=>a.id===agenteId);
 
   try {
-    const emAnt = state.emails.find(e=>e.id===id);
-    const estadoAnt = emAnt?.estado || 'sin_asignar';
-    let nuevoEstadoMp;
-    if (agenteId) {
-      nuevoEstadoMp = (estadoAnt === 'sin_asignar' || estadoAnt === 'pendiente') ? 'pendiente' : estadoAnt;
-    } else {
-      nuevoEstadoMp = (estadoAnt === 'pendiente' || estadoAnt === 'sin_asignar') ? 'sin_asignar' : estadoAnt;
-    }
     await sb(`correos?id=eq.${id}`, 'PATCH', {
       agente_id: agenteId||null,
-      asignado_a: agente?.nombre||null,
-      estado: nuevoEstadoMp
+      asignado_a: agente?.nombre||null,  // nombre para display
+      estado: agenteId ? 'gestion' : 'pendiente'
     });
     // Actualizar estado local
     const em = state.emails.find(e=>e.id===id);
-    if(em){ em.asignado_a = agenteId; em.agente_id = agenteId; em.estado = nuevoEstadoMp; }
+    if(em){ em.asignado_a = agenteId; em.estado = agenteId?'gestion':'pendiente'; }
     msg.textContent = '✓ ' + (agente ? agente.nombre + ' asignado' : 'Asignación removida');
     msg.style.color = 'var(--green)';
     // Actualizar badge de estado en el modal
@@ -6074,7 +6055,7 @@ let _autoAsignarData = null; // guarda el resultado del preview para confirmar
 
 async function _calcularAutoAsignacion() {
   // 1. Obtener tickets pendientes sin agente (ordenados por fecha, más antiguo primero)
-  const tickets = await sb('correos?agente_id=is.null&estado=in.(pendiente,sin_asignar)&select=id,ticket_id,subject,received_at,agente_id&order=received_at.asc&limit=200') || [];
+  const tickets = await sb('correos?estado=eq.pendiente&agente_id=is.null&select=id,ticket_id,subject,received_at,agente_id&order=received_at.asc&limit=200') || [];
   if(!tickets.length) return { total: 0, asignaciones: [], distribucion: [] };
 
   // 2. Carga real desde correos activos (no casos_activos estático)
@@ -6179,8 +6160,8 @@ async function confirmarAutoAsignar() {
       try {
         await sb(`correos?id=eq.${asig.correo_id}`, 'PATCH', {
           agente_id: asig.agente_id,
-          asignado_a: asig.agente_nombre,
-          estado: 'pendiente'
+          asignado_a: asig.agente_nombre,  // nombre para display
+          estado: 'gestion'
         });
         await addHistorialEvent(asig.correo_id, null, 'asignado_automatico', {agente_id: asig.agente_id, agente_nombre: asig.agente_nombre, por:'admin (autoasignación masiva)'});
         exitosos++;
@@ -6471,7 +6452,7 @@ async function accionMasiva(tipo) {
   for(const id of ids) {
     try {
       const patch = tipo === 'asignar'
-        ? {agente_id:agId, asignado_a:agNombre, estado:'pendiente'}
+        ? {agente_id:agId, asignado_a:agNombre, estado:'gestion'}
         : tipo === 'informacion'
         ? {estado:'informacion', agente_id:null, asignado_a:null}
         : {estado:'pendiente'};
