@@ -3030,18 +3030,6 @@ async function sendReply() {
           await sb(`correos?id=eq.${id}`, 'PATCH', { estado:'enviado', origen:'saliente', is_draft:false });
         } catch(e3){ console.warn('[borrador-enviado]', e3.message); }
       }
-      // Responder correo cuenta como gestión en el ticket original
-      try {
-        const corrOrig = state.emails.find(e=>
-          e.raw?.conversation_id === email?.raw?.conversation_id &&
-          e.origen !== 'saliente' && e.origen !== 'borrador' &&
-          e.estado !== 'enviado' && e.estado !== 'borrador'
-        );
-        const idGest = corrOrig?.id || id;
-        const freshG = await sb(`correos?id=eq.${idGest}&select=num_gestiones&limit=1`);
-        const numG   = (freshG?.[0]?.num_gestiones || 0) + 1;
-        await sb(`correos?id=eq.${idGest}`, 'PATCH', { num_gestiones: numG });
-      } catch(e3){ console.warn('[gestiones-reply]', e3.message); }
       window._replyImportant = false;
 
       // num_gestiones se incrementa SOLO desde saveGestion() — no aquí
