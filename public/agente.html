@@ -865,7 +865,7 @@ async function loadEmails() {
       remitente: e.from_email || '',
       remitente_nombre: e.from_name || '',
       fecha: e.received_at || e.created_at,
-      estado: e.estado || 'pendiente',
+      estado: e.estado || 'sin_asignar',
       prioridad: e.prioridad || '',
       es_urgente: e.es_urgente || false,
       nivel_riesgo: e.nivel_riesgo || '',
@@ -936,7 +936,7 @@ function renderEmailList() {
   } else if(state.folder==='borrador') {
     list = list.filter(e=>(e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true)&&(e.raw?.agente_id===AGENT_ID||!e.raw?.agente_id||e.raw?.from_email===window.GRAPH_USER_ID));
   } else if(state.folder==='todos') {
-    list = list.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
+    list = list.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='sin_asignar');
   } else {
     list = list.filter(e=>e.estado===state.folder);
   }
@@ -2438,7 +2438,7 @@ async function saveGestion() {
     if(_gestionForSolucionado) {
       patchCorreo.estado           = 'solucionado';
       patchCorreo.fecha_resolucion = new Date().toISOString();
-    } else if(email?.estado==='pendiente') {
+    } else if(email?.estado==='pendiente' || email?.estado==='sin_asignar') {
       patchCorreo.estado = 'gestion';
     }
 
