@@ -99,6 +99,9 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .badge.gestionado{background:var(--orange-l);color:var(--orange)}
 .badge.solucionado{background:var(--green-l);color:var(--green)}
 .badge.pendiente_firma{background:var(--purple-l);color:var(--purple)}
+.badge.sin_asignar{background:#f1f5f9;color:#64748b}
+.badge.borrador{background:var(--bg2);color:var(--ink3);border:1px solid var(--border)}
+.badge.enviado{background:#dbeafe;color:#2563eb}
 .badge.borrador{background:var(--bg2);color:var(--ink3);border:1px solid var(--border)}
 .badge.enviado{background:#dbeafe;color:#2563eb}
 .btn-purple{background:var(--purple-l);color:var(--purple);border:1.5px solid var(--purple-l)}
@@ -2518,8 +2521,12 @@ function _mostrarModalPrimeraGestion() {
   document.getElementById('_modalPGAbrir').onclick = function() { modal.remove(); openGestionModal(); };
 }
 
-// Reply
-async // ── Abrir borrador en el editor con su contenido precargado ────────
+// ── Constantes adjuntos (forward declaration para usar en templates) ──
+window.ATTACH_MAX_FILE_MB  = 35;
+window.ATTACH_MAX_TOTAL_MB = 150;
+window.ATTACH_INLINE_MB    = 3.9;
+window.ATTACH_CHUNK_BYTES  = 3 * 1024 * 1024;
+
 async function toggleReplyDraft() {
   const id    = state.selectedId;
   const email = state.emails.find(e=>e.id===id);
@@ -2591,9 +2598,9 @@ async function toggleReply(modo) {
     // CC = todos los to_recipients + cc_recipients excepto el buzón propio
     const propioEmail = (window.GRAPH_USER_ID||'').toLowerCase();
     const allCC = [
-      ..._arr(email.to_recipients).map(r=>r?.emailAddress?.address||r),
-      ..._arr(email.cc_recipients).map(r=>r?.emailAddress?.address||r),
-    ].filter(Boolean).filter(a=>a.toLowerCase()!==propioEmail && a.toLowerCase()!==toVal.toLowerCase());
+      ..._arr(email.to_recipients).map(r=>r?.address||r?.emailAddress?.address||''),
+      ..._arr(email.cc_recipients).map(r=>r?.address||r?.emailAddress?.address||''),
+    ].filter(Boolean).filter(a=>typeof a==='string'&&a.toLowerCase()!==propioEmail&&a.toLowerCase()!==toVal.toLowerCase());
     ccVal = [...new Set(allCC)].join('; ');
     subjectVal = 'RE: '+(email.asunto||'').replace(/^(RE:|RV:|FWD?:)\s*/i,'');
     titleColor = 'var(--green)'; modoLabel = '↩↩ Responder a todos';
@@ -2605,7 +2612,7 @@ async function toggleReply(modo) {
     titleColor = 'var(--orange,#f97316)'; modoLabel = '↪ Reenviar';
   }
 
-  const ccPrev = _arr(email.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ');
+  const ccPrev = _arr(email.cc_recipients).map(r=>r?.address||r?.emailAddress?.address||'').filter(Boolean).join('; ');
 
   area.innerHTML = `
     <div class="reply-box" style="border:1px solid var(--border);border-radius:var(--r);background:var(--surface);overflow:hidden;box-shadow:var(--shadow)">
@@ -2649,7 +2656,7 @@ async function toggleReply(modo) {
             <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
             Adjuntar
           </label>
-          <span style="font-size:10px;color:var(--ink3)">o arrastra · máx. ${ATTACH_MAX_FILE_MB} MB/archivo · ${ATTACH_MAX_TOTAL_MB} MB total</span>
+          <span style="font-size:10px;color:var(--ink3)">o arrastra · máx. ${window.ATTACH_MAX_FILE_MB||35} MB/archivo · ${window.ATTACH_MAX_TOTAL_MB||150} MB total</span>
         </div>
         <input type="file" id="replyFiles" multiple style="display:none" accept="*/*">
         <div id="replyFilesPreview" style="display:flex;flex-wrap:wrap;gap:4px"></div>
