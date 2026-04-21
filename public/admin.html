@@ -3075,24 +3075,21 @@ function setSort(s, el) {
 }
 
 function updateFolderCounts() {
-  // Contar sobre allEmails (individuales) no sobre hilos agrupados
   const _all = state.allEmails || state.emails;
-  const _all2 = state.allEmails || state.emails;
-  document.getElementById('fc-todos').textContent = _all2.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
-  const _forCount = state.allEmails || state.emails;
-  // Sin asignar = correos sin agente_id que no sean saliente/borrador/enviado
-  const sinAsEl = document.getElementById('fc-sin_asignar');
-  if(sinAsEl) sinAsEl.textContent = (_forCount).filter(e=>!e.agente_id&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
-  ['pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'].forEach(s=>{
+  const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
+  document.getElementById('fc-todos').textContent = _all.filter(e=>_pqr(e)&&e.estado!=='informacion').length;
+  const pendEl = document.getElementById('fc-pendiente');
+  if(pendEl) pendEl.textContent = _all.filter(e=>e.estado==='pendiente'&&_pqr(e)).length;
+  const saEl = document.getElementById('fc-sin_asignar');
+  if(saEl) saEl.textContent = _all.filter(e=>e.estado==='sin_asignar'&&_pqr(e)).length;
+  ['gestion','gestionado','solucionado','pendiente_firma','informacion'].forEach(s=>{
     const el = document.getElementById('fc-'+s);
-    if(el) el.textContent = _forCount.filter(e=>e.estado===s&&e.origen!=='saliente'&&e.origen!=='borrador').length;
+    if(el) el.textContent = _all.filter(e=>e.estado===s&&_pqr(e)).length;
   });
-  const urgEl=document.getElementById('fc-urgente');
-  if(urgEl){ const _allU=state.allEmails||state.emails; urgEl.textContent=_allU.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length; }
-  const envEl=document.getElementById('fc-enviado');
-  if(envEl) envEl.textContent=_all2.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
-  const saEl=document.getElementById('fc-sin_asignar');
-  if(saEl) saEl.textContent=_all2.filter(e=>!e.agente_id&&e.estado!=='solucionado'&&e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
+  const urgEl = document.getElementById('fc-urgente');
+  if(urgEl) urgEl.textContent = _all.filter(e=>_pqr(e)&&(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma'&&e.estado!=='informacion').length;
+  const envEl = document.getElementById('fc-enviado');
+  if(envEl) envEl.textContent = _all.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
 }
 
 function renderFolderAgents() {
@@ -3146,11 +3143,15 @@ function renderEmailList() {
   } else if(state.folder === 'todos') {
     list = list.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
   } else if(state.folder === 'sin_asignar') {
-    list = list.filter(e=>!e.agente_id&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
+    list = list.filter(e=>e.estado==='sin_asignar'&&e.origen!=='saliente'&&e.origen!=='borrador');
   } else if(state.folder === 'enviado') {
     list = list.filter(e=>e.origen==='saliente'||e.estado==='enviado');
   } else {
-    list = list.filter(e=>e.estado===state.folder);
+    if(state.folder==='pendiente') {
+      list = list.filter(e=>e.estado==='pendiente'&&e.origen!=='saliente'&&e.origen!=='borrador');
+    } else {
+      list = list.filter(e=>e.estado===state.folder);
+    }
   }
 
   // Search
