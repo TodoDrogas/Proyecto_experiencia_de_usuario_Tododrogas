@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestor Documental · SIGI — Acceso</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+
+:root {
+  --ink:       #0a0e1a;
+  --ink2:      #3a4258;
+  --ink3:      #8892a4;
+  --bg:        #f2f4f8;
+  --surface:   #ffffff;
+  --border:    #dde1eb;
+  --blue:      #2563eb;
+  --blue-d:    #1d4ed8;
+  --blue-glow: rgba(37,99,235,.22);
+  --cyan:      #00c4e8;
+  --cyan-dim:  rgba(0,196,232,.13);
+  --green:     #16a34a;
+  --red:       #dc2626;
+  --shadow:    0 4px 24px rgba(10,14,26,.12),0 1px 4px rgba(10,14,26,.06);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden}
+body{background:var(--ink);display:flex;height:100dvh;overflow:hidden;position:relative;}
+
+#bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
+
+/* ─── LEFT PANEL ─── */
+.left-panel{
+  flex:1;position:relative;z-index:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:clamp(16px,3vh,52px) clamp(20px,4vw,56px);overflow:hidden;
+}
+.left-panel::before{
+  content:'';position:absolute;width:680px;height:680px;top:-180px;left:-160px;
+  background:radial-gradient(circle,rgba(37,99,235,.2) 0%,transparent 68%);
+  animation:orb1 14s ease-in-out infinite alternate;pointer-events:none;
+}
+.left-panel::after{
+  content:'';position:absolute;width:460px;height:460px;bottom:-120px;right:-80px;
+  background:radial-gradient(circle,rgba(0,196,232,.12) 0%,transparent 65%);
+  animation:orb2 18s ease-in-out infinite alternate;pointer-events:none;
+}
+@keyframes orb1{from{transform:translate(0,0) scale(1);}to{transform:translate(70px,50px) scale(1.18);}}
+@keyframes orb2{from{transform:translate(0,0);}to{transform:translate(-50px,-35px) scale(1.12);}}
+
+.left-grid{
+  position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,196,232,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,196,232,.03) 1px,transparent 1px);
+  background-size:56px 56px;
+  mask-image:radial-gradient(ellipse 72% 72% at 50% 50%,black 40%,transparent 100%);
+}
+.scan-line{
+  position:absolute;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,196,232,.25),transparent);
+  animation:scan 9s linear infinite;pointer-events:none;
+}
+@keyframes scan{0%{top:-2%;opacity:0;}8%{opacity:1;}92%{opacity:1;}100%{top:102%;opacity:0;}}
+
+.left-content{position:relative;z-index:2;max-width:clamp(300px,85%,530px);text-align:center;width:100%;}
+
+/* SIGI badge */
+.sigi-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:var(--cyan-dim);border:1px solid rgba(0,196,232,.28);
+  border-radius:8px;padding:7px 16px;margin-bottom:16px;
+  font-family:'DM Mono',monospace;font-size:10px;font-weight:500;
+  letter-spacing:2px;color:var(--cyan);backdrop-filter:blur(8px);
+  box-shadow:0 0 20px rgba(0,196,232,.08);
+}
+.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);
+  box-shadow:0 0 10px var(--cyan);animation:bdot 2s ease-in-out infinite;}
+@keyframes bdot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.65);}}
+
+/* Headline */
+.left-headline{
+  font-size:clamp(22px,3.2vw,44px);font-weight:800;color:#fff;
+  line-height:1.08;letter-spacing:-1.5px;margin-bottom:4px;
+}
+.left-headline .hl{
+  background:linear-gradient(135deg,var(--blue) 0%,var(--cyan) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+.sigi-full-name{
+  font-size:11px;font-weight:500;color:rgba(200,215,255,.45);
+  letter-spacing:1.2px;text-transform:uppercase;margin-bottom:22px;
+  font-family:'DM Mono',monospace;
+}
+
+/* Carousel eyebrow */
+.carousel-eyebrow{
+  font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:rgba(37,99,235,.7);margin:0 0 12px;
+  display:flex;align-items:center;gap:10px;justify-content:center;
+}
+.carousel-eyebrow::before,.carousel-eyebrow::after{
+  content:'';flex:0 0 32px;height:1px;background:linear-gradient(90deg,transparent,rgba(37,99,235,.35));
+}
+.carousel-eyebrow::after{background:linear-gradient(270deg,transparent,rgba(37,99,235,.35));}
+
+/* Carousel arrows */
+.carousel-wrap{position:relative;min-height:clamp(60px,10vh,110px);margin-bottom:clamp(4px,0.8vh,10px);display:flex;align-items:center;gap:8px;}
+.carousel-arrow{
+  flex-shrink:0;width:28px;height:28px;border-radius:50%;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
+  color:rgba(200,215,255,.6);font-size:20px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;padding:0;font-family:sans-serif;
+}
+.carousel-arrow:hover{background:rgba(0,196,232,.15);border-color:rgba(0,196,232,.3);color:#fff;}
+.carousel-slide{
+  flex:1;text-align:center;padding:clamp(8px,1.3vh,14px) clamp(12px,1.5vw,20px);
+  background:linear-gradient(135deg,rgba(37,99,235,.07) 0%,rgba(0,196,232,.05) 100%);
+  border:1px solid rgba(0,196,232,.15);
+  border-radius:14px;backdrop-filter:blur(14px);
+  animation:slideIn .5s cubic-bezier(.16,1,.3,1) both;
+  box-shadow:0 4px 24px rgba(0,0,0,.12), inset 0 1px 0 rgba(255,255,255,.06);
+  position:relative;overflow:hidden;
+}
+.carousel-slide::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(0,196,232,.3),transparent);
+}
+@keyframes slideIn{from{opacity:0;transform:translateY(18px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
+.slide-icon{font-size:26px;margin-bottom:8px;display:block;filter:drop-shadow(0 0 8px rgba(0,196,232,.35));}
+.slide-text{font-size:13px;color:rgba(200,215,255,.72);line-height:1.65;font-weight:400;}
+.slide-text strong{color:#fff;font-weight:700;}
+
+/* Dots */
+.carousel-dots{display:flex;gap:6px;justify-content:center;margin-bottom:28px;align-items:center;}
+.cdot{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.2);
+  transition:all .35s cubic-bezier(.16,1,.3,1);cursor:pointer;border:none;padding:0;}
+.cdot.active{width:28px;border-radius:4px;background:linear-gradient(90deg,var(--blue),var(--cyan));box-shadow:0 0 12px rgba(0,196,232,.5);}
+.cdot:hover:not(.active){background:rgba(255,255,255,.4);}
+
+/* Stats */
+.stat-row{display:flex;gap:0;justify-content:center;margin-bottom:clamp(10px,2vh,24px);
+  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:14px 0;
+}
+.stat{text-align:center;padding:0 20px;}
+.stat-val{font-size:24px;font-weight:800;color:#fff;font-family:'DM Mono',monospace;line-height:1;}
+.stat-val .acc{color:var(--cyan);}
+.stat-label{font-size:9px;font-weight:600;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.32);margin-top:5px;}
+.stat-sep{width:1px;background:rgba(255,255,255,.08);align-self:stretch;margin:4px 0;}
+
+/* Products */
+.product-row{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;}
+.pchip{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
+  border-radius:20px;padding:6px 14px;
+  font-size:11px;font-weight:600;color:rgba(200,215,255,.65);transition:all .25s;
+}
+.pchip:hover{background:rgba(37,99,235,.15);border-color:rgba(37,99,235,.4);color:#fff;transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.2);}
+.pchip-dot{width:5px;height:5px;border-radius:50%;box-shadow:0 0 5px currentColor;}
+
+/* ─── RIGHT PANEL ─── */
+.right-panel{
+  width:clamp(320px,38vw,480px);min-width:0;flex-shrink:0;position:relative;z-index:1;
+  background:var(--surface);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:clamp(16px,3vh,48px) clamp(20px,3vw,48px);box-shadow:-8px 0 48px rgba(10,14,26,.18);
+}
+.right-panel::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,var(--blue),var(--cyan),#7c3aed);
+}
+
+.form-logo{margin-bottom:clamp(10px,2.5vh,28px);}
+.form-logo img{height:clamp(26px,4vh,38px);object-fit:contain;}
+
+/* Inputs */
+.form-title{font-size:22px;font-weight:700;color:var(--ink);margin-bottom:6px;letter-spacing:-.3px;}
+.form-subtitle{font-size:13px;color:var(--ink3);margin-bottom:32px;font-weight:400;line-height:1.5;}
+.form-group{width:100%;margin-bottom:clamp(8px,1.5vh,16px);}
+.form-label{display:block;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--ink3);margin-bottom:8px;}
+.form-input{
+  width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;
+  padding:clamp(9px,1.3vh,13px) 14px;font-size:clamp(12px,1.5vh,14px);font-family:'Poppins',sans-serif;font-weight:500;
+  color:var(--ink);outline:none;transition:all .2s;
+}
+.form-input:focus{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.08);}
+.form-input::placeholder{color:var(--ink3);font-weight:400;}
+
+/* Button */
+.btn-submit{
+  width:100%;background:var(--blue);color:#fff;border:none;border-radius:10px;
+  padding:clamp(10px,1.5vh,14px);font-size:clamp(12px,1.5vh,15px);font-family:'Poppins',sans-serif;font-weight:700;
+  cursor:pointer;transition:all .2s;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  margin-top:4px;letter-spacing:.3px;
+}
+.btn-submit:hover:not(:disabled){background:var(--blue-d);transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,.3);}
+.btn-submit:active{transform:none;}
+.btn-submit:disabled{opacity:.6;transform:none;cursor:not-allowed;box-shadow:none;}
+
+/* Error */
+.error-msg{
+  background:#fef2f2;border:1px solid #fecaca;color:var(--red);
+  border-radius:8px;padding:10px 14px;font-size:12px;font-weight:600;
+  margin-bottom:16px;display:none;align-items:center;gap:8px;
+}
+.error-msg.show{display:flex;}
+
+.form-footer{margin-top:32px;text-align:center;font-size:12px;color:var(--ink3);}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin-icon{animation:spin 1s linear infinite}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+
+@media(max-width:820px){.left-panel{display:none;}.right-panel{width:100%;min-width:0;padding:40px 24px;}}
+
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+
+<!-- LEFT -->
+<div class="left-panel">
+
+  <div class="left-grid"></div>
+  <div class="scan-line"></div>
+  <div class="left-content">
+
+    <div class="sigi-badge">
+      <span class="badge-dot"></span>
+      Gestor Documental · TD
+    </div>
+
+    <div class="left-headline">
+      Gestión Documental<br><span class="hl">centralizada y eficiente</span>
+    </div>
+    <div class="sigi-full-name">Gestor Documental · Procesador TD</div>
+
+    <div class="carousel-eyebrow">Lo que nuestro sistema hace por ti</div>
+
+    <div class="carousel-wrap">
+      <button class="carousel-arrow carousel-prev" onclick="goSlide((currentSlide-1+FRASES.length)%FRASES.length)">&#8249;</button>
+      <div class="carousel-slide" id="activeSlide">
+        <span class="slide-icon">⚙️</span>
+        <div class="slide-text"><strong>Iniciando sistema...</strong></div>
+      </div>
+      <button class="carousel-arrow carousel-next" onclick="goSlide((currentSlide+1)%FRASES.length)">&#8250;</button>
+    </div>
+    <div class="carousel-dots" id="carouselDots"></div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="stat-val">3<span class="acc"> clics</span></div><div class="stat-label">Para dividir</div></div>
+      <div class="stat-sep"></div>
+      <div class="stat"><div class="stat-val">-80<span class="acc">%</span></div><div class="stat-label">Tiempo operativo</div></div>
+      <div class="stat-sep"></div>
+      <div class="stat"><div class="stat-val">1<span class="acc"> ZIP</span></div><div class="stat-label">Todo entregado</div></div>
+      <div class="stat-sep"></div>
+      <div class="stat"><div class="stat-val">0<span class="acc"> apps</span></div><div class="stat-label">Sin instalar nada</div></div>
+    </div>
+
+    <div class="product-row">
+      <div class="pchip"><span class="pchip-dot" style="background:#2563eb"></span> DIVIDIR PDFs</div>
+      <div class="pchip"><span class="pchip-dot" style="background:#7c3aed"></span> ROTAR PÁGINAS</div>
+      <div class="pchip"><span class="pchip-dot" style="background:#16a34a"></span> RENOMBRAR</div>
+      <div class="pchip"><span class="pchip-dot" style="background:#f59e0b"></span> AGRUPAR</div>
+      <div class="pchip"><span class="pchip-dot" style="background:#1abbe4"></span> EXPORTAR ZIP</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- RIGHT -->
+<div class="right-panel">
+
+  <div class="form-logo">
+    <img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="SIGI Gestor" onerror="this.style.display='none'" id="formLogo">
+  </div>
+
+  <!-- ERROR MESSAGE -->
+  <div class="error-msg" id="errorMsg">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span id="errorText">Credenciales inválidas</span>
+  </div>
+
+  <!-- LOGIN FORM -->
+  <div id="loginForm" style="width:100%">
+    <div class="form-title">Bienvenido</div>
+    <div class="form-subtitle">Ingresa tus credenciales para acceder al Gestor Documental</div>
+    <div class="form-group">
+      <label class="form-label">Usuario</label>
+      <input class="form-input" id="loginUser" type="text" placeholder="usuario" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Contraseña</label>
+      <input class="form-input" id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn-submit" onclick="doLogin()" id="btnLogin">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      Ingresar al Gestor
+    </button>
+  </div>
+
+  <div class="form-footer">Gestor Documental · Procesador TD &copy; 2026</div>
+
+</div>
+
+<script>
+
+/* ─── CONFIG VPS ─── */
+// credenciales validadas en login_gestor.php via GitHub Secrets
+
+/* ─── LOGIN → gestor_pdf.html ─── */
+async function doLogin(){
+  const user = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  if(!user || !pass){ showError('Completa todos los campos'); return; }
+  const btn = document.getElementById('btnLogin');
+  btn.disabled = true;
+  btn.innerHTML = '<svg class="spin-icon" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg> Verificando...';
+  try{
+    const r = await fetch('/login_gestor.php',{method:'POST',headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'login_admin', user, pass})});
+    const data = await r.json();
+    if(data.ok){
+      try{ sessionStorage.setItem('pqr_role','usuario'); }catch(e){}
+      try{ sessionStorage.setItem('pqr_name', user); }catch(e){}
+      setTimeout(()=>window.location.href='gestor_pdf.html', 400);
+    } else {
+      showError('Usuario o contraseña incorrectos');
+      document.getElementById('loginPass').value = '';
+      document.getElementById('loginPass').focus();
+      shake('loginForm');
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Ingresar al Gestor';
+    }
+  }catch(e){
+    showError('Error de conexión con el servidor');
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg> Ingresar al Gestor';
+  }
+}
+let FRASES = [
+  {
+    icon: '📂',
+    html: '<strong>Un solo gestor para toda tu operación documental</strong> — Carga carpetas completas con múltiples expedientes y trabaja todos desde una sola pantalla. Sin abrir Adobe, sin carpetas dispersas, sin tiempo perdido.'
+  },
+  {
+    icon: '✂️',
+    html: '<strong>Divide PDFs en segundos, no en horas</strong> — Selecciona las páginas exactas que necesitas, asígnales un nombre y el sistema crea el nuevo archivo al instante. Lo que antes tomaba 20 minutos, ahora son 3 clics.'
+  },
+  {
+    icon: '🔄',
+    html: '<strong>Rota páginas sin herramientas externas</strong> — Páginas escaneadas al revés o de lado: selecciónalas y rótalas 90° o 180° directamente en el visor. El resultado queda guardado en el archivo final.'
+  },
+  {
+    icon: '📦',
+    html: '<strong>Agrupa, renombra y exporta todo en un ZIP</strong> — Al terminar, un solo clic genera el ZIP con todos los expedientes procesados, renombrados y organizados. Listo para entregar, archivar o enviar.'
+  },
+  {
+    icon: '🗂️',
+    html: '<strong>Trabaja varios expedientes al mismo tiempo</strong> — El panel lateral muestra todas tus carpetas activas. Cambia entre expedientes sin perder el progreso de ninguno. Todo el trabajo en una sola sesión.'
+  },
+  {
+    icon: '👁️',
+    html: '<strong>Visor de páginas en tiempo real</strong> — Marca uno o varios PDFs y sus páginas aparecen al instante en el visor. Ves exactamente lo que vas a procesar antes de confirmar cualquier acción.'
+  },
+  {
+    icon: '↩️',
+    html: '<strong>¿Te equivocaste? Revierte con un clic</strong> — Cada operación tiene su propio botón de deshacer. Ningún cambio es permanente hasta que generates el ZIP final. Trabaja sin miedo a cometer errores.'
+  },
+  {
+    icon: '📋',
+    html: '<strong>Renombra con prefijos o nombre libre</strong> — El sistema incluye prefijos predefinidos para facturas, RIPS y documentos estándar. O escribe el nombre que quieras. Vista previa del nombre antes de confirmar.'
+  },
+  {
+    icon: '📊',
+    html: '<strong>Progreso visible en todo momento</strong> — La barra de avance muestra cuántas páginas llevas procesadas sobre el total del expediente. Sabes exactamente cuánto falta sin tener que contar a mano.'
+  },
+  {
+    icon: '⚡',
+    html: '<strong>Sin instalación, sin licencias, sin esperas</strong> — Abre el navegador, entra al sistema y empieza a trabajar. Todo corre en tu equipo, sin subir archivos a servidores externos ni depender de conexión constante.'
+  },
+];
+
+let currentSlide = 0;
+let carouselTimer = null;
+
+/* ─── CAROUSEL ─── */
+function rebuildCarousel() {
+  clearInterval(carouselTimer);
+  buildDots();
+  showSlide(0);
+  carouselTimer = setInterval(() => showSlide((currentSlide+1)%FRASES.length), 4500);
+}
+
+function buildDots() {
+  const d = document.getElementById('carouselDots');
+  if (!d) return;
+  d.innerHTML = FRASES.map((_,i) =>
+    `<button class="cdot ${i===0?'active':''}" onclick="goSlide(${i})"></button>`
+  ).join('');
+}
+
+function showSlide(idx) {
+  currentSlide = idx;
+  const s = document.getElementById('activeSlide');
+  if (!s || !FRASES.length) return;
+  const f = FRASES[idx%FRASES.length];
+  s.style.animation = 'none'; s.offsetHeight; s.style.animation = '';
+  s.innerHTML = `<span class="slide-icon">${f.icon||'💬'}</span><div class="slide-text">${f.html}</div>`;
+  document.querySelectorAll('.cdot').forEach((dot,i) => dot.classList.toggle('active',i===idx));
+}
+
+function goSlide(idx) {
+  showSlide(idx);
+  clearInterval(carouselTimer);
+  carouselTimer = setInterval(() => showSlide((currentSlide+1)%FRASES.length), 4500);
+}
+
+/* ─── CANVAS PARTICLES ─── */
+(function(){
+  const canvas = document.getElementById('bg-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let W, H;
+  const N = 55, pts = [];
+  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;}
+  resize(); window.addEventListener('resize',resize);
+  for(let i=0;i<N;i++) pts.push({x:Math.random()*1440,y:Math.random()*900,vx:(Math.random()-.5)*.22,vy:(Math.random()-.5)*.22,r:Math.random()*1.4+.3,a:Math.random()*.45+.08});
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    pts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;});
+    for(let i=0;i<pts.length;i++) for(let j=i+1;j<pts.length;j++){
+      const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<130){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle=`rgba(0,196,232,${(1-d/130)*.07})`;ctx.lineWidth=.65;ctx.stroke();}
+    }
+    pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=`rgba(100,155,255,${p.a})`;ctx.fill();});
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ─── UI UTILS ─── */
+function showError(msg){const el=document.getElementById('errorMsg');document.getElementById('errorText').textContent=msg;el.classList.add('show');}
+function hideError(){document.getElementById('errorMsg').classList.remove('show');}
+function shake(id){const el=document.getElementById(id);if(!el)return;el.style.animation='none';el.offsetHeight;el.style.animation='shake .4s ease';}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+/* ─── INIT ─── */
+window.addEventListener('DOMContentLoaded',()=>{
+  rebuildCarousel();
+});
+
+</script>
+</body>
+</html>
