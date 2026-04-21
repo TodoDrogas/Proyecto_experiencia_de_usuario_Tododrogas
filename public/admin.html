@@ -2923,19 +2923,19 @@ function showPage(page, btn) {
 async function loadEmails(horasVentana = 0) {
   try {
     // ── Ventana de carga ──
-    // horasVentana>0 → carga histórica manual
-    // ciclo_inicio   → desde que se inició el ciclo activo
-    // fallback       → últimas 48h (cubre desfases de zona horaria y reinicios de servidor)
+    // horasVentana>0 → override manual desde el botón histórico
+    // ciclo_inicio   → fecha configurada en Supabase (configuracion_sistema)
+    // fallback       → últimas 6h
     let desde;
     if (horasVentana > 0) {
       desde = new Date(Date.now() - horasVentana * 60 * 60 * 1000).toISOString();
     } else if (state.ciclo_inicio) {
       desde = new Date(state.ciclo_inicio).toISOString();
     } else {
-      desde = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(); // últimas 6h como arranque seguro
+      desde = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
     }
 
-    // Paginación: traer TODOS los correos del ciclo sin techo de 500
+    // Paginación completa desde ciclo_inicio
     let data = [];
     let offset = 0;
     const PAGE = 1000;
