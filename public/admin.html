@@ -3089,7 +3089,7 @@ function updateFolderCounts() {
   const urgEl = document.getElementById('fc-urgente');
   if(urgEl) urgEl.textContent = _all.filter(e=>_pqr(e)&&(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma'&&e.estado!=='informacion').length;
   const envEl = document.getElementById('fc-enviado');
-  if(envEl) envEl.textContent = _all.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
+  if(envEl) envEl.textContent = _all.filter(e=>(e.origen==='saliente'||e.estado==='enviado')&&!e.agente_id).length;
 }
 
 function renderFolderAgents() {
@@ -3145,7 +3145,8 @@ function renderEmailList() {
   } else if(state.folder === 'sin_asignar') {
     list = list.filter(e=>e.estado==='sin_asignar'&&e.origen!=='saliente'&&e.origen!=='borrador');
   } else if(state.folder === 'enviado') {
-    list = list.filter(e=>e.origen==='saliente'||e.estado==='enviado');
+    // Solo enviados por admin — agente_id null = enviado desde el panel admin
+    list = list.filter(e=>(e.origen==='saliente'||e.estado==='enviado')&&!e.agente_id);
   } else {
     if(state.folder==='pendiente') {
       list = list.filter(e=>e.estado==='pendiente'&&e.origen!=='saliente'&&e.origen!=='borrador');
