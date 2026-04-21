@@ -588,7 +588,7 @@ foreach ($todos_correos as $c) {
     if ($es_nuevo) {
         $stats['insertados']++;
         sbPatch('correos', "id=eq.$corr_id", [
-            'estado'     => 'pendiente',
+            'estado'     => 'sin_asignar',
             'prioridad'  => 'media',
             'created_at' => date('c'),
         ]);
