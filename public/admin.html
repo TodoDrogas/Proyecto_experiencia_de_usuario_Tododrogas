@@ -2040,6 +2040,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 // ──────────────────────────────────────────────
 const SB_URL = window.SUPABASE_URL || 'https://TU_PROYECTO.supabase.co';
 const SB_KEY = window.SUPABASE_KEY || 'TU_ANON_KEY';
+const OPENAI_KEY = window.OPENAI_KEY || localStorage.getItem('ag_openai_key') || '';
 
 async function sb(path, method='GET', body=null) {
   const headers = {
@@ -3290,6 +3291,10 @@ async function selectEmail(id) {
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         ✦ Nova TD
       </button>
+      <button class="btn btn-ghost" onclick="analizarConIA('${email.id}')" style="border-color:#0891b2;color:#0891b2" title="Analizar y sugerir respuesta con IA (Anthropic Claude)">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        ✦ IA
+      </button>
       <button class="btn btn-ghost" onclick="abrirPanelRR()" title="Plantillas" style="border-color:#f59e0b;color:#b45309">⚡ Rápidas</button>
       `}
       ${email.message_id ? `
@@ -4454,6 +4459,110 @@ async function generarConNovaTD(correoId) {
     area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error Nova TD PHP — revisa el log del servidor.</div>`;
     console.error('Nova TD error:', err);
   }
+}
+
+// ── IA DIRECTA (OpenAI GPT-4o) ──────────────────────────────
+async function analizarConIA(correoId) {
+  const email = state.emails.find(e=>e.id===correoId);
+  if(!email) return;
+  const apiKey = OPENAI_KEY || localStorage.getItem('ag_openai_key') || '';
+  if(!apiKey) {
+    const k = prompt('🔑 Ingresa tu OpenAI API Key para activar IA:\n(Se guarda en este navegador)');
+    if(!k) return;
+    localStorage.setItem('ag_openai_key', k.trim());
+  }
+  const key = OPENAI_KEY || localStorage.getItem('ag_openai_key') || '';
+  const area = document.getElementById('replyBoxArea');
+  area.innerHTML = `<div style="background:#e0f2fe;border:1px solid #0891b2;border-radius:8px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border:2px solid #0891b2;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><span style="color:#0891b2;font-weight:600;font-size:13px">✦ IA analizando correo...</span></div>`;
+  const agent = state.agents.find(a=>a.id===email.asignado_a);
+  const agentName = agent?.nombre || 'Equipo PQRSFD';
+  const systemPrompt = `Eres un asistente experto en PQRSFD para Tododrogas, empresa de salud colombiana. Ayudas al asesor "${agentName}" a responder correos de forma profesional, empática y acorde a la normativa colombiana (Ley 1755/2015). Redacta siempre en español.`;
+  const userPrompt = `Responde este correo de PQRSFD.
+
+DATOS:
+- Asunto: ${email.asunto||'(Sin asunto)'}
+- Remitente: ${email.remitente_nombre||email.remitente}
+- Tipo PQR: ${email.tipo_pqr||'No detectado'}
+- Categoría IA: ${email.categoria_ia||'No detectada'}
+- Prioridad: ${email.prioridad||'Normal'}
+- Urgente: ${email.es_urgente?'SÍ':'No'}
+- SLA: ${email.horas_sla||120} horas
+- Estado: ${email.estado||'pendiente'}
+
+CUERPO DEL CORREO:
+${(email.body_content||email.resumen_corto||'(Sin contenido)').slice(0,2000)}
+
+INSTRUCCIONES:
+1. Redacta una respuesta profesional en HTML simple (solo etiquetas <p>), comenzando con "Estimado(a) [nombre]," si hay nombre, o "Estimado(a) usuario(a),".
+2. Acusa recibo, da respuesta concreta o comprométete con tiempos según tipo PQR, cierra con firma del asesor "${agentName}".
+3. Después de la respuesta escribe exactamente esta línea: ---ANALISIS---
+4. Luego un JSON válido sin markdown:
+{"tipo_pqr":"peticion|queja|reclamo|sugerencia|felicitacion|denuncia","prioridad_sugerida":"baja|media|alta","sentimiento":"positivo|neutro|negativo|urgente","resumen":"máximo 2 oraciones","ley_aplicable":"Ley 1755/2015"}`;
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body: JSON.stringify({
+        model:'gpt-4o',
+        max_tokens:1500,
+        messages:[
+          {role:'system', content: systemPrompt},
+          {role:'user',   content: userPrompt}
+        ]
+      })
+    });
+    if(!res.ok) {
+      const err = await res.json().catch(()=>({}));
+      if(res.status===401){ localStorage.removeItem('ag_openai_key'); area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ API Key inválida. Se eliminó. Intenta de nuevo.</div>`; return; }
+      throw new Error(err.error?.message||`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const full = data.choices?.[0]?.message?.content||'';
+    const [respPart, analPart] = full.split('---ANALISIS---');
+    const respHtml = (respPart||'').trim();
+    let analisis = {};
+    try { analisis = JSON.parse((analPart||'').replace(/```json|```/g,'').trim()); } catch(_){}
+    const prioColor = analisis.prioridad_sugerida==='alta'?'#dc2626':analisis.prioridad_sugerida==='media'?'#ca8a04':'#16a34a';
+    const analJSON = JSON.stringify(analisis).replace(/"/g,'&quot;');
+    const banner = `<div style="background:#e0f2fe;border:1px solid #0891b2;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="color:#0891b2;font-weight:700;font-size:12px">✦ Análisis IA · GPT-4o</span>
+        <button onclick="this.parentElement.parentElement.style.display='none'" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:16px;line-height:1">×</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:11px">
+        ${analisis.tipo_pqr?`<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-weight:700">📋 ${analisis.tipo_pqr}</span>`:''}
+        ${analisis.prioridad_sugerida?`<span style="background:${prioColor}22;color:${prioColor};padding:2px 8px;border-radius:99px;font-weight:700">⚡ ${analisis.prioridad_sugerida}</span>`:''}
+        ${analisis.sentimiento?`<span style="background:#f0fdf4;color:#166534;padding:2px 8px;border-radius:99px;font-weight:700">😊 ${analisis.sentimiento}</span>`:''}
+        ${analisis.ley_aplicable?`<span style="background:#f5f3ff;color:#6d28d9;padding:2px 8px;border-radius:99px;font-weight:700">⚖️ ${analisis.ley_aplicable}</span>`:''}
+      </div>
+      ${analisis.resumen?`<div style="margin-top:6px;font-size:11px;color:#475569">${esc(analisis.resumen)}</div>`:''}
+      ${Object.keys(analisis).length?`<button onclick="aplicarAnalisisIA(JSON.parse(this.dataset.a))" data-a="${analJSON}" style="margin-top:8px;background:#0891b2;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">✅ Aplicar al ticket</button>`:''}
+    </div>`;
+    area.innerHTML = banner;
+    toggleReply('reply');
+    setTimeout(()=>{ const ed=document.querySelector('#replyBoxArea [contenteditable]'); if(ed) ed.innerHTML=respHtml; },300);
+  } catch(err) {
+    area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error IA: ${esc(err.message.slice(0,120))}</div>`;
+    console.error('IA error:',err);
+  }
+}
+
+async function aplicarAnalisisIA(analisis) {
+  const id = state.selectedId;
+  if(!id||!analisis) return;
+  const patch = {};
+  if(analisis.tipo_pqr)           patch.tipo_pqr      = analisis.tipo_pqr.toLowerCase();
+  if(analisis.prioridad_sugerida) patch.prioridad     = analisis.prioridad_sugerida;
+  if(analisis.sentimiento)        patch.sentimiento   = analisis.sentimiento.toLowerCase();
+  if(analisis.ley_aplicable)      patch.ley_aplicable = analisis.ley_aplicable;
+  if(analisis.resumen)            patch.resumen_corto = analisis.resumen;
+  try {
+    await sb(`correos?id=eq.${id}`,'PATCH',patch);
+    const em = state.emails.find(e=>e.id===id);
+    if(em) Object.assign(em,patch);
+    showToast('✅ Análisis IA aplicado al ticket','success');
+    selectEmail(id);
+  } catch(e) { showToast('❌ Error: '+e.message.slice(0,60),'error'); }
 }
 
 async function openGestionModal(mode) {
@@ -6366,7 +6475,15 @@ async function cargarHistorico(){
   const desde = localDt.toISOString();
   document.getElementById('modalHistorial').style.display='none';
   showToast('⏳ Cargando correos desde '+el.value+'...','info');
-  // Actualizar ciclo_inicio permanentemente para esta sesión
+  // ✅ FIX: actualizar ciclo_inicio Y cursor en Supabase para retroceder la ventana
+  try {
+    const cfgActual = await sb('configuracion_sistema?id=eq.main&select=data');
+    const dataActual = cfgActual?.[0]?.data || {};
+    await sb('configuracion_sistema?id=eq.main','PATCH',{
+      data: { ...dataActual, sync: { ...dataActual.sync, ciclo_inicio: desde, cursor: desde } }
+    });
+  } catch(e){ console.warn('No se pudo actualizar ciclo_inicio en Supabase',e); }
+  // Actualizar ciclo_inicio en state para esta sesión
   state.ciclo_inicio = desde;
   await loadEmails();
   showToast('✅ Correos cargados desde '+el.value,'success');
