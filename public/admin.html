@@ -7027,33 +7027,83 @@ async function crHiloToggle(msgId) {
   }
   bodyEl.style.display='block';
   if(arrowEl) arrowEl.textContent='▲';
-  if(bodyEl.innerHTML && bodyEl.innerHTML !== '<div style="color:var(--ink3);font-size:11px">Cargando…</div>') return;
-  bodyEl.innerHTML='<div style="color:var(--ink3);font-size:11px">Cargando…</div>';
+  if(bodyEl.dataset.loaded === '1') return;
+  bodyEl.innerHTML='<div style="color:var(--ink3);font-size:11px;padding:4px 0">Cargando…</div>';
   try {
     const token  = await getGraphToken();
     const userId = window.GRAPH_USER_ID || '';
-    const r = await fetch(
-      `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}?$select=body,from,toRecipients,subject,sentDateTime,receivedDateTime`,
-      { headers:{'Authorization':'Bearer '+token} }
-    );
-    if(!r.ok) throw new Error('Graph '+r.status);
-    const d = await r.json();
+
+    const [rBody, rAdjs] = await Promise.all([
+      fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}?$select=body,from,toRecipients,subject,sentDateTime,receivedDateTime,hasAttachments`,
+        {headers:{'Authorization':'Bearer '+token}}),
+      fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments?$select=id,name,contentType,size,isInline`,
+        {headers:{'Authorization':'Bearer '+token}}),
+    ]);
+
+    if(!rBody.ok) throw new Error('Graph body '+rBody.status);
+    const d = await rBody.json();
     const bodyHtml = d.body?.content || '';
     const bodyType = d.body?.contentType || 'text';
+
+    let adjsHtml = '';
+    if(rAdjs.ok) {
+      const adjData = await rAdjs.json();
+      const adjsReales = (adjData.value||[]).filter(a => !a.isInline);
+      if(adjsReales.length) {
+        adjsHtml = `<div style="padding:5px 0 3px;border-top:1px solid var(--bg2);margin-top:5px">
+          <div style="font-size:9px;font-weight:700;color:var(--ink3);letter-spacing:.4px;margin-bottom:4px">📎 ADJUNTOS</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">` +
+          adjsReales.map(a => {
+            const size = a.size>=1048576?(a.size/1048576).toFixed(1)+' MB':a.size>=1024?Math.round(a.size/1024)+' KB':a.size+' B';
+            const dlUrl = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments/${a.id}/$value`;
+            return `<div class="adj-pill" onclick="crDescargarAdjHilo('${esc(dlUrl)}','${esc(a.name)}','${esc(a.contentType||'')}')" title="${esc(a.name)} · ${size}" style="cursor:pointer">
+              <span style="font-size:12px">${getFileIcon(a.name)}</span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px;font-size:10px">${esc(a.name)}</span>
+              <span style="font-size:9px;color:var(--ink3)">${size}</span>
+            </div>`;
+          }).join('') +
+          `</div></div>`;
+      }
+    }
+
+    bodyEl.innerHTML='';
+    if(adjsHtml){const adjDiv=document.createElement('div');adjDiv.innerHTML=adjsHtml;bodyEl.appendChild(adjDiv);}
     if(bodyType==='html'){
       const iframe=document.createElement('iframe');
       iframe.sandbox='allow-same-origin allow-popups';
       iframe.referrerPolicy='no-referrer';
-      iframe.style.cssText='width:100%;min-height:80px;border:none;display:block;border-radius:4px';
+      iframe.style.cssText='width:100%;min-height:80px;border:none;display:block;border-radius:4px;margin-top:4px';
       iframe.srcdoc='<style>html,body{margin:0;padding:6px;font-family:Arial,sans-serif;font-size:12px;color:#333;background:#fff}</style>'+bodyHtml;
       iframe.onload=()=>{try{const h=iframe.contentDocument?.body?.scrollHeight;if(h)iframe.style.height=Math.min(h+16,400)+'px';}catch(e){}};
-      bodyEl.innerHTML='';
       bodyEl.appendChild(iframe);
     } else {
-      bodyEl.innerHTML=`<div style="font-size:11px;color:var(--ink2);white-space:pre-wrap;line-height:1.5">${esc(bodyHtml)}</div>`;
+      const txtDiv=document.createElement('div');
+      txtDiv.style.cssText='font-size:11px;color:var(--ink2);white-space:pre-wrap;line-height:1.5;margin-top:4px';
+      txtDiv.textContent=bodyHtml;
+      bodyEl.appendChild(txtDiv);
     }
+    bodyEl.dataset.loaded='1';
   } catch(e) {
     bodyEl.innerHTML=`<div style="font-size:11px;color:var(--red)">⚠️ Error: ${esc(e.message)}</div>`;
+  }
+}
+
+async function crDescargarAdjHilo(graphUrl, nombre, tipo) {
+  showToast('Descargando '+nombre+'…','info');
+  try {
+    const token = await getGraphToken();
+    const r = await fetch(graphUrl,{headers:{'Authorization':'Bearer '+token}});
+    if(!r.ok) throw new Error('Graph '+r.status);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(new Blob([blob],{type:tipo||'application/octet-stream'}));
+    const a = document.createElement('a');
+    a.href=url; a.download=nombre;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},2000);
+    showToast(nombre+' descargado ✓','success');
+  } catch(e) {
+    try { window.open(`/adj-proxy.php?url=${encodeURIComponent(graphUrl)}`, '_blank'); }
+    catch(e2) { showToast('Error: '+e.message.substring(0,60),'error'); }
   }
 }
 
