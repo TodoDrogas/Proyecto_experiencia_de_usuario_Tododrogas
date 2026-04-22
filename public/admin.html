@@ -2027,7 +2027,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 
 <!-- ══ MODAL: CORREO RESPONDIDO (desde timeline) ══ -->
 <div class="modal-backdrop" id="modalCorreoRespondido" onclick="if(event.target===this)closeModal('modalCorreoRespondido')" style="align-items:flex-start;padding:16px 0;overflow-y:auto">
-  <div style="background:var(--surface);border-radius:16px;width:min(1060px,97vw);max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3);margin:auto">
+  <div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:16px;width:min(1060px,97vw);max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3);margin:auto">
     <!-- HEADER -->
     <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0;background:var(--surface)">
       <div style="min-width:0;flex:1">
@@ -5100,9 +5100,10 @@ async function toggleReply(modo) {
         <button onclick="document.getElementById('replyBoxArea').innerHTML=''" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 4px">✕</button>
       </div>
       <div style="border-bottom:1px solid var(--border)">
-        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
+        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px;position:relative">
           <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">Para</span>
-          <input id="replyTo" value="${esc(toVal)}" placeholder="${modo==='forward'?'Destinatario…':''}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+          <input id="replyTo" value="${esc(toVal)}" placeholder="${modo==='forward'?'Destinatario…':''}" oninput="_crAcBuscar(this.value,'replyTo','replyToAc')" onblur="setTimeout(()=>{const d=document.getElementById('replyToAc');if(d)d.style.display='none'},200)" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+          <div id="replyToAc" style="display:none;position:absolute;left:44px;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:9999;max-height:220px;overflow-y:auto"></div>
         </div>
         <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
           <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">CC</span>
@@ -5113,6 +5114,7 @@ async function toggleReply(modo) {
           <input id="replySubject" value="${esc(subjectVal)}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
         </div>
       </div>
+      ${_fmtBar('replyEditor')}
       <div id="replyEditor" contenteditable="true" style="min-height:120px;padding:12px 14px;font-size:13px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);outline:none;line-height:1.6"></div>
       <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--surface2)">
         <div style="font-size:11px;color:var(--ink3);margin-bottom:6px;font-family:'Franklin Gothic Book',Arial,sans-serif">───────── Mensaje original ─────────</div>
@@ -5571,6 +5573,57 @@ function getFileIcon(n=''){
   if(['ics','vcf'].includes(e))return '📅';
   return '📎';
 }
+// ── Barra de formato para editores contenteditable ──
+function _fmtBar(editorId) {
+  return `<div style="display:flex;align-items:center;gap:2px;padding:4px 8px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap">
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('bold')" title="Negrita" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;font-weight:700;padding:2px 7px;color:var(--ink2)" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'"><b>B</b></button>
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('italic')" title="Cursiva" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-size:13px;padding:2px 7px;color:var(--ink2);font-style:italic" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'"><i>I</i></button>
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('underline')" title="Subrayado" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-size:13px;padding:2px 7px;color:var(--ink2);text-decoration:underline" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'">U</button>
+    <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('insertUnorderedList')" title="Lista" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-size:12px;padding:2px 7px;color:var(--ink2)" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'">≡</button>
+    <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+    <select onchange="document.getElementById('${editorId}').focus();document.execCommand('fontSize',false,this.value);this.value=''" style="font-size:11px;border:1px solid var(--border);border-radius:4px;padding:1px 4px;color:var(--ink2);background:var(--bg);cursor:pointer">
+      <option value="">Tamaño</option>
+      <option value="1">Pequeño</option>
+      <option value="3">Normal</option>
+      <option value="5">Grande</option>
+      <option value="7">Muy grande</option>
+    </select>
+    <select onchange="document.getElementById('${editorId}').focus();document.execCommand('foreColor',false,this.value);this.value=''" style="font-size:11px;border:1px solid var(--border);border-radius:4px;padding:1px 4px;color:var(--ink2);background:var(--bg);cursor:pointer">
+      <option value="">Color</option>
+      <option value="#000000">Negro</option>
+      <option value="#dc2626">Rojo</option>
+      <option value="#2563eb">Azul</option>
+      <option value="#16a34a">Verde</option>
+      <option value="#ca8a04">Amarillo</option>
+    </select>
+  </div>`;
+}
+
+// ── Autocomplete contactos frecuentes en reply ──
+let _crAcTimer = null;
+async function _crAcBuscar(val, inputId, dropId) {
+  clearTimeout(_crAcTimer);
+  const drop = document.getElementById(dropId);
+  if(!drop) return;
+  if(!val || val.length < 2) { drop.style.display='none'; return; }
+  _crAcTimer = setTimeout(async () => {
+    try {
+      const rows = await sb(`contactos_frecuentes?or=(email.ilike.*${encodeURIComponent(val)}*,nombre.ilike.*${encodeURIComponent(val)}*)&order=total_pqrs.desc&limit=8`) || [];
+      if(!rows.length) { drop.style.display='none'; return; }
+      drop.innerHTML = rows.map(c => `
+        <div onclick="document.getElementById('${inputId}').value='${esc(c.email)}';document.getElementById('${dropId}').style.display='none'" style="padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--blue-l)'" onmouseout="this.style.background=''">
+          <div style="width:26px;height:26px;border-radius:50%;background:${c.vip?'var(--yellow)':'var(--blue)'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0">${(c.nombre||c.email).charAt(0).toUpperCase()}</div>
+          <div style="min-width:0">
+            <div style="font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.nombre||'')}${c.vip?' ⭐':''}</div>
+            <div style="font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.email)} · ${c.total_pqrs||0} PQR${(c.total_pqrs||0)!==1?'s':''}</div>
+          </div>
+        </div>`).join('');
+      drop.style.display = 'block';
+    } catch(e) { drop.style.display='none'; }
+  }, 250);
+}
+
 function showToast(msg,type='info'){
   const tc=document.getElementById('toasts'),t=document.createElement('div');
   t.className=`toast ${type}`;t.innerHTML=`<span>${msg}</span>`;
@@ -6785,11 +6838,17 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
   const asunto = correoSaliente?.subject || meta?.subject_enviado || ev.subject || '(Sin asunto)';
   const deNom  = correoSaliente?.from_name || correoSaliente?.from_email || meta?.agente_nombre || 'Admin';
   const deEmail= correoSaliente?.from_email || '';
-  const para   = correoSaliente?.to_recipients
-    ? (Array.isArray(correoSaliente.to_recipients)
-        ? correoSaliente.to_recipients.map(r=>r?.emailAddress?.address||r?.address||r).filter(s=>typeof s==='string'&&s).join('; ')
-        : String(correoSaliente.to_recipients))
-    : (meta?.to_email || '');
+  const para   = (() => {
+    if(correoSaliente?.to_recipients) {
+      const arr = Array.isArray(correoSaliente.to_recipients)
+        ? correoSaliente.to_recipients.map(r=>r?.emailAddress?.address||r?.address||r).filter(s=>typeof s==='string'&&s)
+        : [String(correoSaliente.to_recipients)];
+      if(arr.length) return arr.join('; ');
+    }
+    if(meta?.to_email) return meta.to_email;
+    if(window._crFromOriginal) return window._crFromOriginal;
+    return '';
+  })();
   const cc = correoSaliente?.cc_recipients
     ? (Array.isArray(correoSaliente.cc_recipients)
         ? correoSaliente.cc_recipients.map(r=>r?.emailAddress?.address||r?.address||r).filter(s=>typeof s==='string'&&s).join('; ')
@@ -6833,20 +6892,37 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
   if(adjId) {
     try {
       const adjs = await sb(`adjuntos?correo_id=eq.${adjId}&es_inline=is.false&select=*`) || [];
-      const visibles = adjs.filter(a => a.storage_url && !a.es_inline);
+      const visibles = adjs.filter(a => !a.es_inline);
       if(visibles.length) {
         document.getElementById('crAdjBar').style.display = '';
-        document.getElementById('crAdjGrid').innerHTML = visibles.map(a => {
-          const url = a.storage_url || '#';
+        const pillsHTML = await Promise.all(visibles.map(async a => {
+          let url = a.storage_url || '#';
           const nombre = a.nombre || 'Archivo';
           const bytes = a.tamano_bytes || 0;
           const size = bytes >= 1048576 ? (bytes/1048576).toFixed(1)+' MB' : bytes >= 1024 ? Math.round(bytes/1024)+' KB' : bytes+' B';
-          return `<div class="adj-pill" onclick="previewAdjunto('${esc(url)}','${esc(nombre)}','${esc(a.tipo_contenido||'')}',this)" title="${esc(nombre)} · ${size}">
+          if(a.storage_path && url !== '#') {
+            try {
+              const m2 = url.match(/\/storage\/v1\/object\/(?:public\/|sign\/)?([^/]+)\/(.+?)(?:\?|$)/);
+              if(m2) {
+                const [,bucket,path] = m2;
+                const cleanPath = decodeURIComponent(path.split('?')[0]);
+                const signR = await fetch(`${SB_URL}/storage/v1/object/sign/${bucket}/${cleanPath}`, {
+                  method:'POST',
+                  headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+                  body:JSON.stringify({expiresIn:3600})
+                });
+                if(signR.ok){const sd=await signR.json();if(sd.signedURL)url=`${SB_URL}/storage/v1${sd.signedURL}`;}
+              }
+            } catch(e2){console.warn('[crAdj sign]',e2.message);}
+          }
+          const hasUrl = url && url !== '#';
+          return `<div class="adj-pill" ${hasUrl?`onclick="previewAdjunto('${esc(url)}','${esc(nombre)}','${esc(a.tipo_contenido||'')}',this)"`:'style="cursor:default;opacity:.7"'} title="${esc(nombre)} · ${size}">
             <span style="font-size:14px;flex-shrink:0">${getFileIcon(nombre)}</span>
             <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(nombre)}</span>
-            <span style="font-size:9px;color:var(--ink3)">${size}</span>
+            <span style="font-size:9px;color:var(--ink3)">${size}${!hasUrl?' · sin URL':''}</span>
           </div>`;
-        }).join('');
+        }));
+        document.getElementById('crAdjGrid').innerHTML = pillsHTML.join('');
       } else if(meta?.adjuntos_nombres?.length) {
         document.getElementById('crAdjBar').style.display = '';
         document.getElementById('crAdjGrid').innerHTML = meta.adjuntos_nombres.map(n =>
@@ -6962,9 +7038,10 @@ function crToggleReply(modo) {
       <button onclick="${closeFn}" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 4px">✕</button>
     </div>
     <div style="border-bottom:1px solid var(--border);flex-shrink:0">
-      <div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid var(--border);gap:8px">
+      <div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid var(--border);gap:8px;position:relative">
         <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:50px">Para</span>
-        <input id="crReplyTo" value="${esc(toVal)}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        <input id="crReplyTo" value="${esc(toVal)}" oninput="_crAcBuscar(this.value,'crReplyTo','crReplyToAc')" onblur="setTimeout(()=>{const d=document.getElementById('crReplyToAc');if(d)d.style.display='none'},200)" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        <div id="crReplyToAc" style="display:none;position:absolute;left:50px;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:9999;max-height:220px;overflow-y:auto"></div>
       </div>
       <div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid var(--border);gap:8px">
         <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:50px">CC</span>
@@ -6975,6 +7052,7 @@ function crToggleReply(modo) {
         <input id="crReplySubject" value="${esc(subjectVal)}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book',Arial,sans-serif;color:var(--ink);background:transparent"/>
       </div>
     </div>
+    ${_fmtBar('crReplyEditor')}
     <div id="crReplyEditor" contenteditable="true" style="flex:1;min-height:80px;padding:12px 14px;font-size:13px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);outline:none;line-height:1.6;overflow-y:auto"></div>
     <div style="border-top:1px solid var(--border);padding:8px 14px;background:var(--surface2);flex-shrink:0;max-height:110px;overflow-y:auto">
       <div style="font-size:10px;color:var(--ink3);margin-bottom:4px">───── Respuesta anterior enviada ─────</div>
