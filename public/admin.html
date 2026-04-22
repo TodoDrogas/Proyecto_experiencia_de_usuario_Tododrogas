@@ -2046,6 +2046,26 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
       <div style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px;margin-bottom:6px">📎 ADJUNTOS DE ESTA RESPUESTA</div>
       <div id="crAdjGrid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
     </div>
+
+    <!-- BARRA DE ACCIONES REPLY -->
+    <div id="crAccionesBar" style="padding:8px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+      <span style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.4px;margin-right:4px">RESPONDER SOBRE ESTE CORREO:</span>
+      <button class="btn btn-ghost" onclick="crToggleReply('reply')" style="font-size:11px">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        Responder
+      </button>
+      <button class="btn btn-ghost" onclick="crToggleReply('replyAll')" style="font-size:11px">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><polyline points="14 17 9 12 14 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        Responder a todos
+      </button>
+      <button class="btn btn-ghost" onclick="crToggleReply('forward')" style="font-size:11px">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+        Reenviar
+      </button>
+    </div>
+
+    <!-- ÁREA DE RESPUESTA -->
+    <div id="crReplyBoxArea" style="flex-shrink:0"></div>
     <!-- LAYOUT -->
     <div style="flex:1;display:flex;overflow:hidden;min-height:0">
       <!-- Cuerpo -->
@@ -6742,6 +6762,16 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
 
   _crData = correoSaliente;
 
+  // ── Guardar contexto para crToggleReply / crSendReply ──
+  _crCorreoIdOrigen = correoIdOrigen;
+  _crConvId         = conversationIdOrigen;
+  const padreSB = (state.allEmails||state.emails||[]).find(e => e.id === correoIdOrigen);
+  _crInternetMsgId  = padreSB?.raw?.message_id || padreSB?.raw?.internet_message_id || null;
+  window._crFromOriginal = padreSB?.remitente || padreSB?.raw?.from_email || null;
+  const crRA = document.getElementById('crReplyBoxArea');
+  if(crRA){crRA.innerHTML='';crRA.dataset.modo='';}
+  window._crAttachFiles = new Map();
+
   // 2. Encabezado
   const asunto = correoSaliente?.subject || meta?.subject_enviado || ev.subject || '(Sin asunto)';
   const deNom  = correoSaliente?.from_name || correoSaliente?.from_email || meta?.agente_nombre || 'Admin';
@@ -6862,38 +6892,384 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
   }
 }
 
-function crDescargarEML() {
+// ──────────────────────────────────────────────
+// REPLY DESDE MODAL CORREO RESPONDIDO — ADMIN
+// ──────────────────────────────────────────────
+let _crCorreoIdOrigen = null;
+let _crInternetMsgId  = null;
+let _crConvId         = null;
+
+function crToggleReply(modo) {
+  const area = document.getElementById('crReplyBoxArea');
+  if(area.innerHTML && area.dataset.modo === modo) { area.innerHTML=''; return; }
+  area.dataset.modo = modo;
+  if(!_crData) { showToast('Sin datos del correo para responder','error'); return; }
+
+  const toOrig = window._crFromOriginal || '';
+  let toVal='', ccVal='', subjectVal='', titleColor='', modoLabel='';
+  const asunto = _crData.subject || '';
+
+  if(modo==='reply') {
+    toVal=toOrig; subjectVal='RE: '+asunto.replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor='var(--blue)'; modoLabel='↩ Responder';
+  } else if(modo==='replyAll') {
+    toVal=toOrig;
+    const propio=(window.GRAPH_USER_ID||'').toLowerCase();
+    const allCC=(Array.isArray(_crData.to_recipients)?_crData.to_recipients.map(r=>r?.emailAddress?.address||r?.address||r).filter(s=>typeof s==='string'&&s):[]).filter(a=>a.toLowerCase()!==propio&&a.toLowerCase()!==toOrig.toLowerCase());
+    ccVal=[...new Set(allCC)].join('; ');
+    subjectVal='RE: '+asunto.replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor='var(--green)'; modoLabel='↩↩ Responder a todos';
+  } else {
+    toVal=''; subjectVal='RV: '+asunto.replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor='var(--orange,#f97316)'; modoLabel='↪ Reenviar';
+  }
+
+  const deNom=_crData.from_name||_crData.from_email||'Admin';
+  const deEmail_=_crData.from_email||'';
+  const fechaStr=_crData.sent_at?new Date(_crData.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}):'';
+
+  area.innerHTML=`
+    <div style="border-top:2px solid ${titleColor};background:var(--surface);overflow:hidden">
+      <div style="padding:6px 12px;background:${titleColor}18;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:11px;font-weight:700;color:${titleColor}">${modoLabel} — manteniendo hilo original</span>
+        <button onclick="document.getElementById('crReplyBoxArea').innerHTML=''" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 4px">✕</button>
+      </div>
+      <div style="border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">Para</span>
+          <input id="crReplyTo" value="${esc(toVal)}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        </div>
+        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">CC</span>
+          <input id="crReplyCC" value="${esc(ccVal)}" placeholder="Separar con punto y coma" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        </div>
+        <div style="display:flex;align-items:center;padding:7px 12px;gap:8px">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">Asunto</span>
+          <input id="crReplySubject" value="${esc(subjectVal)}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        </div>
+      </div>
+      <div id="crReplyEditor" contenteditable="true" style="min-height:100px;padding:12px 14px;font-size:13px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);outline:none;line-height:1.6"></div>
+      <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--surface2)">
+        <div style="font-size:11px;color:var(--ink3);margin-bottom:6px">───────── Respuesta anterior enviada ─────────</div>
+        <div style="font-size:11px;color:var(--ink2);line-height:1.5"><b>De:</b> ${esc(deNom)} &lt;${esc(deEmail_)}&gt;<br><b>Enviado:</b> ${fechaStr}<br><b>Asunto:</b> ${esc(asunto)}</div>
+        <div style="margin-top:8px;font-size:12px;color:var(--ink2);max-height:120px;overflow-y:auto;border-left:3px solid var(--border);padding-left:10px">${_crData.body_content||''}</div>
+      </div>
+      <div id="crReplyAttachZone" style="padding:8px 12px;background:var(--bg2);border-top:1px solid var(--border)"
+           ondragover="event.preventDefault();this.style.background='#EFF6FF'"
+           ondragleave="this.style.background='var(--bg2)'"
+           ondrop="event.preventDefault();this.style.background='var(--bg2)';_crAttachAdd(event.dataTransfer.files)">
+        <label for="crReplyFiles" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;font-weight:700;color:var(--ink3);padding:4px 10px;border:1.5px solid var(--border);border-radius:6px;background:#fff">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          Adjuntar
+        </label>
+        <input type="file" id="crReplyFiles" multiple style="display:none" accept="*/*">
+        <div id="crReplyFilesPreview" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px"></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:6px;padding:10px 12px;border-top:1px solid var(--border);background:var(--bg)">
+        <button class="btn btn-ghost" onclick="document.getElementById('crReplyBoxArea').innerHTML=''">Cancelar</button>
+        <button class="btn btn-primary" id="crReplySendBtn" onclick="crSendReply()" style="background:${titleColor};border-color:${titleColor}">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          ${modo==='forward'?'Reenviar':'Enviar'}
+        </button>
+      </div>
+    </div>`;
+
+  window._crAttachFiles = new Map();
+  document.getElementById('crReplyFiles').addEventListener('change',function(){_crAttachAdd(this.files);this.value='';});
+  area.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function _crAttachAdd(files) {
+  if(!files) return;
+  if(!window._crAttachFiles) window._crAttachFiles=new Map();
+  Array.from(files).forEach(f=>{const id=`cr_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;window._crAttachFiles.set(id,{file:f,id});});
+  _crAttachRender();
+}
+
+function _crAttachRender() {
+  const el=document.getElementById('crReplyFilesPreview');
+  if(!el) return;
+  if(!window._crAttachFiles||!window._crAttachFiles.size){el.innerHTML='';return;}
+  el.innerHTML=[...window._crAttachFiles.entries()].map(([id,{file}])=>`
+    <div style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid var(--border);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--ink2)">
+      ${getFileIcon(file.name)} ${esc(file.name)}
+      <button onclick="window._crAttachFiles.delete('${id}');_crAttachRender()" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;line-height:1;padding:0 2px">✕</button>
+    </div>`).join('');
+}
+
+async function crSendReply() {
+  const toInput  = document.getElementById('crReplyTo')?.value?.trim();
+  const ccInput  = document.getElementById('crReplyCC')?.value?.trim();
+  const subject  = document.getElementById('crReplySubject')?.value?.trim();
+  const editor   = document.getElementById('crReplyEditor');
+  const body     = editor?.innerHTML?.trim();
+  const modo     = document.getElementById('crReplyBoxArea').dataset.modo||'reply';
+
+  if(!body||body==='<br>'){ showToast('Escribe un mensaje','info'); return; }
+  if(modo!=='forward'&&!toInput){ showToast('Escribe un destinatario','info'); return; }
+  if(modo==='forward'&&!toInput){ showToast('Escribe a quién reenviar','info'); return; }
+
+  const sendBtn=document.getElementById('crReplySendBtn');
+  if(sendBtn){sendBtn.disabled=true;sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Enviando…';}
+
+  const deNom=_crData?.from_name||_crData?.from_email||'Admin';
+  const deEmail_=_crData?.from_email||'';
+  const fechaStr=_crData?.sent_at?new Date(_crData.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}):'';
+  const hiloHTML=`<br><br><div style="border-left:3px solid #ccc;padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px"><b>De:</b> ${esc(deNom)} &lt;${esc(deEmail_)}&gt;<br><b>Enviado:</b> ${fechaStr}<br><b>Asunto:</b> ${esc(_crData?.subject||'')}<br><br>${_crData?.body_content||''}</div>`;
+
+  try {
+    const token=await getGraphToken();
+    const userId=window.GRAPH_USER_ID||'';
+    if(!token) throw new Error('No se pudo obtener token.');
+    if(!userId) throw new Error('GRAPH_USER_ID no configurado.');
+
+    const adjuntos=[];
+    if(window._crAttachFiles){
+      for(const {file} of window._crAttachFiles.values()){
+        const b64=await new Promise(res=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.readAsDataURL(file);});
+        adjuntos.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:b64});
+      }
+    }
+
+    const fullBody=`<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`;
+    const internetMsgId=_crInternetMsgId;
+    let r;
+
+    if(internetMsgId){
+      let endpoint,graphPayload;
+      if(modo==='reply'){
+        endpoint=`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(internetMsgId)}/reply`;
+        graphPayload={message:{body:{contentType:'HTML',content:fullBody},toRecipients:[{emailAddress:{address:toInput}}]},comment:''};
+      } else if(modo==='replyAll'){
+        endpoint=`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(internetMsgId)}/replyAll`;
+        graphPayload={message:{body:{contentType:'HTML',content:fullBody}},comment:''};
+        if(ccInput) graphPayload.message.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+      } else {
+        endpoint=`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(internetMsgId)}/forward`;
+        graphPayload={message:{body:{contentType:'HTML',content:fullBody},toRecipients:[{emailAddress:{address:toInput}}]},comment:''};
+      }
+      if(adjuntos.length) graphPayload.message.attachments=adjuntos;
+      r=await fetch(endpoint,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify(graphPayload)});
+    } else {
+      const payload={subject:subject||('RE: '+(_crData?.subject||'')),body:{contentType:'HTML',content:fullBody},toRecipients:[{emailAddress:{address:toInput}}]};
+      if(ccInput) payload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+      if(adjuntos.length) payload.attachments=adjuntos;
+      r=await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/sendMail`,{method:'POST',headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({message:payload,saveToSentItems:true})});
+    }
+
+    if(!r.ok&&r.status!==202) throw new Error('Graph '+r.status+': '+(await r.text()).substring(0,100));
+
+    const totalAdj=window._crAttachFiles?.size||0;
+    showToast('Respuesta enviada ✓'+(totalAdj?` (${totalAdj} adjunto${totalAdj>1?'s':''})`:''),'success');
+
+    // Guardar correo saliente
+    let correoSalienteId=null;
+    const correoIdOrigen=_crCorreoIdOrigen;
+    try {
+      const _h={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+      const _r=await fetch(`${SB_URL}/rest/v1/correos`,{method:'POST',headers:_h,body:JSON.stringify({
+        from_email:'admin@tododrogas.com.co',from_name:'Admin',
+        subject:subject||('RE: '+(_crData?.subject||'')),
+        body_content:body,body_type:'html',origen:'saliente',estado:'enviado',
+        conversation_id:_crConvId||null,
+        received_at:new Date().toISOString(),sent_at:new Date().toISOString(),
+        canal_contacto:'correo',
+      })});
+      if(_r.ok){const d=await _r.json();correoSalienteId=Array.isArray(d)?d[0]?.id:d?.id;}
+    } catch(e2){console.warn('[crReply correo-saliente]',e2.message);}
+
+    // Evento historial + num_gestiones
+    if(correoIdOrigen){
+      await addHistorialEvent(correoIdOrigen,{remitente:toInput,asunto:subject},'correo_respondido',{
+        por:'admin',adjuntos:totalAdj,
+        adjuntos_nombres:window._crAttachFiles?[...window._crAttachFiles.values()].map(a=>a.file.name):[],
+        correo_id_saliente:correoSalienteId||null,
+        to_email:toInput||null,
+        subject_enviado:subject||('RE: '+(_crData?.subject||'')),
+        modo,
+      });
+      try {
+        const fg=await sb(`correos?id=eq.${correoIdOrigen}&select=num_gestiones&limit=1`);
+        await sb(`correos?id=eq.${correoIdOrigen}`,'PATCH',{num_gestiones:(fg?.[0]?.num_gestiones||0)+1});
+      } catch(e4){console.warn('[crReply num_gestiones]',e4.message);}
+    }
+
+    window._crAttachFiles=new Map();
+    document.getElementById('crReplyBoxArea').innerHTML='';
+
+  } catch(e){
+    showToast('Error al enviar: '+e.message.substring(0,80),'error');
+    if(sendBtn){sendBtn.disabled=false;sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar';}
+  }
+}
+
+async function crDescargarEML() {
   if(!_crData) { showToast('Sin datos del correo para descargar','error'); return; }
+  showToast('Preparando EML con hilo y adjuntos…','info');
+
   const asunto   = _crData.subject || '(correo enviado)';
   const fileName = asunto.replace(/[\/\\:*?"<>|]/g,'_').substring(0,80) + '.eml';
   const de       = _crData.from_email || 'admin@tododrogas.com.co';
   const deNom    = _crData.from_name  || de;
   const fecha    = _crData.sent_at    || _crData.received_at || new Date().toISOString();
   const cuerpo   = _crData.body_content || '(sin contenido)';
-  const boundary = '----=_CRLocal_' + Date.now();
+  const convId   = _crData.conversation_id || null;
+  const correoId = _crData.id || null;
+
+  // ── 1. Cargar adjuntos del correo saliente ──
+  let adjuntos = [];
+  if(correoId) {
+    try {
+      const rows = await sb(`adjuntos?correo_id=eq.${correoId}&es_inline=is.false&select=*`) || [];
+      adjuntos = rows.filter(a => a.storage_url && !a.es_inline);
+    } catch(e) { console.warn('[crEML] adjuntos:', e.message); }
+  }
+
+  // ── 2. Descargar adjuntos en base64 ──
+  const adjB64 = [];
+  for(const adj of adjuntos) {
+    try {
+      let fetchUrl = adj.storage_url;
+      if(fetchUrl.startsWith('https://graph.microsoft.com')) {
+        fetchUrl = `/adj-proxy.php?url=${encodeURIComponent(fetchUrl)}`;
+      }
+      const r = await fetch(fetchUrl);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const buf = await r.arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      adjB64.push({ nombre: adj.nombre||'archivo', tipo: adj.tipo_contenido||'application/octet-stream', b64 });
+    } catch(e) { console.warn('[crEML] fetch adj '+adj.nombre+':', e.message); }
+  }
+  const adjSinUrl = adjuntos.filter(a => !a.storage_url).map(a => a.nombre);
+
+  // ── 3. Construir hilo desde Supabase + Graph ──
+  let hiloMsgs = [];
+
+  // 3a. Supabase
+  if(convId) {
+    try {
+      const rows = await sb(`correos?conversation_id=eq.${convId}&order=received_at.asc&select=from_name,from_email,received_at,sent_at,subject,body_content,body_type,origen,estado&limit=50`) || [];
+      rows.forEach(c => {
+        const esEnv = c.origen==='saliente'||c.estado==='enviado';
+        hiloMsgs.push({
+          de: c.from_name||(esEnv?'Admin PQRSFD':'Remitente'),
+          email: c.from_email||'',
+          fecha: c.sent_at||c.received_at||'',
+          preview: (c.body_content||'').replace(/<[^>]*>/g,' ').substring(0,300),
+          esEnviado: esEnv,
+        });
+      });
+    } catch(e) { console.warn('[crEML] hilo supabase:', e.message); }
+  }
+
+  // 3b. Graph API
+  if(convId) {
+    try {
+      const token = await getGraphToken();
+      const userId = window.GRAPH_USER_ID || '';
+      if(token && userId) {
+        const convIdClean = convId.replace(/'/g,"''");
+        const r = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/allItems/messages?$filter=conversationId eq '${convIdClean}'&$select=id,subject,from,receivedDateTime,sentDateTime,bodyPreview,isDraft&$top=50`,
+          { headers: {'Authorization':'Bearer '+token} }
+        );
+        if(r.ok) {
+          const data = await r.json();
+          (data.value||[]).forEach(m => {
+            const fMs = m.receivedDateTime||m.sentDateTime||'';
+            const yaEsta = hiloMsgs.some(h => h.fecha && fMs && Math.abs(new Date(h.fecha)-new Date(fMs))<5000);
+            if(!yaEsta) {
+              const deAddr = m.from?.emailAddress?.address||'';
+              const esEnv  = deAddr.toLowerCase().includes((userId||'').split('@')[0].toLowerCase());
+              hiloMsgs.push({
+                de: m.from?.emailAddress?.name||deAddr,
+                email: deAddr,
+                fecha: fMs,
+                preview: (m.bodyPreview||'').substring(0,300),
+                esEnviado: esEnv,
+              });
+            }
+          });
+        }
+      }
+    } catch(e) { console.warn('[crEML] hilo graph:', e.message); }
+  }
+
+  hiloMsgs.sort((a,b) => new Date(a.fecha||0) - new Date(b.fecha||0));
+
+  // ── 4. HTML del hilo ──
+  let hiloHTML = '';
+  if(hiloMsgs.length) {
+    hiloHTML += `\r\n\r\n<hr style="border:1px solid #ccc;margin:20px 0">\r\n`;
+    hiloHTML += `<div style="font-family:Arial,sans-serif;font-size:12px;color:#555;margin-bottom:8px"><strong>🧵 Hilo de conversación (${hiloMsgs.length} mensaje${hiloMsgs.length>1?'s':''})</strong></div>`;
+    hiloMsgs.forEach(m => {
+      const fStr = m.fecha ? new Date(m.fecha).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : '';
+      const bgColor = m.esEnviado ? '#eff6ff' : '#f0fdf4';
+      const borderColor = m.esEnviado ? '#2563eb' : '#16a34a';
+      const label = m.esEnviado ? '📤 ENVIADO' : '📥 RECIBIDO';
+      hiloHTML += `<div style="margin:8px 0;padding:10px 12px;background:${bgColor};border-left:3px solid ${borderColor};font-family:Arial,sans-serif;font-size:12px">`;
+      hiloHTML += `<div style="font-weight:bold;color:#333">${label} · ${m.de}${m.email&&m.email!==m.de?' &lt;'+m.email+'&gt;':''}</div>`;
+      hiloHTML += `<div style="color:#888;font-size:11px;margin-bottom:6px">${fStr}</div>`;
+      hiloHTML += `<div style="color:#444;line-height:1.5">${m.preview.replace(/\n/g,'<br>')}${m.preview.length>=300?'…':''}</div>`;
+      hiloHTML += `</div>`;
+    });
+  }
+
+  // ── 5. Referencia de adjuntos ──
+  let adjRefHTML = '';
+  if(adjB64.length || adjSinUrl.length) {
+    adjRefHTML += `\r\n<div style="font-family:Arial,sans-serif;font-size:12px;color:#555;margin-top:16px">`;
+    adjRefHTML += `<strong>📎 Adjuntos de esta respuesta:</strong><ul style="margin:4px 0;padding-left:20px">`;
+    adjB64.forEach(a => { adjRefHTML += `<li>${a.nombre} <em style="color:#16a34a">(incluido en este EML)</em></li>`; });
+    adjSinUrl.forEach(n => { adjRefHTML += `<li>${n} <em style="color:#888">(sin URL disponible)</em></li>`; });
+    adjRefHTML += `</ul></div>`;
+  }
+
+  // ── 6. Armar EML multipart/mixed ──
+  const bMixed = '----=_Mixed_' + Date.now();
+  const bAlt   = '----=_Alt_'   + Date.now();
+  const cuerpoHtml = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#000;background:#fff">${cuerpo}${adjRefHTML}${hiloHTML}</div>`;
+  const cuerpoTxt  = cuerpo.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim()
+    + (hiloMsgs.length ? '\r\n\r\n--- Hilo ---\r\n'+hiloMsgs.map(m=>`[${m.esEnviado?'ENVIADO':'RECIBIDO'}] ${m.de} · ${m.fecha}\r\n${m.preview}`).join('\r\n---\r\n') : '');
+
   let eml = '';
   eml += `From: ${deNom} <${de}>\r\n`;
+  eml += `To: (destinatario)\r\n`;
   eml += `Subject: ${asunto}\r\n`;
   eml += `Date: ${new Date(fecha).toUTCString()}\r\n`;
   eml += `MIME-Version: 1.0\r\n`;
-  if(_crData.body_type === 'html') {
-    eml += `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n`;
-    eml += `--${boundary}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n`;
-    eml += cuerpo.replace(/<[^>]*>/g,' ').replace(/\r?\n/g,'\r\n') + '\r\n';
-    eml += `--${boundary}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n`;
-    eml += cuerpo + '\r\n';
-    eml += `--${boundary}--\r\n`;
-  } else {
-    eml += `Content-Type: text/plain; charset=utf-8\r\n\r\n`;
-    eml += cuerpo.replace(/\r?\n/g,'\r\n') + '\r\n';
+  eml += `X-Tododrogas-Ticket: traza-correo-respondido\r\n`;
+  eml += `Content-Type: multipart/mixed; boundary="${bMixed}"\r\n\r\n`;
+
+  eml += `--${bMixed}\r\n`;
+  eml += `Content-Type: multipart/alternative; boundary="${bAlt}"\r\n\r\n`;
+  eml += `--${bAlt}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n`;
+  eml += cuerpoTxt.replace(/\r?\n/g,'\r\n') + '\r\n';
+  eml += `--${bAlt}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n`;
+  eml += cuerpoHtml + '\r\n';
+  eml += `--${bAlt}--\r\n`;
+
+  for(const adj of adjB64) {
+    eml += `--${bMixed}\r\n`;
+    eml += `Content-Type: ${adj.tipo}; name="${adj.nombre}"\r\n`;
+    eml += `Content-Transfer-Encoding: base64\r\n`;
+    eml += `Content-Disposition: attachment; filename="${adj.nombre}"\r\n\r\n`;
+    eml += adj.b64.match(/.{1,76}/g).join('\r\n') + '\r\n';
   }
+
+  eml += `--${bMixed}--\r\n`;
+
   const blob = new Blob([eml], {type:'message/rfc822'});
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href = url; a.download = fileName;
   document.body.appendChild(a); a.click();
-  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 2000);
-  showToast('EML descargado ✓','success');
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 3000);
+  const resumen = [
+    adjB64.length ? `${adjB64.length} adjunto${adjB64.length>1?'s':''} incluido${adjB64.length>1?'s':''}` : '',
+    hiloMsgs.length ? `${hiloMsgs.length} mensaje${hiloMsgs.length>1?'s':''} en el hilo` : '',
+  ].filter(Boolean).join(' · ');
+  showToast('EML descargado ✓' + (resumen ? ' — '+resumen : ''),'success');
 }
 
 function logout(){sessionStorage.clear();window.location.href='login.html';}
