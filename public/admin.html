@@ -2026,7 +2026,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 </div>
 
 <!-- ══ MODAL: CORREO RESPONDIDO (desde timeline) ══ -->
-<div class="modal-backdrop" id="modalCorreoRespondido" onclick="if(event.target===this)closeModal('modalCorreoRespondido')" style="align-items:flex-start;padding:16px 0;overflow-y:auto">
+<div class="modal-backdrop" id="modalCorreoRespondido" onmousedown="if(event.target===this)this.dataset.backdropClick='1'" onmouseup="if(event.target===this&&this.dataset.backdropClick==='1'){this.dataset.backdropClick='';closeModal('modalCorreoRespondido')}else{this.dataset.backdropClick=''}" style="align-items:flex-start;padding:16px 0;overflow-y:auto">
   <div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:16px;width:min(1200px,97vw);max-height:calc(100vh - 24px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3);margin:auto">
     <!-- HEADER -->
     <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0;background:var(--surface)">
@@ -6896,7 +6896,7 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
       if(visibles.length) {
         document.getElementById('crAdjBar').style.display = '';
         const pillsHTML = await Promise.all(visibles.map(async a => {
-          let url = a.storage_url || '#';
+          let url = (a.storage_url || '').trim() || '#';
           const nombre = a.nombre || 'Archivo';
           const bytes = a.tamano_bytes || 0;
           const size = bytes >= 1048576 ? (bytes/1048576).toFixed(1)+' MB' : bytes >= 1024 ? Math.round(bytes/1024)+' KB' : bytes+' B';
@@ -7324,7 +7324,7 @@ async function crDescargarEML() {
   const adjB64 = [];
   for(const adj of adjuntos) {
     try {
-      let fetchUrl = adj.storage_url;
+      let fetchUrl = (adj.storage_url||"").trim();
       if(fetchUrl.startsWith('https://graph.microsoft.com')) {
         fetchUrl = `/adj-proxy.php?url=${encodeURIComponent(fetchUrl)}`;
       }
