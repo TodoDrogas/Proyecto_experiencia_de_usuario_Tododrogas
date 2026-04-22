@@ -2027,7 +2027,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 
 <!-- ══ MODAL: CORREO RESPONDIDO (desde timeline) ══ -->
 <div class="modal-backdrop" id="modalCorreoRespondido" onclick="if(event.target===this)closeModal('modalCorreoRespondido')" style="align-items:flex-start;padding:16px 0;overflow-y:auto">
-  <div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:16px;width:min(1060px,97vw);max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3);margin:auto">
+  <div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:16px;width:min(1200px,97vw);max-height:calc(100vh - 24px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3);margin:auto">
     <!-- HEADER -->
     <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0;background:var(--surface)">
       <div style="min-width:0;flex:1">
@@ -6900,21 +6900,33 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
           const nombre = a.nombre || 'Archivo';
           const bytes = a.tamano_bytes || 0;
           const size = bytes >= 1048576 ? (bytes/1048576).toFixed(1)+' MB' : bytes >= 1024 ? Math.round(bytes/1024)+' KB' : bytes+' B';
-          if(a.storage_path && url !== '#') {
-            try {
-              const m2 = url.match(/\/storage\/v1\/object\/(?:public\/|sign\/)?([^/]+)\/(.+?)(?:\?|$)/);
-              if(m2) {
-                const [,bucket,path] = m2;
-                const cleanPath = decodeURIComponent(path.split('?')[0]);
-                const signR = await fetch(`${SB_URL}/storage/v1/object/sign/${bucket}/${cleanPath}`, {
-                  method:'POST',
-                  headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-                  body:JSON.stringify({expiresIn:3600})
-                });
-                if(signR.ok){const sd=await signR.json();if(sd.signedURL)url=`${SB_URL}/storage/v1${sd.signedURL}`;}
-              }
-            } catch(e2){console.warn('[crAdj sign]',e2.message);}
-          }
+          try {
+            const rawPath = a.storage_path ||
+              (() => {
+                if(url.includes('/object/sign/')) {
+                  const m2 = url.match(/\/object\/sign\/([^/]+)\/(.+?)(?:\?|$)/);
+                  if(m2) return m2[2];
+                }
+                if(url.includes('/object/public/')) {
+                  const m3 = url.match(/\/object\/public\/([^/]+)\/(.+?)(?:\?|$)/);
+                  if(m3) return m3[2];
+                }
+                return null;
+              })();
+            const bucket = (() => {
+              const m4 = url.match(/\/object\/(?:sign|public)\/([^/]+)\//);
+              return m4 ? m4[1] : 'adjuntos-pqr';
+            })();
+            if(rawPath && url !== '#') {
+              const cleanPath = decodeURIComponent(rawPath.split('?')[0]);
+              const signR = await fetch(`${SB_URL}/storage/v1/object/sign/${bucket}/${cleanPath}`, {
+                method:'POST',
+                headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+                body:JSON.stringify({expiresIn:3600})
+              });
+              if(signR.ok){const sd=await signR.json();if(sd.signedURL)url=`${SB_URL}/storage/v1${sd.signedURL}`;}
+            }
+          } catch(e2){console.warn('[crAdj sign]',e2.message);}
           const hasUrl = url && url !== '#';
           return `<div class="adj-pill" ${hasUrl?`onclick="previewAdjunto('${esc(url)}','${esc(nombre)}','${esc(a.tipo_contenido||'')}',this)"`:'style="cursor:default;opacity:.7"'} title="${esc(nombre)} · ${size}">
             <span style="font-size:14px;flex-shrink:0">${getFileIcon(nombre)}</span>
@@ -6952,6 +6964,8 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
       if(!msgs.length) {
         hiloEl.innerHTML = '<div class="empty-state"><p>No se encontraron mensajes en el hilo.</p></div>';
       } else {
+        window._crHiloMsgs = {};
+        msgs.forEach(m => { window._crHiloMsgs[m.id] = m; });
         let rows = '';
         msgs.forEach((m, i) => {
           const de = m.from?.emailAddress?.address || '';
@@ -6962,8 +6976,8 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
           const ini = esc(deNombre).charAt(0).toUpperCase();
           const fStr = fechaM ? new Date(fechaM).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}) : '';
           const bb = i === msgs.length-1 ? 'none' : '1px solid var(--border)';
-          rows += `<div style="border-bottom:${bb};padding:8px 6px">
-            <div style="display:flex;align-items:center;gap:7px">
+          rows += `<div style="border-bottom:${bb}">
+            <div onclick="crHiloToggle('${m.id}')" style="padding:8px 8px 4px;cursor:pointer;display:flex;align-items:center;gap:7px" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
               <span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff">${ini}</span>
               <div style="min-width:0;flex:1">
                 <div style="font-size:11px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(deNombre)}${esEnviado?' <span style="background:var(--blue-l);color:var(--blue);font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">ENVIADO</span>':''}</div>
@@ -6971,8 +6985,10 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
               </div>
               ${m.hasAttachments ? '<span style="font-size:12px;flex-shrink:0" title="Tiene adjuntos">📎</span>' : ''}
               <button data-mid="${m.id}" data-sub="${encodeURIComponent(m.subject||'correo')}" onclick="event.stopPropagation();descargarEML(this.dataset.mid,decodeURIComponent(this.dataset.sub))" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700;cursor:pointer;color:var(--ink2);flex-shrink:0">EML</button>
+              <span id="crHiloArrow_${m.id}" style="font-size:9px;color:var(--ink3);flex-shrink:0">▼</span>
             </div>
-            <div style="font-size:10px;color:var(--ink3);margin-top:4px;padding-left:29px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.bodyPreview||'')}</div>
+            <div style="padding:0 8px 6px 37px;font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.bodyPreview||'')}</div>
+            <div id="crHiloBody_${m.id}" style="display:none;padding:6px 8px 10px 37px;font-size:11px;color:var(--ink2);line-height:1.6;border-top:1px solid var(--bg2)"></div>
           </div>`;
         });
         hiloEl.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)">${rows}</div>`;
@@ -6988,6 +7004,49 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
 // ──────────────────────────────────────────────
 // REPLY DESDE MODAL CORREO RESPONDIDO — ADMIN
 // ──────────────────────────────────────────────
+// ── Expandir mensaje del hilo en modal correo_respondido ──
+async function crHiloToggle(msgId) {
+  const bodyEl  = document.getElementById(`crHiloBody_${msgId}`);
+  const arrowEl = document.getElementById(`crHiloArrow_${msgId}`);
+  if(!bodyEl) return;
+  const isOpen = bodyEl.style.display !== 'none';
+  if(isOpen) {
+    bodyEl.style.display='none';
+    if(arrowEl) arrowEl.textContent='▼';
+    return;
+  }
+  bodyEl.style.display='block';
+  if(arrowEl) arrowEl.textContent='▲';
+  if(bodyEl.innerHTML && bodyEl.innerHTML !== '<div style="color:var(--ink3);font-size:11px">Cargando…</div>') return;
+  bodyEl.innerHTML='<div style="color:var(--ink3);font-size:11px">Cargando…</div>';
+  try {
+    const token  = await getGraphToken();
+    const userId = window.GRAPH_USER_ID || '';
+    const r = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}?$select=body,from,toRecipients,subject,sentDateTime,receivedDateTime`,
+      { headers:{'Authorization':'Bearer '+token} }
+    );
+    if(!r.ok) throw new Error('Graph '+r.status);
+    const d = await r.json();
+    const bodyHtml = d.body?.content || '';
+    const bodyType = d.body?.contentType || 'text';
+    if(bodyType==='html'){
+      const iframe=document.createElement('iframe');
+      iframe.sandbox='allow-same-origin allow-popups';
+      iframe.referrerPolicy='no-referrer';
+      iframe.style.cssText='width:100%;min-height:80px;border:none;display:block;border-radius:4px';
+      iframe.srcdoc='<style>html,body{margin:0;padding:6px;font-family:Arial,sans-serif;font-size:12px;color:#333;background:#fff}</style>'+bodyHtml;
+      iframe.onload=()=>{try{const h=iframe.contentDocument?.body?.scrollHeight;if(h)iframe.style.height=Math.min(h+16,400)+'px';}catch(e){}};
+      bodyEl.innerHTML='';
+      bodyEl.appendChild(iframe);
+    } else {
+      bodyEl.innerHTML=`<div style="font-size:11px;color:var(--ink2);white-space:pre-wrap;line-height:1.5">${esc(bodyHtml)}</div>`;
+    }
+  } catch(e) {
+    bodyEl.innerHTML=`<div style="font-size:11px;color:var(--red)">⚠️ Error: ${esc(e.message)}</div>`;
+  }
+}
+
 let _crCorreoIdOrigen = null;
 let _crInternetMsgId  = null;
 let _crConvId         = null;
