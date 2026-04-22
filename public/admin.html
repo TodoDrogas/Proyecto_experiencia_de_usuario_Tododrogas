@@ -5335,13 +5335,6 @@ async function sendReply() {
       const adjInfo=totalAdj>0?` (${totalAdj} adjunto${totalAdj>1?'s':''})` :'';
       showToast('Respuesta enviada ✓'+adjInfo,'success');
       const todosLosArchivos=[...inlineFiles,...largeFiles];
-      if(todosLosArchivos.length>0){
-        const _rawAgId3=sessionStorage.getItem('pqr_agent_id')||'';
-        const agentId=(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).test(_rawAgId3)?_rawAgId3:null;
-        _guardarAdjuntosEnStorage(id,todosLosArchivos,agentId)
-          .then(res=>{const f=res.filter(r=>!r.ok);if(f.length)console.warn('[adjuntos-storage] Sin guardar:',f.map(x=>x.nombre).join(', '));})
-          .catch(err=>console.warn('[adjuntos-storage]',err.message));
-      }
       await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,100),correo_id_saliente:null});
       // Guardar correo saliente capturando su ID para el timeline
       let _adminSalienteId = null;
@@ -5369,6 +5362,23 @@ async function sendReply() {
           _adminSalienteId = Array.isArray(_sbAdmData) ? _sbAdmData[0]?.id : _sbAdmData?.id;
         }
       } catch(e2){ console.warn('[correo-saliente-admin]',e2.message); }
+
+      // ── Guardar adjuntos con el ID correcto del correo saliente (bloqueante) ──
+      if(todosLosArchivos.length > 0 && _adminSalienteId) {
+        const _rawAgId3=sessionStorage.getItem('pqr_agent_id')||'';
+        const agentId=(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i).test(_rawAgId3)?_rawAgId3:null;
+        try {
+          const resAdj = await _guardarAdjuntosEnStorage(_adminSalienteId, todosLosArchivos, agentId);
+          const fallidos = resAdj.filter(r=>!r.ok);
+          if(fallidos.length > 0) {
+            showToast(`⚠️ ${fallidos.length} adjunto(s) no se guardaron: ${fallidos.map(f=>f.nombre).join(', ')}`, 'error');
+            console.warn('[adjuntos-storage] Sin guardar:', fallidos);
+          }
+        } catch(eAdj) {
+          showToast('⚠️ Error guardando adjuntos: '+eAdj.message.substring(0,60), 'error');
+          console.warn('[adjuntos-storage]', eAdj.message);
+        }
+      }
       // Actualizar el evento correo_respondido ya guardado con el correo_id_saliente
       if(_adminSalienteId) {
         try {
