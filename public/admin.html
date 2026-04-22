@@ -669,12 +669,6 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         <span class="folder-cnt" id="fc-pendiente_firma" style="background:var(--purple-l);color:var(--purple)">0</span>
       </div>
       <div class="folders-divider"></div>
-      <div class="folder-item" onclick="setFolder('enviado',this)" style="color:var(--blue)">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        Enviados
-        <span class="folder-cnt" id="fc-enviado" style="background:var(--blue-l);color:var(--blue)">0</span>
-      </div>
-      <div class="folders-divider"></div>
       <div class="folders-title" style="margin-top:8px">Por agente</div>
       <div id="folderAgents"></div>
     </div>
@@ -2031,6 +2025,59 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
   </div>
 </div>
 
+<!-- ══ MODAL: CORREO RESPONDIDO (desde timeline) ══ -->
+<div class="modal-backdrop" id="modalCorreoRespondido" onclick="if(event.target===this)closeModal('modalCorreoRespondido')" style="align-items:flex-start;padding:16px 0;overflow-y:auto">
+  <div style="background:var(--surface);border-radius:16px;width:min(960px,97vw);max-height:calc(100vh - 32px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3);margin:auto">
+    <!-- HEADER -->
+    <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0;background:var(--surface)">
+      <div style="min-width:0;flex:1">
+        <div style="display:inline-flex;align-items:center;gap:6px;background:#dbeafe;color:#2563eb;font-size:10px;font-weight:700;padding:2px 10px;border-radius:99px;margin-bottom:6px;letter-spacing:.4px">📤 CORREO ENVIADO</div>
+        <div id="crAsunto" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:5px;line-height:1.3"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <span id="crDe" style="font-size:12px;color:var(--ink2)"></span>
+          <span id="crPara" style="font-size:11px;color:var(--ink3)"></span>
+          <span id="crFecha" style="font-size:11px;color:var(--ink3)"></span>
+        </div>
+      </div>
+      <button onclick="closeModal('modalCorreoRespondido')" style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--ink3);font-size:20px;line-height:1;padding:2px 8px;border-radius:6px" title="Cerrar">✕</button>
+    </div>
+    <!-- ADJUNTOS -->
+    <div id="crAdjBar" style="display:none;padding:8px 20px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0">
+      <div style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px;margin-bottom:6px">📎 ADJUNTOS DE ESTA RESPUESTA</div>
+      <div id="crAdjGrid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <!-- LAYOUT -->
+    <div style="flex:1;display:flex;overflow:hidden;min-height:0">
+      <!-- Cuerpo -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0">
+        <div style="padding:8px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0">
+          <span style="font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.4px">RESPUESTA ENVIADA</span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:16px 20px;min-height:0">
+          <div id="crBody"></div>
+        </div>
+      </div>
+      <!-- Hilo -->
+      <div style="width:320px;min-width:280px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--surface2)">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface)">
+          <div style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px">🧵 HILO DE CONVERSACIÓN</div>
+        </div>
+        <div id="crHiloWrap" style="flex:1;overflow-y:auto;padding:10px;min-height:0">
+          <div class="empty-state"><p>Cargando hilo…</p></div>
+        </div>
+      </div>
+    </div>
+    <!-- FOOTER -->
+    <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;background:var(--bg)">
+      <button onclick="closeModal('modalCorreoRespondido')" class="btn btn-ghost" style="font-size:12px">Cerrar</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="crDescargarEML()">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Descargar EML
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- TOASTS -->
 <div id="toasts"></div>
 
@@ -3096,8 +3143,6 @@ function updateFolderCounts() {
   });
   const urgEl = document.getElementById('fc-urgente');
   if(urgEl) urgEl.textContent = _all.filter(e=>_pqr(e)&&(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma'&&e.estado!=='informacion').length;
-  const envEl = document.getElementById('fc-enviado');
-  if(envEl) envEl.textContent = _all.filter(e=>(e.origen==='saliente'||e.estado==='enviado')&&!e.agente_id).length;
 }
 
 function renderFolderAgents() {
@@ -3155,9 +3200,6 @@ function renderEmailList() {
     list = list.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
   } else if(state.folder === 'sin_asignar') {
     list = list.filter(e=>e.estado==='sin_asignar'&&e.origen!=='saliente'&&e.origen!=='borrador');
-  } else if(state.folder === 'enviado') {
-    // Solo enviados por admin — agente_id null = enviado desde el panel admin
-    list = list.filter(e=>(e.origen==='saliente'||e.estado==='enviado')&&!e.agente_id);
   } else {
     if(state.folder==='pendiente') {
       list = list.filter(e=>e.estado==='pendiente'&&e.origen!=='saliente'&&e.origen!=='borrador');
@@ -3275,8 +3317,6 @@ async function selectEmail(id) {
     <div class="ev-actions">
       ${email.estado==='solucionado' ? `
         <span style="display:inline-flex;align-items:center;gap:5px;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">🔒 Ticket cerrado · solo lectura</span>
-      ` : (email.origen==='saliente'||email.estado==='enviado') ? `
-        <span style="display:inline-flex;align-items:center;gap:5px;background:#dbeafe;color:#2563eb;font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">📤 Correo enviado — historial disponible a la derecha</span>
       ` : (email.origen==='borrador'||email.estado==='borrador'||email.is_draft) ? `
       <button class="btn btn-ghost" onclick="toggleReply('reply')">↩ Responder</button>
       <button class="btn btn-ghost" onclick="toggleReply('replyAll')">↩↩ Resp. a todos</button>
@@ -3550,10 +3590,13 @@ function renderTimeline(events, container) {
     const meta = _parseMeta(ev.datos_extra||ev.metadata);
     const agente = meta.agente_nombre||ev.agente_nombre||'';
     const obs = meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
-    return `<div class="timeline-item" onclick="openTlDetail(${i})" data-idx="${i}">
+    const esCorreoResp = accion.toLowerCase().includes('correo_respondido');
+    const crBadge = esCorreoResp ? ' <span style="font-size:9px;background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:4px;font-weight:700;vertical-align:middle">\uD83D\uDCE4 ver</span>' : '';
+    const crTitle = esCorreoResp ? ' title="Ver correo enviado"' : '';
+    return `<div class="timeline-item" onclick="openTlDetail(${i})" data-idx="${i}"${crTitle}>
       <div class="tl-dot color-${color}"></div>
       <div class="tl-content">
-        <div class="tl-action">${esc(accion)}</div>
+        <div class="tl-action">${esc(accion)}${crBadge}</div>
         ${agente?`<div class="tl-agent">${esc(agente)}</div>`:''}
         <div class="tl-date">${fecha?formatDate(new Date(fecha),true):''}</div>
         ${obs?`<div class="tl-obs">${esc(obs.substring(0,100))}${obs.length>100?'...':''}</div>`:''}
@@ -3571,6 +3614,14 @@ function openTlDetail(idx) {
   if(!events||!events[idx]) return;
   const ev = events[idx];
   const meta = _parseMeta(ev.datos_extra||ev.metadata);
+
+  // ── Correo respondido → abrir modal especial con el correo enviado ──
+  const accionEv = (ev.evento||ev.accion||'').toLowerCase();
+  if(accionEv.includes('correo_respondido')) {
+    abrirCorreoRespondido(ev.correo_id || null, ev, meta);
+    return;
+  }
+
   const fecha = ev.created_at||ev.fecha||'';
 
   let adjuntosHTML = '';
@@ -5267,17 +5318,45 @@ async function sendReply() {
           .then(res=>{const f=res.filter(r=>!r.ok);if(f.length)console.warn('[adjuntos-storage] Sin guardar:',f.map(x=>x.nombre).join(', '));})
           .catch(err=>console.warn('[adjuntos-storage]',err.message));
       }
-      await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,100)});
+      await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,100),correo_id_saliente:null});
+      // Guardar correo saliente capturando su ID para el timeline
+      let _adminSalienteId = null;
       try {
-        await sb('correos','POST',{
-          from_email:'admin@tododrogas.com.co', from_name:'Admin',
-          subject: subject||('RE: '+(email?.asunto||'')),
-          body_content:body, body_type:'html', origen:'saliente', estado:'enviado',
-          conversation_id:email?.raw?.conversation_id||null,
-          received_at:new Date().toISOString(), sent_at:new Date().toISOString(),
-          importance:window._replyImportant?'high':'normal', canal_contacto:'correo',
+        const _sbAdmH = {
+          'apikey': SB_KEY,
+          'Authorization': 'Bearer ' + SB_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        };
+        const _sbAdmR = await fetch(`${SB_URL}/rest/v1/correos`, {
+          method: 'POST',
+          headers: _sbAdmH,
+          body: JSON.stringify({
+            from_email:'admin@tododrogas.com.co', from_name:'Admin',
+            subject: subject||('RE: '+(email?.asunto||'')),
+            body_content:body, body_type:'html', origen:'saliente', estado:'enviado',
+            conversation_id:email?.raw?.conversation_id||null,
+            received_at:new Date().toISOString(), sent_at:new Date().toISOString(),
+            importance:window._replyImportant?'high':'normal', canal_contacto:'correo',
+          }),
         });
+        if(_sbAdmR.ok) {
+          const _sbAdmData = await _sbAdmR.json();
+          _adminSalienteId = Array.isArray(_sbAdmData) ? _sbAdmData[0]?.id : _sbAdmData?.id;
+        }
       } catch(e2){ console.warn('[correo-saliente-admin]',e2.message); }
+      // Actualizar el evento correo_respondido ya guardado con el correo_id_saliente
+      if(_adminSalienteId) {
+        try {
+          // Buscar el evento recién creado y actualizarlo
+          const _evRows = await sb(`historial_eventos?correo_id=eq.${id}&evento=eq.correo_respondido&order=created_at.desc&limit=1`);
+          if(_evRows && _evRows[0]?.id) {
+            const _evMeta = _parseMeta(_evRows[0].datos_extra||'{}');
+            _evMeta.correo_id_saliente = _adminSalienteId;
+            await sb(`historial_eventos?id=eq.${_evRows[0].id}`, 'PATCH', { datos_extra: JSON.stringify(_evMeta) });
+          }
+        } catch(e5){ console.warn('[correo-saliente-admin link]', e5.message); }
+      }
       try {
         const corrOrig=state.emails.find(e=>e.raw?.conversation_id===email?.raw?.conversation_id&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
         const idGest=corrOrig?.id||id;
@@ -5618,10 +5697,13 @@ async function _mpLoadTimeline(correoId) {
       const meta=_parseMeta(ev.datos_extra||ev.metadata);
       const agente=meta.agente_nombre||ev.agente_nombre||'';
       const obs=meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
-      return `<div class="timeline-item" onclick="mpOpenTlDetail(${i})" style="cursor:pointer">
+      const esCorreoResp = accion.toLowerCase().includes('correo_respondido');
+      const crBadge = esCorreoResp ? ' <span style="font-size:9px;background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:4px;font-weight:700;vertical-align:middle">\uD83D\uDCE4 ver</span>' : '';
+      const crTitle = esCorreoResp ? ' title="Ver correo enviado"' : '';
+      return `<div class="timeline-item" onclick="mpOpenTlDetail(${i})" style="cursor:pointer"${crTitle}>
         <div class="tl-dot color-${color}"></div>
         <div class="tl-content">
-          <div class="tl-action">${esc(accion)}</div>
+          <div class="tl-action">${esc(accion)}${crBadge}</div>
           ${agente?`<div class="tl-agent">${esc(agente)}</div>`:''}
           <div class="tl-date">${fecha?formatDate(new Date(fecha),true):''}</div>
           ${obs?`<div class="tl-obs">${esc(obs.substring(0,80))}${obs.length>80?'…':''}</div>`:''}
@@ -5637,6 +5719,14 @@ function mpOpenTlDetail(idx) {
   const events = el?._events;
   if(!events||!events[idx]) return;
   const ev=events[idx], meta=_parseMeta(ev.datos_extra||ev.metadata);
+
+  // ── Correo respondido → abrir modal especial con el correo enviado ──
+  const accionEv = (ev.evento||ev.accion||'').toLowerCase();
+  if(accionEv.includes('correo_respondido')) {
+    abrirCorreoRespondido(ev.correo_id || null, ev, meta);
+    return;
+  }
+
   const fecha=ev.created_at||ev.fecha||'';
   let adjHTML='';
   if(meta.firma_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
@@ -6601,6 +6691,209 @@ async function accionMasiva(tipo) {
   showToast(`✅ ${ok} correos actualizados`, 'success');
   limpiarSeleccion();
   renderEmailList();
+}
+
+// ──────────────────────────────────────────────
+// CORREO RESPONDIDO — abrir modal desde timeline
+// ──────────────────────────────────────────────
+let _crData = null;
+
+async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
+  _crData = null;
+  document.getElementById('crAsunto').textContent = 'Cargando…';
+  document.getElementById('crDe').textContent = '';
+  document.getElementById('crPara').textContent = '';
+  document.getElementById('crFecha').textContent = '';
+  document.getElementById('crBody').innerHTML = '<div class="empty-state"><p>Cargando correo…</p></div>';
+  document.getElementById('crAdjBar').style.display = 'none';
+  document.getElementById('crAdjGrid').innerHTML = '';
+  document.getElementById('crHiloWrap').innerHTML = '<div class="empty-state"><p>Cargando hilo…</p></div>';
+  document.getElementById('modalCorreoRespondido').classList.add('show');
+
+  const correoSalienteId = meta?.correo_id_saliente || null;
+  const conversationIdOrigen = (() => {
+    const padre = state.emails.find(e => e.id === correoIdOrigen) || state.allEmails?.find(e => e.id === correoIdOrigen);
+    return padre?.raw?.conversation_id || null;
+  })();
+
+  // 1. Cargar correo saliente por ID directo
+  let correoSaliente = null;
+  if(correoSalienteId) {
+    try {
+      const rows = await sb(`correos?id=eq.${correoSalienteId}&select=*`);
+      correoSaliente = Array.isArray(rows) ? rows[0] : rows;
+    } catch(e) { console.warn('[crModal] ID directo falló:', e.message); }
+  }
+  // Fallback por conversation_id + fecha más cercana al evento
+  if(!correoSaliente && conversationIdOrigen) {
+    try {
+      const rows = await sb(`correos?conversation_id=eq.${conversationIdOrigen}&origen=eq.saliente&order=sent_at.desc&limit=10&select=*`);
+      const lista = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+      if(lista.length) {
+        const evFecha = new Date(ev.created_at || ev.fecha || 0).getTime();
+        correoSaliente = lista.reduce((best, c) => {
+          const df = Math.abs(new Date(c.sent_at||c.received_at||0).getTime() - evFecha);
+          const db = Math.abs(new Date(best.sent_at||best.received_at||0).getTime() - evFecha);
+          return df < db ? c : best;
+        }, lista[0]);
+      }
+    } catch(e) { console.warn('[crModal] Fallback conv_id falló:', e.message); }
+  }
+
+  _crData = correoSaliente;
+
+  // 2. Encabezado
+  const asunto = correoSaliente?.subject || meta?.subject_enviado || ev.subject || '(Sin asunto)';
+  const deNom  = correoSaliente?.from_name || correoSaliente?.from_email || meta?.agente_nombre || 'Admin';
+  const deEmail= correoSaliente?.from_email || '';
+  const para   = correoSaliente?.to_recipients
+    ? (Array.isArray(correoSaliente.to_recipients)
+        ? correoSaliente.to_recipients.map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')
+        : correoSaliente.to_recipients)
+    : (meta?.to_email || '');
+  const fecha  = correoSaliente?.sent_at || correoSaliente?.received_at || ev.created_at || '';
+
+  document.getElementById('crAsunto').textContent = asunto;
+  document.getElementById('crDe').textContent = `De: ${deNom}${deEmail && deEmail!==deNom ? ' <'+deEmail+'>' : ''}`;
+  document.getElementById('crPara').textContent = para ? `Para: ${para}` : '';
+  document.getElementById('crFecha').textContent = fecha ? new Date(fecha).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : '';
+
+  // 3. Cuerpo
+  const bodyEl = document.getElementById('crBody');
+  if(correoSaliente?.body_content) {
+    if(correoSaliente.body_type === 'html') {
+      const iframe = document.createElement('iframe');
+      iframe.sandbox = 'allow-same-origin allow-popups';
+      iframe.referrerPolicy = 'no-referrer';
+      iframe.style.cssText = 'width:100%;min-height:300px;border:none;display:block';
+      iframe.srcdoc = '<style>html,body{background:#ffffff!important;color:#000000!important}</style>' + correoSaliente.body_content;
+      iframe.onload = () => {
+        try { const h = iframe.contentDocument?.body?.scrollHeight; if(h) iframe.style.height = h + 40 + 'px'; } catch(e) {}
+      };
+      bodyEl.innerHTML = '';
+      bodyEl.appendChild(iframe);
+    } else {
+      bodyEl.innerHTML = `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(correoSaliente.body_content)}</pre>`;
+    }
+  } else if(meta?.observaciones || ev.descripcion) {
+    bodyEl.innerHTML = `<div style="font-size:13px;color:var(--ink2);line-height:1.7;white-space:pre-wrap">${esc(meta?.observaciones || ev.descripcion || '')}</div>`;
+  } else {
+    bodyEl.innerHTML = '<div class="empty-state"><p style="color:var(--ink3)">No se pudo recuperar el cuerpo del correo.<br>Puede que sea un correo antiguo sin datos en Supabase.</p></div>';
+  }
+
+  // 4. Adjuntos
+  const adjId = correoSalienteId || correoSaliente?.id;
+  if(adjId) {
+    try {
+      const adjs = await sb(`adjuntos?correo_id=eq.${adjId}&es_inline=is.false&select=*`) || [];
+      const visibles = adjs.filter(a => a.storage_url && !a.es_inline);
+      if(visibles.length) {
+        document.getElementById('crAdjBar').style.display = '';
+        document.getElementById('crAdjGrid').innerHTML = visibles.map(a => {
+          const url = a.storage_url || '#';
+          const nombre = a.nombre || 'Archivo';
+          const bytes = a.tamano_bytes || 0;
+          const size = bytes >= 1048576 ? (bytes/1048576).toFixed(1)+' MB' : bytes >= 1024 ? Math.round(bytes/1024)+' KB' : bytes+' B';
+          return `<div class="adj-pill" onclick="previewAdjunto('${esc(url)}','${esc(nombre)}','${esc(a.tipo_contenido||'')}',this)" title="${esc(nombre)} · ${size}">
+            <span style="font-size:14px;flex-shrink:0">${getFileIcon(nombre)}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(nombre)}</span>
+            <span style="font-size:9px;color:var(--ink3)">${size}</span>
+          </div>`;
+        }).join('');
+      } else if(meta?.adjuntos_nombres?.length) {
+        document.getElementById('crAdjBar').style.display = '';
+        document.getElementById('crAdjGrid').innerHTML = meta.adjuntos_nombres.map(n =>
+          `<div class="adj-pill" style="cursor:default;opacity:.7"><span style="font-size:14px">${getFileIcon(n)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(n)}</span></div>`
+        ).join('') + '<span style="font-size:10px;color:var(--ink3);align-self:center;margin-left:4px">(sin URL disponible)</span>';
+      }
+    } catch(e) { console.warn('[crModal] adjuntos:', e.message); }
+  } else if(meta?.adjuntos_nombres?.length) {
+    document.getElementById('crAdjBar').style.display = '';
+    document.getElementById('crAdjGrid').innerHTML = meta.adjuntos_nombres.map(n =>
+      `<div class="adj-pill" style="cursor:default;opacity:.7"><span style="font-size:14px">${getFileIcon(n)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(n)}</span></div>`
+    ).join('') + '<span style="font-size:10px;color:var(--ink3);align-self:center;margin-left:4px">(sin URL disponible)</span>';
+  }
+
+  // 5. Hilo desde Graph API
+  const hiloEl = document.getElementById('crHiloWrap');
+  if(conversationIdOrigen) {
+    try {
+      const token = await getGraphToken();
+      const userId = window.GRAPH_USER_ID || '';
+      const convIdClean = conversationIdOrigen.replace(/'/g, "''");
+      const url = `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/allItems/messages?$filter=conversationId eq '${convIdClean}'&$select=id,subject,from,toRecipients,receivedDateTime,sentDateTime,bodyPreview,hasAttachments,isDraft&$top=50`;
+      const r = await fetch(url, { headers: {'Authorization':'Bearer '+token} });
+      if(!r.ok) throw new Error('Graph '+r.status);
+      const data = await r.json();
+      const msgs = (data.value||[]).sort((a,b)=>new Date(a.receivedDateTime||a.sentDateTime||0)-new Date(b.receivedDateTime||b.sentDateTime||0));
+      if(!msgs.length) {
+        hiloEl.innerHTML = '<div class="empty-state"><p>No se encontraron mensajes en el hilo.</p></div>';
+      } else {
+        let rows = '';
+        msgs.forEach((m, i) => {
+          const de = m.from?.emailAddress?.address || '';
+          const deNombre = m.from?.emailAddress?.name || de;
+          const fechaM = m.receivedDateTime || m.sentDateTime || '';
+          const esEnviado = de.toLowerCase().includes((window.GRAPH_USER_ID||'').split('@')[0].toLowerCase());
+          const bg = esEnviado ? 'var(--blue)' : 'var(--green)';
+          const ini = esc(deNombre).charAt(0).toUpperCase();
+          const fStr = fechaM ? new Date(fechaM).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}) : '';
+          const bb = i === msgs.length-1 ? 'none' : '1px solid var(--border)';
+          rows += `<div style="border-bottom:${bb};padding:8px 6px">
+            <div style="display:flex;align-items:center;gap:7px">
+              <span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff">${ini}</span>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:11px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(deNombre)}${esEnviado?' <span style="background:var(--blue-l);color:var(--blue);font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">ENVIADO</span>':''}</div>
+                <div style="font-size:10px;color:var(--ink3)">${fStr}</div>
+              </div>
+              ${m.hasAttachments ? '<span style="font-size:12px;flex-shrink:0" title="Tiene adjuntos">📎</span>' : ''}
+              <button data-mid="${m.id}" data-sub="${encodeURIComponent(m.subject||'correo')}" onclick="event.stopPropagation();descargarEML(this.dataset.mid,decodeURIComponent(this.dataset.sub))" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700;cursor:pointer;color:var(--ink2);flex-shrink:0">EML</button>
+            </div>
+            <div style="font-size:10px;color:var(--ink3);margin-top:4px;padding-left:29px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.bodyPreview||'')}</div>
+          </div>`;
+        });
+        hiloEl.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)">${rows}</div>`;
+      }
+    } catch(e) {
+      hiloEl.innerHTML = `<div style="padding:10px;font-size:11px;color:var(--red);background:var(--red-l);border-radius:var(--r2)">⚠️ No se pudo cargar el hilo desde Graph API.<br><small>${esc(e.message)}</small></div>`;
+    }
+  } else {
+    hiloEl.innerHTML = '<div class="empty-state"><p style="font-size:11px">Sin conversation_id disponible.</p></div>';
+  }
+}
+
+function crDescargarEML() {
+  if(!_crData) { showToast('Sin datos del correo para descargar','error'); return; }
+  const asunto   = _crData.subject || '(correo enviado)';
+  const fileName = asunto.replace(/[\/\\:*?"<>|]/g,'_').substring(0,80) + '.eml';
+  const de       = _crData.from_email || 'admin@tododrogas.com.co';
+  const deNom    = _crData.from_name  || de;
+  const fecha    = _crData.sent_at    || _crData.received_at || new Date().toISOString();
+  const cuerpo   = _crData.body_content || '(sin contenido)';
+  const boundary = '----=_CRLocal_' + Date.now();
+  let eml = '';
+  eml += `From: ${deNom} <${de}>\r\n`;
+  eml += `Subject: ${asunto}\r\n`;
+  eml += `Date: ${new Date(fecha).toUTCString()}\r\n`;
+  eml += `MIME-Version: 1.0\r\n`;
+  if(_crData.body_type === 'html') {
+    eml += `Content-Type: multipart/alternative; boundary="${boundary}"\r\n\r\n`;
+    eml += `--${boundary}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n`;
+    eml += cuerpo.replace(/<[^>]*>/g,' ').replace(/\r?\n/g,'\r\n') + '\r\n';
+    eml += `--${boundary}\r\nContent-Type: text/html; charset=utf-8\r\n\r\n`;
+    eml += cuerpo + '\r\n';
+    eml += `--${boundary}--\r\n`;
+  } else {
+    eml += `Content-Type: text/plain; charset=utf-8\r\n\r\n`;
+    eml += cuerpo.replace(/\r?\n/g,'\r\n') + '\r\n';
+  }
+  const blob = new Blob([eml], {type:'message/rfc822'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = fileName;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 2000);
+  showToast('EML descargado ✓','success');
 }
 
 function logout(){sessionStorage.clear();window.location.href='login.html';}
