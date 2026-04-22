@@ -6911,29 +6911,15 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
           const bytes = a.tamano_bytes || 0;
           const size = bytes >= 1048576 ? (bytes/1048576).toFixed(1)+' MB' : bytes >= 1024 ? Math.round(bytes/1024)+' KB' : bytes+' B';
           try {
-            const rawPath = a.storage_path ||
-              (() => {
-                if(url.includes('/object/sign/')) {
-                  const m2 = url.match(/\/object\/sign\/([^/]+)\/(.+?)(?:\?|$)/);
-                  if(m2) return m2[2];
-                }
-                if(url.includes('/object/public/')) {
-                  const m3 = url.match(/\/object\/public\/([^/]+)\/(.+?)(?:\?|$)/);
-                  if(m3) return m3[2];
-                }
-                return null;
-              })();
-            const bucket = (() => {
-              const m4 = url.match(/\/object\/(?:sign|public)\/([^/]+)\//);
-              return m4 ? m4[1] : 'adjuntos-pqr';
+            const rawPath = a.storage_path || (() => {
+              if(url.includes('/object/sign/')) { const m2=url.match(/\/object\/sign\/([^/]+)\/(.+?)(?:\?|$)/); if(m2) return m2[2]; }
+              if(url.includes('/object/public/')) { const m3=url.match(/\/object\/public\/([^/]+)\/(.+?)(?:\?|$)/); if(m3) return m3[2]; }
+              return null;
             })();
+            const bucket = (() => { const m4=url.match(/\/object\/(?:sign|public)\/([^/]+)\//); return m4?m4[1]:'adjuntos-pqr'; })();
             if(rawPath && url !== '#') {
               const cleanPath = decodeURIComponent(rawPath.split('?')[0]);
-              const signR = await fetch(`${SB_URL}/storage/v1/object/sign/${bucket}/${cleanPath}`, {
-                method:'POST',
-                headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-                body:JSON.stringify({expiresIn:3600})
-              });
+              const signR = await fetch(`${SB_URL}/storage/v1/object/sign/${bucket}/${cleanPath}`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:3600})});
               if(signR.ok){const sd=await signR.json();if(sd.signedURL)url=`${SB_URL}/storage/v1${sd.signedURL}`;}
             }
           } catch(e2){console.warn('[crAdj sign]',e2.message);}
@@ -6945,11 +6931,58 @@ async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
           </div>`;
         }));
         document.getElementById('crAdjGrid').innerHTML = pillsHTML.join('');
-      } else if(meta?.adjuntos_nombres?.length) {
-        document.getElementById('crAdjBar').style.display = '';
-        document.getElementById('crAdjGrid').innerHTML = meta.adjuntos_nombres.map(n =>
-          `<div class="adj-pill" style="cursor:default;opacity:.7"><span style="font-size:14px">${getFileIcon(n)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(n)}</span></div>`
-        ).join('') + '<span style="font-size:10px;color:var(--ink3);align-self:center;margin-left:4px">(sin URL disponible)</span>';
+      }
+
+      // ── Fallback: buscar en Graph SentItems por fecha del correo saliente ──
+      if(!visibles.length) {
+        const sentAt = correoSaliente?.sent_at || correoSaliente?.received_at;
+        const userId = window.GRAPH_USER_ID || '';
+        let graphAdjs = [], graphMsgId = null;
+        if(sentAt && userId) {
+          try {
+            const token = await getGraphToken();
+            const dt = new Date(sentAt);
+            const desde = new Date(dt.getTime()-5*60000).toISOString();
+            const hasta = new Date(dt.getTime()+5*60000).toISOString();
+            const rS = await fetch(
+              `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/SentItems/messages?$filter=sentDateTime ge ${desde} and sentDateTime le ${hasta} and hasAttachments eq true&$select=id,subject,sentDateTime&$top=20`,
+              {headers:{'Authorization':'Bearer '+token}}
+            );
+            if(rS.ok) {
+              const dS = await rS.json();
+              const asuntoSal = (correoSaliente?.subject||'').toLowerCase().replace(/^(re:|rv:|fwd?:)\s*/i,'').trim();
+              const msgMatch = (dS.value||[]).find(m=>{
+                const mSubj=(m.subject||'').toLowerCase().replace(/^(re:|rv:|fwd?:)\s*/i,'').trim();
+                return mSubj.includes(asuntoSal.substring(0,30))||asuntoSal.includes(mSubj.substring(0,30));
+              }) || (dS.value||[])[0];
+              if(msgMatch?.id) {
+                graphMsgId = msgMatch.id;
+                const rA = await fetch(
+                  `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(graphMsgId)}/attachments?$select=id,name,contentType,size,isInline`,
+                  {headers:{'Authorization':'Bearer '+token}}
+                );
+                if(rA.ok){const dA=await rA.json();graphAdjs=(dA.value||[]).filter(a=>!a.isInline);}
+              }
+            }
+          } catch(eg){console.warn('[crAdj graph fallback]',eg.message);}
+        }
+        if(graphAdjs.length && graphMsgId) {
+          document.getElementById('crAdjBar').style.display = '';
+          document.getElementById('crAdjGrid').innerHTML = graphAdjs.map(a => {
+            const size = a.size>=1048576?(a.size/1048576).toFixed(1)+' MB':a.size>=1024?Math.round(a.size/1024)+' KB':a.size+' B';
+            const dlUrl = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(graphMsgId)}/attachments/${a.id}/$value`;
+            return `<div class="adj-pill" onclick="crDescargarAdjHilo('${esc(dlUrl)}','${esc(a.name)}','${esc(a.contentType||'')}')" title="${esc(a.name)} · ${size}" style="cursor:pointer">
+              <span style="font-size:14px;flex-shrink:0">${getFileIcon(a.name)}</span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(a.name)}</span>
+              <span style="font-size:9px;color:var(--green)">✓ ${size}</span>
+            </div>`;
+          }).join('');
+        } else if(meta?.adjuntos_nombres?.length) {
+          document.getElementById('crAdjBar').style.display = '';
+          document.getElementById('crAdjGrid').innerHTML = meta.adjuntos_nombres.map(n =>
+            `<div class="adj-pill" style="cursor:default;opacity:.7"><span style="font-size:14px">${getFileIcon(n)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(n)}</span></div>`
+          ).join('') + '<span style="font-size:10px;color:var(--ink3);align-self:center;margin-left:4px">(sin URL disponible)</span>';
+        }
       }
     } catch(e) { console.warn('[crModal] adjuntos:', e.message); }
   } else if(meta?.adjuntos_nombres?.length) {
