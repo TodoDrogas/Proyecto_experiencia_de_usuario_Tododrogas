@@ -912,6 +912,8 @@ const state = {
   folder: 'todos',
   epsCatalogo: null,
   sedes: [],
+  respondidosIds: new Set(),   // IDs de tickets con al menos 1 correo_respondido
+  conGestionIds:  new Set(),   // IDs de tickets con al menos 1 gestión (sin importar tipo)
   get defaultActions() { return DEFAULT_ACTIONS; },
 };
 
@@ -945,6 +947,23 @@ async function loadEmails() {
       data = data.concat(page);
       if(page.length < PAGE) break;
       offset += PAGE;
+    }
+    // ── Cargar historial para etiquetas CON/SIN RESPUESTA ──────────────
+    const _ids = (data||[]).map(e=>e.id).filter(Boolean);
+    state.respondidosIds = new Set();
+    state.conGestionIds  = new Set();
+    if(_ids.length > 0) {
+      try {
+        const _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado']);
+        const _histSnap = await sb(
+          `historial_eventos?correo_id=in.(${_ids.slice(0,400).join(',')})&select=correo_id,evento&limit=3000`
+        ) || [];
+        _histSnap.forEach(h => {
+          if(!h.correo_id) return;
+          if(!_EXCL.has(h.evento)) state.conGestionIds.add(h.correo_id);
+          if(h.evento === 'correo_respondido') state.respondidosIds.add(h.correo_id);
+        });
+      } catch(_eH) { console.warn('[etiquetas-carga]', _eH.message); }
     }
     state.emails = (data||[]).map(e=>({
       id: e.id,
@@ -1045,6 +1064,13 @@ function renderEmailList() {
         <span class="ei-time">${formatDate(new Date(e.fecha))}</span>
         <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':estadoLabel(e.estado)}</span>
       </div>
+      ${(()=>{
+        const _conResp = state.respondidosIds.has(e.id);
+        const _conGest = state.conGestionIds.has(e.id);
+        if(_conResp) return '<div style="margin-top:3px"><span style="background:#dcfce7;color:#15803d;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px;letter-spacing:.3px">✉ CON RESPUESTA</span></div>';
+        if(_conGest) return '<div style="margin-top:3px"><span style="background:#fef9c3;color:#854d0e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px;letter-spacing:.3px">⏳ SIN RESPUESTA</span></div>';
+        return '';
+      })()}
     </div>`).join('');
 }
 
@@ -3051,22 +3077,60 @@ async function sendReply() {
       attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:base64});
     }
 
-    const messagePayload={
-      subject:    subject||('RE: '+email.asunto),
-      body:       {contentType:'HTML',content:`<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`},
-      toRecipients:[{emailAddress:{address:toInput}}],
-      importance: window._replyImportant ? 'high' : 'normal',
-    };
-    if(ccInput){
-      messagePayload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
-    }
-    if(attachments.length>0) messagePayload.attachments=attachments;
+    const _bodyFull = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`;
+
+    // ── Intentar usar /reply nativo de Graph si tenemos el message_id del correo entrante ──
+    // Esto preserva In-Reply-To, References y el hilo en Outlook automáticamente
+    const _internetMsgId = email?.raw?.internet_message_id || email?.raw?.message_id || email?.message_id || null;
 
     let r;
-    if(largeFiles.length>0){
-      r=await _sendMailWithLargeAttachments(token,userId,messagePayload,largeFiles);
+    if(_internetMsgId && largeFiles.length === 0) {
+      // Construir endpoint según modo
+      let _endpoint, _replyPayload;
+      if(window._replyModo === 'replyAll') {
+        _endpoint = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(_internetMsgId)}/replyAll`;
+        _replyPayload = { message: { body: {contentType:'HTML', content: _bodyFull}, importance: window._replyImportant?'high':'normal' }, comment: '' };
+      } else if(window._replyModo === 'forward') {
+        _endpoint = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(_internetMsgId)}/forward`;
+        _replyPayload = {
+          message: {
+            toRecipients: [{emailAddress:{address:toInput}}],
+            body: {contentType:'HTML', content: _bodyFull},
+            importance: window._replyImportant?'high':'normal',
+          },
+          comment: ''
+        };
+        if(ccInput) _replyPayload.message.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+        if(attachments.length>0) _replyPayload.message.attachments = attachments;
+      } else {
+        // reply normal
+        _endpoint = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(_internetMsgId)}/reply`;
+        _replyPayload = { message: { body: {contentType:'HTML', content: _bodyFull}, importance: window._replyImportant?'high':'normal' }, comment: '' };
+        if(attachments.length>0) _replyPayload.message.attachments = attachments;
+        if(ccInput) _replyPayload.message.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+      }
+      r = await fetch(_endpoint, {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body: JSON.stringify(_replyPayload),
+      });
     } else {
-      r=await _sendMailDirect(token,userId,messagePayload);
+      // Fallback: sendMail directo (adjuntos grandes o sin message_id)
+      const messagePayload={
+        subject:    subject||('RE: '+email.asunto),
+        body:       {contentType:'HTML',content:_bodyFull},
+        toRecipients:[{emailAddress:{address:toInput}}],
+        importance: window._replyImportant ? 'high' : 'normal',
+      };
+      if(ccInput){
+        messagePayload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+      }
+      if(attachments.length>0) messagePayload.attachments=attachments;
+      if(largeFiles.length>0){
+        r=await _sendMailWithLargeAttachments(token,userId,messagePayload,largeFiles);
+      } else {
+        r=await _sendMailDirect(token,userId,messagePayload);
+      }
     }
 
     const totalAdj=_attachedFiles.size;
@@ -3087,20 +3151,23 @@ async function sendReply() {
           method: 'POST',
           headers: _sbSalHeaders,
           body: JSON.stringify({
-            from_email:      userId,
-            from_name:       AGENT_NAME || 'Agente',
-            subject:         subject || ('RE: '+(email?.asunto||'')),
-            body_content:    body,
-            body_type:       'html',
-            origen:          'saliente',
-            estado:          'enviado',
-            conversation_id: email?.raw?.conversation_id || null,
-            received_at:     new Date().toISOString(),
-            sent_at:         new Date().toISOString(),
-            importance:      window._replyImportant ? 'high' : 'normal',
-            canal_contacto:  'correo',
-            agente_id:       AGENT_ID || null,
-            asignado_a:      AGENT_NAME || null,
+            from_email:           userId,
+            from_name:            AGENT_NAME || 'Agente',
+            subject:              subject || ('RE: '+(email?.asunto||'')),
+            body_content:         body,
+            body_type:            'html',
+            origen:               'saliente',
+            estado:               'enviado',
+            conversation_id:      email?.raw?.conversation_id || null,
+            received_at:          new Date().toISOString(),
+            sent_at:              new Date().toISOString(),
+            importance:           window._replyImportant ? 'high' : 'normal',
+            canal_contacto:       'correo',
+            agente_id:            AGENT_ID || null,
+            asignado_a:           AGENT_NAME || null,
+            to_recipients:        JSON.stringify([{emailAddress:{address:toInput,name:toInput}}]),
+            cc_recipients:        ccInput ? JSON.stringify(ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a,name:a}}))) : null,
+            internet_message_id:  email?.raw?.internet_message_id || email?.message_id || null,
           }),
         });
         if(_sbSalR.ok) {
@@ -3150,6 +3217,9 @@ async function sendReply() {
           subject_enviado: subject || ('RE: '+(email?.asunto||'')),
         })
       }); }catch{}
+      // ── Actualizar etiquetas en memoria ──
+      state.respondidosIds.add(id);
+      state.conGestionIds.add(id);
       _attachedFiles.clear();
       document.getElementById('replyBoxArea').innerHTML='';
       await loadTicketTimeline(id);
@@ -4918,6 +4988,8 @@ async function crSendReply() {
       if(state.selectedId === correoIdOrigen) await loadTicketTimeline(correoIdOrigen);
     }
 
+    // ── Actualizar etiquetas en memoria ──
+    if(correoIdOrigen) { state.respondidosIds.add(correoIdOrigen); state.conGestionIds.add(correoIdOrigen); }
     window._crAttachFiles = new Map();
     document.getElementById('crReplyBoxArea').innerHTML = '';
 
