@@ -3172,11 +3172,22 @@ async function loadAgents() {
 
 async function loadHistorial() {
   try {
-    const data = await sb('historial_eventos?order=created_at.desc&limit=100');
-    state.historial = data || [];
+    // Cargar en páginas para obtener todo el historial reciente
+    let all = [], offset = 0;
+    const PAGE = 1000;
+    while(true) {
+      const page = await sb(`historial_eventos?order=created_at.desc&limit=${PAGE}&offset=${offset}`);
+      if(!page || page.length === 0) break;
+      all = all.concat(page);
+      if(page.length < PAGE) break;
+      offset += PAGE;
+      if(all.length >= 10000) break; // tope de seguridad
+    }
+    state.historial = all;
+    console.log('[loadHistorial] Eventos cargados:', all.length);
   } catch {
     try {
-      const data = await sb('historial?order=fecha.desc&limit=100');
+      const data = await sb('historial?order=fecha.desc&limit=1000');
       state.historial = data || [];
     } catch {}
   }
@@ -9435,6 +9446,12 @@ async function enviarCorreoNuevo() {
 
 // ── Confirmar Pendiente Firma EPS ──
 function abrirConfirmarFirmaEPS() {
+  const id = state.selectedId;
+  const email = state.emails.find(e=>e.id===id);
+  if(!email?.agente_id && !email?.asignado_a) {
+    showToast('Debes asignar un agente antes de marcar como Pendiente por firma','error');
+    return;
+  }
   document.getElementById('modalConfirmarFirmaEPS').classList.add('show');
 }
 function cerrarConfirmarFirmaEPS() {
