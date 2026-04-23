@@ -588,7 +588,7 @@ foreach ($todos_correos as $c) {
     if ($es_nuevo) {
         $stats['insertados']++;
         sbPatch('correos', "id=eq.$corr_id", [
-            'estado'     => 'sin_asignar',
+            'estado'     => 'pendiente',
             'prioridad'  => 'media',
             'created_at' => date('c'),
         ]);
@@ -832,7 +832,7 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
 
         $count++;
         log_msg("    ✅ Adjunto: $nombre ($bucket)");
-        usleep(100_000);
+        usleep(500_000); // 500ms entre adjuntos
     }
 
     return $count;
