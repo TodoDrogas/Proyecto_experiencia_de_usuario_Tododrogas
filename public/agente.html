@@ -1330,6 +1330,24 @@ function openTlDetail(idx) {
     adjuntosHTML += `<div class="tl-detail-row"><div class="tl-detail-label">Adjuntos</div><div class="tl-detail-val" style="color:var(--ink2)">${meta.adjuntos_nombres.map(n=>esc(n)).join(', ')}</div></div>`;
   }
 
+  // Campos extra de primera gestión
+  const extraHTML = [
+    meta.eps_nombre        ? row('EPS',               meta.eps_nombre)        : '',
+    meta.origen            ? row('Origen',             meta.origen)            : '',
+    meta.nombre_solicitud  ? row('Nombre solicitud',   meta.nombre_solicitud)  : '',
+    meta.detalle_solicitud ? row('Detalle solicitud',  meta.detalle_solicitud) : '',
+    meta.categoria_sigi    ? row('Categoría SIGI',     meta.categoria_sigi)    : '',
+    meta.tipo_documento    ? row('Tipo documento',     meta.tipo_documento)    : '',
+    meta.cedula_paciente   ? row('Cédula paciente',    meta.cedula_paciente)   : '',
+    meta.nombre_paciente   ? row('Nombre paciente',    meta.nombre_paciente)   : '',
+    meta.telefono          ? row('Teléfono',           meta.telefono)          : '',
+    meta.direccion         ? row('Dirección',          meta.direccion)         : '',
+    meta.departamento      ? row('Departamento',       meta.departamento)      : '',
+    meta.ciudad            ? row('Ciudad',             meta.ciudad)            : '',
+    meta.tiene_tutela!==undefined ? row('Tutela', meta.tiene_tutela?'Sí':'No') : '',
+    meta.medicamentos?.length ? row('Medicamentos', meta.medicamentos.map(m=>m.nombre_medicamento||m.nombre||JSON.stringify(m)).join(', ')) : '',
+  ].join('');
+
   document.getElementById('tlDetailContent').innerHTML=`
     <button onclick="closeModal('modalTlDetail')" style="float:right;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:0">✕</button>
     <h3 style="font-size:15px;font-weight:700;margin-bottom:16px">Detalle de gestión</h3>
@@ -1337,6 +1355,7 @@ function openTlDetail(idx) {
     ${row('Acción',ev.evento||ev.accion||'—')}
     ${row('Agente',meta.agente_nombre||ev.agente_nombre||'—')}
     ${row('Observaciones',meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'—')}
+    ${extraHTML}
     ${adjuntosHTML}
     <div style="margin-top:14px;padding:10px 12px;background:var(--bg2);border-radius:8px;font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px">
       🔒 Esta gestión no puede ser editada ni eliminada
@@ -1533,21 +1552,8 @@ async function setPriority(prio, btn) {
 }
 
 function marcarSolucionado() {
-  const id=state.selectedId;
-  if(!id) return;
-  const email=state.emails.find(e=>e.id===id);
-  if(!confirm('¿Marcar este ticket como "Pendiente por firma"?\n\nDeberás adjuntar la firma de cierre para cerrar definitivamente.')) return;
-  sb(`correos?id=eq.${id}`,'PATCH',{estado:'pendiente_firma'}).then(async()=>{
-    sb('historial_eventos','POST',{correo_id:id,agente_id:AGENT_ID,evento:'pendiente_firma',from_email:email?.remitente,subject:email?.asunto,descripcion:'Ticket marcado como pendiente de firma de cierre',datos_extra:JSON.stringify({agente_nombre:AGENT_NAME,por:'agente'})}).catch(e=>console.error('[agente] pendiente_firma error:',e?.message));
-    const em=state.emails.find(e=>e.id===id);
-    if(em) em.estado='pendiente_firma';
-    document.getElementById('mgmtEstadoBadge').className='badge pendiente_firma';
-    document.getElementById('mgmtEstadoBadge').textContent='Pte. por firma';
-    showToast('Ticket pendiente por firma ✍️','info');
-    updateFolderCounts();
-    renderEmailList();
-    selectEmail(id);
-  }).catch(e=>showToast('Error: '+e.message.substring(0,60),'error'));
+  if(!state.selectedId) return;
+  abrirConfirmarFirmaEPS();
 }
 
 function abrirModalFirma() {
@@ -2607,7 +2613,42 @@ async function saveGestion() {
 
   try {
     // ═══ OPERACIÓN 1: Evidencia ═══
+    // ── Metadata base ──
     const metadata = { agente_id:agentId, agente_nombre:agentName, por:'agente', observaciones:obs, num_gestion: numGest+1 };
+
+    // ── Primera gestión: incluir todos los campos del formulario en metadata ──
+    if(esPrimera) {
+      const _epsNombre = document.getElementById('gEpsSearch')?.value||'';
+      const _epsId     = document.getElementById('gEpsId')?.value||'';
+      const _origen    = document.getElementById('gOrigen')?.value||'';
+      const _nombreSol = document.getElementById('gNombreSolVal')?.value||'';
+      const _detalle   = document.getElementById('gDetalleVal')?.value||'';
+      const _categoria = document.getElementById('gCategoria')?.value||'';
+      const _tipoDoc   = document.getElementById('gTipoDoc')?.value||'';
+      const _cedula    = document.getElementById('gCedula')?.value?.trim()||'';
+      const _nombre    = document.getElementById('gNombre')?.value?.trim()||'';
+      const _direccion = document.getElementById('gDireccion')?.value?.trim()||'';
+      const _telefono  = document.getElementById('gTelefono')?.value?.trim()||'';
+      const _depto     = document.getElementById('gDeptoVal')?.value||'';
+      const _ciudad    = document.getElementById('gCiudadVal')?.value||'';
+      const _tutela    = _gTutela;
+      const _meds      = gRecolectarMeds();
+      if(_epsNombre)  metadata.eps_nombre        = _epsNombre;
+      if(_epsId)      metadata.eps_id            = _epsId;
+      if(_origen)     metadata.origen            = _origen;
+      if(_nombreSol)  metadata.nombre_solicitud  = _nombreSol;
+      if(_detalle)    metadata.detalle_solicitud = _detalle;
+      if(_categoria)  metadata.categoria_sigi    = _categoria;
+      if(_tipoDoc)    metadata.tipo_documento    = _tipoDoc;
+      if(_cedula)     metadata.cedula_paciente   = _cedula;
+      if(_nombre)     metadata.nombre_paciente   = _nombre;
+      if(_direccion)  metadata.direccion         = _direccion;
+      if(_telefono)   metadata.telefono          = _telefono;
+      if(_depto)      metadata.departamento      = _depto;
+      if(_ciudad)     metadata.ciudad            = _ciudad;
+      if(_tutela!==null) metadata.tiene_tutela   = _tutela;
+      if(_meds.length)   metadata.medicamentos   = _meds;
+    }
     if(_gestionEvidenciaFile) {
       try {
         const ts=Date.now();
@@ -5937,6 +5978,22 @@ async function enviarCorreoNuevoAg() {
         Adjuntar <input type="file" multiple style="display:none" onchange="_cnAgAttachAdd(this.files);this.value=''">
       </label>
       <button onclick="cerrarCorreoNuevoAg()" style="margin-left:auto;background:none;border:1.5px solid var(--border);border-radius:var(--r2);padding:7px 14px;font-size:12px;font-weight:600;color:var(--ink3);font-family:'Poppins',sans-serif;cursor:pointer">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL CONFIRMAR PENDIENTE FIRMA ══ -->
+<style>#modalConfirmarFirmaEPS.show{display:flex!important}</style>
+<div id="modalConfirmarFirmaEPS" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(10,14,26,.45);align-items:center;justify-content:center" onmousedown="if(event.target===this)cerrarConfirmarFirmaEPS()">
+  <div style="background:#fff;border:2px solid #2563eb;border-radius:16px;padding:2rem 2.5rem;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 32px rgba(10,14,26,.18)">
+    <div style="width:56px;height:56px;border-radius:50%;background:#eff6ff;border:2px solid #2563eb;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem">
+      <svg width="26" height="26" fill="none" stroke="#2563eb" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <p style="font-size:16px;font-weight:600;color:#0a0e1a;margin:0 0 .5rem">¿El correo fue enviado a la EPS?</p>
+    <p style="font-size:13px;color:#3a4258;margin:0 0 1.75rem;line-height:1.6">Al confirmar, el ticket pasará a estado<br><strong style="color:#0a0e1a">Pendiente por firma</strong>.</p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="cerrarConfirmarFirmaEPS()" style="padding:9px 24px;border-radius:8px;border:1.5px solid #dde1eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#3a4258;font-family:'Poppins',sans-serif">Cancelar</button>
+      <button onclick="confirmarFirmaEPS()" style="padding:9px 28px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:'Poppins',sans-serif">Confirmar</button>
     </div>
   </div>
 </div>
