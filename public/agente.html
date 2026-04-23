@@ -3868,7 +3868,7 @@ async function _mpLoadTimeline(correoId) {
   } catch(e){ el.innerHTML=`<div class="empty-state"><p style="color:var(--red)">Error cargando historial</p></div>`; }
 }
 
-function mpOpenTlDetail(idx) {
+async function mpOpenTlDetail(idx) {
   const el = document.getElementById('mpTimeline');
   const events = el._events;
   if(!events||!events[idx]) return;
@@ -3885,6 +3885,48 @@ function mpOpenTlDetail(idx) {
   let adjHTML='';
   if(meta.firma_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
   if(meta.evidencia_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Evidencia</div><div class="tl-detail-val"><a href="${esc(meta.evidencia_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--blue);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--blue-l);border-radius:6px;font-size:11px;background:var(--blue-l)">${getFileIcon(meta.evidencia_nombre||'evidencia')} ${esc(meta.evidencia_nombre||'Ver evidencia')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
+
+  // ── Fallback para registros antiguos ──
+  const _esG = (ev.evento||ev.accion||'').toLowerCase().includes('gestión')||(ev.num_gestion||meta.num_gestion)===1;
+  const _hasExtra = meta.eps_nombre||meta.nombre_solicitud||meta.cedula_paciente;
+  let cd = null;
+  if(_esG && !_hasExtra && ev.correo_id) {
+    try {
+      const rows = await sb(`correos?id=eq.${ev.correo_id}&select=nombre,cedula_paciente,tipo_documento,telefono_contacto,direccion_paciente,nombre_solicitud,detalle_solicitud,departamento_paciente,ciudad_paciente,tiene_tutela,categoria_sigi,eps_id,origen&limit=1`);
+      cd = rows?.[0]||null;
+    } catch(e){ console.warn('[mpTlDetail fallback]',e.message); }
+  }
+  const _xEps    = meta.eps_nombre       ||'';
+  const _xOrig   = meta.origen           ||cd?.origen            ||'';
+  const _xNomSol = meta.nombre_solicitud ||cd?.nombre_solicitud  ||'';
+  const _xDetSol = meta.detalle_solicitud||cd?.detalle_solicitud ||'';
+  const _xCat    = meta.categoria_sigi   ||cd?.categoria_sigi    ||'';
+  const _xTDoc   = meta.tipo_documento   ||cd?.tipo_documento    ||'';
+  const _xCed    = meta.cedula_paciente  ||cd?.cedula_paciente   ||'';
+  const _xNom    = meta.nombre_paciente  ||cd?.nombre            ||'';
+  const _xTel    = meta.telefono         ||cd?.telefono_contacto ||'';
+  const _xDir    = meta.direccion        ||cd?.direccion_paciente||'';
+  const _xDepto  = meta.departamento     ||cd?.departamento_paciente||'';
+  const _xCiud   = meta.ciudad           ||cd?.ciudad_paciente   ||'';
+  const _xTut    = meta.tiene_tutela!==undefined?meta.tiene_tutela:cd?.tiene_tutela;
+  const _xMeds   = meta.medicamentos||[];
+  const xHTML = [
+    _xEps    ?row('EPS',             _xEps):'',
+    _xOrig   ?row('Origen',          _xOrig):'',
+    _xNomSol ?row('Nombre solicitud',_xNomSol):'',
+    _xDetSol ?row('Detalle solicitud',_xDetSol):'',
+    _xCat    ?row('Categoría SIGI',  _xCat):'',
+    _xTDoc   ?row('Tipo documento',  _xTDoc):'',
+    _xCed    ?row('Cédula paciente', _xCed):'',
+    _xNom    ?row('Nombre paciente', _xNom):'',
+    _xTel    ?row('Teléfono',        _xTel):'',
+    _xDir    ?row('Dirección',       _xDir):'',
+    _xDepto  ?row('Departamento',    _xDepto):'',
+    _xCiud   ?row('Ciudad',          _xCiud):'',
+    _xTut!==undefined&&_xTut!==null?row('Tutela',_xTut?'Sí':'No'):'',
+    _xMeds.length?row('Medicamentos',_xMeds.map(m=>m.nombre_medicamento||m.nombre||'').join(', ')):'',
+  ].join('');
+
   document.getElementById('tlDetailContent').innerHTML=`
     <button onclick="closeModal('modalTlDetail')" style="float:right;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:0">✕</button>
     <h3 style="font-size:15px;font-weight:700;margin-bottom:16px">Detalle de gestión</h3>
@@ -3892,6 +3934,7 @@ function mpOpenTlDetail(idx) {
     ${row('Acción',ev.evento||ev.accion||'—')}
     ${row('Agente',meta.agente_nombre||ev.agente_nombre||'—')}
     ${row('Observaciones',meta.observaciones||ev.detalle||ev.observaciones||'—')}
+    ${xHTML}
     ${adjHTML}
     <div style="margin-top:14px;padding:10px 12px;background:var(--bg2);border-radius:8px;font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px">🔒 Esta gestión no puede ser editada ni eliminada</div>`;
   document.getElementById('modalTlDetail').classList.add('show');
