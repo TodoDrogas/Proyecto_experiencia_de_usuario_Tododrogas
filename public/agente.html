@@ -331,17 +331,6 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
       Urgentes
       <span class="folder-cnt" id="fc-urgente" style="background:var(--red-l);color:var(--red)">0</span>
     </div>
-    <div style="height:1px;background:var(--border);margin:6px 0"></div>
-    <div class="folder-item" onclick="setFolder('enviado',this)" style="color:var(--blue)">
-      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      Enviados
-      <span class="folder-cnt" id="fc-enviado" style="background:var(--blue-l);color:var(--blue)">0</span>
-    </div>
-    <div class="folder-item" onclick="setFolder('borrador',this)" style="color:var(--ink3)">
-      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      Borradores
-      <span class="folder-cnt" id="fc-borrador">0</span>
-    </div>
   </div>
 
   <!-- Email list -->
@@ -791,6 +780,90 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
   </div>
 </div>
 
+<!-- ══ MODAL: CORREO RESPONDIDO (desde timeline) ══ -->
+<div class="modal-backdrop" id="modalCorreoRespondido" onmousedown="if(event.target===this)this.dataset.backdropClick='1'" onmouseup="if(event.target===this&&this.dataset.backdropClick==='1'){this.dataset.backdropClick='';closeModal('modalCorreoRespondido')}else{this.dataset.backdropClick=''}" style="align-items:flex-start;padding:16px 0;overflow-y:auto">
+  <div onclick="event.stopPropagation()" style="background:var(--surface);border-radius:16px;width:min(1200px,97vw);max-height:calc(100vh - 24px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.3);margin:auto">
+
+    <!-- HEADER -->
+    <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0;background:var(--surface)">
+      <div style="min-width:0;flex:1">
+        <div style="display:inline-flex;align-items:center;gap:6px;background:#dbeafe;color:#2563eb;font-size:10px;font-weight:700;padding:2px 10px;border-radius:99px;margin-bottom:6px;letter-spacing:.4px">📤 CORREO ENVIADO</div>
+        <div id="crAsunto" style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:6px;line-height:1.3"></div>
+        <table style="border-collapse:collapse;font-size:12px;line-height:1.6">
+          <tr><td style="color:var(--ink3);font-weight:700;padding-right:10px;white-space:nowrap;vertical-align:top">De:</td><td id="crDe" style="color:var(--ink2)"></td></tr>
+          <tr><td style="color:var(--ink3);font-weight:700;padding-right:10px;white-space:nowrap;vertical-align:top">Para:</td><td id="crPara" style="color:var(--ink2)"></td></tr>
+          <tr id="crCCRow" style="display:none"><td style="color:var(--ink3);font-weight:700;padding-right:10px;white-space:nowrap;vertical-align:top">CC:</td><td id="crCC" style="color:var(--ink2)"></td></tr>
+          <tr><td style="color:var(--ink3);font-weight:700;padding-right:10px;white-space:nowrap">Fecha:</td><td id="crFecha" style="color:var(--ink3)"></td></tr>
+        </table>
+      </div>
+      <button onclick="closeModal('modalCorreoRespondido')" style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--ink3);font-size:20px;line-height:1;padding:2px 8px;border-radius:6px" title="Cerrar">✕</button>
+    </div>
+
+    <!-- ADJUNTOS DE LA RESPUESTA -->
+    <div id="crAdjBar" style="display:none;padding:6px 20px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0">
+      <div style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px;margin-bottom:5px">📎 ADJUNTOS DE ESTA RESPUESTA</div>
+      <div id="crAdjGrid" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+    </div>
+
+    <!-- BARRA DE ACCIONES REPLY -->
+    <div style="padding:7px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;display:flex;flex-wrap:wrap;gap:5px;align-items:center">
+      <span style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.4px;margin-right:4px">CONTINUAR HILO:</span>
+      <button class="btn btn-ghost" onclick="crToggleReply('reply')" style="font-size:11px">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        Responder
+      </button>
+      <button class="btn btn-ghost" onclick="crToggleReply('replyAll')" style="font-size:11px">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><polyline points="14 17 9 12 14 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
+        Responder a todos
+      </button>
+      <button class="btn btn-ghost" onclick="crToggleReply('forward')" style="font-size:11px">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+        Reenviar
+      </button>
+    </div>
+
+    <!-- LAYOUT PRINCIPAL: col izq (cuerpo ó reply) + col der (hilo) -->
+    <div style="flex:1;display:flex;overflow:hidden;min-height:0">
+
+      <!-- COLUMNA IZQUIERDA: cuerpo del correo O reply box -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0">
+
+        <!-- CUERPO — se oculta cuando el reply está abierto -->
+        <div id="crBodyWrap" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0">
+          <div style="padding:7px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0">
+            <span style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.4px">RESPUESTA ENVIADA</span>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:16px 20px;min-height:0">
+            <div id="crBody"></div>
+          </div>
+        </div>
+
+        <!-- REPLY BOX — ocupa la columna izquierda completa -->
+        <div id="crReplyBoxArea" style="flex:1;display:none;flex-direction:column;overflow:hidden;min-height:0"></div>
+      </div>
+
+      <!-- COLUMNA DERECHA: hilo siempre visible -->
+      <div style="width:310px;min-width:270px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;min-height:0;background:var(--surface2)">
+        <div style="padding:8px 14px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface)">
+          <div style="font-size:10px;font-weight:700;color:var(--ink3);letter-spacing:.6px">🧵 HILO DE CONVERSACIÓN</div>
+        </div>
+        <div id="crHiloWrap" style="flex:1;overflow-y:auto;padding:10px;min-height:0">
+          <div class="empty-state"><p>Cargando hilo…</p></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div style="padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;background:var(--bg)">
+      <button onclick="closeModal('modalCorreoRespondido')" class="btn btn-ghost" style="font-size:12px">Cerrar</button>
+      <button class="btn btn-ghost" style="font-size:12px" onclick="crDescargarEML()">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Descargar EML
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- TOASTS -->
 <div id="toasts"></div>
 
@@ -800,6 +873,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 // ──────────────────────────────────────────────
 const SB_URL = window.SUPABASE_URL || 'https://TU_PROYECTO.supabase.co';
 const SB_KEY = window.SUPABASE_KEY || 'TU_ANON_KEY';
+const OPENAI_KEY = window.OPENAI_KEY || localStorage.getItem('ag_openai_key') || '';
 
 async function sb(path, method='GET', body=null) {
   const headers = {
@@ -862,10 +936,16 @@ let _gestionForSolucionado = false;
 // ──────────────────────────────────────────────
 async function loadEmails() {
   try {
-    // Traer tickets asignados — incluye enviados/borradores que tengan agente_id
-    // Una sola query para evitar duplicados
-    const dataIn = await sb(`correos?agente_id=eq.${AGENT_ID}&order=received_at.desc&limit=300`);
-    const data = dataIn || [];
+    // Traer tickets asignados — paginado para no cortar silenciosamente
+    let data = [], offset = 0;
+    const PAGE = 500;
+    while(true) {
+      const page = await sb(`correos?agente_id=eq.${AGENT_ID}&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&order=received_at.desc&limit=${PAGE}&offset=${offset}`);
+      if(!page || page.length === 0) break;
+      data = data.concat(page);
+      if(page.length < PAGE) break;
+      offset += PAGE;
+    }
     state.emails = (data||[]).map(e=>({
       id: e.id,
       message_id: e.message_id,
@@ -918,11 +998,6 @@ function updateFolderCounts() {
   // Urgentes
   const urg = state.emails.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length;
   document.getElementById('fc-urgente').textContent=urg;
-  // Enviados y Borradores
-  const envEl=document.getElementById('fc-enviado');
-  const borEl=document.getElementById('fc-borrador');
-  if(envEl) envEl.textContent=state.emails.filter(e=>e.origen==='saliente'||e.estado==='enviado').length;
-  if(borEl) borEl.textContent=state.emails.filter(e=>(e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true)&&(e.raw?.agente_id===AGENT_ID||!e.raw?.agente_id||e.raw?.from_email===window.GRAPH_USER_ID)).length;
 }
 
 function setFolder(f, el) {
@@ -941,10 +1016,6 @@ function renderEmailList() {
 
   if(state.folder==='urgente') {
     list = list.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
-  } else if(state.folder==='enviado') {
-    list = list.filter(e=>e.origen==='saliente'||e.estado==='enviado');
-  } else if(state.folder==='borrador') {
-    list = list.filter(e=>(e.origen==='borrador'||e.estado==='borrador'||e.is_draft===true)&&(e.raw?.agente_id===AGENT_ID||!e.raw?.agente_id||e.raw?.from_email===window.GRAPH_USER_ID));
   } else if(state.folder==='todos') {
     list = list.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
   } else {
@@ -1006,15 +1077,12 @@ async function selectEmail(id) {
       ${email.tipo_pqr?`<span class="meta-chip" style="text-transform:capitalize">${email.tipo_pqr}</span>`:''}
       ${(()=>{const t=email.tono||'';const s=email.sentimiento||'neutro';const tonoMap={enojado:{bg:'#fee2e2',c:'#991b1b',e:'😤'},frustrado:{bg:'#fff7ed',c:'#9a3412',e:'😤'},triste:{bg:'#eff6ff',c:'#1e40af',e:'😢'},ansioso:{bg:'#fefce8',c:'#854d0e',e:'😰'},neutro:{bg:'#f3f4f6',c:'#374151',e:'😐'},satisfecho:{bg:'#f0fdf4',c:'#166534',e:'😊'},agradecido:{bg:'#f0fdf4',c:'#166534',e:'🙏'}};const info=tonoMap[t]||tonoMap['neutro'];return t&&t!=='neutro'?`<span style="display:inline-flex;align-items:center;gap:3px;background:${info.bg};color:${info.c};font-size:10px;font-weight:700;padding:3px 8px;border-radius:99px" title="Tono detectado por IA">${info.e} ${t.toUpperCase()}</span>`:''})()}
       ${email.fecha_limite_sla?`<span class="meta-chip" style="color:${new Date(email.fecha_limite_sla)<new Date()?'#dc2626':new Date(email.fecha_limite_sla)<new Date(Date.now()+86400000)?'#ca8a04':'#16a34a'};font-weight:600">⏱ SLA: ${new Date(email.fecha_limite_sla).toLocaleDateString('es-CO',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>`:''}
-      ${email.origen==='saliente'||email.estado==='enviado'?`<span class="meta-chip" style="background:#dbeafe;color:#2563eb">📤 Enviado</span>`:''}
       ${email.origen==='borrador'||email.estado==='borrador'||email.is_draft?`<span class="meta-chip" style="background:var(--bg2);color:var(--ink3)">📝 Borrador</span>`:''}
     </div>
     ${email.fecha_limite_sla?`<div style="margin-bottom:12px">${(()=>{const fin=new Date(email.fecha_limite_sla).getTime();const inicio=new Date(email.fecha).getTime();const ahora=Date.now();const pct=Math.max(0,Math.min(100,Math.round((ahora-inicio)/(fin-inicio)*100)));const color=pct>=90?'#dc2626':pct>=70?'#ca8a04':'#16a34a';const restante=fin-ahora;const hRest=Math.max(0,Math.round(restante/3600000));return '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--ink3);margin-bottom:4px"><span>Progreso SLA · '+email.horas_sla+'h</span><span style="color:'+color+';font-weight:600">'+(restante>0?hRest+'h restantes':'⚠️ Vencido')+'</span></div><div style="height:6px;background:var(--border);border-radius:99px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+color+';border-radius:99px"></div></div>'})()}</div>`:''}
     <div class="ev-actions">
       ${email.estado==='solucionado' ? `
         <span style="display:inline-flex;align-items:center;gap:5px;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">🔒 Ticket cerrado · solo lectura</span>
-      ` : (email.origen==='saliente'||email.estado==='enviado') ? `
-        <span style="display:inline-flex;align-items:center;gap:5px;background:#dbeafe;color:#2563eb;font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">📤 Correo enviado — historial disponible a la derecha</span>
       ` : (email.origen==='borrador'||email.estado==='borrador'||email.is_draft) ? `
       <button class="btn btn-ghost" onclick="(window.top||window).toggleReply('reply')" title="Responder">
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 00-4-4H4"/></svg>
@@ -1053,6 +1121,10 @@ async function selectEmail(id) {
       <button class="btn btn-ghost" onclick="(window.top||window).generarConNovaTD('${email.id}')" style="border-color:#7c3aed;color:#7c3aed">
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         ✦ Nova TD
+      </button>
+      <button class="btn btn-ghost" onclick="(window.top||window).analizarConIA('${email.id}')" style="border-color:#0891b2;color:#0891b2" title="Analizar y sugerir respuesta con IA (GPT-4o)">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        ✦ IA
       </button>
       <button class="btn btn-ghost" onclick="(window.top||window).abrirPanelRR()" title="Plantillas" style="border-color:#f59e0b;color:#b45309">⚡ Rápidas</button>
       `}
@@ -1183,10 +1255,13 @@ function renderTimeline(events, container) {
     const meta=_parseMeta(ev.datos_extra||ev.metadata);
     const agente=meta.agente_nombre||ev.agente_nombre||'';
     const obs=meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
-    return `<div class="timeline-item" onclick="openTlDetail(${i})">
+    const esCorreoResp = accion.toLowerCase().includes('correo_respondido');
+    const crBadge = esCorreoResp ? ' <span style="font-size:9px;background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:4px;font-weight:700;vertical-align:middle">\uD83D\uDCE4 ver</span>' : '';
+    const crTitle = esCorreoResp ? ' title="Ver correo enviado"' : '';
+    return `<div class="timeline-item" onclick="openTlDetail(${i})"${crTitle}>
       <div class="tl-dot color-${color}"></div>
       <div class="tl-content">
-        <div class="tl-action">${esc(accion)}</div>
+        <div class="tl-action">${esc(accion)}${crBadge}</div>
         ${agente?`<div class="tl-agent">${esc(agente)}</div>`:''}
         <div class="tl-date">${fecha?formatDate(new Date(fecha),true):''}</div>
         ${obs?`<div class="tl-obs">${esc(obs.substring(0,90))}${obs.length>90?'...':''}</div>`:''}
@@ -1201,6 +1276,14 @@ function openTlDetail(idx) {
   const events = el._events;
   if(!events||!events[idx]) return;
   const ev=events[idx],meta=_parseMeta(ev.datos_extra||ev.metadata);
+
+  // ── Correo respondido → abrir modal especial con el correo enviado ──
+  const accionEv = (ev.evento||ev.accion||'').toLowerCase();
+  if(accionEv.includes('correo_respondido')) {
+    abrirCorreoRespondido(ev.correo_id || null, ev, meta);
+    return;
+  }
+
   const fecha=ev.created_at||ev.fecha||'';
 
   let adjuntosHTML = '';
@@ -2161,6 +2244,110 @@ async function generarConNovaTD(correoId) {
   }
 }
 
+
+// ── IA DIRECTA (OpenAI GPT-4o) ──────────────────────────────
+async function analizarConIA(correoId) {
+  const email = state.emails.find(e=>e.id===correoId);
+  if(!email) return;
+  // Bloquear si no hay primera gestión (igual que Nova TD)
+  try {
+    const _esBorr = email.origen==='borrador'||email.estado==='borrador'||email.is_draft;
+    if(!_esBorr) {
+      const _fg = await sb(`correos?id=eq.${correoId}&select=num_gestiones&limit=1`);
+      if((_fg?.[0]?.num_gestiones||0)===0){ _mostrarModalPrimeraGestion(); return; }
+    }
+  } catch(e){}
+  const apiKey = OPENAI_KEY || localStorage.getItem('ag_openai_key') || '';
+  if(!apiKey) {
+    const k = prompt('🔑 Ingresa tu OpenAI API Key para activar IA:\n(Se guarda en este navegador)');
+    if(!k) return;
+    localStorage.setItem('ag_openai_key', k.trim());
+  }
+  const key = OPENAI_KEY || localStorage.getItem('ag_openai_key') || '';
+  const area = document.getElementById('replyBoxArea');
+  area.innerHTML = `<div style="background:#e0f2fe;border:1px solid #0891b2;border-radius:8px;padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border:2px solid #0891b2;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div><span style="color:#0891b2;font-weight:600;font-size:13px">✦ IA analizando correo...</span></div>`;
+  const agentName = AGENT_NAME || 'Equipo PQRSFD';
+  const systemPrompt = `Eres un asistente experto en PQRSFD para Tododrogas, empresa de salud colombiana. Ayudas al asesor "${agentName}" a responder correos de forma profesional, empática y acorde a la normativa colombiana (Ley 1755/2015). Redacta siempre en español.`;
+  const userPrompt = `Responde este correo de PQRSFD.
+
+DATOS:
+- Asunto: ${email.asunto||'(Sin asunto)'}
+- Remitente: ${email.remitente_nombre||email.remitente}
+- Tipo PQR: ${email.tipo_pqr||'No detectado'}
+- Categoría IA: ${email.categoria_ia||'No detectada'}
+- Prioridad: ${email.prioridad||'Normal'}
+- Urgente: ${email.es_urgente?'SÍ':'No'}
+- SLA: ${email.horas_sla||120} horas
+
+CUERPO DEL CORREO:
+${(email.body_content||email.resumen_corto||'(Sin contenido)').slice(0,2000)}
+
+INSTRUCCIONES:
+1. Redacta una respuesta profesional en HTML simple (solo etiquetas <p>), comenzando con "Estimado(a) [nombre]," o "Estimado(a) usuario(a),".
+2. Acusa recibo, da respuesta concreta o comprométete con tiempos según tipo PQR, cierra con firma del asesor "${agentName}".
+3. Después de la respuesta escribe exactamente: ---ANALISIS---
+4. Luego un JSON válido sin markdown:
+{"tipo_pqr":"peticion|queja|reclamo|sugerencia|felicitacion|denuncia","prioridad_sugerida":"baja|media|alta","sentimiento":"positivo|neutro|negativo|urgente","resumen":"máximo 2 oraciones","ley_aplicable":"Ley 1755/2015"}`;
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body: JSON.stringify({model:'gpt-4o',max_tokens:1500,messages:[{role:'system',content:systemPrompt},{role:'user',content:userPrompt}]})
+    });
+    if(!res.ok) {
+      const err = await res.json().catch(()=>({}));
+      if(res.status===401){ localStorage.removeItem('ag_openai_key'); area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ API Key inválida. Se eliminó. Intenta de nuevo.</div>`; return; }
+      throw new Error(err.error?.message||`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const full = data.choices?.[0]?.message?.content||'';
+    const [respPart, analPart] = full.split('---ANALISIS---');
+    const respHtml = (respPart||'').trim();
+    let analisis = {};
+    try { analisis = JSON.parse((analPart||'').replace(/```json|```/g,'').trim()); } catch(_){}
+    const prioColor = analisis.prioridad_sugerida==='alta'?'#dc2626':analisis.prioridad_sugerida==='media'?'#ca8a04':'#16a34a';
+    const analJSON = JSON.stringify(analisis).replace(/"/g,'&quot;');
+    const banner = `<div style="background:#e0f2fe;border:1px solid #0891b2;border-radius:8px;padding:10px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="color:#0891b2;font-weight:700;font-size:12px">✦ Análisis IA · GPT-4o</span>
+        <button onclick="this.parentElement.parentElement.style.display='none'" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:16px;line-height:1">×</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;font-size:11px">
+        ${analisis.tipo_pqr?`<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-weight:700">📋 ${analisis.tipo_pqr}</span>`:''}
+        ${analisis.prioridad_sugerida?`<span style="background:${prioColor}22;color:${prioColor};padding:2px 8px;border-radius:99px;font-weight:700">⚡ ${analisis.prioridad_sugerida}</span>`:''}
+        ${analisis.sentimiento?`<span style="background:#f0fdf4;color:#166534;padding:2px 8px;border-radius:99px;font-weight:700">😊 ${analisis.sentimiento}</span>`:''}
+        ${analisis.ley_aplicable?`<span style="background:#f5f3ff;color:#6d28d9;padding:2px 8px;border-radius:99px;font-weight:700">⚖️ ${analisis.ley_aplicable}</span>`:''}
+      </div>
+      ${analisis.resumen?`<div style="margin-top:6px;font-size:11px;color:#475569">${analisis.resumen}</div>`:''}
+      ${Object.keys(analisis).length?`<button onclick="aplicarAnalisisIA(JSON.parse(this.dataset.a))" data-a="${analJSON}" style="margin-top:8px;background:#0891b2;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">✅ Aplicar al ticket</button>`:''}
+    </div>`;
+    area.innerHTML = banner;
+    if(!area.dataset.modo||area.dataset.modo!=='reply') toggleReply('reply');
+    setTimeout(()=>{ const ed=document.querySelector('#replyBoxArea [contenteditable]'); if(ed) ed.innerHTML=respHtml; },300);
+  } catch(err) {
+    area.innerHTML=`<div style="background:#fee2e2;color:#dc2626;padding:10px;border-radius:6px;font-size:12px">❌ Error IA: ${err.message.slice(0,120)}</div>`;
+    console.error('IA error:',err);
+  }
+}
+
+async function aplicarAnalisisIA(analisis) {
+  const id = state.selectedId;
+  if(!id||!analisis) return;
+  const patch = {};
+  if(analisis.tipo_pqr)           patch.tipo_pqr      = analisis.tipo_pqr.toLowerCase();
+  if(analisis.prioridad_sugerida) patch.prioridad     = analisis.prioridad_sugerida;
+  if(analisis.sentimiento)        patch.sentimiento   = analisis.sentimiento.toLowerCase();
+  if(analisis.ley_aplicable)      patch.ley_aplicable = analisis.ley_aplicable;
+  if(analisis.resumen)            patch.resumen_corto = analisis.resumen;
+  try {
+    await sb(`correos?id=eq.${id}`,'PATCH',patch);
+    const em = state.emails.find(e=>e.id===id);
+    if(em) Object.assign(em,patch);
+    showToast('✅ Análisis IA aplicado al ticket','success');
+    selectEmail(id);
+  } catch(e){ showToast('❌ Error: '+e.message.slice(0,60),'error'); }
+}
+
 async function openGestionModal(mode) {
   if (!state.selectedId) {
     showToast('Selecciona un correo primero', 'error');
@@ -2621,9 +2808,10 @@ async function toggleReply(modo) {
         <button onclick="document.getElementById('replyBoxArea').innerHTML=''" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 4px">✕</button>
       </div>
       <div style="border-bottom:1px solid var(--border)">
-        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
+        <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px;position:relative">
           <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">Para</span>
-          <input id="replyTo" value="${esc(toVal)}" placeholder="${modo==='forward'?'Destinatario…':''}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+          <input id="replyTo" value="${esc(toVal)}" placeholder="${modo==='forward'?'Destinatario…':''}" oninput="_crAcBuscar(this.value,'replyTo','replyToAc')" onblur="setTimeout(()=>{const d=document.getElementById('replyToAc');if(d)d.style.display='none'},200)" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
+          <div id="replyToAc" style="display:none;position:absolute;left:44px;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:9999;max-height:220px;overflow-y:auto"></div>
         </div>
         <div style="display:flex;align-items:center;padding:7px 12px;border-bottom:1px solid var(--border);gap:8px">
           <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:44px">CC</span>
@@ -2634,6 +2822,7 @@ async function toggleReply(modo) {
           <input id="replySubject" value="${esc(subjectVal)}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);background:transparent"/>
         </div>
       </div>
+      ${_fmtBar('replyEditor')}
       <div id="replyEditor" contenteditable="true" style="min-height:120px;padding:12px 14px;font-size:13px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);outline:none;line-height:1.6"></div>
       <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--surface2)">
         <div style="font-size:11px;color:var(--ink3);margin-bottom:6px;font-family:'Franklin Gothic Book',Arial,sans-serif">───────── Mensaje original ─────────</div>
@@ -2885,55 +3074,62 @@ async function sendReply() {
       const adjInfo=totalAdj>0?` (${totalAdj} adjunto${totalAdj>1?'s':''})`:'';
       showToast('Respuesta enviada ✓'+adjInfo,'success');
 
-      // Guardar adjuntos salientes en Supabase Storage (no bloqueante)
-      const todosLosArchivos=[...inlineFiles,...largeFiles];
-      if(todosLosArchivos.length>0){
-        _guardarAdjuntosEnStorage(id, todosLosArchivos, AGENT_ID)
-          .then(res=>{
-            const fallidos=res.filter(r=>!r.ok);
-            if(fallidos.length>0)
-              console.warn('[adjuntos-storage] Sin guardar:',fallidos.map(f=>f.nombre).join(', '));
-          })
-          .catch(err=>console.warn('[adjuntos-storage] Error general:',err.message));
-      }
-
-      // Guardar correo enviado en Supabase
+      // Guardar correo enviado en Supabase y capturar su ID para el timeline
+      let correoSalienteId = null;
       try {
-        await sb('correos','POST',{
-          from_email:      userId,
-          from_name:       AGENT_NAME || 'Agente',
-          subject:         subject || ('RE: '+(email?.asunto||'')),
-          body_content:    body,
-          body_type:       'html',
-          origen:          'saliente',
-          estado:          'enviado',
-          conversation_id: email?.raw?.conversation_id || null,
-          received_at:     new Date().toISOString(),
-          sent_at:         new Date().toISOString(),
-          importance:      window._replyImportant ? 'high' : 'normal',
-          canal_contacto:  'correo',
-          agente_id:       AGENT_ID || null,
-          asignado_a:      AGENT_NAME || null,
+        const _sbSalHeaders = {
+          'apikey': SB_KEY,
+          'Authorization': 'Bearer ' + SB_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+        };
+        const _sbSalR = await fetch(`${SB_URL}/rest/v1/correos`, {
+          method: 'POST',
+          headers: _sbSalHeaders,
+          body: JSON.stringify({
+            from_email:      userId,
+            from_name:       AGENT_NAME || 'Agente',
+            subject:         subject || ('RE: '+(email?.asunto||'')),
+            body_content:    body,
+            body_type:       'html',
+            origen:          'saliente',
+            estado:          'enviado',
+            conversation_id: email?.raw?.conversation_id || null,
+            received_at:     new Date().toISOString(),
+            sent_at:         new Date().toISOString(),
+            importance:      window._replyImportant ? 'high' : 'normal',
+            canal_contacto:  'correo',
+            agente_id:       AGENT_ID || null,
+            asignado_a:      AGENT_NAME || null,
+          }),
         });
+        if(_sbSalR.ok) {
+          const _sbSalData = await _sbSalR.json();
+          correoSalienteId = Array.isArray(_sbSalData) ? _sbSalData[0]?.id : _sbSalData?.id;
+        }
       } catch(e2){ console.warn('[correo-saliente]', e2.message); }
+
+      // ── Guardar adjuntos salientes en Storage con el ID correcto (bloqueante) ──
+      const todosLosArchivos=[...inlineFiles,...largeFiles];
+      if(todosLosArchivos.length > 0 && correoSalienteId) {
+        try {
+          const resAdj = await _guardarAdjuntosEnStorage(correoSalienteId, todosLosArchivos, AGENT_ID);
+          const fallidos = resAdj.filter(r=>!r.ok);
+          if(fallidos.length > 0) {
+            showToast(`⚠️ ${fallidos.length} adjunto(s) no se guardaron en Storage: ${fallidos.map(f=>f.nombre).join(', ')}`, 'error');
+            console.warn('[adjuntos-storage] Sin guardar:', fallidos);
+          }
+        } catch(eAdj) {
+          showToast('⚠️ Error guardando adjuntos en Storage: '+eAdj.message.substring(0,60), 'error');
+          console.warn('[adjuntos-storage]', eAdj.message);
+        }
+      }
       // Si el correo actual era un borrador, eliminarlo de Supabase al enviarse
       if (email?.origen==='borrador'||email?.estado==='borrador'||email?.is_draft) {
         try {
           await sb(`correos?id=eq.${id}`, 'PATCH', { estado:'enviado', origen:'saliente', is_draft:false });
         } catch(e3){ console.warn('[borrador-enviado]', e3.message); }
       }
-      // Responder correo cuenta como gestión en el ticket original
-      try {
-        const corrOrig = state.emails.find(e=>
-          e.raw?.conversation_id === email?.raw?.conversation_id &&
-          e.origen !== 'saliente' && e.origen !== 'borrador' &&
-          e.estado !== 'enviado' && e.estado !== 'borrador'
-        );
-        const idGest = corrOrig?.id || id;
-        const freshG = await sb(`correos?id=eq.${idGest}&select=num_gestiones&limit=1`);
-        const numG   = (freshG?.[0]?.num_gestiones || 0) + 1;
-        await sb(`correos?id=eq.${idGest}`, 'PATCH', { num_gestiones: numG });
-      } catch(e3){ console.warn('[gestiones-reply]', e3.message); }
       window._replyImportant = false;
 
       // num_gestiones se incrementa SOLO desde saveGestion() — no aquí
@@ -2948,7 +3144,10 @@ async function sendReply() {
           agente_nombre:AGENT_NAME,
           por:'agente',
           adjuntos:totalAdj,
-          adjuntos_nombres:[..._attachedFiles.keys()]
+          adjuntos_nombres:[..._attachedFiles.keys()],
+          correo_id_saliente: correoSalienteId || null,
+          to_email: toInput || null,
+          subject_enviado: subject || ('RE: '+(email?.asunto||'')),
         })
       }); }catch{}
       _attachedFiles.clear();
@@ -3178,6 +3377,59 @@ async function _sendMailWithLargeAttachments(token,userId,payload,largeFiles){
     method:'POST',headers:{'Authorization':'Bearer '+token}
   });
 }
+// ── Barra de formato para editores contenteditable ──
+function _fmtBar(editorId) {
+  return `<div style="display:flex;align-items:center;gap:2px;padding:4px 8px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap">
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('bold')" title="Negrita (Ctrl+B)" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;font-weight:700;padding:2px 7px;color:var(--ink2)" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'"><b>B</b></button>
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('italic')" title="Cursiva (Ctrl+I)" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;padding:2px 7px;color:var(--ink2);font-style:italic" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'"><i>I</i></button>
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('underline')" title="Subrayado (Ctrl+U)" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;padding:2px 7px;color:var(--ink2);text-decoration:underline" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'">U</button>
+    <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('insertUnorderedList')" title="Lista" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-size:12px;padding:2px 7px;color:var(--ink2)" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'">≡</button>
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('justifyLeft')" title="Alinear izquierda" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-size:12px;padding:2px 7px;color:var(--ink2)" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'">⬅</button>
+    <button type="button" onmousedown="event.preventDefault();document.getElementById('${editorId}').focus();document.execCommand('justifyCenter')" title="Centrar" style="background:none;border:1px solid transparent;border-radius:4px;cursor:pointer;font-size:12px;padding:2px 7px;color:var(--ink2)" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='none'">≡</button>
+    <div style="width:1px;height:16px;background:var(--border);margin:0 4px"></div>
+    <select onchange="document.getElementById('${editorId}').focus();document.execCommand('fontSize',false,this.value);this.value=''" style="font-size:11px;border:1px solid var(--border);border-radius:4px;padding:1px 4px;color:var(--ink2);background:var(--bg);cursor:pointer">
+      <option value="">Tamaño</option>
+      <option value="1">Pequeño</option>
+      <option value="3">Normal</option>
+      <option value="5">Grande</option>
+      <option value="7">Muy grande</option>
+    </select>
+    <select onchange="document.getElementById('${editorId}').focus();document.execCommand('foreColor',false,this.value);this.value=''" style="font-size:11px;border:1px solid var(--border);border-radius:4px;padding:1px 4px;color:var(--ink2);background:var(--bg);cursor:pointer">
+      <option value="">Color</option>
+      <option value="#000000">Negro</option>
+      <option value="#dc2626">Rojo</option>
+      <option value="#2563eb">Azul</option>
+      <option value="#16a34a">Verde</option>
+      <option value="#ca8a04">Amarillo</option>
+    </select>
+  </div>`;
+}
+
+// ── Autocomplete contactos frecuentes en campos reply ──
+let _crAcTimer = null;
+async function _crAcBuscar(val, inputId, dropId) {
+  clearTimeout(_crAcTimer);
+  const drop = document.getElementById(dropId);
+  if(!drop) return;
+  if(!val || val.length < 2) { drop.style.display='none'; return; }
+  _crAcTimer = setTimeout(async () => {
+    try {
+      const rows = await sb(`contactos_frecuentes?or=(email.ilike.*${encodeURIComponent(val)}*,nombre.ilike.*${encodeURIComponent(val)}*)&order=total_pqrs.desc&limit=8`) || [];
+      if(!rows.length) { drop.style.display='none'; return; }
+      drop.innerHTML = rows.map(c => `
+        <div onclick="document.getElementById('${inputId}').value='${esc(c.email)}';document.getElementById('${dropId}').style.display='none'" style="padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--blue-l)'" onmouseout="this.style.background=''">
+          <div style="width:26px;height:26px;border-radius:50%;background:${c.vip?'var(--yellow)':'var(--blue)'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0">${(c.nombre||c.email).charAt(0).toUpperCase()}</div>
+          <div style="min-width:0">
+            <div style="font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.nombre||'')}${c.vip?' ⭐':''}</div>
+            <div style="font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.email)} · ${c.total_pqrs||0} PQR${(c.total_pqrs||0)!==1?'s':''}</div>
+          </div>
+        </div>`).join('');
+      drop.style.display = 'block';
+    } catch(e) { drop.style.display='none'; }
+  }, 250);
+}
+
 function showToast(msg,type='info'){
   const tc=document.getElementById('toasts'),t=document.createElement('div');
   t.className=`toast ${type}`;t.innerHTML=`<span>${msg}</span>`;
@@ -3400,10 +3652,13 @@ async function _mpLoadTimeline(correoId) {
       const meta=_parseMeta(ev.datos_extra||ev.metadata);
       const agente=meta.agente_nombre||ev.agente_nombre||'';
       const obs=meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'';
-      return `<div class="timeline-item" onclick="mpOpenTlDetail(${i})" data-mp-idx="${i}">
+      const esCorreoResp = accion.toLowerCase().includes('correo_respondido');
+      const crBadge = esCorreoResp ? ' <span style="font-size:9px;background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:4px;font-weight:700;vertical-align:middle">\uD83D\uDCE4 ver</span>' : '';
+      const crTitle = esCorreoResp ? ' title="Ver correo enviado"' : '';
+      return `<div class="timeline-item" onclick="mpOpenTlDetail(${i})" data-mp-idx="${i}"${crTitle}>
         <div class="tl-dot color-${color}"></div>
         <div class="tl-content">
-          <div class="tl-action">${esc(accion)}</div>
+          <div class="tl-action">${esc(accion)}${crBadge}</div>
           ${agente?`<div class="tl-agent">${esc(agente)}</div>`:''}
           <div class="tl-date">${fecha?formatDate(new Date(fecha),true):''}</div>
           ${obs?`<div class="tl-obs">${esc(obs.substring(0,80))}${obs.length>80?'…':''}</div>`:''}
@@ -3419,6 +3674,14 @@ function mpOpenTlDetail(idx) {
   const events = el._events;
   if(!events||!events[idx]) return;
   const ev=events[idx], meta=_parseMeta(ev.datos_extra||ev.metadata);
+
+  // ── Correo respondido → abrir modal especial con el correo enviado ──
+  const accionEv = (ev.evento||ev.accion||'').toLowerCase();
+  if(accionEv.includes('correo_respondido')) {
+    abrirCorreoRespondido(ev.correo_id || null, ev, meta);
+    return;
+  }
+
   const fecha=ev.created_at||ev.fecha||'';
   let adjHTML='';
   if(meta.firma_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
@@ -3924,6 +4187,925 @@ async function verHiloCompleto(conversationId, correoId) {
   } catch(e) {
     area.innerHTML = '<div style="padding:12px 14px;background:var(--red-l);border-radius:var(--r2);margin-top:8px;font-size:11px;color:var(--red)">⚠️ '+esc(e.message)+'</div>';
   }
+}
+
+// ──────────────────────────────────────────────
+// CORREO RESPONDIDO — abrir modal desde timeline
+// ──────────────────────────────────────────────
+let _crData = null; // datos del correo saliente activo en el modal
+
+async function abrirCorreoRespondido(correoIdOrigen, ev, meta) {
+  // Limpiar estado anterior
+  _crData = null;
+  document.getElementById('crAsunto').textContent = 'Cargando…';
+  document.getElementById('crDe').textContent = '';
+  document.getElementById('crPara').textContent = '';
+  document.getElementById('crFecha').textContent = '';
+  document.getElementById('crBody').innerHTML = '<div class="empty-state"><p>Cargando correo…</p></div>';
+  document.getElementById('crAdjBar').style.display = 'none';
+  document.getElementById('crAdjGrid').innerHTML = '';
+  document.getElementById('crHiloWrap').innerHTML = '<div class="empty-state"><p>Cargando hilo…</p></div>';
+  document.getElementById('modalCorreoRespondido').classList.add('show');
+
+  const correoSalienteId = meta?.correo_id_saliente || null;
+  const conversationIdOrigen = (() => {
+    // Intentar recuperar el conversation_id del correo padre (correoIdOrigen)
+    const padre = state.emails.find(e => e.id === correoIdOrigen);
+    return padre?.raw?.conversation_id || null;
+  })();
+
+  // ── 1. Cargar correo saliente por ID directo
+  let correoSaliente = null;
+  if(correoSalienteId) {
+    try {
+      const rows = await sb(`correos?id=eq.${correoSalienteId}&select=*`);
+      correoSaliente = Array.isArray(rows) ? rows[0] : rows;
+    } catch(e) { console.warn('[crModal] No pudo cargar correo saliente por ID:', e.message); }
+  }
+
+  // Fallback: buscar por conversation_id + origen saliente + fecha más cercana al evento
+  if(!correoSaliente && conversationIdOrigen) {
+    try {
+      const rows = await sb(`correos?conversation_id=eq.${conversationIdOrigen}&origen=eq.saliente&order=sent_at.desc&limit=10&select=*`);
+      const lista = Array.isArray(rows) ? rows : (rows ? [rows] : []);
+      if(lista.length) {
+        // El más cercano en tiempo al evento
+        const evFecha = new Date(ev.created_at || ev.fecha || 0).getTime();
+        correoSaliente = lista.reduce((best, c) => {
+          const df = Math.abs(new Date(c.sent_at||c.received_at||0).getTime() - evFecha);
+          const db = Math.abs(new Date(best.sent_at||best.received_at||0).getTime() - evFecha);
+          return df < db ? c : best;
+        }, lista[0]);
+      }
+    } catch(e) { console.warn('[crModal] Fallback conv_id falló:', e.message); }
+  }
+
+  // Guardar para EML
+  _crData = correoSaliente;
+
+  // ── Guardar contexto para crToggleReply / crSendReply ──
+  _crCorreoIdOrigen = correoIdOrigen;
+  _crConvId         = conversationIdOrigen;
+  // internet_message_id del correo ENTRANTE padre — para /reply nativo de Graph
+  const padreSB = state.emails.find(e => e.id === correoIdOrigen);
+  _crInternetMsgId  = padreSB?.raw?.message_id || padreSB?.message_id || padreSB?.raw?.internet_message_id || null;
+  // from_email del correo entrante (a quién responder)
+  window._crFromOriginal = padreSB?.remitente || padreSB?.raw?.from_email || null;
+  // Limpiar reply area anterior
+  const crRA = document.getElementById('crReplyBoxArea');
+  if(crRA) { crRA.innerHTML=''; crRA.dataset.modo=''; crRA.style.display='none'; }
+  const crBW = document.getElementById('crBodyWrap');
+  if(crBW) crBW.style.display='flex';
+  window._crAttachFiles = new Map();
+
+  // 2. Renderizar encabezado
+  const asunto = correoSaliente?.subject || meta?.subject_enviado || ev.subject || '(Sin asunto)';
+  const deNom  = correoSaliente?.from_name || correoSaliente?.from_email || meta?.agente_nombre || 'Agente';
+  const deEmail = correoSaliente?.from_email || '';
+  const para   = (() => {
+    // 1. to_recipients del correo saliente en Supabase
+    if(correoSaliente?.to_recipients) {
+      const arr = Array.isArray(correoSaliente.to_recipients)
+        ? correoSaliente.to_recipients.map(r=>r?.emailAddress?.address||r?.address||r).filter(s=>typeof s==='string'&&s)
+        : [String(correoSaliente.to_recipients)];
+      if(arr.length) return arr.join('; ');
+    }
+    // 2. meta.to_email guardado en datos_extra del evento
+    if(meta?.to_email) return meta.to_email;
+    // 3. remitente del correo padre (a quién se respondió)
+    if(window._crFromOriginal) return window._crFromOriginal;
+    return '';
+  })();
+  const cc = correoSaliente?.cc_recipients
+    ? (Array.isArray(correoSaliente.cc_recipients)
+        ? correoSaliente.cc_recipients.map(r=>r?.emailAddress?.address||r?.address||r).filter(s=>typeof s==='string'&&s).join('; ')
+        : String(correoSaliente.cc_recipients))
+    : '';
+  const fecha  = correoSaliente?.sent_at || correoSaliente?.received_at || ev.created_at || '';
+
+  document.getElementById('crAsunto').textContent = asunto;
+  document.getElementById('crDe').textContent = `${deNom}${deEmail && deEmail!==deNom ? ' <'+deEmail+'>' : ''}`;
+  document.getElementById('crPara').textContent = para || '—';
+  const ccRow = document.getElementById('crCCRow');
+  if(cc && ccRow) {
+    document.getElementById('crCC').textContent = cc;
+    ccRow.style.display = '';
+  } else if(ccRow) {
+    ccRow.style.display = 'none';
+  }
+  document.getElementById('crFecha').textContent = fecha ? new Date(fecha).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : '';
+
+  // 3. Renderizar cuerpo
+  const bodyEl = document.getElementById('crBody');
+  if(correoSaliente?.body_content) {
+    if(correoSaliente.body_type === 'html') {
+      // Reutilizar renderEmailBody adaptado inline
+      const html = correoSaliente.body_content;
+      const iframe = document.createElement('iframe');
+      iframe.sandbox = 'allow-same-origin allow-popups';
+      iframe.referrerPolicy = 'no-referrer';
+      iframe.style.cssText = 'width:100%;min-height:300px;border:none;display:block';
+      const _clearStyle = '<style>html,body{background:#ffffff!important;color:#000000!important}</style>';
+      iframe.srcdoc = _clearStyle + html;
+      iframe.onload = () => {
+        try { const h = iframe.contentDocument?.body?.scrollHeight; if(h) iframe.style.height = h + 40 + 'px'; } catch(e) {}
+      };
+      bodyEl.innerHTML = '';
+      bodyEl.appendChild(iframe);
+    } else {
+      bodyEl.innerHTML = `<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(correoSaliente.body_content)}</pre>`;
+    }
+  } else if(meta?.observaciones || ev.descripcion) {
+    bodyEl.innerHTML = `<div style="font-size:13px;color:var(--ink2);line-height:1.7;white-space:pre-wrap">${esc(meta?.observaciones || ev.descripcion || '')}</div>`;
+  } else {
+    bodyEl.innerHTML = '<div class="empty-state"><p style="color:var(--ink3)">No se pudo recuperar el cuerpo del correo.<br>Puede que sea un correo antiguo sin datos en Supabase.</p></div>';
+  }
+
+  // 4. Cargar adjuntos del correo saliente
+  if(correoSalienteId || correoSaliente?.id) {
+    const adjId = correoSalienteId || correoSaliente.id;
+    try {
+      const adjs = await sb(`adjuntos?correo_id=eq.${adjId}&es_inline=is.false&select=*`) || [];
+      const visibles = adjs.filter(a => !a.es_inline);
+      if(visibles.length) {
+        document.getElementById('crAdjBar').style.display = '';
+        const pillsHTML = await Promise.all(visibles.map(async a => {
+          let url = (a.storage_url || '').trim() || '#';
+          const nombre = a.nombre || 'Archivo';
+          const bytes = a.tamano_bytes || 0;
+          const size = bytes >= 1048576 ? (bytes/1048576).toFixed(1)+' MB' : bytes >= 1024 ? Math.round(bytes/1024)+' KB' : bytes+' B';
+          try {
+            const rawPath = a.storage_path || (() => {
+              if(url.includes('/object/sign/')) { const m2=url.match(/\/object\/sign\/([^/]+)\/(.+?)(?:\?|$)/); if(m2) return m2[2]; }
+              if(url.includes('/object/public/')) { const m3=url.match(/\/object\/public\/([^/]+)\/(.+?)(?:\?|$)/); if(m3) return m3[2]; }
+              return null;
+            })();
+            const bucket = (() => { const m4=url.match(/\/object\/(?:sign|public)\/([^/]+)\//); return m4?m4[1]:'adjuntos-pqr'; })();
+            if(rawPath && url !== '#') {
+              const cleanPath = decodeURIComponent(rawPath.split('?')[0]);
+              const signR = await fetch(`${SB_URL}/storage/v1/object/sign/${bucket}/${cleanPath}`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:3600})});
+              if(signR.ok){const sd=await signR.json();if(sd.signedURL)url=`${SB_URL}/storage/v1${sd.signedURL}`;}
+            }
+          } catch(e2){console.warn('[crAdj sign]',e2.message);}
+          const hasUrl = url && url !== '#';
+          return `<div class="adj-pill" ${hasUrl?`onclick="previewAdjunto('${esc(url)}','${esc(nombre)}','${esc(a.tipo_contenido||'')}',this)"`:'style="cursor:default;opacity:.7"'} title="${esc(nombre)} · ${size}">
+            <span style="font-size:14px;flex-shrink:0">${getFileIcon(nombre)}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(nombre)}</span>
+            <span style="font-size:9px;color:var(--ink3)">${size}${!hasUrl?' · sin URL':''}</span>
+          </div>`;
+        }));
+        document.getElementById('crAdjGrid').innerHTML = pillsHTML.join('');
+      }
+
+      // ── Fallback: buscar en Graph SentItems por fecha del correo saliente ──
+      if(!visibles.length) {
+        const sentAt = correoSaliente?.sent_at || correoSaliente?.received_at;
+        const userId = window.GRAPH_USER_ID || '';
+        let graphAdjs = [];
+        if(sentAt && userId) {
+          try {
+            const token = await getGraphToken();
+            const dt = new Date(sentAt);
+            const desde = new Date(dt.getTime() - 5*60000).toISOString(); // -5 min
+            const hasta = new Date(dt.getTime() + 5*60000).toISOString(); // +5 min
+            const rS = await fetch(
+              `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/SentItems/messages?$filter=sentDateTime ge ${desde} and sentDateTime le ${hasta} and hasAttachments eq true&$select=id,subject,sentDateTime,hasAttachments&$top=20`,
+              {headers:{'Authorization':'Bearer '+token}}
+            );
+            if(rS.ok) {
+              const dS = await rS.json();
+              // Buscar el mensaje cuyo asunto coincide con el del correo saliente
+              const asuntoSal = (correoSaliente?.subject || '').toLowerCase().replace(/^(re:|rv:|fwd?:)\s*/i,'').trim();
+              const msgMatch = (dS.value||[]).find(m => {
+                const mSubj = (m.subject||'').toLowerCase().replace(/^(re:|rv:|fwd?:)\s*/i,'').trim();
+                return mSubj.includes(asuntoSal.substring(0,30)) || asuntoSal.includes(mSubj.substring(0,30));
+              }) || (dS.value||[])[0]; // fallback al primero en esa ventana de tiempo
+              if(msgMatch?.id) {
+                const rA = await fetch(
+                  `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgMatch.id)}/attachments?$select=id,name,contentType,size,isInline`,
+                  {headers:{'Authorization':'Bearer '+token}}
+                );
+                if(rA.ok) {
+                  const dA = await rA.json();
+                  graphAdjs = (dA.value||[]).filter(a => !a.isInline);
+                }
+              }
+            }
+          } catch(eg){console.warn('[crAdj graph fallback]',eg.message);}
+        }
+
+        if(graphAdjs.length) {
+          document.getElementById('crAdjBar').style.display = '';
+          document.getElementById('crAdjGrid').innerHTML = graphAdjs.map(a => {
+            const size = a.size>=1048576?(a.size/1048576).toFixed(1)+' MB':a.size>=1024?Math.round(a.size/1024)+' KB':a.size+' B';
+            const dlUrl = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(a._msgId||'')}/attachments/${a.id}/$value`;
+            // Guardar msgId en el adjunto para descarga
+            a._msgId = a._msgId || '';
+            return `<div class="adj-pill" onclick="crDescargarAdjHilo('${esc(`https://graph.microsoft.com/v1.0/users/${userId}/messages/` + encodeURIComponent(graphAdjs._msgId||'') + '/attachments/' + a.id + '/$value')}','${esc(a.name)}','${esc(a.contentType||'')}') " title="${esc(a.name)} · ${size}" style="cursor:pointer">
+              <span style="font-size:14px;flex-shrink:0">${getFileIcon(a.name)}</span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(a.name)}</span>
+              <span style="font-size:9px;color:var(--ink3)">${size} · Graph</span>
+            </div>`;
+          }).join('');
+          // Guardar msgId para descarga correcta — rerender con el ID
+          if(graphAdjs.length && graphAdjs[0]) {
+            // Necesito el msgId — lo busco de nuevo del match
+            try {
+              const token2 = await getGraphToken();
+              const dt2 = new Date(sentAt);
+              const desde2 = new Date(dt2.getTime()-5*60000).toISOString();
+              const hasta2 = new Date(dt2.getTime()+5*60000).toISOString();
+              const rS2 = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/SentItems/messages?$filter=sentDateTime ge ${desde2} and sentDateTime le ${hasta2} and hasAttachments eq true&$select=id&$top=5`,{headers:{'Authorization':'Bearer '+token2}});
+              if(rS2.ok) {
+                const dS2 = await rS2.json();
+                const msgId2 = dS2.value?.[0]?.id;
+                if(msgId2) {
+                  document.getElementById('crAdjGrid').innerHTML = graphAdjs.map(a => {
+                    const size = a.size>=1048576?(a.size/1048576).toFixed(1)+' MB':a.size>=1024?Math.round(a.size/1024)+' KB':a.size+' B';
+                    const dlUrl = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId2)}/attachments/${a.id}/$value`;
+                    return `<div class="adj-pill" onclick="crDescargarAdjHilo('${esc(dlUrl)}','${esc(a.name)}','${esc(a.contentType||'')}')" title="${esc(a.name)} · ${size}" style="cursor:pointer">
+                      <span style="font-size:14px;flex-shrink:0">${getFileIcon(a.name)}</span>
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(a.name)}</span>
+                      <span style="font-size:9px;color:var(--green)">✓ ${size}</span>
+                    </div>`;
+                  }).join('');
+                }
+              }
+            } catch(eg2){console.warn('[crAdj msgId fix]',eg2.message);}
+          }
+        } else if(meta?.adjuntos_nombres?.length) {
+          document.getElementById('crAdjBar').style.display = '';
+          document.getElementById('crAdjGrid').innerHTML = meta.adjuntos_nombres.map(n =>
+            `<div class="adj-pill" style="cursor:default;opacity:.7"><span style="font-size:14px">${getFileIcon(n)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(n)}</span></div>`
+          ).join('') + '<span style="font-size:10px;color:var(--ink3);align-self:center;margin-left:4px">(sin URL disponible)</span>';
+        }
+      }
+    } catch(e) { console.warn('[crModal] adjuntos:', e.message); }
+  } else if(meta?.adjuntos_nombres?.length) {
+    document.getElementById('crAdjBar').style.display = '';
+    document.getElementById('crAdjGrid').innerHTML = meta.adjuntos_nombres.map(n =>
+      `<div class="adj-pill" style="cursor:default;opacity:.7"><span style="font-size:14px">${getFileIcon(n)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${esc(n)}</span></div>`
+    ).join('') + '<span style="font-size:10px;color:var(--ink3);align-self:center;margin-left:4px">(sin URL disponible)</span>';
+  }
+
+  // 5. Cargar hilo de conversación
+  const hiloEl = document.getElementById('crHiloWrap');
+  if(conversationIdOrigen) {
+    try {
+      const token = await getGraphToken();
+      const userId = window.GRAPH_USER_ID || '';
+      const convIdClean = conversationIdOrigen.replace(/'/g, "''");
+      const url = `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/allItems/messages?$filter=conversationId eq '${convIdClean}'&$select=id,subject,from,toRecipients,receivedDateTime,sentDateTime,bodyPreview,hasAttachments,isDraft&$top=50`;
+      const r = await fetch(url, { headers: {'Authorization':'Bearer '+token} });
+      if(!r.ok) throw new Error('Graph '+r.status);
+      const data = await r.json();
+      const msgs = (data.value||[]).sort((a,b)=>new Date(a.receivedDateTime||a.sentDateTime||0)-new Date(b.receivedDateTime||b.sentDateTime||0));
+      if(!msgs.length) {
+        hiloEl.innerHTML = '<div class="empty-state"><p>No se encontraron mensajes en el hilo.</p></div>';
+      } else {
+        // Guardar msgs para expandir al clic
+        window._crHiloMsgs = {};
+        msgs.forEach(m => { window._crHiloMsgs[m.id] = m; });
+
+        let rows = '';
+        msgs.forEach((m, i) => {
+          const de = m.from?.emailAddress?.address || '';
+          const deNombre = m.from?.emailAddress?.name || de;
+          const fechaM = m.receivedDateTime || m.sentDateTime || '';
+          const esEnviado = de.toLowerCase().includes((window.GRAPH_USER_ID||'').split('@')[0].toLowerCase());
+          const bg = esEnviado ? 'var(--blue)' : 'var(--green)';
+          const ini = esc(deNombre).charAt(0).toUpperCase();
+          const fStr = fechaM ? new Date(fechaM).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}) : '';
+          const bb = i === msgs.length-1 ? 'none' : '1px solid var(--border)';
+          rows += `<div style="border-bottom:${bb}">
+            <div onclick="crHiloToggle('${m.id}')" style="padding:8px 8px 4px;cursor:pointer;display:flex;align-items:center;gap:7px" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+              <span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff">${ini}</span>
+              <div style="min-width:0;flex:1">
+                <div style="font-size:11px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(deNombre)}${esEnviado?' <span style="background:var(--blue-l);color:var(--blue);font-size:9px;padding:1px 5px;border-radius:4px;font-weight:700">ENVIADO</span>':''}</div>
+                <div style="font-size:10px;color:var(--ink3)">${fStr}</div>
+              </div>
+              ${m.hasAttachments ? '<span style="font-size:12px;flex-shrink:0" title="Tiene adjuntos">📎</span>' : ''}
+              <button data-mid="${m.id}" data-sub="${encodeURIComponent(m.subject||'correo')}" onclick="event.stopPropagation();descargarEML(this.dataset.mid,decodeURIComponent(this.dataset.sub))" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:2px 6px;font-size:9px;font-weight:700;cursor:pointer;color:var(--ink2);flex-shrink:0">EML</button>
+              <span id="crHiloArrow_${m.id}" style="font-size:9px;color:var(--ink3);flex-shrink:0">▼</span>
+            </div>
+            <div style="padding:0 8px 6px 37px;font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.bodyPreview||'')}</div>
+            <div id="crHiloBody_${m.id}" style="display:none;padding:6px 8px 10px 37px;font-size:11px;color:var(--ink2);line-height:1.6;border-top:1px solid var(--bg2)"></div>
+          </div>`;
+        });
+        hiloEl.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--r);overflow:hidden;background:var(--surface)">${rows}</div>`;
+      }
+    } catch(e) {
+      hiloEl.innerHTML = `<div style="padding:10px;font-size:11px;color:var(--red);background:var(--red-l);border-radius:var(--r2)">⚠️ No se pudo cargar el hilo desde Graph API.<br><small>${esc(e.message)}</small></div>`;
+    }
+  } else {
+    hiloEl.innerHTML = '<div class="empty-state"><p style="font-size:11px">Sin conversation_id disponible<br>para cargar el hilo.</p></div>';
+  }
+}
+
+// ── Expandir mensaje del hilo en modal correo_respondido ──
+async function crHiloToggle(msgId) {
+  const bodyEl  = document.getElementById(`crHiloBody_${msgId}`);
+  const arrowEl = document.getElementById(`crHiloArrow_${msgId}`);
+  if(!bodyEl) return;
+  const isOpen = bodyEl.style.display !== 'none';
+  if(isOpen) {
+    bodyEl.style.display = 'none';
+    if(arrowEl) arrowEl.textContent = '▼';
+    return;
+  }
+  bodyEl.style.display = 'block';
+  if(arrowEl) arrowEl.textContent = '▲';
+  if(bodyEl.dataset.loaded === '1') return;
+  bodyEl.innerHTML = '<div style="color:var(--ink3);font-size:11px;padding:4px 0">Cargando…</div>';
+  try {
+    const token  = await getGraphToken();
+    const userId = window.GRAPH_USER_ID || '';
+
+    // Cargar cuerpo y adjuntos en paralelo
+    const [rBody, rAdjs] = await Promise.all([
+      fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}?$select=body,from,toRecipients,subject,sentDateTime,receivedDateTime,hasAttachments`,
+        {headers:{'Authorization':'Bearer '+token}}),
+      fetch(`https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments?$select=id,name,contentType,size,isInline`,
+        {headers:{'Authorization':'Bearer '+token}}),
+    ]);
+
+    if(!rBody.ok) throw new Error('Graph body '+rBody.status);
+    const d = await rBody.json();
+    const bodyHtml = d.body?.content || '';
+    const bodyType = d.body?.contentType || 'text';
+
+    // Adjuntos reales (no inline)
+    let adjsHtml = '';
+    if(rAdjs.ok) {
+      const adjData = await rAdjs.json();
+      const adjsReales = (adjData.value||[]).filter(a => !a.isInline);
+      if(adjsReales.length) {
+        adjsHtml = `<div style="padding:5px 0 3px;border-top:1px solid var(--bg2);margin-top:5px">
+          <div style="font-size:9px;font-weight:700;color:var(--ink3);letter-spacing:.4px;margin-bottom:4px">📎 ADJUNTOS</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">` +
+          adjsReales.map(a => {
+            const size = a.size>=1048576?(a.size/1048576).toFixed(1)+' MB':a.size>=1024?Math.round(a.size/1024)+' KB':a.size+' B';
+            // URL de descarga directa desde Graph
+            const dlUrl = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments/${a.id}/$value`;
+            return `<div class="adj-pill" onclick="crDescargarAdjHilo('${esc(dlUrl)}','${esc(a.name)}','${esc(a.contentType||'')}')" title="${esc(a.name)} · ${size}" style="cursor:pointer">
+              <span style="font-size:12px">${getFileIcon(a.name)}</span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:110px;font-size:10px">${esc(a.name)}</span>
+              <span style="font-size:9px;color:var(--ink3)">${size}</span>
+            </div>`;
+          }).join('') +
+          `</div></div>`;
+      }
+    }
+
+    // Renderizar cuerpo
+    bodyEl.innerHTML = '';
+    if(adjsHtml) {
+      const adjDiv = document.createElement('div');
+      adjDiv.innerHTML = adjsHtml;
+      bodyEl.appendChild(adjDiv);
+    }
+    if(bodyType === 'html') {
+      const iframe = document.createElement('iframe');
+      iframe.sandbox = 'allow-same-origin allow-popups';
+      iframe.referrerPolicy = 'no-referrer';
+      iframe.style.cssText = 'width:100%;min-height:80px;border:none;display:block;border-radius:4px;margin-top:4px';
+      iframe.srcdoc = '<style>html,body{margin:0;padding:6px;font-family:Arial,sans-serif;font-size:12px;color:#333;background:#fff}</style>' + bodyHtml;
+      iframe.onload = () => { try { const h=iframe.contentDocument?.body?.scrollHeight; if(h) iframe.style.height=Math.min(h+16,400)+'px'; } catch(e){} };
+      bodyEl.appendChild(iframe);
+    } else {
+      const txtDiv = document.createElement('div');
+      txtDiv.style.cssText = 'font-size:11px;color:var(--ink2);white-space:pre-wrap;line-height:1.5;margin-top:4px';
+      txtDiv.textContent = bodyHtml;
+      bodyEl.appendChild(txtDiv);
+    }
+    bodyEl.dataset.loaded = '1';
+  } catch(e) {
+    bodyEl.innerHTML = `<div style="font-size:11px;color:var(--red)">⚠️ Error cargando: ${esc(e.message)}</div>`;
+  }
+}
+
+// Descargar adjunto de un mensaje del hilo via Graph API
+async function crDescargarAdjHilo(graphUrl, nombre, tipo) {
+  showToast('Descargando '+nombre+'…', 'info');
+  try {
+    const token = await getGraphToken();
+    const r = await fetch(graphUrl, {headers:{'Authorization':'Bearer '+token}});
+    if(!r.ok) throw new Error('Graph '+r.status);
+    const blob = await r.blob();
+    const url = URL.createObjectURL(new Blob([blob], {type: tipo||'application/octet-stream'}));
+    const a = document.createElement('a');
+    a.href = url; a.download = nombre;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 2000);
+    showToast(nombre+' descargado ✓', 'success');
+  } catch(e) {
+    // Fallback: abrir via proxy si falla
+    try {
+      const proxyUrl = `/adj-proxy.php?url=${encodeURIComponent(graphUrl)}`;
+      window.open(proxyUrl, '_blank');
+    } catch(e2) {
+      showToast('Error descargando: '+e.message.substring(0,60), 'error');
+    }
+  }
+}
+
+// ──────────────────────────────────────────────
+// REPLY DESDE MODAL CORREO RESPONDIDO
+// ──────────────────────────────────────────────
+// _crCorreoIdOrigen: ID del correo ENTRANTE padre del hilo (para historial y num_gestiones)
+let _crCorreoIdOrigen = null;
+// _crInternetMsgId: internet_message_id del correo entrante padre (para Graph /reply)
+let _crInternetMsgId  = null;
+// _crConvId: conversation_id del hilo
+let _crConvId = null;
+
+function crToggleReply(modo) {
+  const area     = document.getElementById('crReplyBoxArea');
+  const bodyWrap = document.getElementById('crBodyWrap');
+
+  // Si ya está abierto con el mismo modo → cerrar y volver al cuerpo
+  if(area.style.display !== 'none' && area.dataset.modo === modo) {
+    area.style.display = 'none';
+    area.innerHTML = '';
+    bodyWrap.style.display = 'flex';
+    return;
+  }
+  area.dataset.modo = modo;
+
+  if(!_crData) { showToast('Sin datos del correo para responder','error'); return; }
+
+  const toOrig = window._crFromOriginal || '';
+  let toVal='', ccVal='', subjectVal='', titleColor='', modoLabel='';
+  const asunto = _crData.subject || '';
+
+  if(modo==='reply') {
+    toVal=toOrig; subjectVal='RE: '+asunto.replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor='var(--blue)'; modoLabel='↩ Responder';
+  } else if(modo==='replyAll') {
+    toVal=toOrig;
+    const propio=(window.GRAPH_USER_ID||'').toLowerCase();
+    const allCC=(Array.isArray(_crData.to_recipients)?_crData.to_recipients.map(r=>r?.emailAddress?.address||r?.address||r).filter(s=>typeof s==='string'&&s):[]).filter(a=>a.toLowerCase()!==propio&&a.toLowerCase()!==toOrig.toLowerCase());
+    ccVal=[...new Set(allCC)].join('; ');
+    subjectVal='RE: '+asunto.replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor='var(--green)'; modoLabel='↩↩ Responder a todos';
+  } else {
+    toVal=''; subjectVal='RV: '+asunto.replace(/^(RE:|RV:|FWD?:)\s*/i,'');
+    titleColor='var(--orange,#f97316)'; modoLabel='↪ Reenviar';
+  }
+
+  const deNom_   = _crData.from_name  || _crData.from_email || 'Agente';
+  const deEmail_ = _crData.from_email || '';
+  const fechaStr = _crData.sent_at ? new Date(_crData.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : '';
+  const cuerpoOriginal = _crData.body_content || '';
+
+  // Ocultar cuerpo, mostrar reply ocupando toda la columna izquierda
+  bodyWrap.style.display = 'none';
+  area.style.display = 'flex';
+  area.style.flexDirection = 'column';
+  area.style.overflow = 'hidden';
+
+  area.innerHTML = `
+    <div style="padding:7px 12px;background:${titleColor}18;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <span style="font-size:11px;font-weight:700;color:${titleColor}">${modoLabel} — mismo hilo</span>
+      <button onclick="document.getElementById('crReplyBoxArea').style.display='none';document.getElementById('crReplyBoxArea').innerHTML='';document.getElementById('crBodyWrap').style.display='flex';" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 4px">✕</button>
+    </div>
+    <div style="border-bottom:1px solid var(--border);flex-shrink:0">
+      <div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid var(--border);gap:8px;position:relative">
+        <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:50px">Para</span>
+        <input id="crReplyTo" value="${esc(toVal)}" placeholder="${modo==='forward'?'Destinatario…':''}" oninput="_crAcBuscar(this.value,'crReplyTo','crReplyToAc')" onblur="setTimeout(()=>{const d=document.getElementById('crReplyToAc');if(d)d.style.display='none'},200)" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book',Arial,sans-serif;color:var(--ink);background:transparent"/>
+        <div id="crReplyToAc" style="display:none;position:absolute;left:50px;right:0;top:100%;background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;box-shadow:0 8px 24px rgba(0,0,0,.15);z-index:9999;max-height:220px;overflow-y:auto"></div>
+      </div>
+      <div style="display:flex;align-items:center;padding:6px 12px;border-bottom:1px solid var(--border);gap:8px">
+        <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:50px">CC</span>
+        <input id="crReplyCC" value="${esc(ccVal)}" placeholder="Separar con punto y coma" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book',Arial,sans-serif;color:var(--ink);background:transparent"/>
+      </div>
+      <div style="display:flex;align-items:center;padding:6px 12px;gap:8px">
+        <span style="font-size:11px;font-weight:700;color:var(--ink3);min-width:50px">Asunto</span>
+        <input id="crReplySubject" value="${esc(subjectVal)}" style="flex:1;border:none;outline:none;font-size:12px;font-family:'Franklin Gothic Book',Arial,sans-serif;color:var(--ink);background:transparent"/>
+      </div>
+    </div>
+    ${_fmtBar('crReplyEditor')}
+    <div id="crReplyEditor" contenteditable="true" style="flex:1;min-height:80px;padding:12px 14px;font-size:13px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);outline:none;line-height:1.6;overflow-y:auto"></div>
+    <div style="border-top:1px solid var(--border);padding:8px 14px;background:var(--surface2);flex-shrink:0;max-height:110px;overflow-y:auto">
+      <div style="font-size:10px;color:var(--ink3);margin-bottom:4px">───── Respuesta anterior enviada ─────</div>
+      <div style="font-size:11px;color:var(--ink2);line-height:1.4"><b>De:</b> ${esc(deNom_)} &lt;${esc(deEmail_)}&gt; · <b>Enviado:</b> ${fechaStr}</div>
+      <div style="margin-top:4px;font-size:11px;color:var(--ink2);max-height:60px;overflow-y:auto;border-left:3px solid var(--border);padding-left:8px">${cuerpoOriginal.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().substring(0,200)}…</div>
+    </div>
+    <div id="crReplyAttachZone" style="padding:6px 12px;background:var(--bg2);border-top:1px solid var(--border);flex-shrink:0"
+         ondragover="event.preventDefault();this.style.background='#EFF6FF'"
+         ondragleave="this.style.background='var(--bg2)'"
+         ondrop="event.preventDefault();this.style.background='var(--bg2)';_crAttachAdd(event.dataTransfer.files)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <label for="crReplyFiles" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;font-weight:700;color:var(--ink3);padding:3px 10px;border:1.5px solid var(--border);border-radius:6px;background:#fff">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          Adjuntar
+        </label>
+        <span id="crAttachLoadMsg" style="font-size:10px;color:var(--ink3)"></span>
+      </div>
+      <input type="file" id="crReplyFiles" multiple style="display:none" accept="*/*">
+      <div id="crReplyFilesPreview" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:6px;padding:8px 12px;border-top:1px solid var(--border);background:var(--bg);flex-shrink:0">
+      <button class="btn btn-ghost" onclick="document.getElementById('crReplyBoxArea').style.display='none';document.getElementById('crReplyBoxArea').innerHTML='';document.getElementById('crBodyWrap').style.display='flex';">Cancelar</button>
+      <button class="btn btn-primary" id="crReplySendBtn" onclick="crSendReply()" style="background:${titleColor};border-color:${titleColor}">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        ${modo==='forward'?'Reenviar':'Enviar'}
+      </button>
+    </div>`;
+
+  // Adjuntos nuevos para este reply
+  window._crAttachFiles = new Map();
+  document.getElementById('crReplyFiles').addEventListener('change',function(){_crAttachAdd(this.files);this.value='';});
+
+  // ── Auto-cargar adjuntos originales del correo saliente ──
+  const adjId = _crData.id || null;
+  if(adjId) {
+    const msgEl = document.getElementById('crAttachLoadMsg');
+    if(msgEl) msgEl.textContent = 'Cargando adjuntos originales…';
+    sb(`adjuntos?correo_id=eq.${adjId}&es_inline=is.false&select=*`)
+      .then(async rows => {
+        const visibles = (rows||[]).filter(a=>a.storage_url&&!a.es_inline);
+        if(!visibles.length) {
+          if(msgEl) msgEl.textContent = '';
+          return;
+        }
+        let cargados=0, sinUrl=0;
+        for(const adj of visibles) {
+          try {
+            let fetchUrl = (adj.storage_url||"").trim();
+            if(fetchUrl.startsWith('https://graph.microsoft.com')) fetchUrl=`/adj-proxy.php?url=${encodeURIComponent(fetchUrl)}`;
+            const r = await fetch(fetchUrl);
+            if(!r.ok) throw new Error('HTTP '+r.status);
+            const buf = await r.arrayBuffer();
+            const file = new File([buf], adj.nombre||'adjunto', {type:adj.tipo_contenido||'application/octet-stream'});
+            const id = `cr_orig_${adj.id||Date.now()}_${Math.random().toString(36).substr(2,4)}`;
+            window._crAttachFiles.set(id, {file, id, original:true});
+            cargados++;
+          } catch(e) { sinUrl++; console.warn('[crAutoAdj]', adj.nombre, e.message); }
+        }
+        _crAttachRender();
+        if(msgEl) msgEl.textContent = cargados ? `📎 ${cargados} adjunto${cargados>1?'s':''} original${cargados>1?'es':''} cargado${cargados>1?'s':''}${sinUrl?` · ${sinUrl} sin URL`:''}` : (sinUrl?`⚠️ ${sinUrl} adjunto${sinUrl>1?'s':''} sin URL disponible`:'');
+      })
+      .catch(e => { if(msgEl) msgEl.textContent=''; console.warn('[crAutoAdj]',e.message); });
+  }
+}
+
+function _crAttachAdd(files) {
+  if(!files) return;
+  if(!window._crAttachFiles) window._crAttachFiles = new Map();
+  Array.from(files).forEach(f => {
+    const id = `cr_${Date.now()}_${Math.random().toString(36).substr(2,5)}`;
+    window._crAttachFiles.set(id, {file:f, id});
+  });
+  _crAttachRender();
+}
+
+function _crAttachRender() {
+  const el = document.getElementById('crReplyFilesPreview');
+  if(!el) return;
+  if(!window._crAttachFiles || !window._crAttachFiles.size) { el.innerHTML=''; return; }
+  el.innerHTML = [...window._crAttachFiles.entries()].map(([id,{file,original}])=>`
+    <div style="display:inline-flex;align-items:center;gap:4px;background:#fff;border:1px solid ${original?'var(--blue)':'var(--border)'};border-radius:6px;padding:3px 8px;font-size:11px;color:var(--ink2)">
+      ${getFileIcon(file.name)} ${esc(file.name)}
+      ${original?'<span style="font-size:9px;background:#dbeafe;color:#2563eb;padding:1px 5px;border-radius:4px;font-weight:700">original</span>':''}
+      <button onclick="window._crAttachFiles.delete('${id}');_crAttachRender()" style="background:none;border:none;cursor:pointer;color:var(--ink3);font-size:13px;line-height:1;padding:0 2px">✕</button>
+    </div>`).join('');
+}
+
+async function crSendReply() {
+  const toInput   = document.getElementById('crReplyTo')?.value?.trim();
+  const ccInput   = document.getElementById('crReplyCC')?.value?.trim();
+  const subject   = document.getElementById('crReplySubject')?.value?.trim();
+  const editor    = document.getElementById('crReplyEditor');
+  const body      = editor?.innerHTML?.trim();
+  const modo      = document.getElementById('crReplyBoxArea').dataset.modo || 'reply';
+
+  if(!body||body==='<br>'){ showToast('Escribe un mensaje','info'); return; }
+  if(modo!=='forward'&&!toInput){ showToast('Escribe un destinatario','info'); return; }
+  if(modo==='forward'&&!toInput){ showToast('Escribe a quién reenviar','info'); return; }
+
+  const sendBtn = document.getElementById('crReplySendBtn');
+  if(sendBtn){ sendBtn.disabled=true; sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Enviando…'; }
+
+  // Hilo citado
+  const deNom    = _crData?.from_name  || _crData?.from_email || 'Agente';
+  const deEmail_ = _crData?.from_email || '';
+  const fechaStr = _crData?.sent_at ? new Date(_crData.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : '';
+  const hiloHTML = `<br><br><div style="border-left:3px solid #ccc;padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px"><b>De:</b> ${esc(deNom)} &lt;${esc(deEmail_)}&gt;<br><b>Enviado:</b> ${fechaStr}<br><b>Asunto:</b> ${esc(_crData?.subject||'')}<br><br>${_crData?.body_content||''}</div>`;
+
+  try {
+    const token  = await getGraphToken();
+    const userId = window.GRAPH_USER_ID || '';
+    if(!token)  throw new Error('No se pudo obtener token. Recarga la página.');
+    if(!userId) throw new Error('GRAPH_USER_ID no configurado.');
+
+    // Adjuntos del reply
+    const adjuntos = [];
+    if(window._crAttachFiles) {
+      for(const {file} of window._crAttachFiles.values()) {
+        const b64 = await _fileToBase64(file);
+        adjuntos.push({'@odata.type':'#microsoft.graph.fileAttachment', name:file.name, contentType:file.type||'application/octet-stream', contentBytes:b64});
+      }
+    }
+
+    const fullBody = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`;
+
+    let r;
+    // ── Usar /reply o /replyAll o /forward con internet_message_id del padre
+    // para mantener el hilo exacto en el buzón del ciudadano ──
+    const internetMsgId = _crInternetMsgId; // ID del correo ENTRANTE padre
+
+    if(internetMsgId) {
+      // Endpoint nativo de Graph — mantiene In-Reply-To y References automáticamente
+      let endpoint, graphPayload;
+      if(modo==='reply') {
+        endpoint = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(internetMsgId)}/reply`;
+        graphPayload = { message:{ body:{contentType:'HTML',content:fullBody}, toRecipients:[{emailAddress:{address:toInput}}] }, comment:'' };
+      } else if(modo==='replyAll') {
+        endpoint = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(internetMsgId)}/replyAll`;
+        graphPayload = { message:{ body:{contentType:'HTML',content:fullBody} }, comment:'' };
+        if(ccInput) graphPayload.message.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+      } else {
+        endpoint = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(internetMsgId)}/forward`;
+        graphPayload = { message:{ body:{contentType:'HTML',content:fullBody}, toRecipients:[{emailAddress:{address:toInput}}] }, comment:'' };
+      }
+      if(adjuntos.length) graphPayload.message.attachments = adjuntos;
+      r = await fetch(endpoint, {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body: JSON.stringify(graphPayload),
+      });
+    } else {
+      // Fallback — sendMail normal si no hay internet_message_id
+      const payload = {
+        subject: subject||('RE: '+(_crData?.subject||'')),
+        body:    {contentType:'HTML', content:fullBody},
+        toRecipients:[{emailAddress:{address:toInput}}],
+      };
+      if(ccInput) payload.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+      if(adjuntos.length) payload.attachments = adjuntos;
+      r = await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/sendMail`,{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+        body: JSON.stringify({message:payload, saveToSentItems:true}),
+      });
+    }
+
+    if(!r.ok && r.status!==202) throw new Error('Graph '+r.status+': '+(await r.text()).substring(0,100));
+
+    const totalAdj = window._crAttachFiles?.size || 0;
+    showToast('Respuesta enviada ✓' + (totalAdj?` (${totalAdj} adjunto${totalAdj>1?'s':''})`:''), 'success');
+
+    // ── Guardar correo saliente en Supabase ──
+    let correoSalienteId = null;
+    const correoIdOrigen = _crCorreoIdOrigen;
+    try {
+      const _h = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'};
+      const _r = await fetch(`${SB_URL}/rest/v1/correos`,{method:'POST',headers:_h,body:JSON.stringify({
+        from_email:      userId,
+        from_name:       AGENT_NAME || 'Agente',
+        subject:         subject||('RE: '+(_crData?.subject||'')),
+        body_content:    body,
+        body_type:       'html',
+        origen:          'saliente',
+        estado:          'enviado',
+        conversation_id: _crConvId || null,
+        received_at:     new Date().toISOString(),
+        sent_at:         new Date().toISOString(),
+        canal_contacto:  'correo',
+        agente_id:       AGENT_ID || null,
+        asignado_a:      AGENT_NAME || null,
+      })});
+      if(_r.ok){ const d=await _r.json(); correoSalienteId=Array.isArray(d)?d[0]?.id:d?.id; }
+    } catch(e2){ console.warn('[crReply correo-saliente]',e2.message); }
+
+    // ── Guardar adjuntos salientes ──
+    if(window._crAttachFiles && window._crAttachFiles.size > 0 && correoSalienteId) {
+      _guardarAdjuntosEnStorage(correoSalienteId, [...window._crAttachFiles.values()], AGENT_ID)
+        .catch(e=>console.warn('[crReply adjuntos]',e.message));
+    }
+
+    // ── Evento correo_respondido en historial + num_gestiones ──
+    if(correoIdOrigen) {
+      try {
+        await sb('historial_eventos','POST',{
+          correo_id:   correoIdOrigen,
+          agente_id:   AGENT_ID,
+          evento:      'correo_respondido',
+          from_email:  toInput,
+          subject:     subject||('RE: '+(_crData?.subject||'')),
+          descripcion: 'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,80),
+          datos_extra: JSON.stringify({
+            agente_nombre:      AGENT_NAME,
+            por:                'agente',
+            adjuntos:           totalAdj,
+            adjuntos_nombres:   window._crAttachFiles ? [...window._crAttachFiles.values()].map(a=>a.file.name) : [],
+            correo_id_saliente: correoSalienteId || null,
+            to_email:           toInput || null,
+            subject_enviado:    subject||('RE: '+(_crData?.subject||'')),
+            modo:               modo,
+          }),
+        });
+      } catch(e3){ console.warn('[crReply historial]',e3.message); }
+
+      // ── Incrementar num_gestiones ──
+      try {
+        const fg = await sb(`correos?id=eq.${correoIdOrigen}&select=num_gestiones&limit=1`);
+        await sb(`correos?id=eq.${correoIdOrigen}`,'PATCH',{num_gestiones:(fg?.[0]?.num_gestiones||0)+1});
+      } catch(e4){ console.warn('[crReply num_gestiones]',e4.message); }
+
+      // Recargar timeline del correo padre si está seleccionado
+      if(state.selectedId === correoIdOrigen) await loadTicketTimeline(correoIdOrigen);
+    }
+
+    window._crAttachFiles = new Map();
+    document.getElementById('crReplyBoxArea').innerHTML = '';
+
+  } catch(e) {
+    showToast('Error al enviar: '+e.message.substring(0,80),'error');
+    if(sendBtn){ sendBtn.disabled=false; sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar'; }
+  }
+}
+
+async function crDescargarEML() {
+  if(!_crData) { showToast('Sin datos del correo para descargar','error'); return; }
+  showToast('Preparando EML con hilo y adjuntos…','info');
+
+  const asunto   = _crData.subject || '(correo enviado)';
+  const fileName = asunto.replace(/[\/\\:*?"<>|]/g,'_').substring(0,80) + '.eml';
+  const de       = _crData.from_email || 'agente@tododrogas.com.co';
+  const deNom    = _crData.from_name  || de;
+  const fecha    = _crData.sent_at    || _crData.received_at || new Date().toISOString();
+  const cuerpo   = _crData.body_content || '(sin contenido)';
+  const convId   = _crData.conversation_id || null;
+  const correoId = _crData.id || null;
+
+  // ── 1. Cargar adjuntos del correo saliente ──
+  let adjuntos = [];
+  if(correoId) {
+    try {
+      const rows = await sb(`adjuntos?correo_id=eq.${correoId}&es_inline=is.false&select=*`) || [];
+      adjuntos = rows.filter(a => a.storage_url && !a.es_inline);
+    } catch(e) { console.warn('[crEML] adjuntos:', e.message); }
+  }
+
+  // ── 2. Descargar adjuntos en base64 ──
+  const adjB64 = [];
+  for(const adj of adjuntos) {
+    try {
+      let fetchUrl = (adj.storage_url||"").trim();
+      // Adjuntos de Graph API → proxy
+      if(fetchUrl.startsWith('https://graph.microsoft.com')) {
+        fetchUrl = `/adj-proxy.php?url=${encodeURIComponent(fetchUrl)}`;
+      }
+      const r = await fetch(fetchUrl);
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const buf = await r.arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      adjB64.push({ nombre: adj.nombre||'archivo', tipo: adj.tipo_contenido||'application/octet-stream', b64 });
+    } catch(e) { console.warn('[crEML] fetch adj '+adj.nombre+':', e.message); }
+  }
+  // Adjuntos sin URL pero con nombre — los listamos en el hilo como referencia
+  const adjSinUrl = (adjuntos.length === 0 && _crData._adjNombres)
+    ? (_crData._adjNombres || [])
+    : adjuntos.filter(a => !a.storage_url).map(a => a.nombre);
+
+  // ── 3. Construir hilo desde Supabase + Graph ──
+  let hiloMsgs = []; // [{de, fecha, preview, esEnviado}]
+
+  // 3a. Supabase — correos del mismo conversation_id
+  if(convId) {
+    try {
+      const rows = await sb(`correos?conversation_id=eq.${convId}&order=received_at.asc&select=from_name,from_email,received_at,sent_at,subject,body_content,body_type,origen,estado&limit=50`) || [];
+      rows.forEach(c => {
+        const esEnv = c.origen==='saliente'||c.estado==='enviado';
+        hiloMsgs.push({
+          de: c.from_name||(esEnv?'Agente PQRSFD':'Remitente'),
+          email: c.from_email||'',
+          fecha: c.sent_at||c.received_at||'',
+          preview: (c.body_content||'').replace(/<[^>]*>/g,' ').substring(0,300),
+          esEnviado: esEnv,
+          fuente: 'supabase',
+        });
+      });
+    } catch(e) { console.warn('[crEML] hilo supabase:', e.message); }
+  }
+
+  // 3b. Graph API — mensajes del buzón
+  if(convId) {
+    try {
+      const token = await getGraphToken();
+      const userId = window.GRAPH_USER_ID || '';
+      if(token && userId) {
+        const convIdClean = convId.replace(/'/g,"''");
+        const r = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/allItems/messages?$filter=conversationId eq '${convIdClean}'&$select=id,subject,from,receivedDateTime,sentDateTime,bodyPreview,isDraft&$top=50`,
+          { headers: {'Authorization':'Bearer '+token} }
+        );
+        if(r.ok) {
+          const data = await r.json();
+          (data.value||[]).forEach(m => {
+            const fMs = m.receivedDateTime||m.sentDateTime||'';
+            // evitar duplicados por fecha aproximada
+            const yaEsta = hiloMsgs.some(h => h.fecha && fMs && Math.abs(new Date(h.fecha)-new Date(fMs))<5000);
+            if(!yaEsta) {
+              const deAddr = m.from?.emailAddress?.address||'';
+              const esEnv  = deAddr.toLowerCase().includes((userId||'').split('@')[0].toLowerCase());
+              hiloMsgs.push({
+                de: m.from?.emailAddress?.name||deAddr,
+                email: deAddr,
+                fecha: fMs,
+                preview: (m.bodyPreview||'').substring(0,300),
+                esEnviado: esEnv,
+                fuente: 'graph',
+              });
+            }
+          });
+        }
+      }
+    } catch(e) { console.warn('[crEML] hilo graph:', e.message); }
+  }
+
+  // Ordenar hilo por fecha
+  hiloMsgs.sort((a,b) => new Date(a.fecha||0) - new Date(b.fecha||0));
+
+  // ── 4. Construir bloque HTML del hilo ──
+  let hiloHTML = '';
+  if(hiloMsgs.length) {
+    hiloHTML += `\r\n\r\n<hr style="border:1px solid #ccc;margin:20px 0">\r\n`;
+    hiloHTML += `<div style="font-family:Arial,sans-serif;font-size:12px;color:#555;margin-bottom:8px"><strong>🧵 Hilo de conversación (${hiloMsgs.length} mensaje${hiloMsgs.length>1?'s':''})</strong></div>`;
+    hiloMsgs.forEach((m,i) => {
+      const fStr = m.fecha ? new Date(m.fecha).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : '';
+      const bgColor = m.esEnviado ? '#eff6ff' : '#f0fdf4';
+      const borderColor = m.esEnviado ? '#2563eb' : '#16a34a';
+      const label = m.esEnviado ? '📤 ENVIADO' : '📥 RECIBIDO';
+      hiloHTML += `<div style="margin:8px 0;padding:10px 12px;background:${bgColor};border-left:3px solid ${borderColor};font-family:Arial,sans-serif;font-size:12px">`;
+      hiloHTML += `<div style="font-weight:bold;color:#333">${label} · ${m.de}${m.email&&m.email!==m.de?' &lt;'+m.email+'&gt;':''}</div>`;
+      hiloHTML += `<div style="color:#888;font-size:11px;margin-bottom:6px">${fStr}</div>`;
+      hiloHTML += `<div style="color:#444;line-height:1.5">${m.preview.replace(/\n/g,'<br>')}${m.preview.length>=300?'…':''}</div>`;
+      hiloHTML += `</div>`;
+    });
+  }
+
+  // ── 5. Bloque de adjuntos referenciados ──
+  let adjRefHTML = '';
+  if(adjB64.length || adjSinUrl.length) {
+    adjRefHTML += `\r\n<div style="font-family:Arial,sans-serif;font-size:12px;color:#555;margin-top:16px">`;
+    adjRefHTML += `<strong>📎 Adjuntos de esta respuesta:</strong><ul style="margin:4px 0;padding-left:20px">`;
+    adjB64.forEach(a => { adjRefHTML += `<li>${a.nombre} <em style="color:#16a34a">(incluido en este EML)</em></li>`; });
+    adjSinUrl.forEach(n => { adjRefHTML += `<li>${n} <em style="color:#888">(sin URL disponible)</em></li>`; });
+    adjRefHTML += `</ul></div>`;
+  }
+
+  // ── 6. Armar EML multipart/mixed ──
+  const bMixed   = '----=_Mixed_'  + Date.now();
+  const bAlt     = '----=_Alt_'    + Date.now();
+
+  const cuerpoHtml = `<div style="font-family:Arial,sans-serif;font-size:13px;color:#000;background:#fff">${cuerpo}${adjRefHTML}${hiloHTML}</div>`;
+  const cuerpoTxt  = cuerpo.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim()
+    + (hiloMsgs.length ? '\r\n\r\n--- Hilo ---\r\n' + hiloMsgs.map(m=>`[${m.esEnviado?'ENVIADO':'RECIBIDO'}] ${m.de} · ${m.fecha}\r\n${m.preview}`).join('\r\n---\r\n') : '');
+
+  let eml = '';
+  eml += `From: ${deNom} <${de}>\r\n`;
+  eml += `To: (destinatario)\r\n`;
+  eml += `Subject: ${asunto}\r\n`;
+  eml += `Date: ${new Date(fecha).toUTCString()}\r\n`;
+  eml += `MIME-Version: 1.0\r\n`;
+  eml += `X-Tododrogas-Ticket: traza-correo-respondido\r\n`;
+  eml += `Content-Type: multipart/mixed; boundary="${bMixed}"\r\n\r\n`;
+
+  // Parte alternativa (texto + html con hilo)
+  eml += `--${bMixed}\r\n`;
+  eml += `Content-Type: multipart/alternative; boundary="${bAlt}"\r\n\r\n`;
+  eml += `--${bAlt}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n`;
+  eml += cuerpoTxt.replace(/\r?\n/g,'\r\n') + '\r\n';
+  eml += `--${bAlt}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n`;
+  eml += cuerpoHtml + '\r\n';
+  eml += `--${bAlt}--\r\n`;
+
+  // Adjuntos en base64
+  for(const adj of adjB64) {
+    eml += `--${bMixed}\r\n`;
+    eml += `Content-Type: ${adj.tipo}; name="${adj.nombre}"\r\n`;
+    eml += `Content-Transfer-Encoding: base64\r\n`;
+    eml += `Content-Disposition: attachment; filename="${adj.nombre}"\r\n\r\n`;
+    // Partir base64 en líneas de 76 chars (estándar MIME)
+    eml += adj.b64.match(/.{1,76}/g).join('\r\n') + '\r\n';
+  }
+
+  eml += `--${bMixed}--\r\n`;
+
+  const blob = new Blob([eml], {type:'message/rfc822'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = fileName;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 3000);
+  const resumen = [
+    adjB64.length ? `${adjB64.length} adjunto${adjB64.length>1?'s':''} incluido${adjB64.length>1?'s':''}` : '',
+    hiloMsgs.length ? `${hiloMsgs.length} mensaje${hiloMsgs.length>1?'s':''} en el hilo` : '',
+  ].filter(Boolean).join(' · ');
+  showToast('EML descargado ✓' + (resumen ? ' — '+resumen : ''),'success');
 }
 
 function logout(){sessionStorage.clear();window.location.href='login.html';}
