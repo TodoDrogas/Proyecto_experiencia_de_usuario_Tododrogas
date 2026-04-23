@@ -3217,26 +3217,23 @@ function renderFolderAgents() {
   const all = state.allEmails || state.emails;
   const idsConResp = state._idsConResp || new Set();
   el.innerHTML = activos.map((a,i)=>{
-    const mis      = all.filter(e=>e.agente_id===a.id&&e.origen!=='saliente'&&e.origen!=='borrador');
-    const pendiente= mis.filter(e=>e.estado==='pendiente').length;
-    const gestion  = mis.filter(e=>e.estado==='gestion').length;
-    const total    = mis.length;
-    const sinResp  = mis.filter(e=>!idsConResp.has(e.id)&&e.estado!=='solucionado'&&e.estado!=='gestionado').length;
-    const ini      = (a.nombre||'?').charAt(0).toUpperCase();
-    const color    = COLORS[i%COLORS.length];
-    return `<div class="folder-item" onclick="setAgentFolder('${a.id}',this)" style="gap:6px;flex-direction:column;align-items:flex-start;padding:6px 8px">
-      <div style="display:flex;align-items:center;gap:6px;width:100%">
-        <div style="width:20px;height:20px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${ini}</div>
-        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-weight:600">${esc(a.nombre.split(' ')[0])}</span>
-        <span class="folder-cnt" title="Total correos">${total}</span>
+    const mis     = all.filter(e=>e.agente_id===a.id&&e.origen!=='saliente'&&e.origen!=='borrador');
+    const total   = mis.length;
+    const sinResp = mis.filter(e=>!idsConResp.has(e.id)&&e.estado!=='solucionado'&&e.estado!=='gestionado'&&e.estado!=='informacion').length;
+    const ini     = (a.nombre||'?').charAt(0).toUpperCase();
+    const color   = COLORS[i%COLORS.length];
+    return `<div class="folder-item" onclick="setAgentFolder('${a.id}',this)" style="gap:5px;flex-direction:column;align-items:flex-start;padding:7px 10px">
+      <div style="display:flex;align-items:center;gap:7px;width:100%">
+        <div style="width:22px;height:22px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0">${ini}</div>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-weight:600;font-size:12px">${esc(a.nombre.split(' ')[0])}</span>
+        <span class="folder-cnt">${total}</span>
       </div>
-      <div style="display:flex;gap:4px;padding-left:26px;flex-wrap:wrap">
-        ${pendiente>0?`<span style="background:#fef9c3;color:#854d0e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px">⏳ ${pendiente} pend.</span>`:''}
-        ${gestion>0?`<span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px">✏️ ${gestion} gest.</span>`:''}
-        ${sinResp>0?`<span style="background:#fee2e2;color:#dc2626;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px">✗ ${sinResp} S/R</span>`:''}
-        ${pendiente===0&&gestion===0&&sinResp===0?`<span style="color:var(--ink3);font-size:9px">sin activos</span>`:''}
+      <div style="padding-left:29px;display:flex;gap:4px">
+        ${sinResp>0
+          ? `<span style="background:var(--red-l);color:var(--red);font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">&#10007; ${sinResp} S/R</span>`
+          : `<span style="background:var(--green-l);color:var(--green);font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">&#10003; Al d&#237;a</span>`
+        }
       </div>
-      <div style="padding-left:26px;font-size:9px;color:var(--ink3);font-weight:600">Total: ${total} correo${total!==1?'s':''}</div>
     </div>`;
   }).join('');
 }
@@ -3860,18 +3857,20 @@ async function eliminarCorreoInformacion() {
     showToast('Solo se pueden eliminar correos marcados como "Información"','error');
     return;
   }
-  if(!confirm(`¿Eliminar permanentemente este correo de Información?\n\n"${email?.asunto||'(Sin asunto)'}"\n\nEsta acción no se puede deshacer y eliminará el registro de Supabase.`)) return;
+  if(!confirm(`¿Eliminar permanentemente este correo de Información?\n\n"${email?.asunto||'(Sin asunto)'}"\n\nSe eliminarán también: adjuntos, historial y gestiones asociadas.\nEsta acción no se puede deshacer.`)) return;
   try {
-    // Eliminar adjuntos primero
+    // 1. Adjuntos
     await sb(`adjuntos?correo_id=eq.${id}`, 'DELETE');
-    // Eliminar historial
+    // 2. Historial
     await sb(`historial_eventos?correo_id=eq.${id}`, 'DELETE');
-    // Eliminar el correo
+    // 3. Gestiones de medicamentos
+    await sb(`gestiones_medicamentos?correo_id=eq.${id}`, 'DELETE');
+    // 4. Correo
     const r = await fetch(`${SB_URL}/rest/v1/correos?id=eq.${id}`, {
       method:'DELETE',
       headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'}
     });
-    if(!r.ok && r.status!==204) throw new Error('Error al eliminar: '+r.status);
+    if(!r.ok && r.status!==204) throw new Error('Error al eliminar correo: '+r.status);
     // Remover de state
     state.emails = state.emails.filter(e=>e.id!==id);
     state.allEmails = (state.allEmails||[]).filter(e=>e.id!==id);
