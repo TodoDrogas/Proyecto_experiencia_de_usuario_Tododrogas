@@ -301,6 +301,12 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
   <!-- Folders -->
   <div class="folders-panel">
     <div class="folders-title">Mis tickets</div>
+    <div style="padding:0 4px 10px">
+      <button onclick="abrirCorreoNuevoAg()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:var(--blue);color:#fff;border:none;border-radius:var(--r2);padding:7px 10px;font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--blue-d)'" onmouseout="this.style.background='var(--blue)'">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Correo nuevo
+      </button>
+    </div>
     <div class="folder-item active" onclick="setFolder('todos',this)">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></svg>
       Todos
@@ -1067,6 +1073,7 @@ function renderEmailList() {
       ${(()=>{
         const _conResp = state.respondidosIds.has(e.id);
         const _conGest = state.conGestionIds.has(e.id);
+        if(e.estado==='informacion'||e.origen==='saliente') return '';
         if(_conResp) return '<div style="margin-top:3px"><span style="background:#dcfce7;color:#15803d;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px;letter-spacing:.3px">✉ CON RESPUESTA</span></div>';
         if(_conGest) return '<div style="margin-top:3px"><span style="background:#fef9c3;color:#854d0e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px;letter-spacing:.3px">⏳ SIN RESPUESTA</span></div>';
         return '';
@@ -5785,6 +5792,153 @@ async function cargarMetricasAgente() {
     return '<tr><td style="color:#2563eb;font-weight:700;white-space:nowrap">'+(c.ticket_id||'—')+'</td><td style="color:#0f172a;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(c.nombre||'—')+'</td><td style="color:#64748b;font-size:10px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+eps+'">'+eps+'</td><td style="color:#64748b;font-size:10px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(c.nombre_solicitud||'—')+'</td><td style="text-align:center;font-weight:800;color:#7c3aed;font-size:14px">'+(c.num_gestiones||0)+'</td><td style="text-align:center;font-size:10px;font-weight:700;color:'+(c.tiene_tutela===true?'#dc2626':'#94a3b8')+'">'+(c.tiene_tutela===true?'SÍ':'NO')+'</td><td><span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:99px;'+bst+'">'+((c.estado||'').toUpperCase())+'</span></td></tr>';
   }).join('');
 }
+
+// ══════════════════════════════════════════════════════════
+// CORREO NUEVO (AGENTE)
+// ══════════════════════════════════════════════════════════
+const _cnAgFiles = new Map();
+let _cnAgCounter = 0;
+
+function abrirCorreoNuevoAg() {
+  _cnAgFiles.clear(); _cnAgCounter = 0;
+  document.getElementById('cnAgTo').value = '';
+  document.getElementById('cnAgCC').value = '';
+  document.getElementById('cnAgSubject').value = '';
+  document.getElementById('cnAgEditor').innerHTML = '';
+  document.getElementById('cnAgFilesPreview').innerHTML = '';
+  document.getElementById('cnAgDropTo').style.display = 'none';
+  document.getElementById('cnAgDropCC').style.display = 'none';
+  document.getElementById('modalCorreoNuevoAg').classList.add('show');
+  setTimeout(()=>{ const fb=document.getElementById('cnAgFmtBar'); if(fb&&!fb.innerHTML.trim()&&typeof _fmtBar==='function') fb.innerHTML=_fmtBar('cnAgEditor'); },50);
+  document.getElementById('cnAgTo').focus();
+}
+function cerrarCorreoNuevoAg() {
+  document.getElementById('modalCorreoNuevoAg').classList.remove('show');
+  _cnAgFiles.clear();
+}
+let _cnAgAcTimer = null;
+async function _cnAgAcBuscar(val, inputId, dropId) {
+  clearTimeout(_cnAgAcTimer);
+  const drop = document.getElementById(dropId);
+  if(!drop) return;
+  if(!val || val.length < 2) { drop.style.display='none'; return; }
+  _cnAgAcTimer = setTimeout(async () => {
+    try {
+      const rows = await sb(`contactos_frecuentes?or=(email.ilike.*${encodeURIComponent(val)}*,nombre.ilike.*${encodeURIComponent(val)}*)&order=total_pqrs.desc&limit=8`) || [];
+      if(!rows.length) { drop.style.display='none'; return; }
+      drop.innerHTML = rows.map(c =>
+        `<div onclick="document.getElementById('${inputId}').value='${esc(c.email)}';document.getElementById('${dropId}').style.display='none'" style="padding:7px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--blue-l)'" onmouseout="this.style.background=''">
+          <div style="width:26px;height:26px;border-radius:50%;background:${c.vip?'var(--yellow)':'var(--blue)'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0">${(c.nombre||c.email).charAt(0).toUpperCase()}</div>
+          <div style="min-width:0"><div style="font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.nombre||'')}${c.vip?' ⭐':''}</div>
+          <div style="font-size:10px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.email)} · ${c.total_pqrs||0} PQR${(c.total_pqrs||0)!==1?'s':''}</div></div>
+        </div>`).join('');
+      drop.style.display = 'block';
+    } catch(e) { drop.style.display='none'; }
+  }, 250);
+}
+function _cnAgAttachRender() {
+  const preview = document.getElementById('cnAgFilesPreview');
+  if(!preview) return;
+  preview.innerHTML = '';
+  _cnAgFiles.forEach(({file, id}) => {
+    const isLarge = file.size > (window.ATTACH_INLINE_MB||3.9)*1024*1024;
+    const pill = document.createElement('div');
+    pill.style.cssText = 'display:inline-flex;align-items:center;gap:6px;background:#fff;border:1.5px solid var(--border);border-radius:8px;padding:4px 8px 4px 10px;font-size:11px;font-weight:500;color:var(--ink2);margin:2px;max-width:260px';
+    pill.innerHTML = `<span style="flex-shrink:0;font-size:14px">${getFileIcon(file.name)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:140px">${esc(file.name)}</span><span style="color:var(--ink3);flex-shrink:0">${_fmtSize(file.size)}</span><button onclick="_cnAgAttachRemove('${id}')" style="flex-shrink:0;background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px;line-height:1;padding:0 2px">×</button>`;
+    preview.appendChild(pill);
+  });
+}
+function _cnAgAttachRemove(id) { _cnAgFiles.forEach((v,k)=>{ if(v.id===id) _cnAgFiles.delete(k); }); _cnAgAttachRender(); }
+function _cnAgAttachAdd(files) {
+  let totalBytes=0; _cnAgFiles.forEach(({file})=>totalBytes+=file.size);
+  for(const file of files){
+    if(file.size>(window.ATTACH_MAX_FILE_MB||35)*1024*1024){showToast(`"${file.name}" supera el límite`,'error');continue;}
+    if(totalBytes+file.size>(window.ATTACH_MAX_TOTAL_MB||150)*1024*1024){showToast('Total adjuntos supera el límite','error');break;}
+    if(!_cnAgFiles.has(file.name)){_cnAgFiles.set(file.name,{file,id:'cnag'+(++_cnAgCounter)});totalBytes+=file.size;}
+  }
+  _cnAgAttachRender();
+}
+async function enviarCorreoNuevoAg() {
+  const toInput=document.getElementById('cnAgTo').value.trim();
+  const ccInput=document.getElementById('cnAgCC').value.trim();
+  const subject=document.getElementById('cnAgSubject').value.trim();
+  const body=document.getElementById('cnAgEditor').innerHTML.trim();
+  if(!toInput){showToast('Escribe un destinatario','info');return;}
+  if(!subject){showToast('Escribe un asunto','info');return;}
+  if(!body||body==='<br>'){showToast('Escribe el mensaje','info');return;}
+  const sendBtn=document.getElementById('cnAgSendBtn');
+  if(sendBtn){sendBtn.disabled=true;sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg> Enviando…';}
+  try {
+    const token=await getGraphToken();
+    const userId=window.GRAPH_USER_ID||'';
+    if(!token) throw new Error('No se pudo obtener token.');
+    if(!userId) throw new Error('GRAPH_USER_ID no configurado.');
+    const INLINE=( window.ATTACH_INLINE_MB||3.9)*1024*1024;
+    const inlineFiles=[],largeFiles=[];
+    _cnAgFiles.forEach(({file,id})=>{ if(file.size<=INLINE) inlineFiles.push({file,id}); else largeFiles.push({file,id}); });
+    const attachments=[];
+    for(const {file} of inlineFiles){ const b64=await _fileToBase64(file); attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:b64}); }
+    const fullBody=`<div style="font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;color:#000">${body}</div>`;
+    const payload={subject,body:{contentType:'HTML',content:fullBody},toRecipients:toInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}))};
+    if(ccInput) payload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+    if(attachments.length) payload.attachments=attachments;
+    const r=largeFiles.length>0?await _sendMailWithLargeAttachments(token,userId,payload,largeFiles):await _sendMailDirect(token,userId,payload);
+    if(!r.ok&&r.status!==202) throw new Error('Graph '+r.status+': '+(await r.text()).substring(0,100));
+    // Guardar como saliente — origen:saliente NO afecta métricas
+    try {
+      await fetch(`${SB_URL}/rest/v1/correos`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+        body:JSON.stringify({from_email:userId,from_name:AGENT_NAME||'Agente',agente_id:AGENT_ID||null,subject,body_content:body,body_type:'html',origen:'saliente',estado:'enviado',received_at:new Date().toISOString(),sent_at:new Date().toISOString(),canal_contacto:'correo'})});
+    } catch(e2){console.warn('[cn-ag-sb]',e2.message);}
+    showToast('Correo enviado ✓','success');
+    cerrarCorreoNuevoAg();
+  } catch(e){
+    showToast('Error al enviar: '+e.message.substring(0,80),'error');
+    if(sendBtn){sendBtn.disabled=false;sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar';}
+  }
+}
 </script>
+
+<!-- ══ MODAL CORREO NUEVO AGENTE ══ -->
+<style>#modalCorreoNuevoAg.show{display:flex!important}</style>
+<div id="modalCorreoNuevoAg" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(10,14,26,.45);align-items:center;justify-content:center" onclick="if(event.target===this)cerrarCorreoNuevoAg()">
+  <div style="background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow-l);width:min(680px,96vw);max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+    <div style="display:flex;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <svg width="15" height="15" fill="none" stroke="var(--blue)" stroke-width="2" viewBox="0 0 24 24" style="margin-right:8px"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      <span style="font-size:14px;font-weight:700;color:var(--ink)">Correo nuevo</span>
+      <button onclick="cerrarCorreoNuevoAg()" style="margin-left:auto;background:none;border:none;cursor:pointer;color:var(--ink3);font-size:22px;line-height:1;padding:0 4px">×</button>
+    </div>
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;flex-direction:column;gap:8px">
+      <div style="position:relative;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);padding-bottom:8px">
+        <span style="font-size:12px;font-weight:600;color:var(--ink3);min-width:50px">Para:</span>
+        <input id="cnAgTo" type="text" placeholder="destinatario@email.com  (separa con ;)" autocomplete="off" oninput="_cnAgAcBuscar(this.value,'cnAgTo','cnAgDropTo')" onblur="setTimeout(()=>{const d=document.getElementById('cnAgDropTo');if(d)d.style.display='none';},200)" style="flex:1;border:none;outline:none;font-size:13px;font-family:'Poppins',sans-serif;color:var(--ink);background:transparent">
+        <div id="cnAgDropTo" style="display:none;position:absolute;top:100%;left:58px;right:0;background:#fff;border:1.5px solid var(--border);border-radius:var(--r2);box-shadow:var(--shadow-l);z-index:99;max-height:220px;overflow-y:auto"></div>
+      </div>
+      <div style="position:relative;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);padding-bottom:8px">
+        <span style="font-size:12px;font-weight:600;color:var(--ink3);min-width:50px">CC:</span>
+        <input id="cnAgCC" type="text" placeholder="cc@email.com  (opcional, separa con ;)" autocomplete="off" oninput="_cnAgAcBuscar(this.value,'cnAgCC','cnAgDropCC')" onblur="setTimeout(()=>{const d=document.getElementById('cnAgDropCC');if(d)d.style.display='none';},200)" style="flex:1;border:none;outline:none;font-size:13px;font-family:'Poppins',sans-serif;color:var(--ink);background:transparent">
+        <div id="cnAgDropCC" style="display:none;position:absolute;top:100%;left:58px;right:0;background:#fff;border:1.5px solid var(--border);border-radius:var(--r2);box-shadow:var(--shadow-l);z-index:99;max-height:220px;overflow-y:auto"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;font-weight:600;color:var(--ink3);min-width:50px">Asunto:</span>
+        <input id="cnAgSubject" type="text" placeholder="Asunto del correo" autocomplete="off" style="flex:1;border:none;outline:none;font-size:13px;font-family:'Poppins',sans-serif;color:var(--ink);background:transparent">
+      </div>
+    </div>
+    <div style="flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column">
+      <div id="cnAgFmtBar"></div>
+      <div id="cnAgEditor" contenteditable="true" style="flex:1;min-height:200px;padding:14px 18px;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;color:var(--ink);outline:none;line-height:1.6"></div>
+    </div>
+    <div style="padding:6px 18px;border-top:1px solid var(--border);flex-shrink:0"><div id="cnAgFilesPreview"></div></div>
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 18px;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface2)">
+      <button id="cnAgSendBtn" onclick="enviarCorreoNuevoAg()" style="display:flex;align-items:center;gap:6px;background:var(--blue);color:#fff;border:none;border-radius:var(--r2);padding:8px 18px;font-size:13px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar
+      </button>
+      <label style="display:flex;align-items:center;gap:6px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--r2);padding:7px 14px;font-size:12px;font-weight:600;color:var(--ink2);cursor:pointer">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+        Adjuntar <input type="file" multiple style="display:none" onchange="_cnAgAttachAdd(this.files);this.value=''">
+      </label>
+      <button onclick="cerrarCorreoNuevoAg()" style="margin-left:auto;background:none;border:1.5px solid var(--border);border-radius:var(--r2);padding:7px 14px;font-size:12px;font-weight:600;color:var(--ink3);font-family:'Poppins',sans-serif;cursor:pointer">Cancelar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
