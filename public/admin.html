@@ -1370,6 +1370,26 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </div>
           </div>
 
+          <!-- KPIs Etiquetas Con/Sin Respuesta -->
+          <div class="mkpi-strip" style="grid-template-columns:1fr 1fr;margin-bottom:14px">
+            <div class="mkpi-card" style="border-left:3px solid #16a34a">
+              <div class="mkpi-icon">✉️</div>
+              <div class="mkpi-body">
+                <div class="mkpi-val ok" id="agKpiConResp">—</div>
+                <div class="mkpi-label">Con Respuesta</div>
+                <div class="mkpi-sub">Tickets con correo enviado</div>
+              </div>
+            </div>
+            <div class="mkpi-card" style="border-left:3px solid #ca8a04">
+              <div class="mkpi-icon">⏳</div>
+              <div class="mkpi-body">
+                <div class="mkpi-val warn" id="agKpiSinResp">—</div>
+                <div class="mkpi-label">Sin Respuesta</div>
+                <div class="mkpi-sub">Con gestión pero sin correo</div>
+              </div>
+            </div>
+          </div>
+
           <!-- Gráficas asesores -->
           <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:14px">
             <div class="mchart-card">
@@ -1409,6 +1429,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
                 <th>En gestión</th><th>P. Firma</th><th>Resueltos</th>
                 <th>% Resolución</th><th>T. prom. h</th>
                 <th>Gestiones</th><th>Respuestas</th><th>Firmas</th>
+                <th style="color:#15803d">✉ Con Resp.</th><th style="color:#854d0e">⏳ Sin Resp.</th>
                 <th>Quejas</th><th>Peticiones</th><th>Reclamos</th>
                 <th>Alta sin resolver</th><th>Casos Activos</th>
               </tr></thead>
@@ -8794,6 +8815,16 @@ function renderAgentes(){
   setV('agKpiGest',    gestCount);
   const autoCerrados = E.filter(e=>e.estado==='solucionado').length;
   setV('agKpiAutoCerrado', autoCerrados);
+
+  // ── KPIs globales Con/Sin Respuesta ──
+  const _EXCL_KPI = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado']);
+  const _idsConGest   = new Set(H.filter(h=>h.correo_id && !_EXCL_KPI.has(h.evento)).map(h=>h.correo_id));
+  const _idsConResp   = new Set(H.filter(h=>h.correo_id && h.evento==='correo_respondido').map(h=>h.correo_id));
+  const _globalConResp = _idsConResp.size;
+  const _globalSinResp = [..._idsConGest].filter(tid=>!_idsConResp.has(tid)).length;
+  setV('agKpiConResp',  _globalConResp);
+  setV('agKpiSinResp',  _globalSinResp);
+
   setV('agTableInfo',  `${act.length} asesores activos · ${total} tickets en el período`);
 
   // ── CHART RESUELTOS VS PENDIENTES ──
@@ -8875,6 +8906,12 @@ function renderAgentes(){
     const resp    = myH.filter(h=>h.evento==='correo_respondido').length;
     const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
     const gestReg = myH.filter(h=>!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length;
+    // ── Etiquetas Con/Sin Respuesta por agente ──
+    const _EXCL_EV = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado']);
+    const _ticketsConGest = new Set(myH.filter(h=>!_EXCL_EV.has(h.evento)).map(h=>h.correo_id));
+    const _ticketsResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
+    const conRespCount = _ticketsResp.size;
+    const sinRespCount = [..._ticketsConGest].filter(tid=>!_ticketsResp.has(tid)).length;
     const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
     const carga   = pend+gest;
     const color   = COLS[i%COLS.length];
@@ -8902,13 +8939,15 @@ function renderAgentes(){
       <td style="font-family:'DM Mono',monospace;text-align:center">${gestReg}</td>
       <td style="font-family:'DM Mono',monospace;text-align:center">${resp}</td>
       <td style="font-family:'DM Mono',monospace;text-align:center">${firmas}</td>
+      <td style="text-align:center"><span style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px">${conRespCount}</span></td>
+      <td style="text-align:center"><span style="background:#fef9c3;color:#854d0e;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px">${sinRespCount}</span></td>
       <td style="text-align:center;font-size:11px">${qCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${pCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${rCount||'—'}</td>
       <td style="text-align:center"><span style="font-weight:700;color:${alta>0?'var(--red)':'var(--ink3)'}">${alta}</span></td>
       <td style="text-align:center;font-family:'DM Mono',monospace;font-weight:700;color:${(a.casos_activos||0)>10?'var(--red)':(a.casos_activos||0)>5?'#ca8a04':'var(--green)'}">${a.casos_activos||0}</td>
     </tr>`;
-  }).join('')||'<tr><td colspan="20" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
+  }).join('')||'<tr><td colspan="22" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
 
   // Poblar selector de asesores en timeline
   const sel=document.getElementById('agFiltroAsesor');
