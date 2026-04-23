@@ -122,6 +122,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .badge.enviado{background:#dbeafe;color:#2563eb}
 .badge.sin_asignar{background:#f1f5f9;color:#64748b}
 .badge.informacion{background:#f0fdf4;color:#0891b2;border:1px solid #bae6fd}
+.badge.con_respuesta{background:#dcfce7;color:#16a34a;border:1px solid #bbf7d0}
+.badge.sin_respuesta{background:#fee2e2;color:#dc2626;border:1px solid #fecaca}
 .email-item.bulk-selected{background:var(--blue-l)!important;border-left:3px solid var(--blue)}
 .btn-purple{background:var(--purple-l);color:var(--purple);border:1.5px solid var(--purple-l)}
 .btn-purple:hover{background:#ede9fe}
@@ -720,6 +722,10 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <button class="btn" style="background:#e0f2fe;color:#0891b2;border:1px solid #bae6fd" onclick="marcarInformacion()">
               <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               Información
+            </button>
+            <button id="btnEliminarInfo" class="btn" style="display:none;background:#fee2e2;color:#dc2626;border:1px solid #fecaca" onclick="eliminarCorreoInformacion()" title="Eliminar correo de Información de Supabase">
+              <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+              Eliminar Info
             </button>
             <button class="btn btn-danger" onclick="reabrirTicket()">
               <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
@@ -3125,6 +3131,21 @@ async function loadEmails(horasVentana = 0) {
     // Lista agrupada = lo que muestra el panel izquierdo (igual que Outlook)
     state.emails = Array.from(hilos.values());
 
+    // ── Calcular IDs con respuesta (para badge CON/SIN RESPUESTA) ──
+    try {
+      const ids = allEmails.map(e=>e.id);
+      // Buscar en historial ya cargado primero (rápido)
+      const hLocal = state.historial || [];
+      const localConResp = new Set(hLocal.filter(h=>h.evento==='correo_respondido'&&h.correo_id).map(h=>h.correo_id));
+      // Complementar con los emails que ya tienen num_gestiones>0 en su raw y tenían respondido en historial local
+      // Además: query directa para correos respondidos en la ventana de carga
+      const evResp = await sb(`historial_eventos?evento=eq.correo_respondido&select=correo_id&limit=5000`);
+      state._idsConResp = new Set([...localConResp, ...(evResp||[]).map(h=>h.correo_id).filter(Boolean)]);
+    } catch(e2) {
+      // Fallback: usar sólo historial local
+      state._idsConResp = new Set((state.historial||[]).filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
+    }
+
   } catch(err) {
     console.error('[loadEmails] Error:', err.message);
     state.emails = [];
@@ -3194,24 +3215,28 @@ function renderFolderAgents() {
   const activos = state.agents.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
   const COLORS = ['#2563eb','#16a34a','#ea580c','#7c3aed','#ca8a04','#dc2626'];
   const all = state.allEmails || state.emails;
+  const idsConResp = state._idsConResp || new Set();
   el.innerHTML = activos.map((a,i)=>{
     const mis      = all.filter(e=>e.agente_id===a.id&&e.origen!=='saliente'&&e.origen!=='borrador');
     const pendiente= mis.filter(e=>e.estado==='pendiente').length;
     const gestion  = mis.filter(e=>e.estado==='gestion').length;
     const total    = mis.length;
+    const sinResp  = mis.filter(e=>!idsConResp.has(e.id)&&e.estado!=='solucionado'&&e.estado!=='gestionado').length;
     const ini      = (a.nombre||'?').charAt(0).toUpperCase();
     const color    = COLORS[i%COLORS.length];
     return `<div class="folder-item" onclick="setAgentFolder('${a.id}',this)" style="gap:6px;flex-direction:column;align-items:flex-start;padding:6px 8px">
       <div style="display:flex;align-items:center;gap:6px;width:100%">
         <div style="width:20px;height:20px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;flex-shrink:0">${ini}</div>
         <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-weight:600">${esc(a.nombre.split(' ')[0])}</span>
-        <span class="folder-cnt">${total}</span>
+        <span class="folder-cnt" title="Total correos">${total}</span>
       </div>
-      <div style="display:flex;gap:4px;padding-left:26px">
+      <div style="display:flex;gap:4px;padding-left:26px;flex-wrap:wrap">
         ${pendiente>0?`<span style="background:#fef9c3;color:#854d0e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px">⏳ ${pendiente} pend.</span>`:''}
         ${gestion>0?`<span style="background:#fef3c7;color:#92400e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px">✏️ ${gestion} gest.</span>`:''}
-        ${pendiente===0&&gestion===0?`<span style="color:var(--ink3);font-size:9px">sin activos</span>`:''}
+        ${sinResp>0?`<span style="background:#fee2e2;color:#dc2626;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px">✗ ${sinResp} S/R</span>`:''}
+        ${pendiente===0&&gestion===0&&sinResp===0?`<span style="color:var(--ink3);font-size:9px">sin activos</span>`:''}
       </div>
+      <div style="padding-left:26px;font-size:9px;color:var(--ink3);font-weight:600">Total: ${total} correo${total!==1?'s':''}</div>
     </div>`;
   }).join('');
 }
@@ -3306,6 +3331,7 @@ function renderEmailList() {
         <span class="ei-time">${formatDate(new Date(e.fecha))}</span>
         <div class="ei-badges">
           ${agent?`<span style="font-size:10px;color:var(--ink3)">${esc(agent.nombre.split(' ')[0])}</span>`:''}
+          ${(()=>{const tieneResp=(state._idsConResp||new Set()).has(e.id);return e.origen!=='saliente'&&e.estado!=='enviado'&&e.origen!=='borrador'&&e.estado!=='borrador'?`<span class="badge ${tieneResp?'con_respuesta':'sin_respuesta'}">${tieneResp?'✓ Resp.':'✗ S/R'}</span>`:'';})()}
           <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':e.estado==='sin_asignar'||(!e.agente_id&&e.estado==='pendiente')?'sin_asignar':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':e.estado==='sin_asignar'||(!e.agente_id&&e.estado==='pendiente')?'Sin asignar':estadoLabel(e.estado)}</span>
         </div>
       </div>
@@ -3423,6 +3449,9 @@ async function selectEmail(id) {
   // Render mgmt panel
   document.getElementById('mgmtEstadoBadge').className='badge '+email.estado;
   document.getElementById('mgmtEstadoBadge').textContent=estadoLabel(email.estado);
+  // Mostrar botón eliminar solo si el correo es de Información
+  const _btnElimInfo = document.getElementById('btnEliminarInfo');
+  if(_btnElimInfo) _btnElimInfo.style.display = email.estado==='informacion' ? '' : 'none';
   const agSel = document.getElementById('mgmtAgentSelect');
   agSel.value = email.asignado_a||'';
   // Priority buttons
@@ -3820,6 +3849,43 @@ async function marcarInformacion() {
   showToast('Correo marcado como Información ℹ️','info');
   updateFolderCounts();
   renderEmailList();
+  renderFolderAgents();
+}
+
+async function eliminarCorreoInformacion() {
+  const id = state.selectedId;
+  if(!id) return;
+  const email = state.emails.find(e=>e.id===id) || (state.allEmails||[]).find(e=>e.id===id);
+  if(email?.estado !== 'informacion') {
+    showToast('Solo se pueden eliminar correos marcados como "Información"','error');
+    return;
+  }
+  if(!confirm(`¿Eliminar permanentemente este correo de Información?\n\n"${email?.asunto||'(Sin asunto)'}"\n\nEsta acción no se puede deshacer y eliminará el registro de Supabase.`)) return;
+  try {
+    // Eliminar adjuntos primero
+    await sb(`adjuntos?correo_id=eq.${id}`, 'DELETE');
+    // Eliminar historial
+    await sb(`historial_eventos?correo_id=eq.${id}`, 'DELETE');
+    // Eliminar el correo
+    const r = await fetch(`${SB_URL}/rest/v1/correos?id=eq.${id}`, {
+      method:'DELETE',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'}
+    });
+    if(!r.ok && r.status!==204) throw new Error('Error al eliminar: '+r.status);
+    // Remover de state
+    state.emails = state.emails.filter(e=>e.id!==id);
+    state.allEmails = (state.allEmails||[]).filter(e=>e.id!==id);
+    state.selectedId = null;
+    document.getElementById('emailView').style.display='none';
+    document.getElementById('mgmtPanel').style.display='none';
+    document.getElementById('noSelection').style.display='flex';
+    showToast('Correo de Información eliminado ✓','success');
+    updateFolderCounts();
+    renderEmailList();
+    renderFolderAgents();
+  } catch(err) {
+    showToast('Error al eliminar: '+err.message.substring(0,80),'error');
+  }
 }
 
 async function marcarSolucionado() {
@@ -6482,7 +6548,7 @@ async function confirmarAutoAsignar() {
         await sb(`correos?id=eq.${asig.correo_id}`, 'PATCH', {
           agente_id: asig.agente_id,
           asignado_a: asig.agente_nombre,  // nombre para display
-          estado: 'gestion'
+          estado: 'pendiente'  // 'gestion' solo se activa con la primera gestión real del agente
         });
         await addHistorialEvent(asig.correo_id, null, 'asignado_automatico', {agente_id: asig.agente_id, agente_nombre: asig.agente_nombre, por:'admin (autoasignación masiva)'});
         exitosos++;
@@ -6781,7 +6847,7 @@ async function accionMasiva(tipo) {
   for(const id of ids) {
     try {
       const patch = tipo === 'asignar'
-        ? {agente_id:agId, asignado_a:agNombre, estado:'gestion'}
+        ? {agente_id:agId, asignado_a:agNombre, estado:'pendiente'}  // 'gestion' solo con primera gestión real
         : tipo === 'informacion'
         ? {estado:'informacion', agente_id:null, asignado_a:null}
         : {estado:'pendiente'};
