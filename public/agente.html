@@ -5545,6 +5545,28 @@ function insertarTextoEnReply(texto){
 
 
 
+
+// ── Confirmar Pendiente Firma EPS ──
+function abrirConfirmarFirmaEPS() {
+  document.getElementById('modalConfirmarFirmaEPS').classList.add('show');
+}
+function cerrarConfirmarFirmaEPS() {
+  document.getElementById('modalConfirmarFirmaEPS').classList.remove('show');
+}
+function confirmarFirmaEPS() {
+  cerrarConfirmarFirmaEPS();
+  const id = state.selectedId;
+  if(!id) return;
+  const email = state.emails.find(e=>e.id===id);
+  sb(`correos?id=eq.${id}`,'PATCH',{estado:'pendiente_firma'}).then(async()=>{
+    sb('historial_eventos','POST',{correo_id:id,agente_id:AGENT_ID,evento:'pendiente_firma',from_email:email?.remitente,subject:email?.asunto,descripcion:'Ticket marcado como pendiente de firma de cierre',datos_extra:JSON.stringify({agente_nombre:AGENT_NAME,por:'agente'})}).catch(e=>console.error('[pendiente_firma]',e?.message));
+    showToast('Ticket pendiente por firma ✍️','info');
+    const em=state.emails.find(e=>e.id===id);
+    if(em) em.estado='pendiente_firma';
+    updateFolderCounts(); renderEmailList(); selectEmail(id);
+  });
+}
+
 </script>
 <!-- ⚡ Panel Respuestas Rápidas v3 — igual que Admin -->
 <style>
