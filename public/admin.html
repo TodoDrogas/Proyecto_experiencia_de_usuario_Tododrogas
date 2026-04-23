@@ -3683,7 +3683,7 @@ function renderTimeline(events, container) {
   container._events = events;
 }
 
-function openTlDetail(idx) {
+async function openTlDetail(idx) {
   const el = document.getElementById('ticketTimeline');
   const events = el._events;
   if(!events||!events[idx]) return;
@@ -3711,21 +3711,51 @@ function openTlDetail(idx) {
   }
 
 
+
+  // ── Fallback para registros antiguos: si no hay datos en meta, buscar en correos ──
+  const _esGestion = (ev.evento||ev.accion||'').toLowerCase().includes('gestión') ||
+                     (ev.evento||ev.accion||'') === 'Gestión registrada' ||
+                     (ev.num_gestion||meta.num_gestion) === 1;
+  const _tieneExtra = meta.eps_nombre||meta.nombre_solicitud||meta.cedula_paciente||meta.eps_id;
+
+  let correoData = null;
+  if(_esGestion && !_tieneExtra && ev.correo_id) {
+    try {
+      const rows = await sb(`correos?id=eq.${ev.correo_id}&select=nombre,cedula_paciente,tipo_documento,telefono_contacto,direccion_paciente,nombre_solicitud,detalle_solicitud,departamento_paciente,ciudad_paciente,tiene_tutela,categoria_sigi,eps_id,origen&limit=1`);
+      correoData = rows?.[0] || null;
+    } catch(e){ console.warn('[tlDetail fallback]', e.message); }
+  }
+
+  const _eps      = meta.eps_nombre      || '';
+  const _origen   = meta.origen          || correoData?.origen           || '';
+  const _nomSol   = meta.nombre_solicitud|| correoData?.nombre_solicitud || '';
+  const _detSol   = meta.detalle_solicitud||correoData?.detalle_solicitud|| '';
+  const _cat      = meta.categoria_sigi  || correoData?.categoria_sigi   || '';
+  const _tipoDoc  = meta.tipo_documento  || correoData?.tipo_documento   || '';
+  const _cedula   = meta.cedula_paciente || correoData?.cedula_paciente  || '';
+  const _nombre   = meta.nombre_paciente || correoData?.nombre           || '';
+  const _tel      = meta.telefono        || correoData?.telefono_contacto|| '';
+  const _dir      = meta.direccion       || correoData?.direccion_paciente||'';
+  const _depto    = meta.departamento    || correoData?.departamento_paciente||'';
+  const _ciudad   = meta.ciudad          || correoData?.ciudad_paciente  || '';
+  const _tutela   = meta.tiene_tutela!==undefined ? meta.tiene_tutela : correoData?.tiene_tutela;
+  const _meds     = meta.medicamentos    || [];
+
   const extraHTML = [
-    meta.eps_nombre        ? row('EPS',               meta.eps_nombre)        : '',
-    meta.origen            ? row('Origen',             meta.origen)            : '',
-    meta.nombre_solicitud  ? row('Nombre solicitud',   meta.nombre_solicitud)  : '',
-    meta.detalle_solicitud ? row('Detalle solicitud',  meta.detalle_solicitud) : '',
-    meta.categoria_sigi    ? row('Categoría SIGI',     meta.categoria_sigi)    : '',
-    meta.tipo_documento    ? row('Tipo documento',     meta.tipo_documento)    : '',
-    meta.cedula_paciente   ? row('Cédula paciente',    meta.cedula_paciente)   : '',
-    meta.nombre_paciente   ? row('Nombre paciente',    meta.nombre_paciente)   : '',
-    meta.telefono          ? row('Teléfono',           meta.telefono)          : '',
-    meta.direccion         ? row('Dirección',          meta.direccion)         : '',
-    meta.departamento      ? row('Departamento',       meta.departamento)      : '',
-    meta.ciudad            ? row('Ciudad',             meta.ciudad)            : '',
-    meta.tiene_tutela!==undefined ? row('Tutela', meta.tiene_tutela?'Sí':'No') : '',
-    meta.medicamentos?.length ? row('Medicamentos', meta.medicamentos.map(m=>m.nombre_medicamento||m.nombre||JSON.stringify(m)).join(', ')) : '',
+    _eps     ? row('EPS',               _eps)                              : '',
+    _origen  ? row('Origen',            _origen)                           : '',
+    _nomSol  ? row('Nombre solicitud',  _nomSol)                           : '',
+    _detSol  ? row('Detalle solicitud', _detSol)                           : '',
+    _cat     ? row('Categoría SIGI',    _cat)                              : '',
+    _tipoDoc ? row('Tipo documento',    _tipoDoc)                          : '',
+    _cedula  ? row('Cédula paciente',   _cedula)                           : '',
+    _nombre  ? row('Nombre paciente',   _nombre)                           : '',
+    _tel     ? row('Teléfono',          _tel)                              : '',
+    _dir     ? row('Dirección',         _dir)                              : '',
+    _depto   ? row('Departamento',      _depto)                            : '',
+    _ciudad  ? row('Ciudad',            _ciudad)                           : '',
+    _tutela!==undefined&&_tutela!==null ? row('Tutela', _tutela?'Sí':'No') : '',
+    _meds.length ? row('Medicamentos',  _meds.map(m=>m.nombre_medicamento||m.nombre||JSON.stringify(m)).join(', ')) : '',
   ].join('');
   const html = `
     <button onclick="closeModal('modalTlDetail')" style="float:right;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:0">✕</button>
@@ -5955,21 +5985,51 @@ function mpOpenTlDetail(idx) {
   if(meta.firma_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Firma</div><div class="tl-detail-val"><a href="${esc(meta.firma_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--purple);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--purple-l);border-radius:6px;font-size:11px;background:var(--purple-l)">${getFileIcon(meta.firma_archivo||'firma.pdf')} ${esc(meta.firma_archivo||'Ver firma')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
   if(meta.evidencia_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Evidencia</div><div class="tl-detail-val"><a href="${esc(meta.evidencia_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--blue);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--blue-l);border-radius:6px;font-size:11px;background:var(--blue-l)">${getFileIcon(meta.evidencia_nombre||'evidencia')} ${esc(meta.evidencia_nombre||'Ver evidencia')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
 
+
+  // ── Fallback para registros antiguos: si no hay datos en meta, buscar en correos ──
+  const _esGestion = (ev.evento||ev.accion||'').toLowerCase().includes('gestión') ||
+                     (ev.evento||ev.accion||'') === 'Gestión registrada' ||
+                     (ev.num_gestion||meta.num_gestion) === 1;
+  const _tieneExtra = meta.eps_nombre||meta.nombre_solicitud||meta.cedula_paciente||meta.eps_id;
+
+  let correoData = null;
+  if(_esGestion && !_tieneExtra && ev.correo_id) {
+    try {
+      const rows = await sb(`correos?id=eq.${ev.correo_id}&select=nombre,cedula_paciente,tipo_documento,telefono_contacto,direccion_paciente,nombre_solicitud,detalle_solicitud,departamento_paciente,ciudad_paciente,tiene_tutela,categoria_sigi,eps_id,origen&limit=1`);
+      correoData = rows?.[0] || null;
+    } catch(e){ console.warn('[tlDetail fallback]', e.message); }
+  }
+
+  const _eps      = meta.eps_nombre      || '';
+  const _origen   = meta.origen          || correoData?.origen           || '';
+  const _nomSol   = meta.nombre_solicitud|| correoData?.nombre_solicitud || '';
+  const _detSol   = meta.detalle_solicitud||correoData?.detalle_solicitud|| '';
+  const _cat      = meta.categoria_sigi  || correoData?.categoria_sigi   || '';
+  const _tipoDoc  = meta.tipo_documento  || correoData?.tipo_documento   || '';
+  const _cedula   = meta.cedula_paciente || correoData?.cedula_paciente  || '';
+  const _nombre   = meta.nombre_paciente || correoData?.nombre           || '';
+  const _tel      = meta.telefono        || correoData?.telefono_contacto|| '';
+  const _dir      = meta.direccion       || correoData?.direccion_paciente||'';
+  const _depto    = meta.departamento    || correoData?.departamento_paciente||'';
+  const _ciudad   = meta.ciudad          || correoData?.ciudad_paciente  || '';
+  const _tutela   = meta.tiene_tutela!==undefined ? meta.tiene_tutela : correoData?.tiene_tutela;
+  const _meds     = meta.medicamentos    || [];
+
   const extraHTML = [
-    meta.eps_nombre        ? row('EPS',               meta.eps_nombre)        : '',
-    meta.origen            ? row('Origen',             meta.origen)            : '',
-    meta.nombre_solicitud  ? row('Nombre solicitud',   meta.nombre_solicitud)  : '',
-    meta.detalle_solicitud ? row('Detalle solicitud',  meta.detalle_solicitud) : '',
-    meta.categoria_sigi    ? row('Categoría SIGI',     meta.categoria_sigi)    : '',
-    meta.tipo_documento    ? row('Tipo documento',     meta.tipo_documento)    : '',
-    meta.cedula_paciente   ? row('Cédula paciente',    meta.cedula_paciente)   : '',
-    meta.nombre_paciente   ? row('Nombre paciente',    meta.nombre_paciente)   : '',
-    meta.telefono          ? row('Teléfono',           meta.telefono)          : '',
-    meta.direccion         ? row('Dirección',          meta.direccion)         : '',
-    meta.departamento      ? row('Departamento',       meta.departamento)      : '',
-    meta.ciudad            ? row('Ciudad',             meta.ciudad)            : '',
-    meta.tiene_tutela!==undefined ? row('Tutela', meta.tiene_tutela?'Sí':'No') : '',
-    meta.medicamentos?.length ? row('Medicamentos', meta.medicamentos.map(m=>m.nombre_medicamento||m.nombre||JSON.stringify(m)).join(', ')) : '',
+    _eps     ? row('EPS',               _eps)                              : '',
+    _origen  ? row('Origen',            _origen)                           : '',
+    _nomSol  ? row('Nombre solicitud',  _nomSol)                           : '',
+    _detSol  ? row('Detalle solicitud', _detSol)                           : '',
+    _cat     ? row('Categoría SIGI',    _cat)                              : '',
+    _tipoDoc ? row('Tipo documento',    _tipoDoc)                          : '',
+    _cedula  ? row('Cédula paciente',   _cedula)                           : '',
+    _nombre  ? row('Nombre paciente',   _nombre)                           : '',
+    _tel     ? row('Teléfono',          _tel)                              : '',
+    _dir     ? row('Dirección',         _dir)                              : '',
+    _depto   ? row('Departamento',      _depto)                            : '',
+    _ciudad  ? row('Ciudad',            _ciudad)                           : '',
+    _tutela!==undefined&&_tutela!==null ? row('Tutela', _tutela?'Sí':'No') : '',
+    _meds.length ? row('Medicamentos',  _meds.map(m=>m.nombre_medicamento||m.nombre||JSON.stringify(m)).join(', ')) : '',
   ].join('');
   document.getElementById('tlDetailContent').innerHTML=`
     <button onclick="closeModal('modalTlDetail')" style="float:right;background:none;border:none;cursor:pointer;font-size:18px;color:var(--ink3);padding:0">✕</button>
