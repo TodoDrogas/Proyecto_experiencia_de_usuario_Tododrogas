@@ -920,6 +920,8 @@ const state = {
   sedes: [],
   respondidosIds: new Set(),   // IDs de tickets con al menos 1 correo_respondido
   conGestionIds:  new Set(),   // IDs de tickets con al menos 1 gestión (sin importar tipo)
+  modoConsulta:   false,       // true cuando se consulta ticket de otro agente
+  cedulaConsulta: '',          // cédula buscada en modo consulta
   get defaultActions() { return DEFAULT_ACTIONS; },
 };
 
@@ -1037,7 +1039,23 @@ function setFolder(f, el) {
 // ──────────────────────────────────────────────
 function renderEmailList() {
   let list = [...state.emails];
-  const search = document.getElementById('searchInput')?.value?.toLowerCase()||'';
+  const rawSearch = document.getElementById('searchInput')?.value||'';
+  const search = rawSearch.toLowerCase();
+
+  // ── Detección modo consulta por cédula (5-10 dígitos) ──
+  const _esCedula = /^[0-9]{5,10}$/.test(rawSearch.trim());
+  if(_esCedula) {
+    // Buscar en Supabase y mostrar resultados — async via helper
+    _buscarPorCedula(rawSearch.trim());
+    return;
+  }
+
+  // Si se limpió la búsqueda, salir del modo consulta
+  if(!rawSearch && state.modoConsulta) {
+    state.modoConsulta = false;
+    state.cedulaConsulta = '';
+    document.getElementById('_bannerConsulta')?.remove();
+  }
 
   if(state.folder==='urgente') {
     list = list.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
@@ -1079,6 +1097,122 @@ function renderEmailList() {
         return '';
       })()}
     </div>`).join('');
+}
+
+
+// ── Búsqueda por cédula (modo consulta) ──
+let _cedulaBusquedaTimer = null;
+async function _buscarPorCedula(cedula) {
+  clearTimeout(_cedulaBusquedaTimer);
+  _cedulaBusquedaTimer = setTimeout(async () => {
+    const el = document.getElementById('emailList');
+    el.innerHTML = '<div class="empty-state"><p>🔍 Buscando cédula ' + cedula + '…</p></div>';
+    try {
+      const rows = await sb(
+        `correos?or=(cedula_paciente.eq.${encodeURIComponent(cedula)},cedula.eq.${encodeURIComponent(cedula)})` +
+        `&order=received_at.desc&limit=50&select=id,ticket_id,subject,from_name,from_email,received_at,estado,agente_id,asignado_a,prioridad,es_urgente,tipo_pqr,fecha_limite_sla,origen,is_read,nombre,cedula_paciente,cedula`
+      ) || [];
+
+      // Mostrar banner
+      let banner = document.getElementById('_bannerConsulta');
+      if(!banner) {
+        banner = document.createElement('div');
+        banner.id = '_bannerConsulta';
+        banner.style.cssText = 'background:#fef9c3;border:1.5px solid #fde68a;color:#854d0e;font-size:11px;font-weight:700;padding:6px 12px;border-radius:var(--r2);margin-bottom:6px;display:flex;align-items:center;gap:6px';
+        banner.innerHTML = '👁 Modo consulta · cédula <span id="_bannerCedula"></span> <button onclick="_salirModoConsulta()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:13px;color:#854d0e;font-weight:700">✕</button>';
+        const listHeader = document.querySelector('.list-header');
+        if(listHeader) listHeader.after(banner);
+      }
+      document.getElementById('_bannerCedula').textContent = cedula;
+      state.modoConsulta = true;
+      state.cedulaConsulta = cedula;
+
+      if(!rows.length) {
+        el.innerHTML = '<div class="empty-state"><p>Sin tickets para cédula ' + cedula + '</p></div>';
+        return;
+      }
+
+      el.innerHTML = rows.map(e => {
+        const esMio = e.agente_id === AGENT_ID;
+        const agNom = e.asignado_a || '—';
+        return `<div class="email-item${!e.is_read?' unread':''}" onclick="_selectConsulta('${e.id}','${e.agente_id||''}')">
+          ${!e.is_read?'<div class="unread-pip"></div>':''}
+          ${!esMio?`<div style="background:#eff6ff;color:#2563eb;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px;margin-bottom:3px;display:inline-block">👁 ${esc(agNom)}</div>`:''}
+          <div class="ei-from">${esc(e.from_name||e.from_email||'')}</div>
+          <div class="ei-subj">${esc(e.subject||'')}</div>
+          <div class="ei-foot">
+            <span class="ei-time">${e.received_at?formatDate(new Date(e.received_at)):''}</span>
+            <span class="badge ${e.estado||''}">${estadoLabel(e.estado||'')}</span>
+          </div>
+        </div>`;
+      }).join('');
+    } catch(err) {
+      document.getElementById('emailList').innerHTML = '<div class="empty-state"><p>Error al buscar: ' + esc(err.message) + '</p></div>';
+    }
+  }, 400);
+}
+
+function _salirModoConsulta() {
+  state.modoConsulta = false;
+  state.cedulaConsulta = '';
+  document.getElementById('_bannerConsulta')?.remove();
+  document.getElementById('searchInput').value = '';
+  renderEmailList();
+}
+
+async function _selectConsulta(id, agenteId) {
+  // Si es mi ticket, seleccionar normal
+  if(agenteId === AGENT_ID || !agenteId) {
+    state.modoConsulta = false;
+    selectEmail(id);
+    return;
+  }
+  // Si es de otro agente → cargar desde Supabase y mostrar en modo solo lectura
+  state.modoConsulta = true;
+  state.selectedId = id;
+  try {
+    const rows = await sb(`correos?id=eq.${id}&select=*&limit=1`);
+    const correo = rows?.[0];
+    if(!correo) { showToast('No se pudo cargar el correo','error'); return; }
+
+    // Marcar seleccionado en lista
+    document.querySelectorAll('.email-item').forEach(el => el.classList.remove('selected'));
+    event?.currentTarget?.classList?.add('selected');
+
+    document.getElementById('noSelection').style.display='none';
+    document.getElementById('emailView').style.display='';
+    document.getElementById('mgmtRight').style.display='';
+
+    const ev = document.getElementById('emailView');
+    ev.innerHTML = `
+      <div style="background:#eff6ff;border:1.5px solid #bfdbfe;color:#1e40af;font-size:12px;font-weight:600;padding:8px 14px;border-radius:var(--r2);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+        👁 Modo consulta — ticket de <strong>${esc(correo.asignado_a||'otro agente')}</strong>. Solo lectura.
+      </div>
+      <div class="ev-subject">${esc(correo.subject||'')}</div>
+      <div class="ev-meta">
+        <span class="meta-chip">De: ${esc(correo.from_name||correo.from_email||'')}</span>
+        <span class="meta-chip">&lt;${esc(correo.from_email||'')}&gt;</span>
+        <span class="meta-chip">${correo.received_at?formatDate(new Date(correo.received_at),true):''}</span>
+        ${correo.tipo_pqr?`<span class="meta-chip" style="text-transform:capitalize">${correo.tipo_pqr}</span>`:''}
+      </div>
+      <div class="ev-actions">
+        <span style="display:inline-flex;align-items:center;gap:5px;background:#eff6ff;color:#2563eb;font-size:11px;font-weight:700;padding:5px 12px;border-radius:var(--r2)">👁 Solo lectura · ticket de ${esc(correo.asignado_a||'otro agente')}</span>
+      </div>
+      <div class="ev-body" id="evBodyContent">
+        ${correo.body_type==='html'?'':`<pre style="font-family:'Poppins',sans-serif;font-size:13px;white-space:pre-wrap;word-break:break-word">${esc(correo.body_content||correo.body_preview||'Sin contenido')}</pre>`}
+      </div>`;
+
+    if(correo.body_type==='html') renderEmailBody(id, correo.message_id, correo.body_content||'', 'evBodyContent');
+
+    // Panel derecho solo lectura
+    document.getElementById('mgmtEstadoBadge').className='badge '+(correo.estado||'');
+    document.getElementById('mgmtEstadoBadge').textContent=estadoLabel(correo.estado||'');
+    document.querySelectorAll('.priority-btn').forEach(b=>b.classList.toggle('active-prio',b.dataset.p===correo.prioridad));
+
+    // Cargar historial del ticket consultado
+    await loadTicketTimeline(id, correo.message_id);
+
+  } catch(err) { showToast('Error: '+err.message.substring(0,60),'error'); }
 }
 
 // ──────────────────────────────────────────────
@@ -1155,10 +1289,7 @@ async function selectEmail(id) {
         <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         ✦ Nova TD
       </button>
-      <button class="btn btn-ghost" onclick="(window.top||window).analizarConIA('${email.id}')" style="border-color:#0891b2;color:#0891b2" title="Analizar y sugerir respuesta con IA (GPT-4o)">
-        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-        ✦ IA
-      </button>
+
       <button class="btn btn-ghost" onclick="(window.top||window).abrirPanelRR()" title="Plantillas" style="border-color:#f59e0b;color:#b45309">⚡ Rápidas</button>
       `}
       ${email.message_id ? `
