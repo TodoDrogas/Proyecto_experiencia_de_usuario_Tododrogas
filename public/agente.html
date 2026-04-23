@@ -2851,15 +2851,25 @@ async function toggleReply(modo) {
       ${_fmtBar('replyEditor')}
       <div id="replyEditor" contenteditable="true" style="min-height:120px;padding:12px 14px;font-size:13px;font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;color:var(--ink);outline:none;line-height:1.6"></div>
       <div style="border-top:1px solid var(--border);padding:10px 14px;background:var(--surface2)">
-        <div style="font-size:11px;color:var(--ink3);margin-bottom:6px;font-family:'Franklin Gothic Book',Arial,sans-serif">───────── Mensaje original ─────────</div>
-        <div style="font-size:11px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;line-height:1.5">
+        <div style="font-size:11px;color:var(--ink3);margin-bottom:6px;font-family:'Franklin Gothic Book',Arial,sans-serif">───────── ${(window._hiloMsgs||[]).length > 1 ? 'Hilo completo (' + (window._hiloMsgs||[]).length + ' mensajes)' : 'Mensaje original'} ─────────</div>
+        ${(window._hiloMsgs||[]).length > 1 ? `<div style="font-size:11px;color:var(--ink3);margin-bottom:8px;font-family:'Franklin Gothic Book',Arial,sans-serif">El hilo completo se adjuntará automáticamente al enviar.</div>
+        ${[...(window._hiloMsgs||[])].sort((a,b)=>new Date(b.receivedDateTime||b.sentDateTime||0)-new Date(a.receivedDateTime||a.sentDateTime||0)).map(m=>{
+          const de=m.from?.emailAddress?.name||m.from?.emailAddress?.address||'';
+          const f=new Date(m.receivedDateTime||m.sentDateTime||0).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'});
+          const esEnv=(m.from?.emailAddress?.address||'').toLowerCase().includes((window.GRAPH_USER_ID||'').split('@')[0].toLowerCase());
+          return `<div style="font-size:11px;font-family:'Franklin Gothic Book',Arial,sans-serif;padding:6px 8px;background:${esEnv?'#eff4ff':'#f7f8fb'};border-left:2px solid ${esEnv?'#2563eb':'#ccc'};margin-bottom:4px;border-radius:0 4px 4px 0">
+            <div style="font-weight:700;color:var(--ink)">${esc(de)}</div>
+            <div style="color:var(--ink3)">${f}</div>
+            <div style="color:var(--ink2);margin-top:2px">${esc((m.bodyPreview||'').substring(0,120))}${(m.bodyPreview||'').length>120?'…':''}</div>
+          </div>`;
+        }).join('')}` : `<div style="font-size:11px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;line-height:1.5">
           <b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br>
           <b>Enviado:</b> ${email?.sent_at ? new Date(email.sent_at).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'}) : ''}<br>
           <b>Para:</b> ${esc(_arr(email?.to_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; '))}<br>
           <b>CC:</b> ${esc(_arr(email?.cc_recipients).map(r=>r?.emailAddress?.address||r).filter(Boolean).join('; ')||'(ninguno)')}<br>
           <b>Asunto:</b> ${esc(email?.asunto||'')}
         </div>
-        <div style="margin-top:8px;font-size:12px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;max-height:180px;overflow-y:auto;border-left:3px solid var(--border);padding-left:10px">${email?.body_content||email?.raw?.body_preview||''}</div>
+        <div style="margin-top:8px;font-size:12px;color:var(--ink2);font-family:'Franklin Gothic Book',Arial,sans-serif;max-height:180px;overflow-y:auto;border-left:3px solid var(--border);padding-left:10px">${email?.body_content||email?.raw?.body_preview||''}</div>`}
       </div>
       <!-- Adjuntos -->
       <div id="replyAttachZone" style="padding:8px 12px;background:var(--bg2);border-top:1px solid var(--border);transition:background .15s"
@@ -3041,8 +3051,31 @@ async function sendReply() {
     }
   } catch(e) { /* si falla la verificación, dejar continuar */ }
 
-  // Construir hilo histórico
-  const hiloHTML=`
+  // Construir hilo histórico — incluir todos los mensajes del hilo si están disponibles
+  const _hiloMsgsDisp = (window._hiloMsgs||[]).filter(m=>m && (m.receivedDateTime||m.sentDateTime));
+  let hiloHTML;
+  if(_hiloMsgsDisp.length > 1) {
+    // Hilo completo disponible desde verHiloCompleto
+    const _sorted = [..._hiloMsgsDisp].sort((a,b)=>new Date(b.receivedDateTime||b.sentDateTime||0)-new Date(a.receivedDateTime||a.sentDateTime||0));
+    hiloHTML = '<br><br>';
+    _sorted.forEach((m,i)=>{
+      const de   = m.from?.emailAddress?.name||m.from?.emailAddress?.address||'';
+      const deEm = m.from?.emailAddress?.address||'';
+      const para = (m.toRecipients||[]).map(r=>r.emailAddress?.address||'').join('; ');
+      const f    = new Date(m.receivedDateTime||m.sentDateTime||0).toLocaleString('es-CO',{dateStyle:'full',timeStyle:'short'});
+      const prev = m.bodyPreview||'';
+      hiloHTML += `<div style="border-left:3px solid ${i===0?'#2563eb':'#ccc'};padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px;margin-bottom:12px">
+        <b>De:</b> ${esc(de)} &lt;${esc(deEm)}&gt;<br>
+        <b>Enviado:</b> ${f}<br>
+        <b>Para:</b> ${esc(para)}<br>
+        <b>Asunto:</b> ${esc(m.subject||'')}<br>
+        ${m.hasAttachments?'<b>📎 Tiene adjuntos</b><br>':''}
+        <br>${esc(prev).substring(0,600)}${prev.length>600?'…':''}
+      </div>`;
+    });
+  } else {
+    // Fallback: solo el mensaje actual
+    hiloHTML=`
     <br><br>
     <div style="border-left:3px solid #ccc;padding-left:10px;color:#555;font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:12px">
       <b>De:</b> ${esc(email?.remitente_nombre||'')} &lt;${esc(email?.remitente||'')}&gt;<br>
@@ -3052,6 +3085,7 @@ async function sendReply() {
       <b>Asunto:</b> ${esc(email?.asunto||'')}<br><br>
       ${email?.body_content||''}
     </div>`;
+  }
 
   // Separar adjuntos pequeños (inline) y grandes (upload session)
   const inlineFiles=[], largeFiles=[];
@@ -3089,7 +3123,17 @@ async function sendReply() {
       let _endpoint, _replyPayload;
       if(window._replyModo === 'replyAll') {
         _endpoint = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(_internetMsgId)}/replyAll`;
-        _replyPayload = { message: { body: {contentType:'HTML', content: _bodyFull}, importance: window._replyImportant?'high':'normal' }, comment: '' };
+        _replyPayload = {
+          message: {
+            body: {contentType:'HTML', content: _bodyFull},
+            importance: window._replyImportant?'high':'normal',
+            // Asegurar que el destinatario personalizado sea incluido
+            toRecipients: [{emailAddress:{address:toInput,name:toInput}}],
+          },
+          comment: ''
+        };
+        if(ccInput) _replyPayload.message.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+        if(attachments.length>0) _replyPayload.message.attachments = attachments;
       } else if(window._replyModo === 'forward') {
         _endpoint = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(_internetMsgId)}/forward`;
         _replyPayload = {
@@ -3103,9 +3147,16 @@ async function sendReply() {
         if(ccInput) _replyPayload.message.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
         if(attachments.length>0) _replyPayload.message.attachments = attachments;
       } else {
-        // reply normal
+        // reply normal — pasar toRecipients explícito para que llegue al destinatario correcto del campo "Para"
         _endpoint = `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(_internetMsgId)}/reply`;
-        _replyPayload = { message: { body: {contentType:'HTML', content: _bodyFull}, importance: window._replyImportant?'high':'normal' }, comment: '' };
+        _replyPayload = {
+          message: {
+            body: {contentType:'HTML', content: _bodyFull},
+            importance: window._replyImportant?'high':'normal',
+            toRecipients: [{emailAddress:{address:toInput,name:toInput}}],
+          },
+          comment: ''
+        };
         if(attachments.length>0) _replyPayload.message.attachments = attachments;
         if(ccInput) _replyPayload.message.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
       }
