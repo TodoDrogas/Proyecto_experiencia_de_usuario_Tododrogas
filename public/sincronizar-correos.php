@@ -443,7 +443,7 @@ $url_base = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders
           . "&\$orderby=" . urlencode('receivedDateTime asc')
           . "&\$count=true"
           . "&\$top=50"
-          . "&\$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,hasAttachments,bodyPreview,body,importance,isRead,conversationId,internetMessageId,flag";
+          . "&\$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,bodyPreview,body,importance,isRead,conversationId,internetMessageId,flag";
 
 $todos_correos = [];
 $paginas       = 0;
@@ -513,21 +513,6 @@ foreach ($todos_correos as $c) {
     $is_read    = (bool)($c['isRead'] ?? false);
     $flag_st    = $c['flag']['flagStatus'] ?? 'notFlagged';
 
-    $to_recipients = array_map(fn($r) => [
-        'name'    => $r['emailAddress']['name']    ?? '',
-        'address' => $r['emailAddress']['address'] ?? '',
-    ], $c['toRecipients'] ?? []);
-
-    $cc_recipients = array_map(fn($r) => [
-        'name'    => $r['emailAddress']['name']    ?? '',
-        'address' => $r['emailAddress']['address'] ?? '',
-    ], $c['ccRecipients'] ?? []);
-
-    $bcc_recipients = array_map(fn($r) => [
-        'name'    => $r['emailAddress']['name']    ?? '',
-        'address' => $r['emailAddress']['address'] ?? '',
-    ], $c['bccRecipients'] ?? []);
-
     // Inferir ticket_id del asunto (correos PQRSFD radicados)
     $ticket_id = null;
     if (preg_match('/\[?(TD-\d{8}-\d{4})\]?/i', $subject, $m)) {
@@ -547,9 +532,6 @@ foreach ($todos_correos as $c) {
         'conversation_id' => $conv_id,
         'from_email'      => $from_email,
         'from_name'       => $from_name,
-        'to_recipients'   => $to_recipients,
-        'cc_recipients'   => $cc_recipients,
-        'bcc_recipients'  => $bcc_recipients,
         'subject'         => $subject,
         'body_preview'    => $body_prev,
         'body_content'    => $body_cont,
@@ -579,12 +561,8 @@ foreach ($todos_correos as $c) {
     $r = sbUpsert('correos', [$payload], 'message_id');
 
     if ($r['code'] === 409) {
-        sbPatch('correos', "message_id=eq.$msg_id", [
-            'to_recipients'  => $to_recipients,
-            'cc_recipients'  => $cc_recipients,
-            'bcc_recipients' => $bcc_recipients,
-        ]);
-        log_msg("  ⚠️  Duplicado — destinatarios actualizados {$msg_id}");
+        // Conflicto: ya existe con mismo message_id — avanzar cursor
+        log_msg("  ⚠️  Duplicado ignorado {$msg_id}");
         $nuevo_cursor = $received_raw;
         continue;
     }
@@ -610,7 +588,7 @@ foreach ($todos_correos as $c) {
         $stats['insertados']++;
         // Estado inicial solo para correos nuevos
         sbPatch('correos', "id=eq.$corr_id", [
-            'estado'    => 'sin_asignar',
+            'estado'    => 'pendiente',
             'prioridad' => 'media',
             'created_at'=> date('c'),
         ]);
