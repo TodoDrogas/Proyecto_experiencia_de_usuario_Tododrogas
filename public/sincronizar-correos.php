@@ -428,26 +428,6 @@ $cursor_iso = $cursor_dt->format('Y-m-d\TH:i:s\Z');
 
 log_msg("=== SYNC v3 === Cursor: $cursor_iso");
 
-// ── Reintentar adjuntos pendientes de ciclos anteriores ──────────────
-$pendientes = sbGet('correos?adjuntos_pendientes=eq.true&select=id,message_id&limit=5') ?? [];
-if (!empty($pendientes)) {
-    log_msg("🔄 Reintentando adjuntos de " . count($pendientes) . " correo(s) pendiente(s)...");
-    $token_retry = getGraphToken();
-    if ($token_retry) {
-        foreach ($pendientes as $p) {
-            $body_retry = sbGet("correos?id=eq.{$p['id']}&select=body_content&limit=1");
-            $body_html  = $body_retry[0]['body_content'] ?? '';
-            $count_retry = procesarAdjuntos($p['id'], $p['message_id'], $token_retry, $body_html);
-            if ($count_retry > 0 || true) {
-                // Quitar flag independientemente — si falla de nuevo lo vuelve a marcar
-                sbPatch('correos', "id=eq.{$p['id']}", ['adjuntos_pendientes' => false]);
-                log_msg("  ✅ Reintento {$p['message_id']}: $count_retry adjunto(s)");
-            }
-            usleep(500_000); // 500ms entre reintentos
-        }
-    }
-}
-
 // ── Token Graph ───────────────────────────────────────────────────────
 $token = getGraphToken();
 if (!$token) {
@@ -868,14 +848,6 @@ function procesarAdjuntos(string $correo_id, string $msg_id, string $token, stri
 
         if ($up_code < 200 || $up_code >= 300) {
             log_msg("    ❌ Error Storage $nombre: HTTP $up_code");
-            // Circuit breaker: si Storage falla, parar adjuntos este ciclo
-            // El correo ya quedó guardado en Supabase — solo faltaron adjuntos
-            if ($up_code === 544 || $up_code === 503 || $up_code === 502) {
-                log_msg("    ⚡ Circuit breaker activado — Storage saturado. Marcando correo para reintento.");
-                // Marcar correo para reintento en próximo ciclo
-                sbPatch('correos', "id=eq.$correo_id", ['adjuntos_pendientes' => true]);
-                return $count; // Salir sin romper el sync principal
-            }
             continue;
         }
 
