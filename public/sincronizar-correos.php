@@ -309,6 +309,183 @@ if ($accion === 'nuevo_ciclo') {
     ]);
 }
 
+
+// ══ RECONCILIACIÓN HORARIA ════════════════════════════════════════════
+// Compara Graph vs Supabase en ventana de 2h y recupera correos perdidos
+if ($accion === 'reconciliar') {
+    log_msg("=== RECONCILIACIÓN HORARIA ===");
+
+    $token = getGraphToken();
+    if (!$token) finalizar(false, 'token_error');
+
+    // Ventana: últimas 2 horas con overlap para no perder nada en bordes
+    $desde = date('Y-m-d\TH:i:s\Z', strtotime('-2 hours'));
+    $hasta = date('Y-m-d\TH:i:s\Z');
+    log_msg("Ventana: $desde → $hasta");
+
+    // ── Paso 1: Obtener message_ids de Graph ──────────────────────────
+    $graphMsgs = [];
+    $nextLink  = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/{$INBOX_ID}/messages"
+               . "?\$filter=" . urlencode("isDraft eq false and receivedDateTime ge {$desde} and receivedDateTime le {$hasta}")
+               . "&\$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,bodyPreview,body,importance,isRead,conversationId,internetMessageId"
+               . "&\$top=100";
+
+    $paginas = 0;
+    while ($nextLink && $paginas < 5) {
+        $ch = curl_init($nextLink);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30,
+            CURLOPT_HTTPHEADER => ["Authorization: Bearer $token", 'ConsistencyLevel: eventual'],
+        ]);
+        $resp = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code !== 200) { log_msg("Graph error $code"); break; }
+        $data = json_decode($resp, true);
+        foreach ($data['value'] ?? [] as $m) {
+            $graphMsgs[$m['id']] = $m;
+        }
+        $nextLink = $data['@odata.nextLink'] ?? null;
+        $paginas++;
+        if ($nextLink) usleep(200_000);
+    }
+    log_msg("Graph: " . count($graphMsgs) . " correos en ventana");
+
+    // ── Paso 2: Obtener message_ids de Supabase ───────────────────────
+    $sbRows = sbGet(
+        "correos?received_at=gte.{$desde}&received_at=lte.{$hasta}&select=message_id&limit=500"
+    ) ?? [];
+    $sbIds = array_flip(array_column($sbRows, 'message_id')); // flip para búsqueda O(1)
+    log_msg("Supabase: " . count($sbIds) . " correos en ventana");
+
+    // ── Paso 3: Detectar faltantes ────────────────────────────────────
+    $faltantes = [];
+    foreach ($graphMsgs as $gid => $gdata) {
+        if (!isset($sbIds[$gid])) {
+            $faltantes[] = $gdata;
+        }
+    }
+    log_msg("Faltantes detectados: " . count($faltantes));
+
+    if (empty($faltantes)) {
+        saveSyncConfig(['ultimo_reconciliacion' => date('c')]);
+        finalizar(true, 'sin_faltantes', [
+            'graph_total'    => count($graphMsgs),
+            'supabase_total' => count($sbIds),
+            'faltantes'      => 0,
+            'recuperados'    => 0,
+            'ventana_desde'  => $desde,
+            'ventana_hasta'  => $hasta,
+        ]);
+    }
+
+    // ── Paso 4: Insertar los faltantes usando misma lógica que sync ──
+    $recuperados = 0;
+    $errores_rec = 0;
+
+    foreach ($faltantes as $c) {
+        $msg_id       = $c['id'] ?? '';
+        $received_raw = $c['receivedDateTime'] ?? '';
+        if (!$msg_id || !$received_raw) continue;
+
+        $from_email = strtolower($c['from']['emailAddress']['address'] ?? '');
+        $from_name  = $c['from']['emailAddress']['name'] ?? '';
+        $subject    = $c['subject'] ?? '(sin asunto)';
+
+        // Ignorar correos del propio buzón
+        if ($from_email === strtolower($GRAPH_MAILBOX)) {
+            log_msg("  Ignorado propio: " . substr($subject, 0, 50));
+            continue;
+        }
+
+        $body_cont = $c['body']['content'] ?? $c['bodyPreview'] ?? '';
+        $body_prev = mb_substr($c['bodyPreview'] ?? '', 0, 500);
+        $body_type = $c['body']['contentType'] ?? 'text';
+        $has_adj   = (bool)($c['hasAttachments'] ?? false);
+        $conv_id   = $c['conversationId'] ?? null;
+        $internet_id = $c['internetMessageId'] ?? null;
+        $importance  = strtolower($c['importance'] ?? 'normal');
+        $is_read     = (bool)($c['isRead'] ?? false);
+        $to_recipients = json_encode($c['toRecipients'] ?? []);
+        $cc_recipients = json_encode($c['ccRecipients'] ?? []);
+
+        $origen = 'graph_sync';
+        if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))  $origen = 'nova_directo';
+        elseif (preg_match('/NOVA\s+TD/ui', $subject))         $origen = 'nova_web';
+        elseif (preg_match('/QR\b/u', $subject))               $origen = 'qr';
+
+        $ticket_id = null;
+        if (preg_match('/\[?(TD-\d{8}-\d{4})\]?/i', $subject, $mt)) $ticket_id = $mt[1];
+
+        $payload = [
+            'message_id'          => $msg_id,
+            'internet_message_id' => $internet_id,
+            'conversation_id'     => $conv_id,
+            'from_email'          => $from_email,
+            'from_name'           => $from_name,
+            'subject'             => $subject,
+            'body_preview'        => $body_prev,
+            'body_content'        => $body_cont,
+            'body_type'           => $body_type,
+            'has_attachments'     => $has_adj,
+            'importance'          => $importance,
+            'is_read'             => $is_read,
+            'received_at'         => $received_raw,
+            'origen'              => $origen,
+            'canal_contacto'      => 'correo',
+            'to_recipients'       => $to_recipients,
+            'cc_recipients'       => $cc_recipients,
+        ];
+        if ($ticket_id) $payload['ticket_id'] = $ticket_id;
+
+        $r = sbUpsert('correos', [$payload], 'message_id');
+
+        if ($r['code'] >= 200 && $r['code'] < 300) {
+            $corr_id = $r['data'][0]['id'] ?? null;
+            // Asignar estado inicial
+            if ($corr_id) {
+                sbPatch('correos', "id=eq.$corr_id", [
+                    'estado'    => 'sin_asignar',
+                    'prioridad' => 'media',
+                    'created_at'=> date('c'),
+                ]);
+                // Registrar en historial para auditoría
+                sbPost('historial_eventos', [
+                    'correo_id'  => $corr_id,
+                    'evento'     => 'sync_correos',
+                    'descripcion'=> 'Correo recuperado por reconciliación horaria — no estaba en Supabase',
+                    'datos_extra'=> json_encode([
+                        'message_id'     => $msg_id,
+                        'subject'        => $subject,
+                        'received_at'    => $received_raw,
+                        'ventana_desde'  => $desde,
+                        'ventana_hasta'  => $hasta,
+                    ]),
+                    'created_at' => date('c'),
+                ]);
+            }
+            $recuperados++;
+            log_msg("  RECUPERADO: " . substr($subject, 0, 60));
+        } else {
+            $errores_rec++;
+            log_msg("  ERROR al recuperar: " . substr($subject, 0, 60) . " code=" . $r['code']);
+        }
+        usleep(100_000);
+    }
+
+    saveSyncConfig(['ultimo_reconciliacion' => date('c')]);
+    log_msg("=== RECONCILIACIÓN FIN: $recuperados recuperados, $errores_rec errores ===");
+    finalizar(true, 'reconciliacion_ok', [
+        'graph_total'    => count($graphMsgs),
+        'supabase_total' => count($sbIds),
+        'faltantes'      => count($faltantes),
+        'recuperados'    => $recuperados,
+        'errores'        => $errores_rec,
+        'ventana_desde'  => $desde,
+        'ventana_hasta'  => $hasta,
+    ]);
+}
+
 // ══ SYNC PRINCIPAL ════════════════════════════════════════════════════
 $sync = getSyncConfig();
 if (empty($sync['activo'])) { log_msg("Sync no activo."); finalizar(true, 'inactivo'); }
