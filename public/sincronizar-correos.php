@@ -21,6 +21,21 @@ $SB_KEY        = '__SB_KEY__';
 $OPENAI_KEY    = '__OPENAI_KEY__';
 $GRAPH_MAILBOX = 'pqrsfd@tododrogas.com.co';
 $INBOX_ID      = '__INBOX_FOLDER_ID__';
+
+// ── Buzones a sincronizar ─────────────────────────────────────────────
+// Agregar aquí todos los buzones que deben monitorearse
+$BUZONES = [
+    [
+        'mailbox'   => 'pqrsfd@tododrogas.com.co',
+        'folder_id' => '__INBOX_FOLDER_ID__',        // mismo que INBOX_ID
+        'label'     => 'PQRSFD',
+    ],
+    [
+        'mailbox'   => 'pqrs.institucional@tododrogas.com.co',
+        'folder_id' => '__INBOX_FOLDER_ID_INSTITUCIONAL__', // obtener con Graph Explorer
+        'label'     => 'Institucional',
+    ],
+];
 $AZURE_TENANT  = '__AZURE_TENANT_ID__';
 $AZURE_CLIENT  = '__AZURE_CLIENT_ID__';
 $AZURE_SECRET  = '__AZURE_CLIENT_SECRET__';
@@ -392,9 +407,11 @@ if ($accion === 'reconciliar') {
         $from_name  = $c['from']['emailAddress']['name'] ?? '';
         $subject    = $c['subject'] ?? '(sin asunto)';
 
-        // Ignorar correos del propio buzón
-        if ($from_email === strtolower($GRAPH_MAILBOX)) {
-            log_msg("  Ignorado propio: " . substr($subject, 0, 50));
+        // Ignorar correos del propio buzón — EXCEPCIÓN: reenvíos externos
+        $es_reenvio_externo_rec = preg_match('/^(RV:|RE:|FWD?:)\s*/i', trim($subject));
+        $buzones_propios_rec = array_map('strtolower', array_column($BUZONES, 'mailbox'));
+        if (in_array($from_email, $buzones_propios_rec) && !$es_reenvio_externo_rec) {
+            log_msg("  Ignorado propio (no reenvío): " . substr($subject, 0, 50));
             continue;
         }
 
@@ -503,50 +520,65 @@ if (!$cursor_actual) { finalizar(false, 'sin_cursor'); }
 
 $cursor_dt  = new DateTime($cursor_actual, new DateTimeZone('UTC'));
 $cursor_iso = $cursor_dt->format('Y-m-d\TH:i:s\Z');
-log_msg("=== SYNC v3.1 === Cursor: $cursor_iso");
+log_msg("=== SYNC v3.2 === Cursor: $cursor_iso");
 
 $token = getGraphToken();
 if (!$token) { finalizar(false, 'token_error'); }
-
-$filter   = urlencode("isDraft eq false and receivedDateTime gt $cursor_iso");
-$url_base = "https://graph.microsoft.com/v1.0/users/{$GRAPH_MAILBOX}/mailFolders/{$INBOX_ID}/messages"
-          . "?\$filter=$filter"
-          . "&\$orderby=" . urlencode('receivedDateTime asc')
-          . "&\$count=true&\$top=50"
-          . "&\$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,bodyPreview,body,importance,isRead,conversationId,internetMessageId,flag";
-
-$todos_correos = [];
-$next_link     = $url_base;
-$paginas       = 0;
-
-while ($next_link) {
-    $ch = curl_init($next_link);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30,
-        CURLOPT_HTTPHEADER => ["Authorization: Bearer $token", 'ConsistencyLevel: eventual'],
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    if ($code !== 200) { log_msg("Graph API error $code en pagina $paginas"); break; }
-    $data          = json_decode($resp, true);
-    $todos_correos = array_merge($todos_correos, $data['value'] ?? []);
-    $paginas++;
-    $next_link = $data['@odata.nextLink'] ?? null;
-    if ($next_link) usleep(200_000);
-}
-
-log_msg("Total correos nuevos: " . count($todos_correos));
-
-if (empty($todos_correos)) {
-    saveSyncConfig(['ultimo_sync' => date('c')]);
-    finalizar(true, 'sin_correos_nuevos');
-}
 
 $stats = ['insertados' => 0, 'actualizados' => 0, 'errores' => 0,
           'adjuntos' => 0, 'clasificados' => 0, 'auto_cerrados' => 0,
           'ignorados_propios' => 0];
 $nuevo_cursor = $cursor_actual;
+
+// ── Iterar sobre TODOS los buzones configurados ───────────────────────
+global $BUZONES;
+foreach ($BUZONES as $buzon_cfg) {
+    $buzon_mailbox  = $buzon_cfg['mailbox'];
+    $buzon_folder   = $buzon_cfg['folder_id'];
+    $buzon_label    = $buzon_cfg['label'];
+
+    // Saltar buzones sin folder_id configurado
+    if (str_contains($buzon_folder, '__')) {
+        log_msg("  Buzón $buzon_label ($buzon_mailbox): folder_id no configurado, saltando.");
+        continue;
+    }
+
+    log_msg("  === Buzón: $buzon_label ($buzon_mailbox) ===");
+
+    $filter   = urlencode("isDraft eq false and receivedDateTime gt $cursor_iso");
+    $url_base = "https://graph.microsoft.com/v1.0/users/{$buzon_mailbox}/mailFolders/{$buzon_folder}/messages"
+              . "?\$filter=$filter"
+              . "&\$orderby=" . urlencode('receivedDateTime asc')
+              . "&\$count=true&\$top=50"
+              . "&\$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,hasAttachments,bodyPreview,body,importance,isRead,conversationId,internetMessageId,flag";
+
+    $todos_correos = [];
+    $next_link     = $url_base;
+    $paginas       = 0;
+
+    while ($next_link) {
+        $ch = curl_init($next_link);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 30,
+            CURLOPT_HTTPHEADER => ["Authorization: Bearer $token", 'ConsistencyLevel: eventual'],
+        ]);
+        $resp = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($code !== 200) { log_msg("    Graph API error $code en pagina $paginas para $buzon_label"); break; }
+        $data          = json_decode($resp, true);
+        $todos_correos = array_merge($todos_correos, $data['value'] ?? []);
+        $paginas++;
+        $next_link = $data['@odata.nextLink'] ?? null;
+        if ($next_link) usleep(200_000);
+    }
+
+    log_msg("    Correos nuevos en $buzon_label: " . count($todos_correos));
+
+    if (empty($todos_correos)) {
+        log_msg("    Sin correos nuevos en $buzon_label");
+        continue;
+    }
 
 foreach ($todos_correos as $c) {
     $msg_id       = $c['id'] ?? '';
@@ -558,14 +590,42 @@ foreach ($todos_correos as $c) {
     $subject    = $c['subject'] ?? '(sin asunto)';
 
     // ── FIX 1: Ignorar correos del propio buzon ───────────────────────
-    if ($from_email === strtolower($GRAPH_MAILBOX)) {
-        log_msg("  Ignorado correo propio: " . substr($subject, 0, 50));
+    // EXCEPCIÓN: si es un RV/FWD desde el buzón propio, puede ser una PQR
+    // reenviada desde pqrs.institucional u otro buzón — NO ignorar
+    $es_reenvio_externo = preg_match('/^(RV:|RE:|FWD?:)\s*/i', trim($subject));
+    $buzones_propios = array_map('strtolower', array_column($BUZONES, 'mailbox'));
+    if (in_array($from_email, $buzones_propios) && !$es_reenvio_externo) {
+        log_msg("  Ignorado correo propio (no reenvío): " . substr($subject, 0, 50));
         $stats['ignorados_propios']++;
         $nuevo_cursor = $received_raw;
         continue;
     }
 
     $body_cont  = $c['body']['content'] ?? $c['bodyPreview'] ?? '';
+    // ── Si es RV desde buzón propio: extraer remitente original del body ──
+    // Ej: pqrsfd reenvía a espejo — el from real está dentro del cuerpo
+    $forzar_sin_asignar = false;
+    if (in_array($from_email, $buzones_propios) && $es_reenvio_externo) {
+        $body_texto_rv = strip_tags($body_cont ?? '');
+        // Buscar "De: Nombre <email@dominio.com>" en el cuerpo del RV
+        if (preg_match('/De:\s*.{0,80}<([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})>/i',
+                       $body_texto_rv, $match_from)) {
+            $from_original = strtolower(trim($match_from[1]));
+            // Solo reemplazar si el remitente original NO es también un buzón propio
+            if (!in_array($from_original, $buzones_propios)) {
+                log_msg("  RV externo — from original extraído: $from_original (antes: $from_email)");
+                $from_email = $from_original;
+                // Intentar extraer nombre también
+                if (preg_match('/De:\s*([^<\n]{2,60})<' . preg_quote($from_original, '/') . '>/i',
+                               $body_texto_rv, $match_name)) {
+                    $from_name = trim($match_name[1]);
+                }
+            }
+        }
+        // Forzar sin_asignar — es una PQR nueva que requiere respuesta de asesora
+        $forzar_sin_asignar = true;
+        log_msg("  RV externo procesado como nuevo ticket — se forzará sin_asignar");
+    }
     $body_prev  = mb_substr($c['bodyPreview'] ?? '', 0, 500);
     $body_type  = $c['body']['contentType'] ?? 'text';
     $has_adj    = (bool)($c['hasAttachments'] ?? false);
@@ -634,13 +694,14 @@ foreach ($todos_correos as $c) {
     // un correo nuevo del mismo hilo — tratarlo como nuevo para que quede sin_asignar
     $es_rehilo = ($estado_actual === 'enviado' && empty($fila['agente_id']));
     if ($es_rehilo) $es_nuevo = true;
+    // Caso especial: RV desde buzón propio — siempre es nuevo ticket
+    if ($forzar_sin_asignar) $es_nuevo = true;
 
     if (!$corr_id) { $nuevo_cursor = $received_raw; continue; }
 
     if ($es_nuevo) {
         $stats['insertados']++;
         // ── FIX 2: Estado 'sin_asignar' — lógica protegida ───────────
-        // Solo asignar sin_asignar si no hay un agente trabajando el ticket
         sbPatch('correos', "id=eq.$corr_id", [
             'estado'    => 'sin_asignar',
             'prioridad' => 'media',
@@ -694,7 +755,9 @@ foreach ($todos_correos as $c) {
     $nuevo_cursor = $received_raw;
     log_msg("  OK $msg_id | " . substr($subject, 0, 50));
     usleep(50_000);
-}
+} // fin foreach correos del buzón
+
+} // fin foreach BUZONES
 
 $total_correos  = ($sync['total_correos']  ?? 0) + $stats['insertados'];
 $total_adjuntos = ($sync['total_adjuntos'] ?? 0) + $stats['adjuntos'];
