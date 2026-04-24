@@ -623,13 +623,24 @@ foreach ($todos_correos as $c) {
 
     $fila    = $r['data'][0] ?? null;
     $corr_id = $fila['id'] ?? null;
-    $es_nuevo = empty($fila['sentimiento']);
+
+    // ── Determinar si es realmente nuevo ─────────────────────────────
+    // Es nuevo si: no tiene sentimiento (no fue clasificado aún) Y
+    // no tiene un estado de gestión activo (no sobreescribir trabajo ya hecho)
+    $estados_protegidos = ['pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'];
+    $estado_actual = $fila['estado'] ?? '';
+    $es_nuevo = empty($fila['sentimiento']) && !in_array($estado_actual, $estados_protegidos);
+    // Caso especial: si estaba 'enviado' (respuesta previa en hilo) y llega
+    // un correo nuevo del mismo hilo — tratarlo como nuevo para que quede sin_asignar
+    $es_rehilo = ($estado_actual === 'enviado' && empty($fila['agente_id']));
+    if ($es_rehilo) $es_nuevo = true;
 
     if (!$corr_id) { $nuevo_cursor = $received_raw; continue; }
 
     if ($es_nuevo) {
         $stats['insertados']++;
-        // ── FIX 2: Estado 'sin_asignar' en vez de 'pendiente' ────────
+        // ── FIX 2: Estado 'sin_asignar' — lógica protegida ───────────
+        // Solo asignar sin_asignar si no hay un agente trabajando el ticket
         sbPatch('correos', "id=eq.$corr_id", [
             'estado'    => 'sin_asignar',
             'prioridad' => 'media',
