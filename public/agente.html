@@ -2989,12 +2989,18 @@ async function toggleReply(modo) {
       const _emChk = state.emails.find(e=>e.id===state.selectedId);
       const _esBorrador = _emChk?.origen==='borrador'||_emChk?.estado==='borrador'||_emChk?.is_draft;
       if (!_esBorrador) {
-        // Buscar ticket original del hilo si es saliente/borrador
-        const _corrOrig = state.emails.find(e=>
-          e.raw?.conversation_id===_emChk?.raw?.conversation_id &&
-          e.origen!=='saliente'&&e.origen!=='borrador'&&
-          e.estado!=='enviado'&&e.estado!=='borrador'&&!e.is_draft
-        );
+        // Buscar el correo ENTRANTE más antiguo del hilo (donde siempre se guarda la gestión)
+        const _convId = _emChk?.raw?.conversation_id;
+        const _corrOrig = _convId
+          ? state.emails
+              .filter(e =>
+                e.raw?.conversation_id === _convId &&
+                e.origen === 'entrante' &&
+                e.estado !== 'borrador' &&
+                !e.is_draft
+              )
+              .sort((a, b) => new Date(a.received_at) - new Date(b.received_at))[0]
+          : null;
         const _idChk = _corrOrig?.id || state.selectedId;
         const _fg = await sb(`correos?id=eq.${_idChk}&select=num_gestiones&limit=1`);
         if((_fg?.[0]?.num_gestiones || 0) === 0) { _mostrarModalPrimeraGestion(); return; }
@@ -3249,11 +3255,18 @@ async function sendReply() {
     const emailActual = state.emails.find(e=>e.id===id);
     const esBorrador = emailActual?.origen==='borrador'||emailActual?.estado==='borrador'||emailActual?.is_draft;
     if (!esBorrador) {
-      const correoOriginal = state.emails.find(e=>
-        e.raw?.conversation_id===emailActual?.raw?.conversation_id &&
-        e.origen!=='saliente'&&e.origen!=='borrador'&&
-        e.estado!=='enviado'&&e.estado!=='borrador'&&!e.is_draft
-      );
+      // Buscar el correo ENTRANTE más antiguo del hilo (donde siempre se guarda la gestión)
+      const _convId = emailActual?.raw?.conversation_id;
+      const correoOriginal = _convId
+        ? state.emails
+            .filter(e =>
+              e.raw?.conversation_id === _convId &&
+              e.origen === 'entrante' &&
+              e.estado !== 'borrador' &&
+              !e.is_draft
+            )
+            .sort((a, b) => new Date(a.received_at) - new Date(b.received_at))[0]
+        : null;
       const idCheck = correoOriginal?.id || id;
       const fresh = await sb(`correos?id=eq.${idCheck}&select=num_gestiones&limit=1`);
       if((fresh?.[0]?.num_gestiones||0) === 0) { _mostrarModalPrimeraGestion(); return; }
