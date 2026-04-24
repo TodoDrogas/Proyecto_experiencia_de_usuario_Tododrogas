@@ -978,7 +978,7 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
   <tr><td style='background:#0c2d5e;padding:18px 44px'>
     <table width='100%' cellpadding='0' cellspacing='0'>
       <tr>
-        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas<br>Experiencia de Servicio al Cliente</td>
+        <td style='font-size:10px;color:#4a6a90;line-height:1.6'>Tododrogas<br>Experiencia del Servicio</td>
         <td align='right' style='font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#2a4870;font-weight:500'>Sistema PQRSFD</td>
       </tr>
     </table>
