@@ -3269,10 +3269,39 @@ function renderEmailList() {
   // Carpetas que muestran correos individuales (sin colapsar hilos)
   const CARPETAS_INDIVIDUALES = ['sin_asignar','pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'];
   const usarIndividual = CARPETAS_INDIVIDUALES.includes(state.folder) || state.folder.startsWith('agent_');
-  let list = usarIndividual ? [...(state.allEmails || state.emails)] : [...state.emails];
   const search = document.getElementById('searchInput')?.value?.toLowerCase()||'';
 
-  // Folder filter
+  // ── BÚSQUEDA GLOBAL ──────────────────────────────────────────────────────
+  // Si hay texto en el buscador, buscar en TODOS los correos sin importar
+  // carpeta ni estado — incluyendo enviados, solucionados, informacion, etc.
+  if(search) {
+    const todosSinFiltro = [...(state.allEmails || state.emails)];
+    const resultado = todosSinFiltro.filter(e=>
+      e.id === state.selectedId ||
+      (e.remitente||'').toLowerCase().includes(search) ||
+      (e.asunto||'').toLowerCase().includes(search) ||
+      (e.remitente_nombre||'').toLowerCase().includes(search) ||
+      (e.raw?.ticket_id||'').toLowerCase().includes(search) ||
+      (e.raw?.cedula||'').toLowerCase().includes(search) ||
+      (e.raw?.cedula_paciente||'').toLowerCase().includes(search) ||
+      (e.raw?.nombre||'').toLowerCase().includes(search) ||
+      (e.raw?.from_email||'').toLowerCase().includes(search)
+    );
+    // Ordenar por fecha desc
+    resultado.sort((a,b)=>new Date(b.raw?.received_at||b.fecha)-new Date(a.raw?.received_at||a.fecha));
+    const el = document.getElementById('emailList');
+    if(!resultado.length) {
+      el.innerHTML = `<div class="empty-state"><div class="ei-icon">🔍</div><p>Sin resultados para <b>${search}</b></p><p style="font-size:11px;color:var(--ink3);margin-top:4px">Buscando en todos los estados y carpetas</p></div>`;
+      return;
+    }
+    // Mostrar banner indicando búsqueda global
+    renderEmailItems(resultado, el, `🔍 ${resultado.length} resultado${resultado.length!==1?'s':''} en todas las carpetas`);
+    return;
+  }
+
+  // ── FILTRO NORMAL POR CARPETA (sin búsqueda) ─────────────────────────────
+  let list = usarIndividual ? [...(state.allEmails || state.emails)] : [...state.emails];
+
   if(state.folder.startsWith('agent_')) {
     const agId = state.folder.replace('agent_','');
     list = list.filter(e=>e.agente_id===agId||e.asignado_a===agId);
@@ -3288,18 +3317,6 @@ function renderEmailList() {
     } else {
       list = list.filter(e=>e.estado===state.folder);
     }
-  }
-
-  // Search
-  if(search) {
-    list = list.filter(e=>
-      e.id === state.selectedId ||
-      (e.remitente||'').toLowerCase().includes(search) ||
-      (e.asunto||'').toLowerCase().includes(search) ||
-      (e.remitente_nombre||'').toLowerCase().includes(search) ||
-      (e.raw?.ticket_id||'').toLowerCase().includes(search) ||
-      (e.raw?.cedula||'').toLowerCase().includes(search)
-    );
   }
 
   // Sort — igual que VPS/Graph: por receivedDateTime exacto (con segundos)
@@ -3322,7 +3339,13 @@ function renderEmailList() {
     return;
   }
 
-  el.innerHTML = list.map(e=>{
+  renderEmailItems(list, el, null);
+}
+
+function renderEmailItems(list, el, banner) {
+  const e_dummy = null; // para evitar conflicto de variable
+  el.innerHTML = (banner ? `<div style="padding:6px 10px;background:var(--blue-l);color:var(--blue);font-size:11px;font-weight:600;border-radius:6px;margin:4px 6px 6px">${banner}</div>` : '') +
+  list.map(e=>{
     const agent = e.asignado_a ? state.agents.find(a=>a.id===e.asignado_a) : null;
     const prioColor = {alta:'#dc2626',media:'#ca8a04',baja:'#16a34a'}[e.prioridad||'']||'transparent';
     return `<div class="email-item${e.id===state.selectedId?' selected':''}${state.selectedIds.has(e.id)?' bulk-selected':''}${!e.is_read?' unread':''}"
