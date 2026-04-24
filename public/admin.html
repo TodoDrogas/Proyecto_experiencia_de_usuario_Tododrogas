@@ -3387,7 +3387,8 @@ async function _buscarEnSupabase(search, el) {
         origen: e.origen || '',
         hilo_count: 1,
         is_read: e.is_read || false,
-        body_content: e.body_content || '',
+        body_content: e.body_content || e.body_preview || '',
+        body_type: e.body_type || 'text',
         raw: e,
       }));
 
@@ -3607,8 +3608,10 @@ async function selectEmail(id) {
   loadAttachments(id, email.message_id);
 
   // ── Renderizar cuerpo del correo resolviendo cid: antes de construir el iframe ──
-  if(email.body_type === 'html') {
-    renderEmailBody(id, email.message_id, email.body_content || '');
+  const _bodyContent = email.body_content || '';
+  const _esHtml = email.body_type === 'html' || _bodyContent.trimStart().startsWith('<');
+  if(_esHtml) {
+    renderEmailBody(id, email.message_id, _bodyContent);
   }
 }
 
