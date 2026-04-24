@@ -3282,10 +3282,14 @@ function renderEmailList() {
       (e.asunto||'').toLowerCase().includes(search) ||
       (e.remitente_nombre||'').toLowerCase().includes(search) ||
       (e.raw?.ticket_id||'').toLowerCase().includes(search) ||
-      (e.raw?.cedula||'').toLowerCase().includes(search) ||
-      (e.raw?.cedula_paciente||'').toLowerCase().includes(search) ||
-      (e.raw?.nombre||'').toLowerCase().includes(search) ||
-      (e.raw?.from_email||'').toLowerCase().includes(search)
+      // Cédula — buscar solo en campos de cédula, no en body
+      (typeof e.raw?.cedula === 'string' && e.raw.cedula.includes(search)) ||
+      (typeof e.raw?.cedula_paciente === 'string' && e.raw.cedula_paciente.includes(search)) ||
+      // Nombre paciente — campo específico, no body
+      (typeof e.raw?.nombre === 'string' && e.raw.nombre.toLowerCase().includes(search)) ||
+      // Resumen IA — contiene nombre y cédula extraídos por GPT
+      (e.resumen_corto||'').toLowerCase().includes(search) ||
+      (e.raw?.resumen_corto||'').toLowerCase().includes(search)
     );
     // Ordenar por fecha desc
     resultado.sort((a,b)=>new Date(b.raw?.received_at||b.fecha)-new Date(a.raw?.received_at||a.fecha));
