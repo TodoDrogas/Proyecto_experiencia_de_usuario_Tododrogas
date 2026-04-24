@@ -3295,7 +3295,9 @@ function renderEmailList() {
     resultado.sort((a,b)=>new Date(b.raw?.received_at||b.fecha)-new Date(a.raw?.received_at||a.fecha));
     const el = document.getElementById('emailList');
     if(!resultado.length) {
-      el.innerHTML = `<div class="empty-state"><div class="ei-icon">🔍</div><p>Sin resultados para <b>${search}</b></p><p style="font-size:11px;color:var(--ink3);margin-top:4px">Buscando en todos los estados y carpetas</p></div>`;
+      // No hay en memoria — buscar directamente en Supabase (incluye enviados y ciclos anteriores)
+      el.innerHTML = `<div class="empty-state"><div class="ei-icon">🔍</div><p>Buscando en base de datos…</p></div>`;
+      _buscarEnSupabase(search, el);
       return;
     }
     // Mostrar banner indicando búsqueda global
@@ -3344,6 +3346,61 @@ function renderEmailList() {
   }
 
   renderEmailItems(list, el, null);
+}
+
+
+// ── BÚSQUEDA DIRECTA EN SUPABASE ─────────────────────────────────────────
+// Se activa cuando la búsqueda en memoria no da resultados.
+// Busca en subject, from_email, from_name, cedula_paciente, cedula, nombre
+let _buscarTimer = null;
+async function _buscarEnSupabase(search, el) {
+  clearTimeout(_buscarTimer);
+  _buscarTimer = setTimeout(async () => {
+    try {
+      const q = encodeURIComponent(search);
+      // Buscar en múltiples campos usando OR de Supabase
+      const rows = await sb(
+        `correos?or=(subject.ilike.*${q}*,from_email.ilike.*${q}*,from_name.ilike.*${q}*,cedula_paciente.ilike.*${q}*,cedula.ilike.*${q}*,nombre.ilike.*${q}*)&order=received_at.desc&limit=30`
+      ) || [];
+
+      if (!rows.length) {
+        el.innerHTML = `<div class="empty-state"><div class="ei-icon">🔍</div><p>Sin resultados para <b>${search}</b></p><p style="font-size:11px;color:var(--ink3);margin-top:4px">Buscado en todos los estados y carpetas</p></div>`;
+        return;
+      }
+
+      // Mapear igual que loadEmails para poder renderizar
+      const mapped = rows.map(e => ({
+        id: e.id,
+        message_id: e.message_id,
+        asunto: e.subject || '(Sin asunto)',
+        remitente: e.from_email || '',
+        remitente_nombre: e.from_name || '',
+        fecha: e.received_at || e.created_at,
+        estado: e.estado || 'sin_asignar',
+        asignado_a: e.asignado_a || null,
+        agente_id: e.agente_id || null,
+        prioridad: e.prioridad || '',
+        es_urgente: e.es_urgente || false,
+        tipo_pqr: e.tipo_pqr || '',
+        resumen_corto: e.resumen_corto || '',
+        fecha_limite_sla: e.fecha_limite_sla || null,
+        origen: e.origen || '',
+        hilo_count: 1,
+        is_read: e.is_read || false,
+        body_content: e.body_content || '',
+        raw: e,
+      }));
+
+      renderEmailItems(mapped, el, `🔍 ${mapped.length} resultado${mapped.length!==1?'s':''} en base de datos (todos los estados)`);
+
+      // Agregar al estado para que selectEmail funcione
+      const idsExistentes = new Set((state.allEmails||[]).map(x=>x.id));
+      mapped.forEach(m => { if(!idsExistentes.has(m.id)) (state.allEmails||[]).push(m); });
+
+    } catch(err) {
+      el.innerHTML = `<div class="empty-state"><div class="ei-icon">⚠️</div><p>Error al buscar: ${err.message}</p></div>`;
+    }
+  }, 400); // debounce 400ms
 }
 
 function renderEmailItems(list, el, banner) {
