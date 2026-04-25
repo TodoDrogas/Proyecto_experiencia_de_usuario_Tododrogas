@@ -6,75 +6,86 @@
 <title>Gestor Documental Inteligente</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <style>
-:root {
-  --ink:    #0d1117;
-  --ink2:   #1e2533;
-  --ink3:   #5a6482;
-  --bg:     #f0f2f7;
-  --bg2:    #e4e8f2;
-  --s2:     #ffffff;
-  --s3:     #f8f9fc;
-  --s4:     #eef1f7;
-  --b:      #d8dce8;
-  --b2:     #c7d9ff;
-  --blue:   #2563eb;
-  --blue-d: #1d4ed8;
-  --blue-l: #eef3ff;
-  --cyan:   #0284c7;
-  --cdim:   #e0f2fe;
-  --green:  #16a34a;
-  --gdim:   #dcfce7;
-  --red:    #dc2626;
-  --rdim:   #fee2e2;
-  --yellow: #ca8a04;
-  --ydim:   #fef9c3;
-  --t:      #0d1117;
-  --t2:     #2a3347;
-  --t3:     #6b7897;
-  --shadow: 0 1px 3px rgba(10,14,26,.06), 0 4px 12px rgba(10,14,26,.04);
-  --shadow-l: 0 2px 8px rgba(10,14,26,.1), 0 8px 24px rgba(10,14,26,.06);
-  --r:12px; --r2:8px;
+:root{
+  --ink:#0d1117;--ink2:#1e2533;--ink3:#5a6482;
+  --bg:#f0f2f7;--bg2:#e4e8f2;--s2:#ffffff;--s3:#f8f9fc;--s4:#eef1f7;
+  --b:#d8dce8;--b2:#c7d9ff;
+  --blue:#2563eb;--blue-d:#1d4ed8;--blue-l:#eef3ff;
+  --cyan:#0284c7;--cdim:#e0f2fe;
+  --green:#16a34a;--gdim:#dcfce7;
+  --red:#dc2626;--rdim:#fee2e2;
+  --yellow:#ca8a04;--ydim:#fef9c3;
+  --purple:#7c3aed;--pdim:#ede9fe;
+  --t:#0d1117;--t2:#2a3347;--t3:#6b7897;
+  --shadow:0 1px 3px rgba(10,14,26,.06),0 4px 12px rgba(10,14,26,.04);
+  --shadow-l:0 2px 8px rgba(10,14,26,.1),0 8px 24px rgba(10,14,26,.06);
+  --r:12px;--r2:8px;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
 html,body{height:100%;font-family:'Poppins',sans-serif;background:var(--bg);color:var(--ink);overflow:hidden;}
 
-/* TOPBAR */
-.tb{height:56px;background:#ffffff;border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 24px;gap:14px;flex-shrink:0;position:relative;z-index:50;box-shadow:0 1px 0 var(--b),0 4px 32px rgba(10,14,40,.06);}
-.tb::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 0%,#2563eb 25%,#0284c7 55%,#2563eb 80%,transparent 100%);opacity:.4;}
-.tb-logo{display:flex;align-items:center;gap:10px;}
-.tb-logo img{height:28px;object-fit:contain;}
-.tb-div{width:1px;height:22px;background:var(--b);}
-.tb-title{font-size:13px;font-weight:700;color:var(--ink);line-height:1.3;}
-.tb-title small{display:block;font-size:9px;font-weight:600;color:var(--t3);letter-spacing:.8px;text-transform:uppercase;}
-.tb-sp{flex:1;}
-.tb button{display:flex;align-items:center;gap:7px;padding:8px 18px;border:none;border-radius:8px;font-family:'Poppins',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.1px;}
-#btnZip{background:linear-gradient(135deg,#16a34a,#059669);color:#fff;display:none;box-shadow:0 2px 10px rgba(22,163,74,.25);}
-#btnZip:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(22,163,74,.35);}
-#btnLoad{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;box-shadow:0 2px 10px rgba(37,99,235,.25);}
-#btnLoad:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(37,99,235,.38);}
-.tb-user{display:flex;align-items:center;gap:8px;padding:8px 16px 8px 10px;background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 2px 10px rgba(37,99,235,.25);color:#fff!important;font-family:'Poppins',sans-serif;font-size:13px;font-weight:700;letter-spacing:.1px;}
-.tb-user:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(37,99,235,.38);}
-.tb-user-avatar{width:26px;height:26px;border-radius:6px;background:rgba(255,255,255,.22);border:1.5px solid rgba(255,255,255,.35);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;letter-spacing:0;flex-shrink:0;}
-.tb-user-label{font-size:13px;font-weight:700;color:#fff!important;letter-spacing:.1px;}
-.tb-user-dot{width:7px;height:7px;border-radius:50%;background:#4ade80;box-shadow:0 0 6px rgba(74,222,128,.7);flex-shrink:0;}
+/* ─── TOP NAV ─── */
+.topnav{height:52px;background:#fff;border-bottom:1px solid var(--b);display:flex;align-items:center;padding:0 16px;gap:4px;flex-shrink:0;position:relative;z-index:100;box-shadow:0 2px 12px rgba(10,14,40,.06);}
+.topnav::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#2563eb 20%,#0284c7 55%,#7c3aed 80%,transparent);opacity:.4;}
+.nav-logo{display:flex;align-items:center;gap:8px;margin-right:12px;text-decoration:none;}
+.nav-logo-icon{width:30px;height:30px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.nav-logo-text{font-size:13px;font-weight:800;color:var(--ink);letter-spacing:-.3px;white-space:nowrap;}
+.nav-logo-text span{color:var(--blue);}
+.nav-div{width:1px;height:24px;background:var(--b);margin:0 8px;}
+.nav-tab{display:flex;align-items:center;gap:6px;padding:7px 12px;border-radius:8px;border:none;background:transparent;font-family:'Poppins',sans-serif;font-size:12px;font-weight:600;color:var(--t3);cursor:pointer;transition:all .18s;white-space:nowrap;}
+.nav-tab:hover{background:var(--bg);color:var(--t2);}
+.nav-tab.act{background:var(--blue-l);color:var(--blue);border:1px solid rgba(37,99,235,.2);}
+.nav-tab .nt-ico{font-size:14px;}
+.nav-sp{flex:1;}
+.nav-user{display:flex;align-items:center;gap:7px;padding:7px 13px;background:linear-gradient(135deg,#2563eb,#1d4ed8);border:none;border-radius:8px;cursor:pointer;font-family:'Poppins',sans-serif;font-size:12px;font-weight:700;color:#fff;letter-spacing:.1px;}
+.nav-user-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;box-shadow:0 0 5px rgba(74,222,128,.7);}
 
-/* LAYOUT */
-.wrap{display:flex;height:calc(100dvh - 56px);}
+/* ─── SCREENS ─── */
+.screen{display:none;height:calc(100dvh - 52px);overflow:hidden;}
+.screen.on{display:flex;flex-direction:column;}
 
-/* SIDEBAR */
-.sb{width:228px;flex-shrink:0;background:var(--s2);border-right:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden;}
-.sb-head{padding:11px 13px;border-bottom:1px solid var(--b);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+/* ─── TOAST ─── */
+.toast{position:fixed;bottom:20px;right:20px;z-index:9999;padding:9px 16px;border-radius:9px;font-size:12px;font-weight:600;color:#fff;box-shadow:0 4px 18px rgba(0,0,0,.2);transform:translateY(70px);opacity:0;transition:all .3s;pointer-events:none;background:var(--green);}
+.toast.on{transform:translateY(0);opacity:1;}
+.toast.warn{background:var(--red);}
+.toast.info{background:var(--blue);}
+
+/* ─── SHARED WELCOME ─── */
+.welcome-zone{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px;text-align:center;background:linear-gradient(160deg,#eef1f7 0%,#e4e8f2 100%);position:relative;overflow:hidden;}
+.welcome-zone::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 65% 55% at 50% 50%,rgba(37,99,235,.09) 0%,transparent 68%);pointer-events:none;}
+.w-badge{position:relative;display:inline-flex;align-items:center;gap:7px;background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.22);border-radius:20px;padding:5px 14px;font-size:10px;font-weight:700;color:#2563eb;letter-spacing:.8px;text-transform:uppercase;}
+.w-badge-dot{width:6px;height:6px;border-radius:50%;background:#2563eb;animation:bdot 2s ease-in-out infinite;}
+@keyframes bdot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(.6);}}
+.w-ico{font-size:48px;opacity:.15;filter:grayscale(1);}
+.w-title{font-size:22px;font-weight:700;color:var(--t);letter-spacing:-.4px;line-height:1.2;}
+.w-desc{font-size:12px;color:var(--t3);max-width:360px;line-height:1.9;}
+.w-btn-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:4px;}
+.w-btn{display:inline-flex;align-items:center;gap:9px;padding:12px 28px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:10px;font-family:'Poppins',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all .22s;box-shadow:0 4px 20px rgba(37,99,235,.3);letter-spacing:.1px;}
+.w-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(37,99,235,.4);}
+.w-btn.alt{background:linear-gradient(135deg,#0284c7,#0369a1);}
+.w-hint{font-size:10px;color:var(--t3);letter-spacing:.3px;}
+input[type=file]{display:none;}
+
+/* ════════════════════════════════
+   MODULE 1 — GESTOR PDF
+════════════════════════════════ */
+.g-wrap{display:flex;flex:1;overflow:hidden;}
+
+/* Sidebar */
+.g-sb{width:230px;flex-shrink:0;background:var(--s2);border-right:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden;}
+.g-sb-head{padding:10px 13px;border-bottom:1px solid var(--b);font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--t3);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 .badge{background:var(--blue-l);border:1px solid var(--b2);border-radius:20px;padding:2px 8px;font-size:10px;color:var(--blue);font-family:'DM Mono',monospace;}
-.sb-list{flex:1;overflow-y:auto;padding:6px;}
-.sb-list::-webkit-scrollbar{width:3px;}
-.sb-list::-webkit-scrollbar-thumb{background:#c4cadb;border-radius:3px;}
+.g-sb-list{flex:1;overflow-y:auto;padding:6px;}
+.g-sb-list::-webkit-scrollbar{width:3px;}
+.g-sb-list::-webkit-scrollbar-thumb{background:#c4cadb;border-radius:3px;}
 .fi{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:8px;cursor:pointer;margin-bottom:2px;border:1px solid transparent;transition:all .18s;}
 .fi:hover{background:var(--bg);}
 .fi.act{background:var(--blue-l);border-color:var(--b2);}
 .fi.done{border:1px solid rgba(16,185,129,.35);background:rgba(16,185,129,.05);}
-.fi.done:hover{background:rgba(16,185,129,.1);}
 .fi-ico{font-size:15px;flex-shrink:0;}
 .fi-name{flex:1;font-size:12px;font-weight:500;color:var(--t);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .fi.done .fi-name{color:var(--green);}
@@ -87,100 +98,75 @@ html,body{height:100%;font-family:'Poppins',sans-serif;background:var(--bg);colo
 .sb-empty-t{font-size:12px;font-weight:600;color:var(--t2);margin-bottom:4px;}
 .sb-empty-d{font-size:10px;color:var(--t3);line-height:1.6;}
 
-/* MAIN */
-.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-.welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:40px;text-align:center;background:linear-gradient(160deg,#eef1f7 0%,#e4e8f2 100%);position:relative;overflow:hidden;}
-.welcome::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 65% 55% at 50% 50%,rgba(37,99,235,.09) 0%,transparent 68%);pointer-events:none;}
-.welcome-badge{position:relative;display:inline-flex;align-items:center;gap:7px;background:rgba(37,99,235,.1);border:1px solid rgba(37,99,235,.22);border-radius:20px;padding:5px 14px;font-size:10px;font-weight:700;color:#2563eb;letter-spacing:.8px;text-transform:uppercase;}
-.welcome-badge-dot{width:6px;height:6px;border-radius:50%;background:#2563eb;animation:bdot 2s ease-in-out infinite;}
-@keyframes bdot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.35;transform:scale(.6);}}
-.welcome-ico{position:relative;font-size:48px;opacity:.15;filter:grayscale(1);}
-.welcome-t{position:relative;font-size:22px;font-weight:700;color:var(--t);letter-spacing:-.4px;line-height:1.2;}
-.welcome-d{position:relative;font-size:12px;color:var(--t3);max-width:340px;line-height:1.9;}
-.welcome-upload-btn{position:relative;display:inline-flex;align-items:center;gap:10px;padding:14px 32px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;border-radius:12px;font-family:'Poppins',sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:all .22s;box-shadow:0 4px 22px rgba(37,99,235,.32),0 1px 0 rgba(255,255,255,.12) inset;letter-spacing:.1px;margin-top:4px;}
-.welcome-upload-btn:hover{transform:translateY(-2px);box-shadow:0 8px 32px rgba(37,99,235,.42);}
-.welcome-upload-btn:active{transform:translateY(0);}
-.welcome-upload-btn span.ico{font-size:18px;}
-.welcome-hint{position:relative;font-size:11px;color:var(--t3);letter-spacing:.3px;margin-top:-4px;}
+/* Main panel */
+.g-main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.g-welcome{flex:1;background:linear-gradient(160deg,#eef1f7,#e4e8f2);}
 
-/* PDF PANEL */
-.panel{flex:1;display:none;flex-direction:column;overflow:hidden;}
-.panel.on{display:flex;}
-.pan-head{padding:10px 16px;background:var(--s2);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:12px;flex-shrink:0;}
+/* PDF Panel */
+.g-panel{flex:1;display:none;flex-direction:column;overflow:hidden;}
+.g-panel.on{display:flex;}
+.pan-head{padding:9px 15px;background:var(--s2);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:10px;flex-shrink:0;}
 .bc{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;flex:1;}
 .bc-cur{color:var(--blue);font-weight:600;}
-.btn-bk{padding:6px 12px;border-radius:7px;border:1px solid var(--b);background:transparent;color:var(--t2);font-family:'Poppins',sans-serif;font-size:11px;font-weight:500;cursor:pointer;transition:all .18s;}
-.btn-bk:hover{background:var(--bg2);border-color:#c4cadb;}
+.btn-sm{padding:6px 12px;border-radius:7px;border:1px solid var(--b);background:transparent;color:var(--t2);font-family:'Poppins',sans-serif;font-size:11px;font-weight:500;cursor:pointer;transition:all .18s;}
+.btn-sm:hover{background:var(--bg2);}
+.btn-sm.green{background:linear-gradient(135deg,var(--green),#059669);color:#fff;border:none;}
+.btn-sm.red{background:var(--rdim);color:var(--red);border-color:rgba(220,38,38,.3);}
 
-/* 3 COLS */
-.cols{flex:1;display:grid;grid-template-columns:230px 1fr 280px;overflow:hidden;}
-
-/* COL1 - PDF LIST */
+/* 3 columns */
+.g-cols{flex:1;display:grid;grid-template-columns:230px 1fr 282px;overflow:hidden;}
 .c1{background:var(--s2);border-right:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden;}
 .col-h{padding:9px 12px;border-bottom:1px solid var(--b);font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--t3);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 .pdf-list{flex:1;overflow-y:auto;padding:5px;}
 .pdf-list::-webkit-scrollbar{width:3px;}
 .pdf-list::-webkit-scrollbar-thumb{background:#c4cadb;border-radius:3px;}
 
-/* PDF item */
+/* PDF items */
 .pi{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;margin-bottom:2px;cursor:pointer;border:1px solid transparent;transition:all .18s;user-select:none;}
 .pi:hover{background:var(--bg);}
 .pi.pi-checked{background:var(--blue-l);border-color:var(--b2);}
 .pi.pi-done{background:rgba(16,185,129,.04);border-color:rgba(16,185,129,.15);}
-.pi.pi-skip{opacity:.5;}
 .pi-cb{width:17px;height:17px;border-radius:4px;border:1.5px solid var(--t3);background:transparent;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;transition:all .15s;}
 .pi.pi-checked .pi-cb{background:var(--blue);border-color:var(--blue);}
 .pi.pi-done .pi-cb{background:var(--green);border-color:var(--green);}
-.pi.pi-skip .pi-cb{background:var(--ydim);border-color:var(--yellow);}
 .pi-cb-icon{font-size:10px;color:#fff;display:none;line-height:1;}
-.pi.pi-checked .pi-cb-icon,.pi.pi-done .pi-cb-icon,.pi.pi-skip .pi-cb-icon{display:block;}
+.pi.pi-checked .pi-cb-icon,.pi.pi-done .pi-cb-icon{display:block;}
 .pi-info{flex:1;min-width:0;}
 .pi-seq{font-family:'DM Mono',monospace;font-size:9px;color:var(--t3);margin-bottom:2px;}
 .pi-name{font-size:11px;font-weight:500;color:var(--t);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pi.pi-done .pi-name{text-decoration:line-through;color:var(--t3);}
 .pi-pgs{font-size:9px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:2px;}
-.pi-new-row{display:flex;align-items:center;gap:7px;padding:6px 10px 6px 28px;margin-bottom:2px;border-radius:7px;background:rgba(2,132,199,.06);border:1px solid rgba(2,132,199,.18);}
-.pi-new-cb{width:15px;height:15px;border-radius:3px;background:var(--cyan);border:1px solid var(--cyan);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#fff;}
+.pi-new-row{display:flex;align-items:center;gap:7px;padding:5px 10px 5px 28px;margin-bottom:2px;border-radius:7px;background:rgba(2,132,199,.06);border:1px solid rgba(2,132,199,.18);}
+.pi-new-cb{width:14px;height:14px;border-radius:3px;background:var(--cyan);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#fff;}
 .pi-new-info{flex:1;min-width:0;}
 .pi-new-label{font-size:9px;color:var(--cyan);font-family:'DM Mono',monospace;}
 .pi-new-name{font-size:11px;font-weight:600;color:var(--cyan);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pi-undo-btn{flex-shrink:0;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);color:#ef4444;border-radius:5px;padding:2px 6px;font-size:10px;cursor:pointer;font-family:'Poppins',sans-serif;font-weight:600;}
-.pi-undo-btn:hover{background:rgba(239,68,68,.18);}
 
-/* COL2 - VIEWER */
+/* Viewer */
 .c2{display:flex;flex-direction:column;overflow:hidden;background:var(--bg2);}
-.vtb{padding:7px 12px;background:var(--s2);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:6px;flex-shrink:0;flex-wrap:wrap;}
-.vb{padding:5px 10px;border-radius:6px;border:1px solid var(--b);background:var(--bg);color:var(--t);font-family:'Poppins',sans-serif;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;}
+.vtb{padding:7px 10px;background:var(--s2);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap;}
+.vb{padding:5px 9px;border-radius:6px;border:1px solid var(--b);background:var(--bg);color:var(--t);font-family:'Poppins',sans-serif;font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;}
 .vb:hover{background:var(--bg2);border-color:#c4cadb;}
 .vsep{width:1px;height:18px;background:var(--b);flex-shrink:0;}
 .pg-inf{font-size:10px;color:var(--t3);font-family:'DM Mono',monospace;}
-
-/* Viewer grid - pages side by side */
 .cw{flex:1;overflow:auto;padding:14px;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;}
 .cw::-webkit-scrollbar{width:5px;}
 .cw::-webkit-scrollbar-thumb{background:rgba(10,14,40,.12);border-radius:4px;}
-
-/* Page wrapper inside viewer */
-.pw{position:relative;flex-shrink:0;cursor:pointer;border-radius:6px;overflow:hidden;
-    box-shadow:0 2px 10px rgba(10,14,40,.1);border:2px solid rgba(10,14,40,.07);transition:border-color .2s;}
+.pw{position:relative;flex-shrink:0;cursor:pointer;border-radius:6px;overflow:hidden;box-shadow:0 2px 10px rgba(10,14,40,.1);border:2px solid rgba(10,14,40,.07);transition:border-color .2s;}
 .pw:hover{border-color:rgba(37,99,235,.4);}
 .pw.psel{border-color:var(--blue);box-shadow:0 0 14px rgba(37,99,235,.2);}
 .pw canvas{display:block;}
-/* PDF source tag on thumbnail */
-.pw-src{position:absolute;top:5px;left:5px;background:rgba(10,14,40,.62);padding:2px 5px;border-radius:3px;
-        font-size:9px;color:rgba(255,255,255,.88);font-family:'DM Mono',monospace;max-width:calc(100% - 10px);
-        white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.pg-lbl{position:absolute;bottom:5px;right:5px;background:rgba(10,14,40,.52);padding:2px 6px;border-radius:3px;
-        font-size:9px;color:rgba(255,255,255,.82);font-family:'DM Mono',monospace;}
-.rot-lbl{position:absolute;top:5px;right:5px;background:rgba(37,99,235,.9);padding:2px 5px;border-radius:3px;
-         font-size:9px;font-weight:700;font-family:'DM Mono',monospace;color:#fff;}
+.pw-src{position:absolute;top:5px;left:5px;background:rgba(10,14,40,.62);padding:2px 5px;border-radius:3px;font-size:9px;color:rgba(255,255,255,.88);font-family:'DM Mono',monospace;max-width:calc(100% - 10px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pg-lbl{position:absolute;bottom:5px;right:5px;background:rgba(10,14,40,.52);padding:2px 6px;border-radius:3px;font-size:9px;color:rgba(255,255,255,.82);font-family:'DM Mono',monospace;}
+.rot-lbl{position:absolute;top:5px;right:5px;background:rgba(37,99,235,.9);padding:2px 5px;border-radius:3px;font-size:9px;font-weight:700;font-family:'DM Mono',monospace;color:#fff;}
 .pov{position:absolute;inset:0;background:rgba(37,99,235,.13);display:none;align-items:center;justify-content:center;pointer-events:none;}
 .pw.psel .pov{display:flex;}
 .pov-ico{font-size:28px;color:var(--blue);}
 .no-pdf{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:var(--t3);width:100%;}
 .no-pdf-i{font-size:42px;opacity:.18;}
 
-/* COL3 - ACTIONS */
+/* Actions col */
 .c3{background:var(--s2);border-left:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden;}
 .sel-bar{padding:8px 14px;background:rgba(2,132,199,.06);border-bottom:1px solid var(--b);font-size:10px;color:var(--t2);display:none;flex-shrink:0;}
 .sel-bar.on{display:block;}
@@ -188,22 +174,23 @@ html,body{height:100%;font-family:'Poppins',sans-serif;background:var(--bg);colo
 .ablock{padding:11px 14px;border-bottom:1px solid var(--b);flex-shrink:0;}
 .albl{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--t3);margin-bottom:8px;}
 .rgrid{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
-.rbtn{padding:7px;border-radius:7px;border:1px solid var(--b);background:var(--bg);color:var(--t);font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;text-align:center;}
+.rbtn{padding:7px;border-radius:7px;border:1px solid var(--b);background:var(--bg);color:var(--t);font-size:11px;font-weight:500;cursor:pointer;transition:all .15s;text-align:center;font-family:'Poppins',sans-serif;}
 .rbtn:hover{background:var(--bg2);border-color:rgba(2,132,199,.35);color:var(--cyan);}
 .rbtn.rr{color:var(--red);border-color:rgba(239,68,68,.25);}
 .rbtn.rr:hover{background:var(--rdim);}
+.rbtn.rg{color:var(--green);border-color:rgba(16,163,74,.25);}
+.rbtn.rg:hover{background:var(--gdim);}
 .sfield{width:100%;padding:8px 11px;background:var(--s3);border:1.5px solid var(--b);border-radius:8px;color:var(--t);font-family:'DM Mono',monospace;font-size:12px;outline:none;cursor:pointer;appearance:none;transition:border-color .2s;padding-right:28px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 9px center;}
 .sfield:focus{border-color:var(--cyan);}
-.sfield option{background:#fff;color:var(--t);}
-.nfield{width:100%;padding:8px 11px;background:var(--bg);border:1.5px solid var(--b);border-radius:8px;color:var(--ink);font-family:'DM Mono',monospace;font-size:13px;outline:none;margin-top:7px;letter-spacing:1px;transition:border-color .2s;}
+.nfield{width:100%;padding:8px 11px;background:var(--bg);border:1.5px solid var(--b);border-radius:8px;color:var(--ink);font-family:'DM Mono',monospace;font-size:13px;outline:none;margin-top:7px;transition:border-color .2s;}
 .nfield:focus{border-color:var(--cyan);}
 .nfield::placeholder{color:var(--t3);}
 .nprev{margin-top:8px;padding:7px 11px;background:linear-gradient(135deg,rgba(2,132,199,.06),rgba(37,99,235,.04));border:1px solid rgba(2,132,199,.2);border-radius:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--cyan);word-break:break-all;min-height:34px;line-height:1.5;}
 .abtn{width:100%;padding:9px;border-radius:8px;border:none;font-family:'Poppins',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .18s;margin-top:7px;display:flex;align-items:center;justify-content:center;gap:5px;}
 .a-ok{background:var(--gdim);color:var(--green);border:1px solid rgba(16,185,129,.3);}
 .a-ok:hover{background:rgba(16,185,129,.2);}
-.a-skip{background:var(--ydim);color:var(--yellow);border:1px solid rgba(245,158,11,.25);}
-.a-skip:hover{background:rgba(245,158,11,.18);}
+.a-del{background:var(--rdim);color:var(--red);border:1px solid rgba(220,38,38,.25);}
+.a-del:hover{background:rgba(220,38,38,.15);}
 .a-fin{background:linear-gradient(135deg,var(--green),#059669);color:#fff;box-shadow:0 2px 10px rgba(16,185,129,.25);margin-top:0;}
 .a-fin:hover{box-shadow:0 4px 14px rgba(16,185,129,.4);}
 .prow{display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-bottom:5px;}
@@ -216,549 +203,901 @@ html,body{height:100%;font-family:'Poppins',sans-serif;background:var(--bg);colo
 .le{font-size:10px;font-family:'DM Mono',monospace;padding:4px 0;border-bottom:1px solid var(--b);display:flex;gap:5px;line-height:1.5;}
 .lok{color:var(--green);}.lwarn{color:var(--yellow);}.linfo{color:var(--cyan);}
 
-/* MODAL OVERLAY */
-.modal-bg{position:fixed;inset:0;background:rgba(10,14,40,.5);z-index:200;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+/* Modal */
+.modal-bg{position:fixed;inset:0;background:rgba(10,14,40,.5);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
 .modal-bg.hide{display:none;}
-.modal{background:var(--s2);border:1px solid var(--b);border-radius:16px;padding:28px 30px;max-width:420px;width:90%;box-shadow:0 24px 64px rgba(10,14,40,.18);}
+.modal{background:var(--s2);border:1px solid var(--b);border-radius:16px;padding:26px 28px;max-width:420px;width:90%;box-shadow:0 24px 64px rgba(10,14,40,.18);}
 .modal h3{font-size:15px;font-weight:700;margin-bottom:8px;color:var(--t);}
 .modal p{font-size:12px;color:var(--t2);line-height:1.7;margin-bottom:18px;}
 .modal-btns{display:flex;gap:10px;}
 .modal-btns button{flex:1;padding:10px;border-radius:9px;border:none;font-family:'Poppins',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .18s;}
 .mbtn-yes{background:linear-gradient(135deg,var(--green),#059669);color:#fff;}
 .mbtn-no{background:var(--bg);color:var(--t2);border:1px solid var(--b)!important;}
-.mbtn-no:hover{background:var(--bg2);}
+.mbtn-cancel{background:linear-gradient(135deg,var(--red),#b91c1c);color:#fff;}
 
-/* TOAST */
-.toast{position:fixed;bottom:20px;right:20px;z-index:999;padding:9px 16px;border-radius:9px;font-size:12px;font-weight:600;color:#fff;box-shadow:0 4px 18px rgba(0,0,0,.2);transform:translateY(70px);opacity:0;transition:all .3s;pointer-events:none;background:var(--green);}
-.toast.on{transform:translateY(0);opacity:1;}
-.toast.warn{background:var(--yellow);color:#000;}
-input[type=file]{display:none;}
+/* ════════════════════════════════
+   MODULE 2 — DIVIDIR PDF
+════════════════════════════════ */
+.div-wrap{flex:1;display:flex;overflow:hidden;}
+.div-left{width:280px;flex-shrink:0;background:var(--s2);border-right:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden;}
+.div-right{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.div-toolbar{padding:10px 14px;background:var(--s2);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;}
+.div-pages{flex:1;overflow:auto;padding:14px;display:flex;flex-wrap:wrap;gap:10px;align-content:flex-start;background:var(--bg2);}
+.div-page-thumb{position:relative;cursor:pointer;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(10,14,40,.1);border:2px solid rgba(10,14,40,.07);transition:all .2s;user-select:none;}
+.div-page-thumb:hover{border-color:rgba(37,99,235,.4);}
+.div-page-thumb.sel{border-color:var(--blue);box-shadow:0 0 14px rgba(37,99,235,.2);}
+.div-page-thumb canvas{display:block;}
+.div-pg-num{position:absolute;bottom:5px;right:5px;background:rgba(10,14,40,.55);padding:2px 6px;border-radius:3px;font-size:9px;color:#fff;font-family:'DM Mono',monospace;}
+.div-pg-sel{position:absolute;inset:0;background:rgba(37,99,235,.12);display:none;align-items:center;justify-content:center;}
+.div-page-thumb.sel .div-pg-sel{display:flex;}
+.div-pg-sel-ico{font-size:28px;color:var(--blue);}
+.div-info{padding:14px;border-bottom:1px solid var(--b);flex-shrink:0;}
+.div-info-title{font-size:11px;font-weight:700;color:var(--t2);margin-bottom:6px;}
+.div-info-stat{display:flex;justify-content:space-between;font-size:11px;color:var(--t3);margin-bottom:4px;font-family:'DM Mono',monospace;}
+.div-info-stat span:last-child{color:var(--blue);font-weight:600;}
+.div-actions{padding:14px;display:flex;flex-direction:column;gap:8px;}
+.div-btn{width:100%;padding:10px;border-radius:9px;border:none;font-family:'Poppins',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:6px;}
+.div-btn.primary{background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;box-shadow:0 2px 10px rgba(37,99,235,.25);}
+.div-btn.primary:hover{box-shadow:0 4px 16px rgba(37,99,235,.4);}
+.div-btn.secondary{background:var(--gdim);color:var(--green);border:1px solid rgba(16,185,129,.3);}
+.div-btn.secondary:hover{background:rgba(16,185,129,.2);}
+.div-btn.danger{background:var(--rdim);color:var(--red);border:1px solid rgba(220,38,38,.25);}
+.div-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* ════════════════════════════════
+   MODULE 3 — UNIR PDF
+════════════════════════════════ */
+.merge-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.merge-body{flex:1;display:flex;overflow:hidden;}
+.merge-left{width:320px;flex-shrink:0;background:var(--s2);border-right:1px solid var(--b);display:flex;flex-direction:column;overflow:hidden;}
+.merge-right{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg2);}
+.merge-drop{padding:14px;border-bottom:1px solid var(--b);flex-shrink:0;}
+.merge-drop-zone{border:2px dashed var(--b2);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--blue-l);}
+.merge-drop-zone:hover,.merge-drop-zone.drag{border-color:var(--blue);background:rgba(37,99,235,.08);}
+.merge-drop-ico{font-size:28px;margin-bottom:6px;opacity:.5;}
+.merge-drop-t{font-size:12px;font-weight:600;color:var(--blue);}
+.merge-drop-d{font-size:10px;color:var(--t3);margin-top:3px;}
+.merge-list{flex:1;overflow-y:auto;padding:8px;}
+.merge-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;border:1px solid var(--b);background:var(--s3);margin-bottom:4px;cursor:grab;}
+.merge-item:active{cursor:grabbing;}
+.merge-item.drag-over{border-color:var(--blue);background:var(--blue-l);}
+.merge-item-grip{font-size:14px;color:var(--t3);flex-shrink:0;}
+.merge-item-ico{font-size:14px;flex-shrink:0;}
+.merge-item-info{flex:1;min-width:0;}
+.merge-item-name{font-size:11px;font-weight:500;color:var(--t);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.merge-item-pgs{font-size:9px;color:var(--t3);font-family:'DM Mono',monospace;margin-top:1px;}
+.merge-item-del{width:20px;height:20px;border-radius:4px;border:none;background:var(--rdim);color:var(--red);font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.merge-preview{flex:1;overflow:auto;padding:14px;display:flex;flex-wrap:wrap;gap:8px;align-content:flex-start;}
+.merge-pg-thumb{border-radius:6px;overflow:hidden;box-shadow:0 2px 8px rgba(10,14,40,.1);border:1px solid var(--b);position:relative;}
+.merge-pg-thumb canvas{display:block;}
+.merge-pg-label{position:absolute;bottom:3px;right:4px;background:rgba(10,14,40,.55);padding:1px 5px;border-radius:3px;font-size:8px;color:#fff;font-family:'DM Mono',monospace;}
+.merge-toolbar{padding:10px 14px;background:var(--s2);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.merge-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--t3);}
+.merge-empty-ico{font-size:42px;opacity:.18;}
+.merge-empty-t{font-size:12px;font-weight:600;}
+
+/* ════════════════════════════════
+   MODULE 4 — WORD ↔ PDF
+════════════════════════════════ */
+.conv-wrap{flex:1;overflow:auto;padding:32px;display:flex;flex-direction:column;align-items:center;gap:24px;}
+.conv-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%;max-width:840px;}
+.conv-card{background:var(--s2);border:1px solid var(--b);border-radius:16px;padding:28px;display:flex;flex-direction:column;gap:14px;transition:box-shadow .2s;}
+.conv-card:hover{box-shadow:var(--shadow-l);}
+.conv-card-head{display:flex;align-items:center;gap:12px;}
+.conv-card-ico{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.conv-card-ico.blue{background:linear-gradient(135deg,rgba(37,99,235,.15),rgba(37,99,235,.08));}
+.conv-card-ico.green{background:linear-gradient(135deg,rgba(16,163,74,.15),rgba(16,163,74,.08));}
+.conv-card-ico.purple{background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(124,58,237,.08));}
+.conv-card-ico.orange{background:linear-gradient(135deg,rgba(234,88,12,.15),rgba(234,88,12,.08));}
+.conv-card-title{font-size:15px;font-weight:700;color:var(--t);}
+.conv-card-desc{font-size:11px;color:var(--t3);line-height:1.7;}
+.conv-drop{border:2px dashed var(--b);border-radius:10px;padding:24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--s3);}
+.conv-drop:hover,.conv-drop.drag{border-color:var(--blue);background:var(--blue-l);}
+.conv-drop-ico{font-size:32px;margin-bottom:6px;opacity:.3;}
+.conv-drop-t{font-size:12px;font-weight:600;color:var(--t2);}
+.conv-drop-d{font-size:10px;color:var(--t3);margin-top:3px;}
+.conv-result{padding:12px;background:var(--gdim);border:1px solid rgba(16,185,129,.3);border-radius:9px;display:none;flex-direction:column;gap:8px;}
+.conv-result.on{display:flex;}
+.conv-result-name{font-size:12px;font-weight:600;color:var(--green);}
+.conv-result-dl{padding:8px 16px;border-radius:7px;border:none;background:linear-gradient(135deg,var(--green),#059669);color:#fff;font-family:'Poppins',sans-serif;font-size:12px;font-weight:600;cursor:pointer;align-self:flex-start;}
+.conv-progress{font-size:11px;color:var(--blue);display:none;}
+.conv-progress.on{display:block;}
+
+/* ════════════════════════════════
+   MODULE 5 — PDF ↔ IMÁGENES
+════════════════════════════════ */
+.img-wrap{flex:1;overflow:auto;padding:24px;display:flex;flex-direction:column;gap:20px;align-items:center;}
+.img-card{background:var(--s2);border:1px solid var(--b);border-radius:16px;padding:24px;width:100%;max-width:680px;display:flex;flex-direction:column;gap:14px;}
+.img-card-title{font-size:16px;font-weight:700;color:var(--t);display:flex;align-items:center;gap:10px;}
+.img-thumbs{display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;}
+.img-thumb{border-radius:8px;overflow:hidden;border:1px solid var(--b);box-shadow:0 2px 8px rgba(10,14,40,.08);}
+.img-thumb canvas{display:block;}
+.img-options{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+.img-select{padding:7px 12px;border:1.5px solid var(--b);border-radius:8px;background:var(--bg);color:var(--t);font-family:'Poppins',sans-serif;font-size:12px;outline:none;cursor:pointer;}
+
+/* ════════════════════════════════
+   MODULE 6 — COMPRIMIR PDF
+════════════════════════════════ */
+.comp-wrap{flex:1;overflow:auto;padding:32px;display:flex;flex-direction:column;align-items:center;gap:24px;}
+.comp-card{background:var(--s2);border:1px solid var(--b);border-radius:16px;padding:28px;width:100%;max-width:560px;display:flex;flex-direction:column;gap:16px;}
+.comp-meter{background:var(--bg2);border-radius:10px;overflow:hidden;height:8px;}
+.comp-meter-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--cyan));border-radius:10px;transition:width .6s;}
+.comp-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.comp-stat{background:var(--s3);border:1px solid var(--b);border-radius:10px;padding:12px;text-align:center;}
+.comp-stat-val{font-size:18px;font-weight:700;color:var(--t);font-family:'DM Mono',monospace;}
+.comp-stat-lbl{font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:.8px;margin-top:3px;}
+
+/* Loading overlay */
+.loading-overlay{position:fixed;inset:0;background:rgba(10,14,40,.4);z-index:800;display:none;align-items:center;justify-content:center;backdrop-filter:blur(3px);}
+.loading-overlay.on{display:flex;}
+.loading-box{background:var(--s2);border-radius:16px;padding:32px 40px;text-align:center;box-shadow:0 24px 64px rgba(10,14,40,.2);}
+.loading-spin{width:44px;height:44px;border:3px solid var(--bg2);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 14px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{font-size:13px;font-weight:600;color:var(--t2);}
+.loading-sub{font-size:11px;color:var(--t3);margin-top:4px;}
 </style>
 </head>
 <body>
 
-<div class="tb">
-  <div class="tb-logo">
-    <img src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCADRAyADASIAAhEBAxEB/8QAHQABAAICAwEBAAAAAAAAAAAAAAcIBQYCAwQBCf/EAFoQAAEDAwECBwsECw4EBgMBAAIAAwQBBQYSBxEIEyEiMkJSFDFBUWFicoKSorIjcYGhFSQzNTZzdJGxwtIWFzQ3Q1NWdZOzwcPR8CWDlOIYRFVjpOFUhKPy/8QAGwEBAQACAwEAAAAAAAAAAAAAAAIFBgEDBAf/xAAsEQEAAgIBAgQFBAMBAAAAAAAAAQIDBAUREgYTITEUIjJBoVFhcbEjM0KB/9oADAMBAAIRAxEAPwC5aIiAiIgIiICIiAiIg415acq+U5O9RcqrE5DfLbYodZVykC0HeGm/lOvipRVWtrz0qjJkrjr3XnpDKd7w0SpD2qKEMl2r3WYZM2doYTPVMh1ul+qP++VaPPvF2nlWs24yHqV8DjpVWa1+Bz5a9157Wt7PijXx27ccd34Wlo43Wu6jg1r865avFyqpQm4JahLSSzFsyrIbYY1i3WRQR6hHqD8xc1d1/DuSI+S7zU8WUmfnx/lZ7fRfVE+I7VweMIt+ZozWvNGQ1Tm/TT/T8ylGLIZlMA/HdBxs6bxIS30rRYXZ08uvbtyQ2PT5DX3K9cVnoREXne0REQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBEStaUpWqDB5ff4eO2Zy4Si36abmm6V5zh9mirtkl9n3+4nNnukdS6AdUB7IrPbWr+5ecmdjNH9qwyJloe0XWL2vqGi0sq7h1Lc+H4+uHF5lvql8653lLbWecVPoj8sxjWPXXIZVY9sj69H3Vwy3A389VupbHrvRjUN4hk92Ks1oPtf9qkbZ7amLNiMCO1QaOG2LrxdsyHeX+/Itm37qLE7XN5/NmMXpDN6PhvX8mLZvWZVYv1luVhuBQrpHJhzdvEukJ08dC6yx6sDtitLFxwyXKMR46CNZDZeLT36fSO+ir8s9xe78Xi7rfU1jmOP+B2OyvtPsLdNm2ayMemjEmGbttdrzx7/ABXlotLRezY16bFOy/s8Ots5dbLGTHPrC2Md5qQyDzJibR0oQlSvJWlV31UX7C8grKgvWOS5vcjDxjO+vU8NPVL9KlBaBta9tfLbHZ9S0duu3grmr931ERed7RERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERBwL/ABWLyeaduxy4Tgrz2Y5kHpbuT61lCKlN+qu6i1fapWtMDuenv0APjou3XrF8tIn9YebbvNNe94+0Srk4W9wi7S+d8URfR/s+RzPr1WE2VZBHveLx2KmPdcRsWX2/DStOShfNWlN63Eu/u303KqNumy7dLCXAlOx3w7xt13VWzObR8xNjivsqA13btdGA1/oWr7fA5JyzbFPpLctHxPiphimas9Y/RIu2rII8DG3LQ25Qpc4dGihcot7+cVfJ4PpUGrslSZEuUciU+b7zpbzddLUVV1rM8fpRqYuyWvcpyE72bzJ9KiIiyDGtk2Zzyt2aW1zfuB10WT8tT5P8VYK73m02cWTutziwBePQ0Uh0Q1l4qb1WfHdQ36CQ9/ukNPtKSeEnhl8yqz2yVY43dTtvq7xjIluMhPR0e10O8tS8RY486lm9eE8lrYL0/dL4EJhQwrQhKm+laeFc1TPAtpWW4FM7hKrr8Nuul23S9+4fR6wF/vSrPbPc9sGb2/j7W/VuSFPlojldLrX+tPOotfbY25ERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBYvI75bMetEi63eUMeKwOoir4fJTx1XpuE2Jb4D0+a+DEaOBOOunXmgI9+qp/tbzu4bQMmBiELo21p3RAiiPOOpc3XUesdf+30g5bTtpN+z67jFii/HttHdMWC1ziMuqR6e+fw9XzrJxrfc5eyJi33Rs6XOlqEXgOuouNo34fLqota2I7K42Iw2b1emRkX16m8aVpqGGJdUfP7RfQPlk67T4lstkm4TnBaixmicdOvVGi5paaWi0OvLjjJjtSfuqoXNLSvi6Id1avPGzmmha1ulqaHqLvX0bDlrlx1vH3fI9jFfBmtjv7wIiLudIiIgIiI4Z7Z/DKfmVrjiPKMgTr8wctfqFWYpT9CiTYPYq07pv77e4SpxMff1u0X+H51LtKrSubzxk2e2v2fRfDetOHU77f8ATR9pGzewZvFrWdHpFuQjuanMDzx80u2P++RVeybHsr2YZS0ZG9EeaLXFmMV5jo+aXxCSu0sPlePWjKLM9abxFF+O77QV8Y18FVh2xNJ2L7UYebxKQJ+iLfWQ3uNd4Xx7Yf4ipOVK8+xS+7M8uaNl94QFzjoE5rm66D8JD1hVktjGfx87x75cgavESgjLZp4f/cHza/VX6EEhIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAiIgIiICIiAi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RYrY+fachgX6qyyIMbBslng11QLTb41fGzHAP0UWSREBERAREQFjJ1islwLXOs1vln2nooGXvUWTRB4rdarbb6faFuhxN/8AMsCH6F7URAREQEREBERBwIRMaiQ0qNe/SqxcjGscfPW/YLU6fjOG2X+Cy6IMfCtFpt5aoFpgxS8bMcQ/RRZBEQEREBERAWKmWCxTXONm2O2yTr1nYoGX10WVRB47fbbfACowIMWINeqy0IfoXsREBERAREQEREBERAREQEREHRKjR5TVWpLDT4eJwKFRY39yuMVPVXHLRq8fcTX7KzKIPNDhxIbWiHEYjB2WgEKfUvSiICIiCH7rt+xa23WXbpFpvNXYr5snUQa01IS09teb/wARmI/+jX32Gv21C23ixPWPaheGyDS1MdKWwXaE+d8WofVWjKRevBcnhZdjUe+29l9qO/U6CD2nXTSRDy6a18S2BU52T7VbtgrTkCsQLhbHD11jm5oIC61QLweypYjcI3GSGndNju4H4aNUA6e8QqhNyiThL45aZ2z2ZfnY7LdxgE1Vp+lNxVoRiFQIvCPO+pYqVwjcbEK9y2K7Gfgo7UAp7pEoo2qbV7znLAQKxgt9sBzX3O0WojLq1MvD7qCO0RZPFbJOyLIIVmtrXGSJTogPZHtEXmiPOUi5Gxqplstx7jel3CNKej1fd3LcF4bJbmLTZoVrj0+RiMAyHzCO5e5UPJPt8Cc3omwY0sadV5oT+JeSPjePRz1xrDa2Cp1m4bY1+FZZEDvIiIC6BjsUfq+LQUdIdxHQedX6V3ogIiIPm7fTdVYuVjtglFrlWS2Pl2nIoFX66LKogxUXH7DEPXFsdtYLxtxQH9FFlURAREQFwEADoBQd/iouaICIiAiIgIiICIiAiIgIiICxOQ49Y78xRi82mJPDdycc3QiH0a98foWWRBDmRcHzD59SctUqdajLqCXGt0+gud7y0a68HLImql9jL3bZQ/8Av0Nov0F8Ss4iCosjYPtCZrpbhxH/ADglB+tpXUOw7aPWu4rUwPnVmNftK36IKpwOD3mz5j3TKtUUOtreIi90Vt9j4OEICod6yN94es1EYEPeLV8Kn1EGlYvsxwnHKg5AsTD0gedR+T8qerxjq5B9Xct1REBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQaNtY2fW7PbMDLpdzXCPvrFk6dWnzS8Y1VVsy2f5Xijx0u9oe4mnRktDrYL1x/W5yvEvm7fTdVB+eu4uyivVc8MxO5uVKfjVqkGXScKKGr2u+sQ5sn2eOV1Fi8Xf5pmP6CUili5CJF0RV02dlWz1muoMXi19MzL4iWctWLY3aq0K2WC2Q3KddmKAl+fcqFQsM2X5lk7gFDtT0aKXSkyx4trT9PS9XUrM7KdmtnwWITjRd23R4KC/LMd3J2Qp1R/St+RAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERB/9k=" alt="Tododrogas">
-    <div class="tb-div"></div>
-    <div class="tb-title">Gestor Documental Inteligente<small>Procesador &middot; TD</small></div>
+<!-- ─── TOP NAV ─── -->
+<div class="topnav">
+  <div class="nav-logo">
+    <div class="nav-logo-icon">📄</div>
+    <div class="nav-logo-text">Gestor <span>Documental</span></div>
   </div>
-  <div class="tb-sp"></div>
-  <button id="btnZip">&#128230; Generar ZIP Final</button>
-  <input type="file" id="fileIn" webkitdirectory multiple accept=".pdf">
-  <div class="tb-user" id="tbUser">
-    <span class="tb-user-avatar">U</span>
-    <span class="tb-user-label">Usuario</span>
-    <span class="tb-user-dot"></span>
+  <div class="nav-div"></div>
+  <button class="nav-tab act" data-screen="gestor" onclick="switchScreen('gestor',this)">
+    <span class="nt-ico">📁</span> Gestor PDF
+  </button>
+  <button class="nav-tab" data-screen="dividir" onclick="switchScreen('dividir',this)">
+    <span class="nt-ico">✂️</span> Dividir PDF
+  </button>
+  <button class="nav-tab" data-screen="unir" onclick="switchScreen('unir',this)">
+    <span class="nt-ico">🔗</span> Unir PDF
+  </button>
+  <button class="nav-tab" data-screen="convertir" onclick="switchScreen('convertir',this)">
+    <span class="nt-ico">🔄</span> Word ↔ PDF
+  </button>
+  <button class="nav-tab" data-screen="imagenes" onclick="switchScreen('imagenes',this)">
+    <span class="nt-ico">🖼️</span> PDF ↔ Imágenes
+  </button>
+  <button class="nav-tab" data-screen="comprimir" onclick="switchScreen('comprimir',this)">
+    <span class="nt-ico">📦</span> Comprimir
+  </button>
+  <div class="nav-sp"></div>
+  <button class="nav-user" onclick="window.location.href='login_gestor.html'">
+    <span>👤</span><span id="navUser">Usuario</span><div class="nav-user-dot"></div>
+  </button>
+</div>
+
+<!-- ════════════════ SCREEN 1: GESTOR PDF ════════════════ -->
+<div id="screen-gestor" class="screen on">
+  <div class="g-wrap">
+    <!-- Sidebar folders -->
+    <div class="g-sb">
+      <div class="g-sb-head">
+        Expedientes <span class="badge" id="sbCount">0</span>
+      </div>
+      <!-- Upload controls -->
+      <div style="padding:8px;border-bottom:1px solid var(--b);display:flex;gap:5px;">
+        <button class="rbtn" style="flex:1;font-size:10px;" onclick="document.getElementById('upFolder').click()">📂 Carpeta</button>
+        <button class="rbtn" style="flex:1;font-size:10px;" onclick="document.getElementById('upFiles').click()">📄 PDFs</button>
+      </div>
+      <input type="file" id="upFolder" webkitdirectory multiple accept=".pdf" onchange="handleUpload(event,'folder')">
+      <input type="file" id="upFiles" multiple accept=".pdf" onchange="handleUpload(event,'files')">
+      <div class="g-sb-list" id="sbList">
+        <div class="sb-empty">
+          <div class="sb-empty-ico">📂</div>
+          <div class="sb-empty-t">Sin expedientes</div>
+          <div class="sb-empty-d">Sube una carpeta o PDFs individuales</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main area -->
+    <div class="g-main">
+      <!-- Welcome -->
+      <div class="g-welcome welcome-zone" id="gWelcome">
+        <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;">
+          <div class="w-badge"><div class="w-badge-dot"></div>Gestor Documental</div>
+          <div class="w-ico">📁</div>
+          <div class="w-title">Sube tus PDFs y comienza</div>
+          <div class="w-desc">Selecciona, renombra, divide o elimina páginas de múltiples PDFs. Exporta en ZIP con archivos exactos.</div>
+          <div class="w-btn-row">
+            <button class="w-btn" onclick="document.getElementById('upFolder').click()">📂 Subir carpeta</button>
+            <button class="w-btn alt" onclick="document.getElementById('upFiles').click()">📄 Subir PDFs</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel (hidden until folder open) -->
+      <div class="g-panel" id="gPanel">
+        <div class="pan-head">
+          <div class="bc">📁 <span id="bcName">—</span></div>
+          <button class="btn-sm" onclick="gZipExport()">⬇ ZIP</button>
+          <button class="btn-sm green" onclick="finishFolder()">✓ Finalizar</button>
+          <button class="btn-sm" onclick="closeFolder()">← Volver</button>
+        </div>
+
+        <div class="g-cols">
+          <!-- Col 1: PDF list -->
+          <div class="c1">
+            <div class="col-h">PDFs <span class="badge" id="pdfCount">0</span></div>
+            <div class="pdf-list" id="pdfList"></div>
+          </div>
+
+          <!-- Col 2: Viewer -->
+          <div class="c2">
+            <div class="vtb">
+              <button class="vb" id="vSelAll">✓ Todos</button>
+              <button class="vb" id="vSelNone">✗ Ninguno</button>
+              <div class="vsep"></div>
+              <button class="vb" id="vZoomIn">🔍+</button>
+              <button class="vb" id="vZoomOut">🔍-</button>
+              <button class="vb" id="vFit">⊞</button>
+              <div class="vsep"></div>
+              <span class="pg-inf" id="pgInf">—</span>
+            </div>
+            <div class="cw" id="cw">
+              <div class="no-pdf"><div class="no-pdf-i">📄</div><span style="font-size:12px;">Selecciona un PDF del panel izquierdo</span></div>
+            </div>
+          </div>
+
+          <!-- Col 3: Actions -->
+          <div class="c3">
+            <div class="sel-bar" id="selBar">
+              <div>Páginas seleccionadas:</div>
+              <div class="sel-pgs" id="selPgs"></div>
+            </div>
+
+            <!-- Rotate -->
+            <div class="ablock">
+              <div class="albl">Rotar</div>
+              <div class="rgrid">
+                <button class="rbtn" id="r90">↻ 90°</button>
+                <button class="rbtn" id="rn90">↺ -90°</button>
+                <button class="rbtn" id="r180">↕ 180°</button>
+                <button class="rbtn" id="r0">⊙ Orig.</button>
+              </div>
+            </div>
+
+            <!-- Delete pages -->
+            <div class="ablock">
+              <div class="albl">Eliminar páginas</div>
+              <button class="abtn a-del" onclick="deleteSelectedPages()">🗑 Eliminar seleccionadas</button>
+            </div>
+
+            <!-- Rename / extract -->
+            <div class="ablock" style="flex:1;overflow-y:auto;">
+              <div class="albl">Renombrar / Extraer</div>
+              <select class="sfield" id="pfxSel" onchange="updatePreview()">
+                <option value="">— Nombre libre —</option>
+                <option value="HC-">HC-</option>
+                <option value="RIPS-">RIPS-</option>
+                <option value="EPS-">EPS-</option>
+                <option value="LAB-">LAB-</option>
+                <option value="IMG-">IMG-</option>
+                <option value="FAC-">FAC-</option>
+                <option value="CRT-">CRT-</option>
+              </select>
+              <div id="numRow" style="display:none;margin-top:7px;">
+                <input class="nfield" id="numFld" placeholder="Número / ID…" oninput="updatePreview()">
+              </div>
+              <input class="nfield" id="freeNameFld" placeholder="Nombre del archivo…" oninput="updatePreview()" style="display:block;">
+              <div class="nprev" id="nprev">Vista previa…</div>
+              <button class="abtn a-ok" onclick="confirmRename()">✓ Crear nuevo PDF</button>
+            </div>
+
+            <!-- Progress -->
+            <div class="ablock">
+              <div class="prow"><span>Progreso</span><span id="progTxt">0 / 0 págs</span><span id="progPct" style="color:var(--blue);font-weight:700;">0%</span></div>
+              <div class="pbar"><div class="pfill" id="pfill" style="width:0%"></div></div>
+            </div>
+
+            <!-- Log -->
+            <div class="log" id="logArea">
+              <div class="log-t">Actividad</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
-<div class="wrap">
-  <div class="sb">
-    <div class="sb-head">Carpetas <span class="badge" id="sbCount">0</span></div>
-    <div class="sb-list" id="sbList">
-      <div class="sb-empty">
-        <div class="sb-empty-ico">&#128194;</div>
-        <div class="sb-empty-t">Sin expedientes</div>
-        <div class="sb-empty-d">Usa Cargar Carpeta para importar</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="main">
-    <div class="welcome" id="welcome">
-      <div class="welcome-badge"><span class="welcome-badge-dot"></span> Procesador &middot; TD</div>
-      <div class="welcome-ico">&#128450;</div>
-      <div class="welcome-t">Gestor Documental Inteligente</div>
-      <div class="welcome-d">Carga tu carpeta ra&iacute;z para comenzar a procesar expedientes.</div>
-      <button class="welcome-upload-btn" onclick="document.getElementById('fileIn').click()">
-        <span class="ico">&#128193;</span> Cargar Carpeta
-      </button>
-      <div class="welcome-hint">o arrastra una carpeta aqu&iacute;</div>
-    </div>
-
-    <div class="panel" id="panel">
-      <div class="pan-head">
-        <div class="bc"><span>GESTOR</span><span style="opacity:.3">&nbsp;&rsaquo;&nbsp;</span><span class="bc-cur" id="bcName">&mdash;</span></div>
-        <button class="btn-bk" id="btnBack">&#8592; Volver</button>
-      </div>
-      <div class="cols">
-
-        <!-- COL1: PDF list with checkboxes -->
-        <div class="c1">
-          <div class="col-h">
-            PDFs del expediente <span class="badge" id="pdfCount">0</span>
-          </div>
-          <div class="pdf-list" id="pdfList"></div>
-        </div>
-
-        <!-- COL2: Multi-PDF thumbnail viewer -->
-        <div class="c2">
-          <div class="vtb">
-            <button class="vb" id="vZoomOut">&#128269;&#8722;</button>
-            <button class="vb" id="vZoomIn">&#128269;+</button>
-            <button class="vb" id="vFit">Ajustar</button>
-            <div class="vsep"></div>
-            <span class="pg-inf" id="pgInf">&mdash;</span>
-            <div class="vsep"></div>
-            <button class="vb" id="vSelAll">&#9745; Todas</button>
-            <button class="vb" id="vSelNone">&#9744; Ninguna</button>
-          </div>
-          <div class="cw" id="cw">
-            <div class="no-pdf"><div class="no-pdf-i">&#9745;</div><span>Marca uno o m&aacute;s PDFs en la lista para ver sus p&aacute;ginas aqu&iacute;</span></div>
-          </div>
-        </div>
-
-        <!-- COL3: Preview + rename -->
-        <div class="c3">
-          <div class="sel-bar" id="selBar">
-            P&aacute;ginas seleccionadas:
-            <div class="sel-pgs" id="selPgs"></div>
-          </div>
-          <div class="ablock">
-            <div class="albl">Rotar p&aacute;ginas seleccionadas</div>
-            <div class="rgrid">
-              <button class="rbtn" id="r90">&#8635; 90&deg;</button>
-              <button class="rbtn" id="rn90">&#8634; &minus;90&deg;</button>
-              <button class="rbtn" id="r180">&#8597; 180&deg;</button>
-              <button class="rbtn rr" id="r0">&#10005; Reset</button>
-            </div>
-          </div>
-          <div class="ablock">
-            <div class="albl">Renombrar nuevo archivo</div>
-            <select class="sfield" id="pfxSel">
-              <option value="">&mdash; Sin prefijo (nombre libre) &mdash;</option>
-              <option value="OTR_830500960_TDNE">OTR_830500960_TDNE</option>
-              <option value="CRC_830500960_TDNE">CRC_830500960_TDNE</option>
-              <option value="FEV_830500960_TDNE">FEV_830500960_TDNE</option>
-              <option value="OPF_830500960_TDNE">OPF_830500960_TDNE</option>
-            </select>
-            <div id="numRow" style="display:none;margin-top:7px;">
-              <input class="nfield" id="numFld" type="text" placeholder="N&uacute;mero / ID (alfanum&eacute;rico)" style="margin-top:0;">
-            </div>
-            <input class="nfield" id="freeNameFld" type="text" placeholder="Nombre del archivo (.pdf auto)">
-            <div class="nprev" id="nprev">Vista previa...</div>
-            <button class="abtn a-ok" id="btnOk">&#10003; Marcar OK y confirmar</button>
-            <button class="abtn a-skip" id="btnSkip">&#8594; Omitir p&aacute;ginas seleccionadas</button>
-          </div>
-          <div class="ablock">
-            <div class="albl">Progreso</div>
-            <div class="prow"><span id="progTxt">0 / 0 p&aacute;gs</span><span id="progPct">0%</span></div>
-            <div class="pbar"><div class="pfill" id="pfill" style="width:0%"></div></div>
-            <button class="abtn a-fin" id="btnFin" style="margin-top:10px;">&#9989; Finalizar expediente</button>
-          </div>
-          <div class="log" id="logArea"><div class="log-t">Registro</div></div>
-        </div>
-
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: Ask delete originals -->
+<!-- Gesture modal -->
 <div class="modal-bg hide" id="modalBg">
   <div class="modal">
-    <h3>&#128465; &iquest;Eliminar p&aacute;ginas originales?</h3>
-    <p id="modalMsg">Las p&aacute;ginas seleccionadas ser&aacute;n asignadas al nuevo archivo.<br>
-    &iquest;Deseas eliminar esas p&aacute;ginas de los PDFs originales?<br><br>
-    <strong>S&iacute; &rarr;</strong> El PDF original pierde esas p&aacute;ginas (si queda sin p&aacute;ginas, desaparece).<br>
-    <strong>No &rarr;</strong> El original queda intacto y el nuevo archivo es una copia.</p>
+    <h3>Confirmar acción</h3>
+    <p id="modalMsg"></p>
     <div class="modal-btns">
-      <button class="mbtn-yes" id="modalYes">&#9989; S&iacute;, eliminar originales</button>
-      <button class="mbtn-no" id="modalNo">&#128196; No, conservar originales</button>
+      <button class="mbtn-yes" id="modalYes">Sí, eliminar originales</button>
+      <button class="mbtn-no" id="modalNo">No, conservar originales</button>
+      <button class="mbtn-cancel" id="modalCancel">Cancelar</button>
     </div>
   </div>
 </div>
 
+<!-- ════════════════ SCREEN 2: DIVIDIR PDF ════════════════ -->
+<div id="screen-dividir" class="screen">
+  <div class="div-wrap">
+    <!-- Left panel: controls -->
+    <div class="div-left">
+      <div style="padding:14px;border-bottom:1px solid var(--b);">
+        <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:10px;">Archivo cargado</div>
+        <div id="divFileName" style="font-size:11px;color:var(--t3);font-family:'DM Mono',monospace;word-break:break-all;margin-bottom:8px;">—</div>
+        <button class="div-btn primary" onclick="document.getElementById('divFileInput').click()" style="margin-bottom:0;">📂 Cargar PDF</button>
+        <input type="file" id="divFileInput" accept=".pdf" onchange="divLoadFile(event)">
+      </div>
+      <div class="div-info" id="divInfoPanel" style="display:none;">
+        <div class="div-info-title">Información</div>
+        <div class="div-info-stat"><span>Total páginas:</span><span id="divTotalPgs">0</span></div>
+        <div class="div-info-stat"><span>Seleccionadas:</span><span id="divSelPgs">0</span></div>
+        <div class="div-info-stat"><span>No seleccionadas:</span><span id="divUnselPgs">0</span></div>
+      </div>
+      <div class="div-actions">
+        <div style="font-size:10px;font-weight:700;color:var(--t3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:-2px;">Exportar como</div>
+        <button class="div-btn secondary" id="divBtnAll" onclick="divExportAll()" disabled>📥 Todas las páginas (ZIP)</button>
+        <button class="div-btn primary" id="divBtnSel" onclick="divExportSelected()" disabled>✂️ Páginas seleccionadas (ZIP)</button>
+        <button class="div-btn danger" id="divBtnRange" onclick="divShowRangeModal()" disabled>📋 Por rango personalizado</button>
+        <button class="div-btn" id="divBtnSelAll" onclick="divSelAll()" disabled style="background:var(--bg);color:var(--t2);border:1px solid var(--b);">✓ Seleccionar todo</button>
+        <button class="div-btn" id="divBtnSelNone" onclick="divSelNone()" disabled style="background:var(--bg);color:var(--t2);border:1px solid var(--b);">✗ Limpiar selección</button>
+      </div>
+    </div>
+
+    <!-- Right: page thumbnails -->
+    <div class="div-right">
+      <div class="div-toolbar">
+        <span style="font-size:12px;font-weight:600;color:var(--t2);">Vista de páginas</span>
+        <div style="flex:1;"></div>
+        <button class="vb" onclick="divZoom(0.15)">🔍+</button>
+        <button class="vb" onclick="divZoom(-0.15)">🔍-</button>
+      </div>
+      <div class="div-pages" id="divPages">
+        <div class="no-pdf" style="width:100%;"><div class="no-pdf-i">✂️</div><span style="font-size:12px;">Carga un PDF para dividirlo</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Range modal for split -->
+<div class="modal-bg hide" id="rangeModalBg">
+  <div class="modal">
+    <h3>Dividir por rango</h3>
+    <p style="margin-bottom:10px;">Define los rangos de páginas separados por coma.<br><small style="color:var(--t3);">Ejemplo: <code>1-3, 4-6, 7</code></small></p>
+    <input class="nfield" id="rangeInput" placeholder="1-3, 4-7, 8-10…" style="margin-bottom:10px;">
+    <div class="modal-btns">
+      <button class="mbtn-yes" onclick="divExportRange()">⬇ Exportar rangos</button>
+      <button class="mbtn-no" onclick="document.getElementById('rangeModalBg').classList.add('hide')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ SCREEN 3: UNIR PDF ════════════════ -->
+<div id="screen-unir" class="screen">
+  <div class="merge-wrap">
+    <div class="merge-toolbar">
+      <span style="font-size:13px;font-weight:700;color:var(--t);">🔗 Unir PDFs</span>
+      <div style="flex:1;"></div>
+      <button class="div-btn primary" onclick="mergeExport()" id="mergeBtnExport" disabled style="padding:8px 18px;font-size:12px;">⬇ Descargar PDF unido</button>
+    </div>
+    <div class="merge-body">
+      <!-- Left: file list -->
+      <div class="merge-left">
+        <div class="merge-drop" onclick="document.getElementById('mergeInput').click()" id="mergeDropZone">
+          <input type="file" id="mergeInput" multiple accept=".pdf" onchange="mergeAddFiles(event)">
+          <div class="merge-drop-ico">📂</div>
+          <div class="merge-drop-t">Agregar PDFs</div>
+          <div class="merge-drop-d">Haz clic o arrastra archivos aquí</div>
+        </div>
+        <div class="merge-list" id="mergeList">
+          <div class="sb-empty" style="padding:16px;"><div class="sb-empty-ico">📄</div><div class="sb-empty-t">Sin archivos</div><div class="sb-empty-d">Agrega PDFs para unirlos</div></div>
+        </div>
+        <div style="padding:10px 14px;border-top:1px solid var(--b);">
+          <button class="div-btn danger" onclick="mergeClear()" style="font-size:11px;padding:7px;">🗑 Limpiar lista</button>
+        </div>
+      </div>
+
+      <!-- Right: preview -->
+      <div class="merge-right">
+        <div style="padding:8px 14px;background:var(--s2);border-bottom:1px solid var(--b);display:flex;align-items:center;gap:8px;">
+          <span style="font-size:11px;font-weight:600;color:var(--t2);">Vista previa del resultado</span>
+          <span id="mergeTotalPages" class="badge">0 páginas</span>
+        </div>
+        <div class="merge-preview" id="mergePreview">
+          <div class="merge-empty"><div class="merge-empty-ico">🔗</div><div class="merge-empty-t">Agrega PDFs para ver la vista previa</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ SCREEN 4: WORD ↔ PDF ════════════════ -->
+<div id="screen-convertir" class="screen">
+  <div class="conv-wrap">
+    <div class="w-badge" style="position:relative;"><div class="w-badge-dot"></div>Conversión de documentos</div>
+    <div class="conv-grid">
+
+      <!-- Word → PDF -->
+      <div class="conv-card">
+        <div class="conv-card-head">
+          <div class="conv-card-ico blue">📝</div>
+          <div>
+            <div class="conv-card-title">Word → PDF</div>
+            <div class="conv-card-desc" style="font-size:10px;color:var(--t3);">.docx → .pdf listo para compartir</div>
+          </div>
+        </div>
+        <div class="conv-drop" id="w2pDrop" onclick="document.getElementById('w2pInput').click()">
+          <input type="file" id="w2pInput" accept=".docx,.doc" onchange="wordToPdf(event)">
+          <div class="conv-drop-ico">📝</div>
+          <div class="conv-drop-t">Seleccionar archivo Word</div>
+          <div class="conv-drop-d">.docx / .doc</div>
+        </div>
+        <div class="conv-progress" id="w2pProg">⏳ Convirtiendo…</div>
+        <div class="conv-result" id="w2pResult">
+          <div class="conv-result-name" id="w2pName"></div>
+          <button class="conv-result-dl" id="w2pDl">⬇ Descargar PDF</button>
+        </div>
+      </div>
+
+      <!-- PDF → Word (images) -->
+      <div class="conv-card">
+        <div class="conv-card-head">
+          <div class="conv-card-ico green">📄</div>
+          <div>
+            <div class="conv-card-title">PDF → Word</div>
+            <div class="conv-card-desc" style="font-size:10px;color:var(--t3);">Extrae texto del PDF en formato .docx</div>
+          </div>
+        </div>
+        <div class="conv-drop" id="p2wDrop" onclick="document.getElementById('p2wInput').click()">
+          <input type="file" id="p2wInput" accept=".pdf" onchange="pdfToWord(event)">
+          <div class="conv-drop-ico">📄</div>
+          <div class="conv-drop-t">Seleccionar PDF</div>
+          <div class="conv-drop-d">.pdf</div>
+        </div>
+        <div class="conv-progress" id="p2wProg">⏳ Extrayendo texto…</div>
+        <div class="conv-result" id="p2wResult">
+          <div class="conv-result-name" id="p2wName"></div>
+          <button class="conv-result-dl" id="p2wDl">⬇ Descargar Word</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--ydim);border:1px solid rgba(202,138,4,.3);border-radius:10px;padding:12px 16px;max-width:840px;width:100%;font-size:11px;color:var(--yellow);">
+      ⚠️ <strong>Word→PDF:</strong> La conversión se realiza en el navegador preservando texto, tablas e imágenes. Formatos muy complejos pueden variar ligeramente.
+      <strong>PDF→Word:</strong> Extrae texto seleccionable del PDF. PDFs escaneados no tienen texto extraíble.
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ SCREEN 5: PDF ↔ IMÁGENES ════════════════ -->
+<div id="screen-imagenes" class="screen">
+  <div class="img-wrap">
+    <div class="w-badge" style="position:relative;"><div class="w-badge-dot"></div>PDF ↔ Imágenes</div>
+
+    <!-- PDF → Images -->
+    <div class="img-card">
+      <div class="img-card-title">📄→🖼️ PDF a Imágenes</div>
+      <div class="conv-drop" onclick="document.getElementById('pdf2imgInput').click()">
+        <input type="file" id="pdf2imgInput" accept=".pdf" onchange="pdfToImages(event)">
+        <div class="conv-drop-ico">📄</div>
+        <div class="conv-drop-t">Seleccionar PDF</div>
+        <div class="conv-drop-d">Cada página se exporta como imagen</div>
+      </div>
+      <div class="img-options">
+        <label style="font-size:11px;color:var(--t3);">Formato:</label>
+        <select class="img-select" id="imgFormat">
+          <option value="png">PNG</option>
+          <option value="jpeg">JPEG</option>
+          <option value="webp">WebP</option>
+        </select>
+        <label style="font-size:11px;color:var(--t3);">Calidad:</label>
+        <select class="img-select" id="imgQuality">
+          <option value="2">Alta (2x)</option>
+          <option value="1.5">Media (1.5x)</option>
+          <option value="1">Normal (1x)</option>
+        </select>
+      </div>
+      <div class="img-thumbs" id="imgThumbs"></div>
+      <div id="imgDownloadRow" style="display:none;">
+        <button class="div-btn primary" onclick="downloadImagesZip()" style="max-width:280px;">⬇ Descargar ZIP de imágenes</button>
+      </div>
+    </div>
+
+    <!-- Images → PDF -->
+    <div class="img-card">
+      <div class="img-card-title">🖼️→📄 Imágenes a PDF</div>
+      <div class="conv-drop" onclick="document.getElementById('imgs2pdfInput').click()">
+        <input type="file" id="imgs2pdfInput" accept="image/*" multiple onchange="imagesToPdf(event)">
+        <div class="conv-drop-ico">🖼️</div>
+        <div class="conv-drop-t">Seleccionar imágenes</div>
+        <div class="conv-drop-d">JPG, PNG, WebP — múltiples archivos</div>
+      </div>
+      <div class="img-thumbs" id="imgs2pdfThumbs"></div>
+      <div id="imgs2pdfDlRow" style="display:none;">
+        <button class="div-btn primary" onclick="imgs2pdfExport()" style="max-width:280px;">⬇ Descargar PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ SCREEN 6: COMPRIMIR ════════════════ -->
+<div id="screen-comprimir" class="screen">
+  <div class="comp-wrap">
+    <div class="w-badge" style="position:relative;"><div class="w-badge-dot"></div>Compresión PDF</div>
+    <div class="comp-card">
+      <div style="font-size:16px;font-weight:700;color:var(--t);">📦 Comprimir PDF</div>
+      <div style="font-size:11px;color:var(--t3);line-height:1.7;">Reduce el tamaño de tu PDF eliminando metadatos innecesarios y optimizando la estructura interna del archivo.</div>
+      <div class="conv-drop" onclick="document.getElementById('compInput').click()">
+        <input type="file" id="compInput" accept=".pdf" onchange="compressPdf(event)">
+        <div class="conv-drop-ico">📦</div>
+        <div class="conv-drop-t">Seleccionar PDF a comprimir</div>
+        <div class="conv-drop-d">.pdf</div>
+      </div>
+      <div class="conv-progress" id="compProg">⏳ Comprimiendo…</div>
+      <div id="compStats" style="display:none;">
+        <div class="comp-stats">
+          <div class="comp-stat">
+            <div class="comp-stat-val" id="compOrigSize">—</div>
+            <div class="comp-stat-lbl">Original</div>
+          </div>
+          <div class="comp-stat">
+            <div class="comp-stat-val" id="compNewSize">—</div>
+            <div class="comp-stat-lbl">Comprimido</div>
+          </div>
+          <div class="comp-stat">
+            <div class="comp-stat-val" id="compSaved">—</div>
+            <div class="comp-stat-lbl">Ahorro</div>
+          </div>
+        </div>
+        <div class="comp-meter"><div class="comp-meter-fill" id="compMeter" style="width:0%"></div></div>
+        <button class="div-btn primary" id="compDlBtn" style="margin-top:8px;">⬇ Descargar PDF comprimido</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="loading-spin"></div>
+    <div class="loading-text" id="loadingText">Procesando…</div>
+    <div class="loading-sub" id="loadingSub">Por favor espera</div>
+  </div>
+</div>
+
+<!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script>
+// ══════════════════════════════════════════════════════════════
+//  GLOBAL INIT
+// ══════════════════════════════════════════════════════════════
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+var { PDFDocument, degrees } = PDFLib;
 
-// ─── STATE ─────────────────────────────────────────────────────────────────
-var folders = {}, curFolder = null, zoom = 0.9;
+document.getElementById('navUser').textContent = sessionStorage.getItem('rips_user') || 'Usuario';
 
-// checkedPdfs: Set of file indices that are checked in the list
-var checkedPdfs = new Set();
-
-// viewerPages: flat array of {fileIdx, page, rotation} currently shown in viewer
-var viewerPages = [];
-
-// selectedViewerPages: Set of viewerPage indices (position in viewerPages array)
-var selectedViewerPages = new Set();
-
-// Pending confirm state
-var pendingConfirm = null;
-
-// ─── INIT ───────────────────────────────────────────────────────────────────
-document.getElementById('btnZip').onclick = generateZip;
-document.getElementById('fileIn').onchange = handleUpload;
-document.getElementById('btnBack').onclick = closeFolder;
-document.getElementById('btnFin').onclick = finishFolder;
-document.getElementById('btnOk').onclick = confirmRename;
-document.getElementById('btnSkip').onclick = skipSelected;
-document.getElementById('vZoomIn').onclick = function(){ zoom = Math.min(zoom+.15,3); rebuildViewer(); };
-document.getElementById('vZoomOut').onclick = function(){ zoom = Math.max(zoom-.15,.3); rebuildViewer(); };
-document.getElementById('vFit').onclick = function(){ zoom = 0.9; rebuildViewer(); };
-document.getElementById('vSelAll').onclick = selAllViewer;
-document.getElementById('vSelNone').onclick = selNoneViewer;
-document.getElementById('r90').onclick = function(){ rotateSel(90); };
-document.getElementById('rn90').onclick = function(){ rotateSel(-90); };
-document.getElementById('r180').onclick = function(){ rotateSel(180); };
-document.getElementById('r0').onclick = function(){ rotateSel(0); };
-document.getElementById('pfxSel').onchange = updatePreview;
-document.getElementById('numFld').oninput = updatePreview;
-document.getElementById('freeNameFld').oninput = updatePreview;
-document.getElementById('modalYes').onclick = function(){ doConfirm(true); };
-document.getElementById('modalNo').onclick = function(){ doConfirm(false); };
-document.getElementById('tbUser').onclick = function(){ window.location.href='login_gestor.html'; };
-
-var user = sessionStorage.getItem('rips_user') || 'Usuario';
-document.getElementById('tbUser').textContent = '\u{1F464} ' + user + '  x';
-
-// ─── UPLOAD ─────────────────────────────────────────────────────────────────
-function handleUpload(ev) {
-  var all = Array.from(ev.target.files).filter(function(f){ return f.name.toLowerCase().endsWith('.pdf'); });
-  if (!all.length){ toast('No se encontraron PDFs', true); return; }
-  folders = {};
-  all.forEach(function(f){
-    var parts = f.webkitRelativePath.split('/');
-    var key = parts.length >= 3 ? parts[parts.length-2] : parts.length===2 ? parts[0] : 'RAIZ';
-    if (!folders[key]) folders[key] = { files:[], status:'pending' };
-    folders[key].files.push({
-      name: f.name, file: f,
-      pageCount: 0, loaded: false, pdfDoc: null,
-      rotations: {},          // page→degrees
-      removedPages: new Set(),// pages deleted from original
-      renamedSegments: [],    // [{pages:[...], name:'...'}]
-      _undo: null
-    });
-  });
-  var sk = Object.keys(folders).sort(function(a,b){ return a.localeCompare(b,undefined,{numeric:true}); });
-  var sf = {}; sk.forEach(function(k){ sf[k]=folders[k]; }); folders = sf;
-  renderSidebar();
-  document.getElementById('btnZip').style.display='flex';
-  toast('Cargados: '+all.length+' PDFs en '+Object.keys(folders).length+' carpetas');
-  ev.target.value='';
+function switchScreen(id, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('act'));
+  document.getElementById('screen-' + id).classList.add('on');
+  btn.classList.add('act');
 }
 
-// ─── SIDEBAR ────────────────────────────────────────────────────────────────
-function renderSidebar(){
+function toast(msg, type, dur) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast ' + (type||'') + ' on';
+  clearTimeout(t._t);
+  t._t = setTimeout(() => t.classList.remove('on'), dur || 2800);
+}
+
+function showLoading(txt, sub) {
+  document.getElementById('loadingText').textContent = txt || 'Procesando…';
+  document.getElementById('loadingSub').textContent = sub || 'Por favor espera';
+  document.getElementById('loadingOverlay').classList.add('on');
+}
+function hideLoading() { document.getElementById('loadingOverlay').classList.remove('on'); }
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(2) + ' MB';
+}
+
+function downloadBlob(blob, name) {
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE 1 — GESTOR PDF
+// ══════════════════════════════════════════════════════════════
+var folders = {}, curFolder = null;
+var checkedPdfs = new Set(), viewerPages = [], selectedViewerPages = new Set();
+var zoom = 0.9, pendingConfirm = null;
+
+// Upload
+function handleUpload(ev, mode) {
+  var all = Array.from(ev.target.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (!all.length) { toast('No se encontraron PDFs', 'warn'); return; }
+  
+  if (mode === 'files') {
+    // All files go into a single group "ARCHIVOS"
+    var key = 'ARCHIVOS';
+    folders = {};
+    folders[key] = { files: [], status: 'pending' };
+    all.forEach(f => {
+      folders[key].files.push(makeFileObj(f));
+    });
+  } else {
+    // Folder mode — group by parent folder
+    folders = {};
+    all.forEach(f => {
+      var parts = f.webkitRelativePath.split('/');
+      var key = parts.length >= 3 ? parts[parts.length-2] : parts.length === 2 ? parts[0] : 'RAIZ';
+      if (!folders[key]) folders[key] = { files: [], status: 'pending' };
+      folders[key].files.push(makeFileObj(f));
+    });
+    var sk = Object.keys(folders).sort((a,b) => a.localeCompare(b,undefined,{numeric:true}));
+    var sf = {}; sk.forEach(k => sf[k] = folders[k]); folders = sf;
+  }
+  
+  renderSidebar();
+  toast('Cargados: ' + all.length + ' PDFs', 'info');
+  ev.target.value = '';
+}
+
+function makeFileObj(f) {
+  return { name: f.name, file: f, pageCount: 0, loaded: false, pdfDoc: null, rotations: {}, removedPages: new Set(), renamedSegments: [], _undo: null };
+}
+
+// Sidebar
+function renderSidebar() {
   var keys = Object.keys(folders);
   document.getElementById('sbCount').textContent = keys.length;
   var el = document.getElementById('sbList');
-  if (!keys.length){
-    el.innerHTML = '<div class="sb-empty"><div class="sb-empty-ico">&#128194;</div><div class="sb-empty-t">Sin expedientes</div></div>';
+  if (!keys.length) {
+    el.innerHTML = '<div class="sb-empty"><div class="sb-empty-ico">📂</div><div class="sb-empty-t">Sin expedientes</div><div class="sb-empty-d">Sube una carpeta o PDFs</div></div>';
     return;
   }
-  el.innerHTML = keys.map(function(k){
-    var fd = folders[k], isDone = fd.status==='done', isAct = curFolder===k;
+  el.innerHTML = keys.map(k => {
+    var fd = folders[k], isDone = fd.status === 'done', isAct = curFolder === k;
     var right = isDone ? '<span class="fi-ok">OK</span>' : isAct ? '<span class="fi-dot"></span>' : '<span class="fi-n">'+fd.files.length+'</span>';
-    return '<div class="fi'+(isDone?' done':'')+(isAct?' act':'')+'" data-key="'+k.replace(/"/g,'&quot;')+'">'+
-      '<span class="fi-ico">'+(isDone?'&#128214;':'&#128193;')+'</span>'+
-      '<span class="fi-name">'+k+'</span>'+right+'</div>';
+    return `<div class="fi${isDone?' done':''}${isAct?' act':''}" data-key="${k.replace(/"/g,'&quot;')}">
+      <span class="fi-ico">${isDone?'📖':'📁'}</span>
+      <span class="fi-name">${k}</span>${right}</div>`;
   }).join('');
-  el.querySelectorAll('.fi').forEach(function(el){
-    el.addEventListener('click', function(){ openFolder(el.getAttribute('data-key')); });
-  });
+  el.querySelectorAll('.fi').forEach(el => el.addEventListener('click', () => openFolder(el.getAttribute('data-key'))));
 }
 
-// ─── FOLDER ──────────────────────────────────────────────────────────────────
-function openFolder(name){
-  curFolder = name;
-  checkedPdfs.clear();
-  viewerPages = [];
-  selectedViewerPages.clear();
-  if (folders[name].status==='pending') folders[name].status='progress';
+function openFolder(name) {
+  curFolder = name; checkedPdfs.clear(); viewerPages = []; selectedViewerPages.clear();
+  if (folders[name].status === 'pending') folders[name].status = 'progress';
   renderSidebar();
-  document.getElementById('welcome').style.display='none';
-  document.getElementById('panel').classList.add('on');
+  document.getElementById('gWelcome').style.display = 'none';
+  document.getElementById('gPanel').classList.add('on');
   document.getElementById('bcName').textContent = name;
-  renderPdfList();
-  showEmptyViewer();
-  updateSelBar();
-  updateProgress();
-  // Reset rename fields
-  resetRenameFields();
-}
-function closeFolder(){
-  curFolder=null; checkedPdfs.clear(); viewerPages=[]; selectedViewerPages.clear();
-  document.getElementById('panel').classList.remove('on');
-  document.getElementById('welcome').style.display='';
-  renderSidebar();
-}
-function finishFolder(){
-  if (!curFolder) return;
-  folders[curFolder].status='done';
-  addLog('info','Expediente '+curFolder+' finalizado');
-  closeFolder();
-  toast('Expediente finalizado');
+  renderPdfList(); showEmptyViewer(); updateSelBar(); updateProgress(); resetRenameFields();
 }
 
-// ─── PDF LIST ────────────────────────────────────────────────────────────────
-function renderPdfList(){
+function closeFolder() {
+  curFolder = null; checkedPdfs.clear(); viewerPages = []; selectedViewerPages.clear();
+  document.getElementById('gPanel').classList.remove('on');
+  document.getElementById('gWelcome').style.display = '';
+  renderSidebar();
+}
+
+function finishFolder() {
+  if (!curFolder) return;
+  folders[curFolder].status = 'done';
+  addLog('info', 'Expediente ' + curFolder + ' finalizado');
+  closeFolder();
+  toast('Expediente finalizado ✓');
+}
+
+// PDF List
+function renderPdfList() {
   var files = (folders[curFolder]||{}).files||[];
-  var total = files.length;
-  document.getElementById('pdfCount').textContent = total;
+  document.getElementById('pdfCount').textContent = files.length;
   var html = '';
-  files.forEach(function(f, i){
-    var isChecked = checkedPdfs.has(i);
-    var isDone = isFullyDone(f);
-    var isSkip = f.skipped;
-    // Remaining pages after removals
+  files.forEach((f, i) => {
+    var isChecked = checkedPdfs.has(i), isDone = isFullyDone(f);
     var remaining = f.pageCount - f.removedPages.size;
-    var cls = 'pi'+(isChecked?' pi-checked':'')+(isDone?' pi-done':'')+(isSkip?' pi-skip':'');
-    var cbIcon = (isChecked||isDone) ? '&#10003;' : (isSkip ? '&#8594;' : '');
-    html += '<div class="'+cls+'" data-i="'+i+'">' +
-      '<div class="pi-cb"><span class="pi-cb-icon">'+cbIcon+'</span></div>' +
-      '<div class="pi-info">' +
-        '<div class="pi-seq">PDF '+(i+1)+' de '+total+'</div>' +
-        '<div class="pi-name" title="'+f.name+'">'+f.name+'</div>' +
-        (f.pageCount ? '<div class="pi-pgs">'+(isDone?'<span style="text-decoration:line-through">':'')+f.pageCount+' pág.'+(isDone?'</span> → '+remaining+' restantes':'')+'</div>' : '') +
-      '</div></div>';
-    // Renamed segments sub-rows
-    f.renamedSegments.forEach(function(seg, si){
-      html += '<div class="pi-new-row" data-i="'+i+'" data-si="'+si+'">' +
-        '<div class="pi-new-cb">&#10003;</div>' +
-        '<div class="pi-new-info">' +
-          '<div class="pi-new-label">&#8594; NUEVO [pág. '+seg.pages.join(',')+']</div>' +
-          '<div class="pi-new-name">'+seg.name+'</div>' +
-        '</div>' +
-        (f._undo!==null ? '<button class="pi-undo-btn" data-undo="'+i+'">&#8635;</button>' : '') +
-        '</div>';
+    html += `<div class="pi${isChecked?' pi-checked':''}${isDone?' pi-done':''}" data-i="${i}">
+      <div class="pi-cb"><span class="pi-cb-icon">✓</span></div>
+      <div class="pi-info">
+        <div class="pi-seq">PDF ${i+1} de ${files.length}</div>
+        <div class="pi-name" title="${f.name}">${f.name}</div>
+        ${f.pageCount ? `<div class="pi-pgs">${f.pageCount} pág. — ${remaining} restantes</div>` : ''}
+      </div></div>`;
+    f.renamedSegments.forEach((seg, si) => {
+      html += `<div class="pi-new-row">
+        <div class="pi-new-cb">✓</div>
+        <div class="pi-new-info">
+          <div class="pi-new-label">→ [pág. ${seg.pages.join(',')}]</div>
+          <div class="pi-new-name">${seg.name}</div>
+        </div>
+        ${f._undo ? `<button class="pi-undo-btn" data-undo="${i}">↩</button>` : ''}
+      </div>`;
     });
   });
   document.getElementById('pdfList').innerHTML = html;
-  // Click on PDF row = toggle checkbox
-  document.getElementById('pdfList').querySelectorAll('.pi').forEach(function(el){
-    el.addEventListener('click', function(){ togglePdfCheck(parseInt(el.getAttribute('data-i'))); });
-  });
-  // Undo buttons
-  document.getElementById('pdfList').querySelectorAll('.pi-undo-btn').forEach(function(btn){
-    btn.addEventListener('click', function(e){
-      e.stopPropagation();
-      undoPdf(parseInt(btn.getAttribute('data-undo')));
-    });
-  });
+  document.getElementById('pdfList').querySelectorAll('.pi').forEach(el =>
+    el.addEventListener('click', () => togglePdfCheck(parseInt(el.getAttribute('data-i'))))
+  );
+  document.getElementById('pdfList').querySelectorAll('.pi-undo-btn').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); undoPdf(parseInt(btn.getAttribute('data-undo'))); })
+  );
 }
 
-function isFullyDone(f){
+function isFullyDone(f) {
   if (!f.pageCount) return false;
   var assigned = 0;
-  f.renamedSegments.forEach(function(s){ assigned += s.pages.length; });
-  return assigned >= f.pageCount - f.removedPages.size && f.renamedSegments.length>0;
+  f.renamedSegments.forEach(s => assigned += s.pages.length);
+  return assigned >= f.pageCount - f.removedPages.size && f.renamedSegments.length > 0;
 }
 
-// ─── TOGGLE PDF CHECKBOX ─────────────────────────────────────────────────────
-function togglePdfCheck(idx){
-  var fd = folders[curFolder].files[idx];
-  if (checkedPdfs.has(idx)){
-    checkedPdfs.delete(idx);
-    // Remove those pages from viewer
-    removeFromViewer(idx);
-  } else {
-    checkedPdfs.add(idx);
-    // Load PDF and add pages to viewer
-    loadAndAddToViewer(idx);
-  }
+function togglePdfCheck(idx) {
+  if (checkedPdfs.has(idx)) { checkedPdfs.delete(idx); removeFromViewer(idx); }
+  else { checkedPdfs.add(idx); loadAndAddToViewer(idx); }
   renderPdfList();
 }
 
-function loadAndAddToViewer(idx){
+function loadAndAddToViewer(idx) {
   var fd = folders[curFolder].files[idx];
-  if (fd.loaded){
-    addPdfPagesToViewer(idx);
-  } else {
-    fd.file.arrayBuffer().then(function(bytes){
-      return pdfjsLib.getDocument({data:bytes}).promise;
-    }).then(function(doc){
-      fd.pdfDoc = doc;
-      fd.pageCount = doc.numPages;
-      fd.loaded = true;
-      addPdfPagesToViewer(idx);
-      renderPdfList(); // update page counts
-      updateProgress();
-    }).catch(function(){ toast('Error al abrir PDF', true); });
-  }
+  if (fd.loaded) { addPdfPagesToViewer(idx); return; }
+  fd.file.arrayBuffer().then(bytes => pdfjsLib.getDocument({data: bytes}).promise)
+    .then(doc => {
+      fd.pdfDoc = doc; fd.pageCount = doc.numPages; fd.loaded = true;
+      addPdfPagesToViewer(idx); renderPdfList(); updateProgress();
+    }).catch(() => toast('Error al abrir PDF', 'warn'));
 }
 
-function addPdfPagesToViewer(idx){
+function addPdfPagesToViewer(idx) {
   var fd = folders[curFolder].files[idx];
-  // Add pages that haven't been removed
-  for (var p=1; p<=fd.pageCount; p++){
-    if (!fd.removedPages.has(p)){
-      viewerPages.push({ fileIdx:idx, page:p, rotation: fd.rotations[p]||0 });
-    }
+  for (var p = 1; p <= fd.pageCount; p++) {
+    if (!fd.removedPages.has(p)) viewerPages.push({ fileIdx: idx, page: p, rotation: fd.rotations[p]||0 });
   }
-  renderViewer();
-  updateSelBar();
-  updatePgInfo();
+  renderViewer(); updateSelBar(); updatePgInfo();
 }
 
-function removeFromViewer(idx){
-  // Remove pages belonging to this file from viewer
-  viewerPages = viewerPages.filter(function(vp){ return vp.fileIdx !== idx; });
-  // Clean selected
-  selectedViewerPages.clear();
-  renderViewer();
-  updateSelBar();
-  updatePgInfo();
+function removeFromViewer(idx) {
+  viewerPages = viewerPages.filter(vp => vp.fileIdx !== idx);
+  selectedViewerPages.clear(); renderViewer(); updateSelBar(); updatePgInfo();
 }
 
-// ─── VIEWER ──────────────────────────────────────────────────────────────────
-function showEmptyViewer(){
-  document.getElementById('cw').innerHTML = '<div class="no-pdf"><div class="no-pdf-i">&#9745;</div><span>Marca uno o m&aacute;s PDFs en la lista para ver sus p&aacute;ginas aqu&iacute;</span></div>';
-  document.getElementById('pgInf').textContent = '—';
+function showEmptyViewer() {
+  document.getElementById('cw').innerHTML = '<div class="no-pdf"><div class="no-pdf-i">📄</div><span style="font-size:12px;">Selecciona un PDF del panel izquierdo</span></div>';
 }
 
-function renderViewer(){
-  if (!viewerPages.length){ showEmptyViewer(); return; }
+function renderViewer() {
   var cw = document.getElementById('cw');
+  if (!viewerPages.length) { showEmptyViewer(); return; }
   cw.innerHTML = '';
-  viewerPages.forEach(function(vp, vi){
-    renderViewerPage(vp, vi, cw);
-  });
+  viewerPages.forEach((vp, vi) => renderPage(vp, vi, cw));
   updatePgInfo();
 }
 
-function rebuildViewer(){
-  renderViewer();
-}
+function rebuildViewer() { renderViewer(); }
 
-function renderViewerPage(vp, vi, cw){
+function renderPage(vp, vi, cw) {
   var fd = folders[curFolder].files[vp.fileIdx];
   if (!fd.pdfDoc) return;
-  fd.pdfDoc.getPage(vp.page).then(function(page){
-    var rot = vp.rotation || 0;
+  fd.pdfDoc.getPage(vp.page).then(page => {
+    var rot = vp.rotation||0;
     var vport = page.getViewport({scale: zoom, rotation: rot});
     var outer = document.createElement('div');
     outer.className = 'pw' + (selectedViewerPages.has(vi) ? ' psel' : '');
     outer.setAttribute('data-vi', vi);
-    outer.style.width = vport.width+'px';
+    outer.style.width = vport.width + 'px';
 
     var canvas = document.createElement('canvas');
     canvas.width = vport.width; canvas.height = vport.height;
     outer.appendChild(canvas);
 
-    // Source label (truncated file name)
-    var src = document.createElement('div');
-    src.className = 'pw-src';
-    var shortName = fd.name.length > 22 ? fd.name.substring(0,20)+'…' : fd.name;
-    src.textContent = shortName;
+    var src = document.createElement('div'); src.className = 'pw-src';
+    src.textContent = fd.name.length > 22 ? fd.name.substring(0,20)+'…' : fd.name;
     outer.appendChild(src);
 
-    // Page label
-    var lbl = document.createElement('div');
-    lbl.className = 'pg-lbl';
-    lbl.textContent = 'Pág. '+vp.page;
+    var lbl = document.createElement('div'); lbl.className = 'pg-lbl';
+    lbl.textContent = 'Pág. ' + vp.page;
     outer.appendChild(lbl);
 
-    // Rotation label
-    if (rot){
-      var rl = document.createElement('div');
-      rl.className = 'rot-lbl';
-      rl.textContent = (rot>0?'+':'')+rot+'°';
-      outer.appendChild(rl);
-    }
+    if (rot) { var rl = document.createElement('div'); rl.className='rot-lbl'; rl.textContent=(rot>0?'+':'')+rot+'°'; outer.appendChild(rl); }
 
-    // Selection overlay
-    var ov = document.createElement('div');
-    ov.className = 'pov';
-    ov.innerHTML = '<span class="pov-ico">&#10003;</span>';
+    var ov = document.createElement('div'); ov.className = 'pov';
+    ov.innerHTML = '<span class="pov-ico">✓</span>';
     outer.appendChild(ov);
 
-    outer.addEventListener('click', (function(vii, el){ return function(){ toggleViewerPage(vii, el); }; })(vi, outer));
+    outer.addEventListener('click', () => toggleViewerPage(vi, outer));
     cw.appendChild(outer);
     page.render({canvasContext: canvas.getContext('2d'), viewport: vport});
   });
 }
 
-function toggleViewerPage(vi, el){
-  if (selectedViewerPages.has(vi)){
-    selectedViewerPages.delete(vi);
-    el.classList.remove('psel');
-  } else {
-    selectedViewerPages.add(vi);
-    el.classList.add('psel');
-  }
+function toggleViewerPage(vi, el) {
+  if (selectedViewerPages.has(vi)) { selectedViewerPages.delete(vi); el.classList.remove('psel'); }
+  else { selectedViewerPages.add(vi); el.classList.add('psel'); }
   updateSelBar();
 }
 
-function selAllViewer(){
-  viewerPages.forEach(function(_, vi){ selectedViewerPages.add(vi); });
-  document.querySelectorAll('.pw').forEach(function(el){ el.classList.add('psel'); });
-  updateSelBar();
-}
-function selNoneViewer(){
-  selectedViewerPages.clear();
-  document.querySelectorAll('.pw').forEach(function(el){ el.classList.remove('psel'); });
-  updateSelBar();
-}
+function selAllViewer() { viewerPages.forEach((_,vi) => selectedViewerPages.add(vi)); document.querySelectorAll('.pw').forEach(el => el.classList.add('psel')); updateSelBar(); }
+function selNoneViewer() { selectedViewerPages.clear(); document.querySelectorAll('.pw').forEach(el => el.classList.remove('psel')); updateSelBar(); }
 
-function updateSelBar(){
+function updateSelBar() {
   var bar = document.getElementById('selBar');
-  var pgs = document.getElementById('selPgs');
-  if (!selectedViewerPages.size){ bar.classList.remove('on'); return; }
+  if (!selectedViewerPages.size) { bar.classList.remove('on'); return; }
   bar.classList.add('on');
-  // Group by file
   var groups = {};
-  selectedViewerPages.forEach(function(vi){
-    var vp = viewerPages[vi];
-    if (!vp) return;
+  selectedViewerPages.forEach(vi => {
+    var vp = viewerPages[vi]; if (!vp) return;
     var fn = folders[curFolder].files[vp.fileIdx].name;
     if (!groups[fn]) groups[fn] = [];
     groups[fn].push(vp.page);
   });
-  var parts = Object.keys(groups).map(function(fn){
-    return fn.replace(/\.pdf$/i,'') + ' ['+groups[fn].sort(function(a,b){return a-b;}).join(',')+']';
-  });
-  pgs.textContent = parts.join(' | ');
+  document.getElementById('selPgs').textContent = Object.keys(groups).map(fn =>
+    fn.replace(/\.pdf$/i,'') + ' [' + groups[fn].sort((a,b)=>a-b).join(',') + ']'
+  ).join(' | ');
 }
 
-function updatePgInfo(){
-  var total = viewerPages.length;
-  document.getElementById('pgInf').textContent = total ? total+' pág.' : '—';
-}
+function updatePgInfo() { document.getElementById('pgInf').textContent = viewerPages.length ? viewerPages.length+' pág.' : '—'; }
 
-// ─── ROTATE ──────────────────────────────────────────────────────────────────
-function rotateSel(deg){
-  if (!selectedViewerPages.size){ toast('Selecciona páginas primero',true); return; }
-  selectedViewerPages.forEach(function(vi){
-    var vp = viewerPages[vi];
-    if (!vp) return;
+// Rotate
+function rotateSel(deg) {
+  if (!selectedViewerPages.size) { toast('Selecciona páginas primero', 'warn'); return; }
+  selectedViewerPages.forEach(vi => {
+    var vp = viewerPages[vi]; if (!vp) return;
     var fd = folders[curFolder].files[vp.fileIdx];
-    var cur = vp.rotation || 0;
-    var newRot = deg===0 ? 0 : (cur+deg+360)%360;
-    vp.rotation = newRot;
-    fd.rotations[vp.page] = newRot;
+    vp.rotation = deg === 0 ? 0 : ((vp.rotation||0)+deg+360)%360;
+    fd.rotations[vp.page] = vp.rotation;
   });
-  renderViewer();
-  addLog('ok','Rotación aplicada a '+selectedViewerPages.size+' pág(s)');
+  renderViewer(); addLog('ok', 'Rotación aplicada');
 }
 
-// ─── RENAME FIELDS ───────────────────────────────────────────────────────────
-function resetRenameFields(){
-  document.getElementById('pfxSel').value='';
-  document.getElementById('numFld').value='';
-  document.getElementById('freeNameFld').value='';
-  document.getElementById('numRow').style.display='none';
-  document.getElementById('freeNameFld').style.display='block';
-  document.getElementById('nprev').textContent='Vista previa...';
+// Delete pages (without renaming)
+function deleteSelectedPages() {
+  if (!selectedViewerPages.size) { toast('Selecciona páginas primero', 'warn'); return; }
+  var files = folders[curFolder].files;
+  selectedViewerPages.forEach(vi => {
+    var vp = viewerPages[vi]; if (!vp) return;
+    var f = files[vp.fileIdx];
+    if (!f._undo) f._undo = { removedPages: new Set(f.removedPages), renamedSegments: f.renamedSegments.map(s=>({...s,pages:[...s.pages]})) };
+    f.removedPages.add(vp.page);
+  });
+  var viSet = new Set(selectedViewerPages);
+  viewerPages = viewerPages.filter((_,vi) => !viSet.has(vi));
+  selectedViewerPages.clear();
+  renderViewer(); renderPdfList(); updateSelBar(); updateProgress();
+  addLog('ok', 'Páginas eliminadas de originales');
+  toast('Páginas eliminadas ✓');
 }
 
-function updatePreview(){
+// Rename fields
+function resetRenameFields() {
+  document.getElementById('pfxSel').value = '';
+  document.getElementById('numFld').value = '';
+  document.getElementById('freeNameFld').value = '';
+  document.getElementById('numRow').style.display = 'none';
+  document.getElementById('freeNameFld').style.display = 'block';
+  document.getElementById('nprev').textContent = 'Vista previa…';
+}
+
+function updatePreview() {
   var pfx = document.getElementById('pfxSel').value;
-  var numRow = document.getElementById('numRow');
-  var freeFld = document.getElementById('freeNameFld');
+  var numRow = document.getElementById('numRow'), freeFld = document.getElementById('freeNameFld');
   var prev;
-  if (pfx){
-    numRow.style.display='block';
-    freeFld.style.display='none';
+  if (pfx) {
+    numRow.style.display = 'block'; freeFld.style.display = 'none';
     var num = document.getElementById('numFld').value.trim();
     prev = num ? pfx+num+'.pdf' : pfx+'[número].pdf';
   } else {
-    numRow.style.display='none';
-    freeFld.style.display='block';
+    numRow.style.display = 'none'; freeFld.style.display = 'block';
     var fn = freeFld.value.trim();
     prev = fn ? (fn.toLowerCase().endsWith('.pdf') ? fn : fn+'.pdf') : '[nombre].pdf';
   }
@@ -766,210 +1105,750 @@ function updatePreview(){
   return prev;
 }
 
-function getNewName(){
+function getNewName() {
   var pfx = document.getElementById('pfxSel').value;
-  if (pfx){
+  if (pfx) {
     var num = document.getElementById('numFld').value.trim();
-    if (!num){ toast('Ingresa el número / ID del archivo',true); return null; }
-    return pfx+num+'.pdf';
-  } else {
-    var fn = document.getElementById('freeNameFld').value.trim();
-    if (!fn){ toast('Ingresa un nombre para el archivo',true); return null; }
-    return fn.toLowerCase().endsWith('.pdf') ? fn : fn+'.pdf';
+    if (!num) { toast('Ingresa número/ID', 'warn'); return null; }
+    return pfx + num + '.pdf';
   }
+  var fn = document.getElementById('freeNameFld').value.trim();
+  if (!fn) { toast('Ingresa un nombre', 'warn'); return null; }
+  return fn.toLowerCase().endsWith('.pdf') ? fn : fn + '.pdf';
 }
 
-// ─── CONFIRM RENAME ──────────────────────────────────────────────────────────
-function confirmRename(){
-  if (!selectedViewerPages.size){ toast('Selecciona páginas primero',true); return; }
-  var newName = getNewName();
-  if (!newName) return;
+function confirmRename() {
+  if (!selectedViewerPages.size) { toast('Selecciona páginas primero', 'warn'); return; }
+  var newName = getNewName(); if (!newName) return;
 
-  // Build list of {fileIdx, page} for selected viewer pages
   var selected = [];
-  selectedViewerPages.forEach(function(vi){
-    var vp = viewerPages[vi];
-    if (vp) selected.push({ fileIdx: vp.fileIdx, page: vp.page, vi: vi });
-  });
-
-  // Group by file
+  selectedViewerPages.forEach(vi => { var vp = viewerPages[vi]; if (vp) selected.push({fileIdx:vp.fileIdx, page:vp.page, vi}); });
   var byFile = {};
-  selected.forEach(function(s){
-    if (!byFile[s.fileIdx]) byFile[s.fileIdx] = [];
-    byFile[s.fileIdx].push(s.page);
-  });
+  selected.forEach(s => { if (!byFile[s.fileIdx]) byFile[s.fileIdx]=[]; byFile[s.fileIdx].push(s.page); });
 
-  pendingConfirm = { newName: newName, byFile: byFile, selectedVis: Array.from(selectedViewerPages) };
+  pendingConfirm = { newName, byFile, selectedVis: Array.from(selectedViewerPages) };
 
-  // Show modal
-  var fNames = Object.keys(byFile).map(function(i){
+  var fNames = Object.keys(byFile).map(i => {
     var f = folders[curFolder].files[parseInt(i)];
-    return f.name+' (pág. '+byFile[i].join(',')+')';
+    return f.name + ' (pág. ' + byFile[i].join(',') + ')';
   }).join('; ');
+
   document.getElementById('modalMsg').innerHTML =
-    '<strong>Nuevo archivo:</strong> '+newName+'<br>'+
-    '<strong>Páginas:</strong> '+fNames+'<br><br>'+
-    '¿Deseas <strong>eliminar</strong> esas páginas de los PDFs originales?<br>'+
-    '<span style="font-size:11px;color:var(--t3);">Sí → el original pierde esas páginas (si queda vacío, desaparece).<br>No → el original queda intacto, el nuevo es una copia.</span>';
+    `<strong>Nuevo archivo:</strong> ${newName}<br><strong>Páginas:</strong> ${fNames}<br><br>
+    ¿Deseas <strong>eliminar</strong> esas páginas de los PDFs originales?<br>
+    <span style="font-size:11px;color:var(--t3);">Sí → el original pierde esas páginas. No → el original queda intacto.</span>`;
   document.getElementById('modalBg').classList.remove('hide');
 }
 
-function doConfirm(deleteOriginals){
+document.getElementById('modalYes').onclick = () => doConfirm(true);
+document.getElementById('modalNo').onclick = () => doConfirm(false);
+document.getElementById('modalCancel').onclick = () => {
+  document.getElementById('modalBg').classList.add('hide');
+  pendingConfirm = null;
+};
+
+function doConfirm(deleteOriginals) {
   document.getElementById('modalBg').classList.add('hide');
   if (!pendingConfirm) return;
-  var pc = pendingConfirm;
-  pendingConfirm = null;
-
+  var pc = pendingConfirm; pendingConfirm = null;
   var files = folders[curFolder].files;
 
-  // Save undo for all affected files
-  Object.keys(pc.byFile).forEach(function(i){
+  Object.keys(pc.byFile).forEach(i => {
     var f = files[parseInt(i)];
-    if (!f._undo){
-      f._undo = {
-        removedPages: new Set(f.removedPages),
-        renamedSegments: f.renamedSegments.map(function(s){ return Object.assign({},s,{pages:s.pages.slice()}); })
-      };
-    }
+    if (!f._undo) f._undo = { removedPages: new Set(f.removedPages), renamedSegments: f.renamedSegments.map(s=>({...s,pages:[...s.pages]})) };
   });
 
-  // Register the renamed segment (shared across files - but one segment per operation)
-  // We'll attach it to the first file involved for display purposes
   var firstFileIdx = parseInt(Object.keys(pc.byFile)[0]);
   var allPages = [];
-  Object.keys(pc.byFile).forEach(function(i){ allPages = allPages.concat(pc.byFile[i].map(function(p){ return {fileIdx:parseInt(i),page:p}; })); });
+  Object.keys(pc.byFile).forEach(i => allPages = allPages.concat(pc.byFile[i].map(p => ({fileIdx:parseInt(i), page:p}))));
 
-  // Add segment to first file
-  files[firstFileIdx].renamedSegments.push({
-    name: pc.newName,
-    pages: pc.byFile[firstFileIdx] || [],
-    allPages: allPages // cross-file info
-  });
+  files[firstFileIdx].renamedSegments.push({ name: pc.newName, pages: pc.byFile[firstFileIdx]||[], allPages });
 
-  if (deleteOriginals){
-    // Remove selected pages from originals
-    Object.keys(pc.byFile).forEach(function(i){
-      var f = files[parseInt(i)];
-      pc.byFile[i].forEach(function(p){ f.removedPages.add(p); });
-    });
-    // Remove from viewer
+  if (deleteOriginals) {
+    Object.keys(pc.byFile).forEach(i => { var f = files[parseInt(i)]; pc.byFile[i].forEach(p => f.removedPages.add(p)); });
     var viSet = new Set(pc.selectedVis);
-    viewerPages = viewerPages.filter(function(_, vi){ return !viSet.has(vi); });
-    // Reindex selectedViewerPages (clear)
+    viewerPages = viewerPages.filter((_,vi) => !viSet.has(vi));
     selectedViewerPages.clear();
-    addLog('ok', pc.newName+' creado y páginas eliminadas de originales');
+    addLog('ok', pc.newName + ' creado — páginas eliminadas');
   } else {
     selectedViewerPages.clear();
-    addLog('ok', pc.newName+' creado (originales conservados)');
+    addLog('ok', pc.newName + ' creado — originales conservados');
   }
 
-  toast('✓ '+pc.newName+' registrado');
-  renderViewer();
-  renderPdfList();
-  updateSelBar();
-  updateProgress();
-  resetRenameFields();
+  toast('✓ ' + pc.newName + ' registrado');
+  renderViewer(); renderPdfList(); updateSelBar(); updateProgress(); resetRenameFields();
 }
 
-// ─── SKIP ────────────────────────────────────────────────────────────────────
-function skipSelected(){
-  if (!selectedViewerPages.size){ toast('Selecciona páginas primero',true); return; }
-  var viSet = new Set(selectedViewerPages);
-  viewerPages = viewerPages.filter(function(_, vi){ return !viSet.has(vi); });
-  selectedViewerPages.clear();
-  renderViewer(); updateSelBar(); updateProgress();
-  addLog('warn','Páginas omitidas');
-}
-
-// ─── UNDO ────────────────────────────────────────────────────────────────────
-function undoPdf(idx){
+function undoPdf(idx) {
   var f = folders[curFolder].files[idx];
-  if (!f._undo){ toast('Nada que revertir',true); return; }
+  if (!f._undo) { toast('Nada que revertir', 'warn'); return; }
   f.removedPages = new Set(f._undo.removedPages);
   f.renamedSegments = f._undo.renamedSegments;
   f._undo = null;
-  // Rebuild viewer pages for this file
-  if (checkedPdfs.has(idx)){
-    viewerPages = viewerPages.filter(function(vp){ return vp.fileIdx!==idx; });
-    if (f.loaded) addPdfPagesToViewer(idx);
-  }
+  if (checkedPdfs.has(idx)) { viewerPages = viewerPages.filter(vp => vp.fileIdx !== idx); if (f.loaded) addPdfPagesToViewer(idx); }
   selectedViewerPages.clear();
   renderPdfList(); renderViewer(); updateSelBar(); updateProgress();
-  toast('Revertido: '+f.name);
-  addLog('warn','Revertido: '+f.name);
+  toast('Revertido: ' + f.name);
+  addLog('warn', 'Revertido: ' + f.name);
 }
 
-// ─── PROGRESS ────────────────────────────────────────────────────────────────
-function updateProgress(){
+function updateProgress() {
   if (!curFolder) return;
   var files = folders[curFolder].files;
-  var totalPages = 0, donePages = 0;
-  files.forEach(function(f){
-    totalPages += f.pageCount;
-    f.renamedSegments.forEach(function(s){ donePages += s.pages.length; });
-    donePages += f.removedPages.size;
-  });
-  var pct = totalPages ? Math.round(donePages/totalPages*100) : 0;
-  document.getElementById('progTxt').textContent = donePages+' / '+totalPages+' págs';
+  var total = 0, done = 0;
+  files.forEach(f => { total += f.pageCount; f.renamedSegments.forEach(s => done += s.pages.length); done += f.removedPages.size; });
+  var pct = total ? Math.round(done/total*100) : 0;
+  document.getElementById('progTxt').textContent = done+' / '+total+' págs';
   document.getElementById('progPct').textContent = pct+'%';
   document.getElementById('pfill').style.width = pct+'%';
 }
 
-// ─── LOG ─────────────────────────────────────────────────────────────────────
-function addLog(type, msg){
+function addLog(type, msg) {
   var area = document.getElementById('logArea');
   var icons = {ok:'✓', warn:'⚠', info:'ℹ'};
   var div = document.createElement('div');
   div.className = 'le l'+type;
-  div.innerHTML = '<span>'+(icons[type]||'·')+'</span><span>'+msg+'</span>';
+  div.innerHTML = `<span>${icons[type]||'·'}</span><span>${msg}</span>`;
   var t = area.querySelector('.log-t');
   area.insertBefore(div, t ? t.nextSibling : area.firstChild);
   var all = area.querySelectorAll('.le');
-  if (all.length>30) all[all.length-1].remove();
+  if (all.length > 30) all[all.length-1].remove();
 }
 
-// ─── ZIP ─────────────────────────────────────────────────────────────────────
-function generateZip(){
-  if (!Object.keys(folders).length){ toast('Carga una carpeta primero',true); return; }
-  toast('Generando ZIP...');
-  var zip = new JSZip(), promises = [];
-  Object.keys(folders).forEach(function(fn){
-    folders[fn].files.forEach(function(fd){
-      // Original (possibly with removed pages) — only include if has remaining pages
+// ZIP export with REAL pdf-lib split
+async function gZipExport() {
+  if (!curFolder) return;
+  showLoading('Generando ZIP…', 'Dividiendo PDFs con páginas exactas');
+  var zip = new JSZip(), files = folders[curFolder].files;
+
+  try {
+    for (var fd of files) {
+      if (!fd.loaded || !fd.file) continue;
+      var bytes = await fd.file.arrayBuffer();
+
+      // Original PDF minus removed pages
       var remaining = fd.pageCount - fd.removedPages.size;
-      if (remaining > 0){
-        promises.push(fd.file.arrayBuffer().then(function(b){
-          zip.folder(fn).file(fd.name, b);
-        }).catch(function(){}));
+      if (remaining > 0) {
+        var origDoc = await PDFDocument.load(bytes);
+        var newDoc = await PDFDocument.create();
+        for (var p = 1; p <= fd.pageCount; p++) {
+          if (!fd.removedPages.has(p)) {
+            var [copied] = await newDoc.copyPages(origDoc, [p-1]);
+            // Apply rotation
+            if (fd.rotations[p]) copied.setRotation(degrees(fd.rotations[p]));
+            newDoc.addPage(copied);
+          }
+        }
+        var saved = await newDoc.save();
+        zip.folder(curFolder).file(fd.name, saved);
       }
-      // Renamed segments - just use the original bytes for now (real split requires pdf-lib)
-      fd.renamedSegments.forEach(function(seg){
-        promises.push(fd.file.arrayBuffer().then(function(b){
-          zip.folder(fn).file(seg.name, b);
-        }).catch(function(){}));
-      });
+
+      // Renamed segments — extract only those pages
+      for (var seg of fd.renamedSegments) {
+        var segDoc = await PDFDocument.create();
+        // allPages contains cross-file references
+        for (var pg of seg.allPages) {
+          var srcFd = files[pg.fileIdx];
+          if (!srcFd.loaded) continue;
+          var srcBytes = await srcFd.file.arrayBuffer();
+          var srcDoc = await PDFDocument.load(srcBytes);
+          var [copiedPg] = await segDoc.copyPages(srcDoc, [pg.page-1]);
+          if (srcFd.rotations[pg.page]) copiedPg.setRotation(degrees(srcFd.rotations[pg.page]));
+          segDoc.addPage(copiedPg);
+        }
+        var segSaved = await segDoc.save();
+        zip.folder(curFolder).file(seg.name, segSaved);
+      }
+    }
+
+    var blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+    downloadBlob(blob, 'GestorDoc_'+new Date().toISOString().slice(0,10)+'.zip');
+    toast('ZIP descargado ✓');
+    addLog('ok', 'ZIP exportado');
+  } catch(e) {
+    toast('Error generando ZIP', 'warn');
+    console.error(e);
+  }
+  hideLoading();
+}
+
+// Bind viewer controls
+document.getElementById('vZoomIn').onclick = () => { zoom = Math.min(zoom+.15,3); rebuildViewer(); };
+document.getElementById('vZoomOut').onclick = () => { zoom = Math.max(zoom-.15,.3); rebuildViewer(); };
+document.getElementById('vFit').onclick = () => { zoom = 0.9; rebuildViewer(); };
+document.getElementById('vSelAll').onclick = selAllViewer;
+document.getElementById('vSelNone').onclick = selNoneViewer;
+document.getElementById('r90').onclick = () => rotateSel(90);
+document.getElementById('rn90').onclick = () => rotateSel(-90);
+document.getElementById('r180').onclick = () => rotateSel(180);
+document.getElementById('r0').onclick = () => rotateSel(0);
+document.getElementById('pfxSel').onchange = updatePreview;
+document.getElementById('numFld').oninput = updatePreview;
+document.getElementById('freeNameFld').oninput = updatePreview;
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE 2 — DIVIDIR PDF
+// ══════════════════════════════════════════════════════════════
+var divPdfDoc = null, divPdfBytes = null, divFileName = '', divSelectedPages = new Set(), divZoomLevel = 0.8;
+
+async function divLoadFile(ev) {
+  var file = ev.target.files[0]; if (!file) return;
+  divFileName = file.name;
+  showLoading('Cargando PDF…', file.name);
+  try {
+    divPdfBytes = await file.arrayBuffer();
+    divPdfDoc = await pdfjsLib.getDocument({data: divPdfBytes}).promise;
+    divSelectedPages.clear();
+    document.getElementById('divFileName').textContent = file.name;
+    document.getElementById('divInfoPanel').style.display = '';
+    document.getElementById('divTotalPgs').textContent = divPdfDoc.numPages;
+    document.getElementById('divSelPgs').textContent = 0;
+    document.getElementById('divUnselPgs').textContent = divPdfDoc.numPages;
+    ['divBtnAll','divBtnSel','divBtnRange','divBtnSelAll','divBtnSelNone'].forEach(id => document.getElementById(id).disabled = false);
+    await divRenderPages();
+    toast('PDF cargado: ' + divPdfDoc.numPages + ' páginas', 'info');
+  } catch(e) { toast('Error al cargar PDF', 'warn'); }
+  hideLoading(); ev.target.value = '';
+}
+
+async function divRenderPages() {
+  var container = document.getElementById('divPages');
+  container.innerHTML = '';
+  for (var i = 1; i <= divPdfDoc.numPages; i++) {
+    await divRenderOnePage(i, container);
+  }
+}
+
+async function divRenderOnePage(pageNum, container) {
+  var page = await divPdfDoc.getPage(pageNum);
+  var vport = page.getViewport({scale: divZoomLevel});
+  var wrapper = document.createElement('div');
+  wrapper.className = 'div-page-thumb' + (divSelectedPages.has(pageNum) ? ' sel' : '');
+  wrapper.dataset.page = pageNum;
+  var canvas = document.createElement('canvas');
+  canvas.width = vport.width; canvas.height = vport.height;
+  wrapper.appendChild(canvas);
+  var num = document.createElement('div'); num.className = 'div-pg-num'; num.textContent = 'Pág. ' + pageNum;
+  wrapper.appendChild(num);
+  var selDiv = document.createElement('div'); selDiv.className = 'div-pg-sel'; selDiv.innerHTML = '<span class="div-pg-sel-ico">✓</span>';
+  wrapper.appendChild(selDiv);
+  wrapper.addEventListener('click', () => divTogglePage(pageNum, wrapper));
+  container.appendChild(wrapper);
+  page.render({canvasContext: canvas.getContext('2d'), viewport: vport});
+}
+
+function divTogglePage(pageNum, el) {
+  if (divSelectedPages.has(pageNum)) { divSelectedPages.delete(pageNum); el.classList.remove('sel'); }
+  else { divSelectedPages.add(pageNum); el.classList.add('sel'); }
+  divUpdateInfo();
+}
+
+function divUpdateInfo() {
+  if (!divPdfDoc) return;
+  var total = divPdfDoc.numPages, sel = divSelectedPages.size;
+  document.getElementById('divSelPgs').textContent = sel;
+  document.getElementById('divUnselPgs').textContent = total - sel;
+}
+
+function divSelAll() {
+  if (!divPdfDoc) return;
+  for (var i = 1; i <= divPdfDoc.numPages; i++) divSelectedPages.add(i);
+  document.querySelectorAll('.div-page-thumb').forEach(el => el.classList.add('sel'));
+  divUpdateInfo();
+}
+
+function divSelNone() {
+  divSelectedPages.clear();
+  document.querySelectorAll('.div-page-thumb').forEach(el => el.classList.remove('sel'));
+  divUpdateInfo();
+}
+
+function divZoom(delta) {
+  divZoomLevel = Math.min(Math.max(divZoomLevel + delta, 0.3), 2.5);
+  if (divPdfDoc) divRenderPages();
+}
+
+async function divExportAll() {
+  if (!divPdfDoc) return;
+  showLoading('Dividiendo PDF…', 'Generando páginas individuales');
+  try {
+    var zip = new JSZip(), srcDoc = await PDFDocument.load(divPdfBytes);
+    for (var i = 1; i <= divPdfDoc.numPages; i++) {
+      var newDoc = await PDFDocument.create();
+      var [pg] = await newDoc.copyPages(srcDoc, [i-1]);
+      newDoc.addPage(pg);
+      var bytes = await newDoc.save();
+      var name = divFileName.replace(/\.pdf$/i,'') + '_pag' + String(i).padStart(3,'0') + '.pdf';
+      zip.file(name, bytes);
+    }
+    var blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+    downloadBlob(blob, divFileName.replace(/\.pdf$/i,'') + '_dividido.zip');
+    toast('ZIP descargado — ' + divPdfDoc.numPages + ' páginas ✓');
+  } catch(e) { toast('Error al dividir', 'warn'); console.error(e); }
+  hideLoading();
+}
+
+async function divExportSelected() {
+  if (!divPdfDoc || !divSelectedPages.size) { toast('Selecciona páginas primero', 'warn'); return; }
+  showLoading('Exportando páginas seleccionadas…', divSelectedPages.size + ' páginas');
+  try {
+    var zip = new JSZip(), srcDoc = await PDFDocument.load(divPdfBytes);
+    var sorted = Array.from(divSelectedPages).sort((a,b)=>a-b);
+    for (var pg of sorted) {
+      var newDoc = await PDFDocument.create();
+      var [copied] = await newDoc.copyPages(srcDoc, [pg-1]);
+      newDoc.addPage(copied);
+      var bytes = await newDoc.save();
+      zip.file(divFileName.replace(/\.pdf$/i,'') + '_pag' + String(pg).padStart(3,'0') + '.pdf', bytes);
+    }
+    var blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+    downloadBlob(blob, divFileName.replace(/\.pdf$/i,'') + '_seleccion.zip');
+    toast('Exportadas ' + sorted.length + ' páginas ✓');
+  } catch(e) { toast('Error al exportar', 'warn'); console.error(e); }
+  hideLoading();
+}
+
+function divShowRangeModal() { document.getElementById('rangeModalBg').classList.remove('hide'); }
+
+async function divExportRange() {
+  var input = document.getElementById('rangeInput').value.trim();
+  if (!input || !divPdfDoc) { toast('Ingresa un rango válido', 'warn'); return; }
+  document.getElementById('rangeModalBg').classList.add('hide');
+
+  // Parse ranges: "1-3, 5, 7-9"
+  var groups = [];
+  input.split(',').forEach(part => {
+    part = part.trim();
+    if (part.includes('-')) {
+      var [a,b] = part.split('-').map(Number);
+      var pages = [];
+      for (var i = a; i <= b; i++) if (i >= 1 && i <= divPdfDoc.numPages) pages.push(i);
+      if (pages.length) groups.push(pages);
+    } else {
+      var n = parseInt(part);
+      if (n >= 1 && n <= divPdfDoc.numPages) groups.push([n]);
+    }
+  });
+
+  if (!groups.length) { toast('Sin rangos válidos', 'warn'); return; }
+  showLoading('Dividiendo por rangos…', groups.length + ' grupos');
+  try {
+    var zip = new JSZip(), srcDoc = await PDFDocument.load(divPdfBytes);
+    for (var gi = 0; gi < groups.length; gi++) {
+      var grp = groups[gi];
+      var newDoc = await PDFDocument.create();
+      for (var pg of grp) {
+        var [copied] = await newDoc.copyPages(srcDoc, [pg-1]);
+        newDoc.addPage(copied);
+      }
+      var bytes = await newDoc.save();
+      var rangeName = grp.length > 1 ? `pag${grp[0]}-${grp[grp.length-1]}` : `pag${grp[0]}`;
+      zip.file(divFileName.replace(/\.pdf$/i,'') + '_' + rangeName + '.pdf', bytes);
+    }
+    var blob = await zip.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:6}});
+    downloadBlob(blob, divFileName.replace(/\.pdf$/i,'') + '_rangos.zip');
+    toast('ZIP con ' + groups.length + ' rangos descargado ✓');
+  } catch(e) { toast('Error', 'warn'); console.error(e); }
+  hideLoading();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE 3 — UNIR PDF
+// ══════════════════════════════════════════════════════════════
+var mergeFiles = [];
+
+async function mergeAddFiles(ev) {
+  var files = Array.from(ev.target.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  showLoading('Cargando archivos…', files.length + ' PDFs');
+  for (var f of files) {
+    var bytes = await f.arrayBuffer();
+    var doc = await pdfjsLib.getDocument({data: bytes.slice(0)}).promise;
+    mergeFiles.push({ file: f, name: f.name, pageCount: doc.numPages, bytes, pdfJsDoc: doc });
+  }
+  renderMergeList(); await renderMergePreview();
+  document.getElementById('mergeBtnExport').disabled = mergeFiles.length === 0;
+  hideLoading(); ev.target.value = '';
+}
+
+function renderMergeList() {
+  var el = document.getElementById('mergeList');
+  if (!mergeFiles.length) {
+    el.innerHTML = '<div class="sb-empty" style="padding:16px;"><div class="sb-empty-ico">📄</div><div class="sb-empty-t">Sin archivos</div></div>';
+    return;
+  }
+  el.innerHTML = mergeFiles.map((f, i) =>
+    `<div class="merge-item" data-i="${i}" draggable="true">
+      <span class="merge-item-grip">⠿</span>
+      <span class="merge-item-ico">📄</span>
+      <div class="merge-item-info">
+        <div class="merge-item-name" title="${f.name}">${f.name}</div>
+        <div class="merge-item-pgs">${f.pageCount} pág.</div>
+      </div>
+      <button class="merge-item-del" onclick="mergeRemove(${i})">✕</button>
+    </div>`
+  ).join('');
+
+  // Drag to reorder
+  var items = el.querySelectorAll('.merge-item');
+  var dragIdx = null;
+  items.forEach((item, i) => {
+    item.addEventListener('dragstart', () => { dragIdx = i; item.style.opacity = '.4'; });
+    item.addEventListener('dragend', () => { item.style.opacity = ''; });
+    item.addEventListener('dragover', e => { e.preventDefault(); item.classList.add('drag-over'); });
+    item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+    item.addEventListener('drop', async e => {
+      e.preventDefault(); item.classList.remove('drag-over');
+      if (dragIdx === null || dragIdx === i) return;
+      var moved = mergeFiles.splice(dragIdx, 1)[0];
+      mergeFiles.splice(i, 0, moved);
+      dragIdx = null;
+      renderMergeList(); await renderMergePreview();
     });
   });
-  Promise.all(promises).then(function(){
-    return zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
-  }).then(function(blob){
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href=url; a.download='RIPS_'+new Date().toISOString().slice(0,10)+'.zip';
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    toast('ZIP descargado');
-  });
 }
 
-// ─── TOAST ───────────────────────────────────────────────────────────────────
-function toast(msg, warn, dur){
-  var t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast'+(warn?' warn':'')+' on';
-  clearTimeout(t._t);
-  t._t = setTimeout(function(){ t.classList.remove('on'); }, dur||2600);
+async function renderMergePreview() {
+  var container = document.getElementById('mergePreview');
+  container.innerHTML = '';
+  var total = 0;
+  if (!mergeFiles.length) {
+    container.innerHTML = '<div class="merge-empty"><div class="merge-empty-ico">🔗</div><div class="merge-empty-t">Agrega PDFs para ver la vista previa</div></div>';
+    document.getElementById('mergeTotalPages').textContent = '0 páginas';
+    return;
+  }
+  for (var f of mergeFiles) {
+    for (var p = 1; p <= Math.min(f.pageCount, 3); p++) { // show max 3 per file for speed
+      var page = await f.pdfJsDoc.getPage(p);
+      var vport = page.getViewport({scale: 0.5});
+      var wrapper = document.createElement('div'); wrapper.className = 'merge-pg-thumb';
+      var canvas = document.createElement('canvas'); canvas.width = vport.width; canvas.height = vport.height;
+      wrapper.appendChild(canvas);
+      var lbl = document.createElement('div'); lbl.className = 'merge-pg-label'; lbl.textContent = 'Pág.' + (total+p);
+      wrapper.appendChild(lbl);
+      container.appendChild(wrapper);
+      page.render({canvasContext: canvas.getContext('2d'), viewport: vport});
+    }
+    total += f.pageCount;
+  }
+  if (total > 9) { var more = document.createElement('div'); more.style='display:flex;align-items:center;justify-content:center;padding:20px;font-size:12px;color:var(--t3);'; more.textContent='… y ' + (total-9) + ' páginas más'; container.appendChild(more); }
+  document.getElementById('mergeTotalPages').textContent = total + ' páginas';
 }
+
+async function mergeRemove(i) {
+  mergeFiles.splice(i, 1);
+  renderMergeList(); await renderMergePreview();
+  document.getElementById('mergeBtnExport').disabled = mergeFiles.length === 0;
+}
+
+function mergeClear() { mergeFiles = []; renderMergeList(); renderMergePreview(); document.getElementById('mergeBtnExport').disabled = true; }
+
+async function mergeExport() {
+  if (!mergeFiles.length) return;
+  showLoading('Uniendo PDFs…', mergeFiles.length + ' archivos');
+  try {
+    var finalDoc = await PDFDocument.create();
+    for (var f of mergeFiles) {
+      var srcDoc = await PDFDocument.load(f.bytes);
+      var indices = Array.from({length: f.pageCount}, (_,i) => i);
+      var pages = await finalDoc.copyPages(srcDoc, indices);
+      pages.forEach(p => finalDoc.addPage(p));
+    }
+    var bytes = await finalDoc.save();
+    downloadBlob(new Blob([bytes], {type:'application/pdf'}), 'PDF_unido_'+Date.now()+'.pdf');
+    toast('PDF unido descargado ✓');
+  } catch(e) { toast('Error al unir PDFs', 'warn'); console.error(e); }
+  hideLoading();
+}
+
+// Drag-drop on merge drop zone
+var mergeDropZone = document.getElementById('mergeDropZone');
+mergeDropZone.addEventListener('dragover', e => { e.preventDefault(); mergeDropZone.classList.add('drag'); });
+mergeDropZone.addEventListener('dragleave', () => mergeDropZone.classList.remove('drag'));
+mergeDropZone.addEventListener('drop', async e => {
+  e.preventDefault(); mergeDropZone.classList.remove('drag');
+  var files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (files.length) {
+    var fakeEv = { target: { files } };
+    await mergeAddFiles(fakeEv);
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE 4 — WORD ↔ PDF
+// ══════════════════════════════════════════════════════════════
+async function wordToPdf(ev) {
+  var file = ev.target.files[0]; if (!file) return;
+  document.getElementById('w2pProg').classList.add('on');
+  document.getElementById('w2pResult').classList.remove('on');
+  try {
+    var arrayBuffer = await file.arrayBuffer();
+    var result = await mammoth.convertToHtml({arrayBuffer});
+    var html = result.value;
+
+    // Create styled HTML document for printing
+    var styledHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>
+      body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.6;margin:2cm;color:#000;}
+      h1,h2,h3{font-weight:bold;margin-top:1em;}
+      table{border-collapse:collapse;width:100%;margin:1em 0;}
+      td,th{border:1px solid #999;padding:6px 10px;}
+      p{margin-bottom:0.5em;}
+      img{max-width:100%;}
+    </style></head><body>${html}</body></html>`;
+
+    // Use print-to-PDF via iframe
+    var iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;width:210mm;height:297mm;';
+    document.body.appendChild(iframe);
+    iframe.contentDocument.write(styledHtml);
+    iframe.contentDocument.close();
+
+    await new Promise(r => setTimeout(r, 800));
+
+    // Use pdf-lib + canvas rendering approach
+    var pdfDoc = await PDFDocument.create();
+    var iframeDoc = iframe.contentDocument;
+    var totalH = iframeDoc.body.scrollHeight;
+    var pageH = 297 * 3.78; // mm to px ~96dpi
+    var pageW = 210 * 3.78;
+    var pages = Math.ceil(totalH / pageH);
+    pages = Math.max(pages, 1);
+
+    for (var pg = 0; pg < pages; pg++) {
+      var canvas = document.createElement('canvas');
+      canvas.width = pageW; canvas.height = pageH;
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,pageW,pageH);
+
+      // Render HTML text slice to canvas (simplified approach)
+      ctx.font = '14px Arial'; ctx.fillStyle = '#000';
+      var lines = iframeDoc.body.innerText.split('\n');
+      var y = 40, lineH = 20;
+      var startLine = Math.floor(pg * pageH / lineH);
+      for (var li = startLine; li < Math.min(startLine + Math.floor(pageH/lineH), lines.length); li++) {
+        var line = lines[li];
+        // Word wrap
+        var words = line.split(' '), curLine = '';
+        for (var wi = 0; wi < words.length; wi++) {
+          var testLine = curLine + words[wi] + ' ';
+          if (ctx.measureText(testLine).width > pageW - 80) { ctx.fillText(curLine, 40, y); y += lineH; curLine = words[wi] + ' '; }
+          else curLine = testLine;
+        }
+        if (curLine) { ctx.fillText(curLine, 40, y); y += lineH; }
+        if (y > pageH - 40) break;
+      }
+
+      var imgData = canvas.toDataURL('image/jpeg', 0.95);
+      var imgBytes = await fetch(imgData).then(r => r.arrayBuffer());
+      var img = await pdfDoc.embedJpg(imgBytes);
+      var pdfPage = pdfDoc.addPage([595, 842]);
+      pdfPage.drawImage(img, {x:0, y:0, width:595, height:842});
+    }
+
+    document.body.removeChild(iframe);
+    var pdfBytes = await pdfDoc.save();
+    var blob = new Blob([pdfBytes], {type:'application/pdf'});
+    var url = URL.createObjectURL(blob);
+    var outName = file.name.replace(/\.(docx|doc)$/i,'') + '.pdf';
+    document.getElementById('w2pName').textContent = '✓ ' + outName;
+    document.getElementById('w2pDl').onclick = () => downloadBlob(blob, outName);
+    document.getElementById('w2pResult').classList.add('on');
+    toast('Conversión completada ✓');
+  } catch(e) { toast('Error en conversión', 'warn'); console.error(e); }
+  document.getElementById('w2pProg').classList.remove('on');
+  ev.target.value = '';
+}
+
+async function pdfToWord(ev) {
+  var file = ev.target.files[0]; if (!file) return;
+  document.getElementById('p2wProg').classList.add('on');
+  document.getElementById('p2wResult').classList.remove('on');
+  showLoading('Extrayendo texto del PDF…', file.name);
+  try {
+    var bytes = await file.arrayBuffer();
+    var pdfDoc = await pdfjsLib.getDocument({data: bytes}).promise;
+    var fullText = '';
+    for (var i = 1; i <= pdfDoc.numPages; i++) {
+      var page = await pdfDoc.getPage(i);
+      var content = await page.getTextContent();
+      var pageText = content.items.map(item => item.str).join(' ');
+      fullText += `\n\n--- Página ${i} ---\n\n` + pageText;
+    }
+
+    // Create a simple .txt file (Word-compatible)
+    // For a proper .docx we'd need docx.js; we'll create an HTML file openable in Word
+    var docHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title></title></head><body>
+      <div style="font-family:Arial;font-size:12pt;">${fullText.replace(/\n/g,'<br>').replace(/--- (Página \d+) ---/g,'<h2>$1</h2>')}</div>
+    </body></html>`;
+
+    var blob = new Blob([docHtml], {type:'application/msword'});
+    var outName = file.name.replace(/\.pdf$/i,'') + '.doc';
+    document.getElementById('p2wName').textContent = '✓ ' + outName + ' (texto extraído)';
+    document.getElementById('p2wDl').onclick = () => downloadBlob(blob, outName);
+    document.getElementById('p2wResult').classList.add('on');
+    toast('Texto extraído — ' + pdfDoc.numPages + ' páginas ✓');
+  } catch(e) { toast('Error extrayendo texto', 'warn'); console.error(e); }
+  document.getElementById('p2wProg').classList.remove('on');
+  hideLoading(); ev.target.value = '';
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE 5 — PDF ↔ IMÁGENES
+// ══════════════════════════════════════════════════════════════
+var imgPdfDoc = null, imgPdfBytes = null, imgPdfFileName = '', imgCanvases = [];
+
+async function pdfToImages(ev) {
+  var file = ev.target.files[0]; if (!file) return;
+  imgPdfFileName = file.name;
+  showLoading('Renderizando páginas…', file.name);
+  try {
+    imgPdfBytes = await file.arrayBuffer();
+    imgPdfDoc = await pdfjsLib.getDocument({data: imgPdfBytes}).promise;
+    imgCanvases = [];
+    var container = document.getElementById('imgThumbs');
+    container.innerHTML = '';
+    var scale = parseFloat(document.getElementById('imgQuality').value) || 1.5;
+
+    for (var i = 1; i <= imgPdfDoc.numPages; i++) {
+      var page = await imgPdfDoc.getPage(i);
+      var vport = page.getViewport({scale});
+      var canvas = document.createElement('canvas');
+      canvas.width = vport.width; canvas.height = vport.height;
+      await page.render({canvasContext: canvas.getContext('2d'), viewport: vport}).promise;
+      imgCanvases.push(canvas);
+
+      // Thumbnail
+      var thumbCanvas = document.createElement('canvas');
+      var thumbScale = 100/vport.width;
+      thumbCanvas.width = 100; thumbCanvas.height = vport.height * thumbScale;
+      thumbCanvas.getContext('2d').drawImage(canvas, 0, 0, thumbCanvas.width, thumbCanvas.height);
+      var div = document.createElement('div'); div.className = 'img-thumb';
+      div.appendChild(thumbCanvas);
+      container.appendChild(div);
+    }
+
+    document.getElementById('imgDownloadRow').style.display = '';
+    toast('Renderizado: ' + imgPdfDoc.numPages + ' páginas ✓');
+  } catch(e) { toast('Error al procesar PDF', 'warn'); console.error(e); }
+  hideLoading(); ev.target.value = '';
+}
+
+async function downloadImagesZip() {
+  if (!imgCanvases.length) return;
+  showLoading('Exportando imágenes…', imgCanvases.length + ' páginas');
+  var zip = new JSZip();
+  var fmt = document.getElementById('imgFormat').value;
+  var mime = 'image/' + (fmt==='jpg'?'jpeg':fmt);
+  for (var i = 0; i < imgCanvases.length; i++) {
+    var dataUrl = imgCanvases[i].toDataURL(mime, 0.92);
+    var b64 = dataUrl.split(',')[1];
+    var name = imgPdfFileName.replace(/\.pdf$/i,'') + '_pag' + String(i+1).padStart(3,'0') + '.' + fmt;
+    zip.file(name, b64, {base64:true});
+  }
+  var blob = await zip.generateAsync({type:'blob'});
+  downloadBlob(blob, imgPdfFileName.replace(/\.pdf$/i,'') + '_imagenes.zip');
+  toast('ZIP de imágenes descargado ✓');
+  hideLoading();
+}
+
+var imgs2pdfImages = [];
+
+function imagesToPdf(ev) {
+  var files = Array.from(ev.target.files);
+  imgs2pdfImages = [];
+  var container = document.getElementById('imgs2pdfThumbs');
+  container.innerHTML = '';
+  var loaded = 0;
+  files.forEach(f => {
+    var reader = new FileReader();
+    reader.onload = e => {
+      var img = new Image(); img.src = e.target.result;
+      img.onload = () => {
+        imgs2pdfImages.push({img, src: e.target.result, name: f.name});
+        var div = document.createElement('div'); div.className = 'img-thumb';
+        var preview = document.createElement('img'); preview.src = e.target.result; preview.style='width:80px;height:auto;display:block;';
+        div.appendChild(preview); container.appendChild(div);
+        loaded++;
+        if (loaded === files.length) { document.getElementById('imgs2pdfDlRow').style.display = ''; toast('Imágenes cargadas: ' + loaded, 'info'); }
+      };
+    };
+    reader.readAsDataURL(f);
+  });
+  ev.target.value = '';
+}
+
+async function imgs2pdfExport() {
+  if (!imgs2pdfImages.length) return;
+  showLoading('Creando PDF…', imgs2pdfImages.length + ' imágenes');
+  try {
+    var pdfDoc = await PDFDocument.create();
+    for (var item of imgs2pdfImages) {
+      var src = item.src;
+      var isJpeg = src.includes('data:image/jpeg') || src.includes('data:image/jpg');
+      var bytes = await fetch(src).then(r => r.arrayBuffer());
+      var embImg = isJpeg ? await pdfDoc.embedJpg(bytes) : await pdfDoc.embedPng(bytes);
+      var page = pdfDoc.addPage([embImg.width, embImg.height]);
+      page.drawImage(embImg, {x:0, y:0, width:embImg.width, height:embImg.height});
+    }
+    var saved = await pdfDoc.save();
+    downloadBlob(new Blob([saved], {type:'application/pdf'}), 'imagenes_a_pdf_'+Date.now()+'.pdf');
+    toast('PDF creado ✓');
+  } catch(e) { toast('Error', 'warn'); console.error(e); }
+  hideLoading();
+}
+
+// ══════════════════════════════════════════════════════════════
+//  MODULE 6 — COMPRIMIR PDF
+// ══════════════════════════════════════════════════════════════
+async function compressPdf(ev) {
+  var file = ev.target.files[0]; if (!file) return;
+  document.getElementById('compProg').classList.add('on');
+  document.getElementById('compStats').style.display = 'none';
+  showLoading('Comprimiendo PDF…', file.name);
+  try {
+    var origBytes = await file.arrayBuffer();
+    var origSize = origBytes.byteLength;
+
+    // Load and re-save with pdf-lib (removes unused objects, optimizes xref)
+    var pdfDoc = await PDFDocument.load(origBytes, { ignoreEncryption: true });
+    
+    // Remove metadata to reduce size
+    pdfDoc.setTitle('');
+    pdfDoc.setAuthor('');
+    pdfDoc.setSubject('');
+    pdfDoc.setKeywords([]);
+    pdfDoc.setProducer('Gestor Documental');
+    pdfDoc.setCreator('Gestor Documental');
+
+    var newBytes = await pdfDoc.save({
+      useObjectStreams: true,  // compress object streams
+      addDefaultPage: false,
+      objectsPerTick: 50
+    });
+    var newSize = newBytes.byteLength;
+    var saved = origSize - newSize;
+    var savedPct = Math.round(saved/origSize*100);
+    if (savedPct < 0) savedPct = 0;
+
+    document.getElementById('compOrigSize').textContent = formatBytes(origSize);
+    document.getElementById('compNewSize').textContent = formatBytes(newSize);
+    document.getElementById('compSaved').textContent = (savedPct > 0 ? '-' : '') + Math.abs(savedPct) + '%';
+    document.getElementById('compMeter').style.width = Math.max(5, 100-savedPct) + '%';
+    document.getElementById('compStats').style.display = '';
+
+    var blob = new Blob([newBytes], {type:'application/pdf'});
+    var outName = file.name.replace(/\.pdf$/i,'') + '_comprimido.pdf';
+    document.getElementById('compDlBtn').onclick = () => downloadBlob(blob, outName);
+
+    if (savedPct > 0) toast(`Comprimido: ${formatBytes(origSize)} → ${formatBytes(newSize)} (${savedPct}% menos) ✓`);
+    else toast('PDF ya estaba optimizado. Se guardó igualmente.', 'info');
+  } catch(e) { toast('Error al comprimir', 'warn'); console.error(e); }
+  document.getElementById('compProg').classList.remove('on');
+  hideLoading(); ev.target.value = '';
+}
+
+// Drag-drop for merge
+document.addEventListener('dragover', e => e.preventDefault());
 </script>
 </body>
 </html>
