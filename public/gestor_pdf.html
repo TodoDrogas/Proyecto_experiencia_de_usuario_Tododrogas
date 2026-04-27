@@ -397,9 +397,12 @@ input[type=file]{display:none}
               <div class="albl">Renombrar / Extraer</div>
               <select class="sfield" id="pfxSel" onchange="gUpdatePrev()">
                 <option value="">— Nombre libre —</option>
-                <option value="HC-">HC-</option><option value="RIPS-">RIPS-</option>
-                <option value="EPS-">EPS-</option><option value="LAB-">LAB-</option>
-                <option value="IMG-">IMG-</option><option value="FAC-">FAC-</option><option value="CRT-">CRT-</option>
+                <option value="CRC_830500960_TDNE">CRC_830500960_TDNE</option>
+                <option value="FEV_830500960_TDNE">FEV_830500960_TDNE</option>
+                <option value="HEV_830500960_TDNE">HEV_830500960_TDNE</option>
+                <option value="OPF_830500960_TDNE">OPF_830500960_TDNE</option>
+                <option value="PDE_830500960_TDNE">PDE_830500960_TDNE</option>
+                <option value="RDM_830500960_TDNE">RDM_830500960_TDNE</option>
               </select>
               <div id="numRow" style="display:none;margin-top:5px">
                 <input class="nfield" id="numFld" placeholder="Número / ID…" oninput="gUpdatePrev()">
@@ -527,7 +530,12 @@ input[type=file]{display:none}
     </div>
     <div class="main-view">
       <div class="vtb">
-        <span style="font-size:11px;font-weight:600;color:var(--gray7)">Vista previa — orden final del PDF unido</span>
+        <span style="font-size:11px;font-weight:600;color:var(--gray7)">Vista de páginas — arrastra para reordenar</span>
+        <div class="vtb-sep"></div>
+        <button class="btn btn-gray btn-xs" onclick="mergeZoom(.15)">🔍+</button>
+        <button class="btn btn-gray btn-xs" onclick="mergeZoom(-.15)">🔍−</button>
+        <div class="vtb-sep"></div>
+        <span class="vtb-info" id="mergePgInf">—</span>
       </div>
       <div class="pg-grid" id="mergePreview">
         <div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;color:var(--gray4)">
@@ -1015,13 +1023,13 @@ function gUpdatePrev(){
   document.getElementById('numRow').style.display=pfx?'block':'none';
   document.getElementById('freeNameFld').style.display=pfx?'none':'block';
   var prev;
-  if(pfx){var num=document.getElementById('numFld').value.trim();prev=num?pfx+num+'.pdf':pfx+'[número].pdf'}
+  if(pfx){var num=document.getElementById('numFld').value.trim();prev=num?pfx+'_'+num+'.pdf':pfx+'_[número].pdf'}
   else{var fn=document.getElementById('freeNameFld').value.trim();prev=fn?(fn.toLowerCase().endsWith('.pdf')?fn:fn+'.pdf'):'[nombre].pdf'}
   document.getElementById('nprev').textContent=prev;return prev;
 }
 function gGetName(){
   var pfx=document.getElementById('pfxSel').value;
-  if(pfx){var num=document.getElementById('numFld').value.trim();if(!num){toast('Ingresa número/ID','err');return null}return pfx+num+'.pdf'}
+  if(pfx){var num=document.getElementById('numFld').value.trim();if(!num){toast('Ingresa número/ID','err');return null}return pfx+'_'+num+'.pdf'}
   var fn=document.getElementById('freeNameFld').value.trim();if(!fn){toast('Ingresa nombre','err');return null}
   return fn.toLowerCase().endsWith('.pdf')?fn:fn+'.pdf';
 }
@@ -1246,25 +1254,27 @@ async function divExportRange(){
 }
 
 // ══════════════ MODULE 3: UNIR ══════════════
-var mFiles=[];
+var mFiles=[],mPages=[],mZLvl=.6;
 async function mergeAdd(ev){
   var files=Array.from(ev.target.files).filter(f=>f.name.toLowerCase().endsWith('.pdf'));
   showL('Cargando…',files.length+' PDFs');
   for(var f of files){
     var bytes=await f.arrayBuffer();
     var doc=await pdfjsLib.getDocument({data:bytes.slice(0)}).promise;
+    var fi=mFiles.length;
     mFiles.push({file:f,name:f.name,pgCount:doc.numPages,bytes,jdoc:doc});
+    for(var p=1;p<=doc.numPages;p++) mPages.push({fi,p});
   }
-  mergeRenderList();await mergeRenderPreview();
+  mergeRenderList();await mergeRenderPageGrid();
   document.getElementById('mergeBtnEx').disabled=mFiles.length===0;
   hideL();ev.target.value='';
 }
 function mergeRenderList(){
   var el=document.getElementById('mergeList');
   document.getElementById('mergeTF').textContent=mFiles.length;
-  var tot=mFiles.reduce((a,f)=>a+f.pgCount,0);
+  var tot=mPages.length;
   document.getElementById('mergeTP').textContent=tot;
-  if(!mFiles.length){el.innerHTML='<div style="text-align:center;padding:16px;opacity:.35"><div style="font-size:22px;margin-bottom:5px">📄</div><div style="font-size:11px">Sin archivos</div></div>';return}
+  if(!mFiles.length){el.innerHTML='<div style="text-align:center;padding:16px;opacity:.35"><div style="font-size:22px;margin-bottom:5px">📄</div><div style="font-size:11px">Sin archivos cargados</div></div>';return}
   el.innerHTML=mFiles.map((f,i)=>`
     <div class="fitem" draggable="true" data-mi="${i}">
       <span class="fitem-grip">⠿</span><span class="fitem-ico">📄</span>
@@ -1283,39 +1293,68 @@ function mergeRenderList(){
     item.addEventListener('drop',async e=>{
       e.preventDefault();item.classList.remove('dov');
       if(dragMi===null||dragMi===i)return;
+      // Reorder files and rebuild pages
       var moved=mFiles.splice(dragMi,1)[0];mFiles.splice(i,0,moved);dragMi=null;
-      mergeRenderList();await mergeRenderPreview();
+      mergeRebuildPages();mergeRenderList();await mergeRenderPageGrid();
     });
   });
 }
-async function mergeRenderPreview(){
-  var c=document.getElementById('mergePreview');c.innerHTML='';
-  var tot=0;
-  if(!mFiles.length){c.innerHTML='<div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;color:var(--gray4)"><div style="font-size:40px;opacity:.2;margin-bottom:10px">🔗</div><span style="font-size:12px">Agrega PDFs para ver la vista previa</span></div>';return}
-  for(var f of mFiles){
-    var pv=Math.min(f.pgCount,4);
-    for(var p=1;p<=pv;p++){
-      var page=await f.jdoc.getPage(p);var vport=page.getViewport({scale:.55});
-      var w=document.createElement('div');w.className='pg-th';w.style.cursor='default';
-      var cv=document.createElement('canvas');cv.width=vport.width;cv.height=vport.height;w.appendChild(cv);
-      var s=document.createElement('div');s.className='pg-src';s.textContent=f.name.length>16?f.name.substring(0,14)+'…':f.name;w.appendChild(s);
-      var n=document.createElement('div');n.className='pg-num';n.textContent='Pág.'+(tot+p);w.appendChild(n);
-      c.appendChild(w);page.render({canvasContext:cv.getContext('2d'),viewport:vport});
-    }
-    tot+=f.pgCount;
-  }
-  document.getElementById('mergeTP').textContent=tot;
+function mergeRebuildPages(){
+  mPages=[];
+  mFiles.forEach((f,fi)=>{for(var p=1;p<=f.pgCount;p++)mPages.push({fi,p})});
 }
-async function mergeRm(i){mFiles.splice(i,1);mergeRenderList();await mergeRenderPreview();document.getElementById('mergeBtnEx').disabled=mFiles.length===0}
-function mergeClear(){mFiles=[];mergeRenderList();mergeRenderPreview();document.getElementById('mergeBtnEx').disabled=true}
+async function mergeRenderPageGrid(){
+  var c=document.getElementById('mergePreview');c.innerHTML='';
+  if(!mPages.length){
+    c.innerHTML='<div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;color:var(--gray4)"><div style="font-size:40px;opacity:.2;margin-bottom:10px">🔗</div><span style="font-size:12px">Agrega PDFs para ver la vista previa</span></div>';
+    document.getElementById('mergePgInf').textContent='—';return;
+  }
+  document.getElementById('mergePgInf').textContent=mPages.length+'pág.';
+  document.getElementById('mergeTP').textContent=mPages.length;
+  for(var mi=0;mi<mPages.length;mi++) await mergeRenderOnePg(mi,c);
+}
+async function mergeRenderOnePg(mi,c){
+  var mp=mPages[mi],f=mFiles[mp.fi];if(!f||!f.jdoc)return;
+  var page=await f.jdoc.getPage(mp.p);
+  var vport=page.getViewport({scale:mZLvl});
+  var w=document.createElement('div');
+  w.className='pg-th';w.dataset.mi=mi;w.draggable=true;
+  var cv=document.createElement('canvas');cv.width=vport.width;cv.height=vport.height;w.appendChild(cv);
+  var s=document.createElement('div');s.className='pg-src';s.textContent=f.name.length>16?f.name.substring(0,14)+'…':f.name;w.appendChild(s);
+  var n=document.createElement('div');n.className='pg-num';n.textContent='Pág.'+(mi+1);w.appendChild(n);
+  var ov=document.createElement('div');ov.className='pg-ov';ov.innerHTML='<div class="pg-ov-check">✓</div>';w.appendChild(ov);
+  // Drag to reorder pages
+  w.addEventListener('dragstart',e=>{w.classList.add('dragging');e.dataTransfer.setData('text/plain',mi)});
+  w.addEventListener('dragend',()=>{w.classList.remove('dragging');document.querySelectorAll('#mergePreview .pg-th').forEach(t=>t.classList.remove('dov-l','dov-r'))});
+  w.addEventListener('dragover',e=>{e.preventDefault();var r=w.getBoundingClientRect();w.classList.toggle('dov-l',e.clientX<r.left+r.width/2);w.classList.toggle('dov-r',e.clientX>=r.left+r.width/2)});
+  w.addEventListener('dragleave',()=>w.classList.remove('dov-l','dov-r'));
+  w.addEventListener('drop',async e=>{
+    e.preventDefault();w.classList.remove('dov-l','dov-r');
+    var from=parseInt(e.dataTransfer.getData('text/plain'));if(from===mi)return;
+    var r=w.getBoundingClientRect();var after=e.clientX>=r.left+r.width/2;
+    var to=after?mi+1:mi;if(from<to)to--;
+    var moved=mPages.splice(from,1)[0];mPages.splice(to,0,moved);
+    await mergeRenderPageGrid();
+  });
+  c.appendChild(w);
+  page.render({canvasContext:cv.getContext('2d'),viewport:vport});
+}
+function mergeZoom(d){mZLvl=Math.min(Math.max(mZLvl+d,.3),2.5);if(mPages.length)mergeRenderPageGrid()}
+async function mergeRm(i){
+  mFiles.splice(i,1);mergeRebuildPages();
+  mergeRenderList();await mergeRenderPageGrid();
+  document.getElementById('mergeBtnEx').disabled=mFiles.length===0;
+}
+function mergeClear(){mFiles=[];mPages=[];mergeRenderList();mergeRenderPageGrid();document.getElementById('mergeBtnEx').disabled=true}
 async function mergeExport(){
-  if(!mFiles.length)return;showL('Uniendo PDFs…',mFiles.length+' archivos');
+  if(!mPages.length)return;showL('Uniendo PDFs…',mPages.length+' páginas');
   try{
     var fin=await PDFDocument.create();
-    for(var f of mFiles){
-      var src=await PDFDocument.load(f.bytes.slice(0));
-      var idx=Array.from({length:f.pgCount},(_,i)=>i);
-      var pgs=await fin.copyPages(src,idx);pgs.forEach(p=>fin.addPage(p));
+    // Cache loaded src docs to avoid reloading
+    var srcDocs={};
+    for(var mp of mPages){
+      if(!srcDocs[mp.fi]) srcDocs[mp.fi]=await PDFDocument.load(mFiles[mp.fi].bytes.slice(0));
+      var[pg]=await fin.copyPages(srcDocs[mp.fi],[mp.p-1]);fin.addPage(pg);
     }
     dlBlob(new Blob([await fin.save()],{type:'application/pdf'}),'PDF_unido_'+Date.now()+'.pdf');
     toast('PDF unido ✓');
