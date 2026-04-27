@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp · Tododrogas</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>(function(){var id=sessionStorage.getItem("pqr_agent_id")||"x";var t=localStorage.getItem("ag_tema_"+id)||"default";if(t!=="default")document.documentElement.setAttribute("data-theme",t);})();</script>
+<script src="config.js" onerror="console.warn('config.js not found')"></script>
+<style>
+:root{
+  --ink:#0a0e1a;--ink2:#3a4258;--ink3:#8892a4;
+  --bg:#f2f4f8;--bg2:#e8ebf2;--surface:#fff;--surface2:#f7f8fb;--border:#dde1eb;
+  --blue:#2563eb;--blue-d:#1d4ed8;--blue-l:#eff4ff;--blue-m:#bfdbfe;
+  --green:#16a34a;--green-l:#dcfce7;
+  --wa:#25d366;--wa-d:#128c7e;--wa-l:#e7fce8;--wa-bg:#e5ddd5;--wa-out:#d9fdd3;--wa-in:#fff;
+  --nova:#6366f1;--nova-l:#eef2ff;
+  --yellow:#ca8a04;--yellow-l:#fef9c3;
+  --red:#dc2626;--red-l:#fee2e2;
+  --orange:#ea580c;--orange-l:#fff7ed;
+  --purple:#7c3aed;--purple-l:#f5f3ff;
+  --shadow:0 1px 3px rgba(10,14,26,.08),0 4px 12px rgba(10,14,26,.04);
+  --shadow-l:0 2px 8px rgba(10,14,26,.12),0 8px 24px rgba(10,14,26,.08);
+  --r:12px;--r2:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+
+/* TOPBAR */
+.topbar{background:var(--ink);color:#fff;height:clamp(40px,5vh,52px);display:flex;align-items:center;padding:0 clamp(10px,1.5vw,20px);gap:clamp(8px,1vw,14px);position:sticky;top:0;z-index:200;flex-shrink:0}
+.tb-brand{font-size:clamp(12px,1.2vw,15px);font-weight:800;color:#fff;display:flex;align-items:center;gap:8px;text-decoration:none}
+.tb-dot{width:7px;height:7px;border-radius:50%;background:var(--wa);box-shadow:0 0 8px var(--wa);flex-shrink:0}
+.tb-divider{width:1px;height:20px;background:rgba(255,255,255,.15)}
+.tb-title{font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;color:rgba(255,255,255,.9)}
+.tb-title-icon{color:var(--wa)}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.btn-back{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.7);padding:4px 12px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .15s;text-decoration:none}
+.btn-back:hover{background:rgba(255,255,255,.15);color:#fff}
+.ag-badge{display:flex;align-items:center;gap:8px}
+.ag-av{width:28px;height:28px;border-radius:50%;background:var(--wa);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.ag-name{font-size:12px;font-weight:500;color:rgba(255,255,255,.8)}
+.btn-logout{background:none;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);padding:4px 10px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .15s}
+.btn-logout:hover{border-color:var(--red);color:#fca5a5}
+
+/* LAYOUT */
+.app-body{display:flex;flex:1;overflow:hidden;min-height:0;position:relative}
+
+/* COL 1 - FILTROS */
+.wa-filters{width:clamp(130px,14vw,180px);min-width:130px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:12px 8px;gap:2px;overflow-y:auto;flex-shrink:0}
+.filters-title{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ink3);padding:4px 8px 10px}
+.filter-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:var(--r2);cursor:pointer;font-size:clamp(10px,1.1vh,12px);font-weight:500;color:var(--ink2);transition:all .15s;user-select:none}
+.filter-item:hover{background:var(--bg)}
+.filter-item.active{background:var(--wa-l);color:var(--wa-d)}
+.filter-cnt{margin-left:auto;background:var(--bg2);color:var(--ink3);font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;font-family:'DM Mono',monospace}
+.filter-item.active .filter-cnt{background:rgba(37,211,102,.2);color:var(--wa-d)}
+.fdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.fdot-all{background:var(--ink3)}
+.fdot-nova{background:var(--nova)}
+.fdot-esc{background:var(--orange)}
+.fdot-esp{background:var(--red)}
+.fdot-cer{background:var(--green)}
+.wa-divider{height:1px;background:var(--border);margin:8px 4px}
+.wa-stat{padding:8px;background:var(--bg2);border-radius:var(--r2);margin:4px}
+.wa-stat-num{font-size:18px;font-weight:800;color:var(--wa-d);font-family:'DM Mono',monospace}
+.wa-stat-lbl{font-size:9px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px}
+
+/* COL 2 - LISTA */
+.wa-list{width:clamp(220px,24vw,320px);min-width:200px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.list-hdr{padding:10px 12px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px;flex-shrink:0}
+.list-search{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r2);padding:6px 10px}
+.list-search input{border:none;background:transparent;font-size:12px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;flex:1}
+.list-search input::placeholder{color:var(--ink3)}
+.list-tabs{display:flex;gap:4px}
+.ltab{flex:1;padding:5px 0;border:none;background:transparent;font-size:10px;font-weight:600;font-family:'Poppins',sans-serif;color:var(--ink3);cursor:pointer;border-radius:6px;transition:all .15s}
+.ltab.active{background:var(--wa-l);color:var(--wa-d)}
+.list-items{flex:1;overflow-y:auto;min-height:0}
+.list-items::-webkit-scrollbar{width:4px}
+.list-items::-webkit-scrollbar-thumb{background:#c1c8d4;border-radius:4px}
+
+/* ITEM CONVERSACION */
+.conv-item{padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;display:flex;align-items:center;gap:10px;position:relative}
+.conv-item:hover{background:var(--bg)}
+.conv-item.sel{background:var(--wa-l);border-left:3px solid var(--wa);padding-left:9px}
+.conv-av{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#128c7e,#25d366);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative}
+.conv-av-dot{position:absolute;bottom:0;right:0;width:10px;height:10px;border-radius:50%;border:2px solid var(--surface)}
+.s-nova .conv-av-dot{background:var(--nova)}
+.s-escalado .conv-av-dot{background:var(--orange);animation:pulseO 2s infinite}
+.s-esperando .conv-av-dot{background:var(--red);animation:pulseR 1.5s infinite}
+.s-cerrado .conv-av-dot{background:var(--ink3)}
+@keyframes pulseO{0%,100%{box-shadow:0 0 0 0 rgba(234,88,12,.4)}50%{box-shadow:0 0 0 4px rgba(234,88,12,0)}}
+@keyframes pulseR{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 5px rgba(220,38,38,0)}}
+.conv-info{flex:1;min-width:0}
+.conv-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.conv-name{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.conv-time{font-size:10px;color:var(--ink3);font-family:'DM Mono',monospace;flex-shrink:0}
+.conv-prev{font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-prev.unread{color:var(--ink2);font-weight:600}
+.conv-bot{display:flex;align-items:center;justify-content:space-between;margin-top:3px}
+.cbadge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px}
+.cb-nova{background:var(--nova-l);color:var(--nova)}
+.cb-esc{background:var(--orange-l);color:var(--orange)}
+.cb-esp{background:var(--red-l);color:var(--red)}
+.cb-cer{background:var(--green-l);color:var(--green)}
+.unread-cnt{background:var(--wa);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:99px;display:flex;align-items:center;justify-content:center;padding:0 4px;font-family:'DM Mono',monospace}
+.timer{font-size:10px;font-weight:700;font-family:'DM Mono',monospace;padding:2px 7px;border-radius:99px;flex-shrink:0}
+.t-ok{background:var(--green-l);color:var(--green)}
+.t-warn{background:var(--yellow-l);color:var(--yellow)}
+.t-danger{background:var(--red-l);color:var(--red);animation:blink .8s step-end infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
+.list-footer{padding:8px 12px;border-top:1px solid var(--border);font-size:10px;color:var(--ink3);font-weight:500;flex-shrink:0}
+
+/* COL 3 - CHAT */
+.wa-chat{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;background:var(--wa-bg)}
+.no-sel{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--ink3)}
+.no-sel p{font-size:13px;font-weight:500}
+.chat-view{display:none;flex-direction:column;height:100%;overflow:hidden}
+
+/* Chat header */
+.chat-hdr{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-shrink:0;box-shadow:var(--shadow)}
+.chat-hav{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,#128c7e,#25d366);color:#fff;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.chat-hinfo{flex:1;min-width:0}
+.chat-hname{font-size:13px;font-weight:700;color:var(--ink)}
+.chat-hsub{font-size:11px;color:var(--ink3);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.chat-hactions{display:flex;gap:8px;align-items:center}
+.btn-tomar{background:var(--orange);color:#fff;border:none;padding:6px 14px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .15s}
+.btn-tomar:hover{background:#c2410c}
+.btn-cerrar{background:var(--green-l);color:var(--green);border:1px solid var(--green);padding:6px 14px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .15s}
+.btn-cerrar:hover{background:var(--green);color:#fff}
+.btn-ico{background:var(--bg2);border:1px solid var(--border);color:var(--ink2);width:32px;height:32px;border-radius:var(--r2);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+.btn-ico:hover{background:var(--bg);border-color:var(--ink3)}
+
+/* MENSAJES */
+.chat-msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-height:0}
+.chat-msgs::-webkit-scrollbar{width:5px}
+.chat-msgs::-webkit-scrollbar-thumb{background:#c1c8d4;border-radius:4px}
+.day-sep{text-align:center;margin:8px 0}
+.day-sep span{background:#e0d8ce;color:#667;font-size:10px;font-weight:600;padding:3px 12px;border-radius:99px}
+.msg-row{display:flex;flex-direction:column;max-width:72%;margin-bottom:2px}
+.msg-row.out{align-self:flex-end;align-items:flex-end}
+.msg-row.inc{align-self:flex-start;align-items:flex-start}
+.msg-sender{font-size:10px;font-weight:700;margin-bottom:2px;padding:0 4px}
+.msg-sender.nova{color:var(--nova)}
+.msg-sender.agent{color:var(--wa-d)}
+.msg-bub{padding:7px 10px 4px;border-radius:8px;font-size:12.5px;line-height:1.55;position:relative;word-break:break-word;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+.msg-row.inc .msg-bub{background:var(--wa-in);border-top-left-radius:2px}
+.msg-row.out .msg-bub{background:var(--wa-out);border-top-right-radius:2px}
+.msg-row.nova-m .msg-bub{background:var(--nova-l);border-top-left-radius:2px}
+.msg-meta{display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:2px}
+.msg-time{font-size:10px;color:var(--ink3);font-family:'DM Mono',monospace}
+.tick-r{color:#53bdeb;font-size:11px}
+.sys-msg{text-align:center;margin:8px auto;max-width:80%}
+.sys-msg span{background:rgba(255,255,255,.7);backdrop-filter:blur(4px);color:var(--ink2);font-size:10px;font-weight:500;padding:4px 12px;border-radius:99px;border:1px solid var(--border)}
+.sys-msg.esc span{background:rgba(254,215,170,.7);color:#c2410c;border-color:#fed7aa}
+.sys-msg.nova-s span{background:rgba(238,242,255,.8);color:var(--nova);border-color:#c7d2fe}
+
+/* INPUT */
+.input-area{background:var(--surface);border-top:1px solid var(--border);padding:10px 14px;display:flex;align-items:flex-end;gap:10px;flex-shrink:0}
+.input-blocked{background:var(--surface);border-top:1px solid var(--border);padding:14px;display:flex;align-items:center;justify-content:center;gap:10px;flex-shrink:0}
+.input-blocked p{font-size:12px;color:var(--ink3);font-weight:500}
+.input-wrap{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:8px 14px;display:flex;align-items:flex-end;gap:8px}
+.input-wrap textarea{flex:1;border:none;background:transparent;font-size:13px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;resize:none;max-height:120px;min-height:20px;line-height:1.5}
+.input-wrap textarea::placeholder{color:var(--ink3)}
+.btn-send{width:42px;height:42px;border-radius:50%;background:var(--wa);border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;box-shadow:0 2px 8px rgba(37,211,102,.4)}
+.btn-send:hover{background:var(--wa-d);transform:scale(1.05)}
+.btn-send:disabled{background:var(--ink3);box-shadow:none;cursor:not-allowed;transform:none}
+.emoji-btn{font-size:18px;cursor:pointer;flex-shrink:0;padding-bottom:2px;opacity:.6;transition:opacity .15s}
+.emoji-btn:hover{opacity:1}
+
+/* COL 4 - INFO */
+.wa-info{width:250px;min-width:210px;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+.wa-info::-webkit-scrollbar{width:4px}
+.wa-info::-webkit-scrollbar-thumb{background:#c1c8d4;border-radius:4px}
+.info-sec{padding:14px;border-bottom:1px solid var(--border)}
+.info-sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink3);margin-bottom:10px}
+.info-row{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.info-lbl{font-size:10px;color:var(--ink3);font-weight:600}
+.info-val{font-size:12px;color:var(--ink);font-weight:500}
+.info-val.ph{font-family:'DM Mono',monospace;font-size:12px;color:var(--wa-d)}
+.itag{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;margin:2px}
+.itag-nova{background:var(--nova-l);color:var(--nova)}
+.itag-esc{background:var(--orange-l);color:var(--orange)}
+.itag-cer{background:var(--green-l);color:var(--green)}
+.itag-eps{background:var(--blue-l);color:var(--blue)}
+.tipif-item{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:var(--r2);cursor:pointer;font-size:12px;color:var(--ink2);transition:all .15s;border:1px solid transparent;margin-bottom:3px}
+.tipif-item:hover{background:var(--bg);border-color:var(--border)}
+.tipif-item.sel{background:var(--wa-l);border-color:var(--wa);color:var(--wa-d);font-weight:600}
+.tipif-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* RR Panel */
+.rr-panel{position:absolute;bottom:70px;right:260px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px;width:260px;box-shadow:var(--shadow-l);z-index:100;max-height:300px;overflow-y:auto;display:none}
+.rr-panel.open{display:block}
+.rr-item{background:var(--bg);border:1px solid var(--border);border-radius:var(--r2);padding:8px 10px;cursor:pointer;transition:all .15s;margin-bottom:5px}
+.rr-item:hover{border-color:var(--wa);background:var(--wa-l)}
+.rr-title{font-size:11px;font-weight:700;color:var(--ink);margin-bottom:2px}
+.rr-body{font-size:11px;color:var(--ink3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--ink);color:#fff;padding:10px 18px;border-radius:var(--r2);font-size:12px;font-weight:500;display:flex;align-items:center;gap:8px;box-shadow:var(--shadow-l);z-index:9999;animation:slideUp .3s ease;pointer-events:none}
+.toast.ok{background:var(--wa-d)}
+.toast.err{background:var(--red)}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+
+/* MODAL */
+.modal-bd{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:500}
+.modal-bd.open{display:flex}
+.modal-box{background:var(--surface);border-radius:var(--r);padding:24px;width:360px;box-shadow:var(--shadow-l);display:flex;flex-direction:column;gap:14px}
+.modal-ttl{font-size:15px;font-weight:700;color:var(--ink)}
+.modal-sub{font-size:12px;color:var(--ink3)}
+.modal-acts{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+.btn-mc{background:var(--bg2);border:none;color:var(--ink2);padding:7px 16px;border-radius:var(--r2);font-size:12px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer}
+.btn-mok{background:var(--wa);border:none;color:#fff;padding:7px 16px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer}
+.minput{width:100%;border:1px solid var(--border);border-radius:var(--r2);padding:8px 12px;font-size:12px;font-family:'Poppins',sans-serif;color:var(--ink);background:var(--bg);outline:none;resize:vertical}
+.minput:focus{border-color:var(--wa)}
+
+/* EMPTY */
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--ink3);padding:20px;text-align:center}
+.empty p{font-size:12px;font-weight:500}
+
+/* DARK */
+html[data-theme="dark"]{--bg:#0f1117;--bg2:#1a1d27;--surface:#1e2130;--surface2:#252836;--border:#2d3144;--ink:#e8ecf5;--ink2:#9aa3bd;--ink3:#5a6484;--wa-bg:#1a1a1a;--wa-out:#1d3a2a;--wa-in:#1e2130}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a href="agente.html" class="tb-brand">
+    <span>Tododrogas</span>
+    <div class="tb-dot"></div>
+  </a>
+  <div class="tb-divider"></div>
+  <div class="tb-title">
+    <svg class="tb-title-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+    WhatsApp
+  </div>
+  <div class="tb-right">
+    <a href="agente.html" class="btn-back">
+      <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Correos PQRSFD
+    </a>
+    <div class="ag-badge">
+      <div class="ag-av" id="agentAv">A</div>
+      <span class="ag-name" id="agentNameLabel">Agente</span>
+    </div>
+    <button class="btn-logout" onclick="logout()">Salir</button>
+  </div>
+</div>
+
+<!-- BODY -->
+<div class="app-body">
+
+  <!-- COL 1 FILTROS -->
+  <div class="wa-filters">
+    <div class="filters-title">Conversaciones</div>
+    <div class="filter-item active" onclick="setFiltro('todas',this)">
+      <div class="fdot fdot-all"></div>Todas
+      <span class="filter-cnt" id="fc-todas">0</span>
+    </div>
+    <div class="filter-item" onclick="setFiltro('nova',this)">
+      <div class="fdot fdot-nova"></div>Con Nova TD
+      <span class="filter-cnt" id="fc-nova">0</span>
+    </div>
+    <div class="filter-item" onclick="setFiltro('escalado',this)">
+      <div class="fdot fdot-esc"></div>Escaladas
+      <span class="filter-cnt" id="fc-escalado">0</span>
+    </div>
+    <div class="filter-item" onclick="setFiltro('esperando',this)">
+      <div class="fdot fdot-esp"></div>Esperando
+      <span class="filter-cnt" id="fc-esperando">0</span>
+    </div>
+    <div class="filter-item" onclick="setFiltro('cerrado',this)">
+      <div class="fdot fdot-cer"></div>Cerradas
+      <span class="filter-cnt" id="fc-cerrado">0</span>
+    </div>
+    <div class="wa-divider"></div>
+    <div class="wa-stat">
+      <div class="wa-stat-num" id="stat-total">0</div>
+      <div class="wa-stat-lbl">Chats totales</div>
+    </div>
+    <div class="wa-stat" style="margin-top:6px">
+      <div class="wa-stat-num" id="stat-activas" style="color:var(--orange)">0</div>
+      <div class="wa-stat-lbl">Activas hoy</div>
+    </div>
+  </div>
+
+  <!-- COL 2 LISTA -->
+  <div class="wa-list">
+    <div class="list-hdr">
+      <div class="list-search">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="searchInput" placeholder="Buscar nombre o número..." oninput="renderLista()">
+      </div>
+      <div class="list-tabs">
+        <button class="ltab active" onclick="setTab('todas',this)">Todas</button>
+        <button class="ltab" onclick="setTab('activas',this)">Activas</button>
+        <button class="ltab" onclick="setTab('cerradas',this)">Cerradas</button>
+      </div>
+    </div>
+    <div class="list-items" id="convList">
+      <div class="empty"><p>Cargando...</p></div>
+    </div>
+    <div class="list-footer" id="listFooter">0 conversaciones</div>
+  </div>
+
+  <!-- COL 3 CHAT -->
+  <div class="wa-chat">
+    <div class="no-sel" id="noSel">
+      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity:.2"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      <p>Selecciona una conversación</p>
+    </div>
+    <div class="chat-view" id="chatView">
+      <div class="chat-hdr" id="chatHdr"></div>
+      <div class="chat-msgs" id="chatMsgs"></div>
+      <div id="inputArea"></div>
+    </div>
+  </div>
+
+  <!-- COL 4 INFO -->
+  <div class="wa-info" id="infoPanel">
+    <div class="empty">
+      <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <p>Info del contacto</p>
+    </div>
+  </div>
+
+  <!-- RR Panel -->
+  <div class="rr-panel" id="rrPanel"></div>
+</div>
+
+<!-- MODAL CERRAR -->
+<div class="modal-bd" id="modalCerrar">
+  <div class="modal-box">
+    <div class="modal-ttl">Cerrar conversación</div>
+    <div class="modal-sub">Tipifica y añade una observación de cierre.</div>
+    <select id="cerrarTipif" class="minput" style="resize:none;min-height:auto">
+      <option value="">-- Selecciona tipificación --</option>
+      <option>PQRSFD radicada</option>
+      <option>Información brindada</option>
+      <option>Sede indicada</option>
+      <option>Medicamento consultado</option>
+      <option>Sin respuesta usuario</option>
+      <option>Escalado a área</option>
+      <option>Otro</option>
+    </select>
+    <textarea class="minput" id="cerrarObs" placeholder="Observación de cierre (opcional)..." rows="3"></textarea>
+    <div class="modal-acts">
+      <button class="btn-mc" onclick="document.getElementById('modalCerrar').classList.remove('open')">Cancelar</button>
+      <button class="btn-mok" onclick="confirmarCerrar()">Cerrar conversación</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────
+const SB_URL   = window.SUPABASE_URL || 'https://TU_PROYECTO.supabase.co';
+const SB_KEY   = window.SUPABASE_KEY || 'TU_ANON_KEY';
+const WA_PHONE = '1004615859412103';
+
+// ── AUTH ─────────────────────────────────────────
+const _rawId   = sessionStorage.getItem('pqr_agent_id')||'';
+const _uuidRe  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const AGENT_ID = _uuidRe.test(_rawId) ? _rawId : null;
+const AGENT_NAME = sessionStorage.getItem('pqr_name')||'Agente';
+function logout(){ sessionStorage.clear(); window.location.href='login.html'; }
+
+// ── SB HELPER ────────────────────────────────────
+async function sb(path,method='GET',body=null){
+  const h={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+  if(method!=='GET') h['Prefer']='return=representation';
+  const r=await fetch(`${SB_URL}/rest/v1/${path}`,{method,headers:h,body:body?JSON.stringify(body):undefined});
+  if(!r.ok&&r.status!==201&&r.status!==204) throw new Error(await r.text());
+  if(r.status===204) return null;
+  try{return await r.json();}catch{return null;}
+}
+
+// ── STATE ────────────────────────────────────────
+const S={
+  sesiones:[],filtro:'todas',tab:'todas',
+  selTel:null,selSesion:null,
+  msgs:[],polling:null,pollingMsg:null,
+};
+
+const TIPIFS=[
+  {label:'PQRSFD radicada',color:'#7c3aed'},
+  {label:'Información brindada',color:'#2563eb'},
+  {label:'Sede indicada',color:'#16a34a'},
+  {label:'Medicamento consultado',color:'#ca8a04'},
+  {label:'Sin respuesta',color:'#dc2626'},
+  {label:'Escalado a área',color:'#ea580c'},
+  {label:'Otro',color:'#8892a4'},
+];
+
+const RR=[
+  {t:'Saludo',b:'Buenos días, soy {{ag}} de Tododrogas. ¿En qué le puedo ayudar?'},
+  {t:'Un momento',b:'Con gusto le ayudo. Un momento por favor, estoy revisando su caso.'},
+  {t:'Sede',b:'Le confirmo los datos de la sede más cercana a su ubicación.'},
+  {t:'PQRSFD',b:'Su solicitud ha sido radicada. Le llegará confirmación con el número de radicado.'},
+  {t:'Cierre',b:'Ha sido un placer atenderle. Estamos a sus órdenes. ¡Que tenga un excelente día!'},
+];
+
+// ── INIT ─────────────────────────────────────────
+(async()=>{
+  if(sessionStorage.getItem('pqr_role')!=='agente'){window.location.href='login.html';return;}
+  document.getElementById('agentNameLabel').textContent=AGENT_NAME;
+  document.getElementById('agentAv').textContent=(AGENT_NAME||'A').charAt(0).toUpperCase();
+  await loadSesiones();
+  startPolling();
+  if(Notification.permission==='default') Notification.requestPermission();
+})();
+
+// ── CARGAR SESIONES ──────────────────────────────
+async function loadSesiones(){
+  try{
+    const data=await sb('wa_sesiones?select=*&order=updated_at.desc&limit=200')||[];
+    S.sesiones=data;
+    updateCtrs();renderLista();
+  }catch(e){
+    document.getElementById('convList').innerHTML=`<div class="empty"><p style="color:var(--red)">Error: ${escH(e.message.substring(0,80))}</p></div>`;
+  }
+}
+
+// ── CONTADORES ───────────────────────────────────
+function updateCtrs(){
+  const s=S.sesiones;
+  document.getElementById('fc-todas').textContent=s.length;
+  document.getElementById('fc-nova').textContent=s.filter(x=>x.estado==='nova').length;
+  document.getElementById('fc-escalado').textContent=s.filter(x=>x.estado==='escalado').length;
+  document.getElementById('fc-esperando').textContent=s.filter(x=>x.estado==='esperando').length;
+  document.getElementById('fc-cerrado').textContent=s.filter(x=>x.estado==='cerrado').length;
+  document.getElementById('stat-total').textContent=s.length;
+  document.getElementById('stat-activas').textContent=s.filter(x=>x.estado!=='cerrado').length;
+}
+
+// ── FILTROS ──────────────────────────────────────
+function setFiltro(f,el){
+  S.filtro=f;
+  document.querySelectorAll('.filter-item').forEach(i=>i.classList.remove('active'));
+  el.classList.add('active');renderLista();
+}
+function setTab(t,el){
+  S.tab=t;
+  document.querySelectorAll('.ltab').forEach(i=>i.classList.remove('active'));
+  el.classList.add('active');renderLista();
+}
+
+// ── RENDER LISTA ─────────────────────────────────
+function renderLista(){
+  const q=document.getElementById('searchInput').value.trim().toLowerCase();
+  let list=[...S.sesiones];
+  if(S.filtro!=='todas') list=list.filter(s=>s.estado===S.filtro);
+  if(S.tab==='activas') list=list.filter(s=>s.estado!=='cerrado');
+  if(S.tab==='cerradas') list=list.filter(s=>s.estado==='cerrado');
+  if(q) list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q));
+
+  document.getElementById('listFooter').textContent=`${list.length} conversación${list.length!==1?'es':''}`;
+  const el=document.getElementById('convList');
+  if(!list.length){el.innerHTML=`<div class="empty"><p>${q?'Sin resultados':'Sin conversaciones'}</p></div>`;return;}
+
+  el.innerHTML=list.map(s=>{
+    const hist=parseHist(s.history);
+    const last=hist[hist.length-1]||{};
+    const prev=escH((last.content||'').substring(0,45)||'...');
+    const unread=s.unread_count||0;
+    const nom=s.nombre||s.telefono||'Desconocido';
+    const ini=nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    const mins=Math.floor((Date.now()-new Date(s.updated_at).getTime())/60000);
+    const tc=mins<10?'t-ok':mins<30?'t-warn':'t-danger';
+    const tt=mins<60?`${mins}m`:`${Math.floor(mins/60)}h${mins%60?mins%60+'m':''}`;
+    const cbMap={nova:'cb-nova',escalado:'cb-esc',esperando:'cb-esp',cerrado:'cb-cer'};
+    const cbLbl={nova:'Nova TD',escalado:'Escalado',esperando:'Esperando',cerrado:'Cerrado'};
+    return `<div class="conv-item s-${s.estado||'nova'}${S.selTel===s.telefono?' sel':''}" onclick="selectConv('${escH(s.telefono)}')">
+      <div class="conv-av">${ini}<div class="conv-av-dot"></div></div>
+      <div class="conv-info">
+        <div class="conv-top"><span class="conv-name">${escH(nom)}</span><span class="conv-time">${fmtTime(s.updated_at)}</span></div>
+        <div class="conv-prev${unread?' unread':''}">${prev}</div>
+        <div class="conv-bot">
+          <span class="cbadge ${cbMap[s.estado]||'cb-nova'}">${cbLbl[s.estado]||'Nova TD'}</span>
+          <div style="display:flex;align-items:center;gap:4px">
+            ${s.estado!=='cerrado'?`<span class="timer ${tc}">${tt}</span>`:''}
+            ${unread?`<span class="unread-cnt">${unread}</span>`:''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── SELECCIONAR ──────────────────────────────────
+async function selectConv(tel){
+  S.selTel=tel;
+  S.selSesion=S.sesiones.find(s=>s.telefono===tel);
+  if(S.selSesion?.unread_count>0){
+    await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{unread_count:0});
+    S.selSesion.unread_count=0;
+  }
+  renderLista();
+  await loadChat(tel);
+  renderInfo();
+  if(S.pollingMsg) clearInterval(S.pollingMsg);
+  S.pollingMsg=setInterval(()=>refreshChat(tel),5000);
+}
+
+async function loadChat(tel){
+  const ses=S.selSesion;if(!ses)return;
+  const hist=parseHist(ses.history);S.msgs=hist;
+  document.getElementById('noSel').style.display='none';
+  const cv=document.getElementById('chatView');cv.style.display='flex';
+  renderHdr(ses);renderMsgs(hist);renderInput(ses);
+}
+
+async function refreshChat(tel){
+  try{
+    const data=await sb(`wa_sesiones?telefono=eq.${enc(tel)}&select=*&limit=1`);
+    if(!data||!data[0])return;
+    const ses=data[0];
+    const idx=S.sesiones.findIndex(s=>s.telefono===tel);
+    if(idx>=0) S.sesiones[idx]=ses;
+    S.selSesion=ses;
+    const hist=parseHist(ses.history);
+    if(hist.length!==S.msgs.length){
+      S.msgs=hist;renderMsgs(hist);renderHdr(ses);renderInput(ses);renderInfo();updateCtrs();renderLista();
+    }
+  }catch(e){}
+}
+
+// ── RENDER HDR ───────────────────────────────────
+function renderHdr(ses){
+  const nom=ses.nombre||ses.telefono||'Desconocido';
+  const ini=nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+  const stLbl={nova:'🤖 Nova TD respondiendo',escalado:'👤 Esperando agente',esperando:'⏳ Usuario esperando',cerrado:'✅ Cerrada'};
+  const stCol={nova:'color:var(--nova)',escalado:'color:var(--orange)',esperando:'color:var(--red)',cerrado:'color:var(--ink3)'};
+  const esEsc=ses.estado==='escalado'||ses.estado==='esperando';
+  const esCer=ses.estado==='cerrado';
+  const esMio=ses.agente_id===AGENT_ID;
+  document.getElementById('chatHdr').innerHTML=`
+    <div class="chat-hav">${ini}</div>
+    <div class="chat-hinfo">
+      <div class="chat-hname">${escH(nom)}</div>
+      <div class="chat-hsub">
+        <span style="${stCol[ses.estado]||'color:var(--nova)'}">● ${stLbl[ses.estado]||'Nova TD'}</span>
+        ${ses.eps?`<span>·</span><span>${escH(ses.eps)}</span>`:''}
+        <span>·</span><span style="font-family:'DM Mono',monospace">${ses.telefono}</span>
+      </div>
+    </div>
+    <div class="chat-hactions">
+      ${esEsc&&!esMio?`<button class="btn-tomar" onclick="tomar('${ses.telefono}')"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Tomar</button>`:''}
+      ${!esCer?`<button class="btn-cerrar" onclick="abrirCerrar()">Cerrar</button>`:''}
+      <button class="btn-ico" onclick="toggleRR()" title="Respuestas rápidas">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      </button>
+    </div>`;
+}
+
+// ── RENDER MENSAJES ──────────────────────────────
+function renderMsgs(hist){
+  const el=document.getElementById('chatMsgs');
+  if(!hist.length){el.innerHTML=`<div class="sys-msg nova-s"><span>🤖 Nova TD inició la conversación</span></div>`;return;}
+  let html='',lastD='';
+  hist.forEach(msg=>{
+    const ts=msg.timestamp?new Date(msg.timestamp):null;
+    const ds=ts?ts.toLocaleDateString('es-CO',{day:'numeric',month:'long'}):'';
+    if(ds&&ds!==lastD){html+=`<div class="day-sep"><span>${ds}</span></div>`;lastD=ds;}
+    const tm=ts?ts.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):'';
+    const c=escH(msg.content||'').replace(/\n/g,'<br>');
+    if(msg.role==='user'){
+      html+=`<div class="msg-row inc"><div class="msg-bub">${c}<div class="msg-meta"><span class="msg-time">${tm}</span></div></div></div>`;
+    } else if(msg.role==='assistant'&&msg.sender==='agent'){
+      html+=`<div class="msg-row out"><span class="msg-sender agent">Tú · ${escH(msg.agente_nombre||AGENT_NAME)}</span><div class="msg-bub">${c}<div class="msg-meta"><span class="msg-time">${tm}</span><span class="tick-r">✓✓</span></div></div></div>`;
+    } else if(msg.role==='assistant'){
+      html+=`<div class="msg-row nova-m inc"><span class="msg-sender nova">🤖 Nova TD</span><div class="msg-bub">${c}<div class="msg-meta"><span class="msg-time">${tm}</span></div></div></div>`;
+    } else if(msg.role==='system'){
+      const isEsc=(msg.content||'').toLowerCase().includes('escal');
+      html+=`<div class="sys-msg ${isEsc?'esc':'nova-s'}"><span>${escH(msg.content||'')}</span></div>`;
+    }
+  });
+  el.innerHTML=html;el.scrollTop=el.scrollHeight;
+}
+
+// ── RENDER INPUT ─────────────────────────────────
+function renderInput(ses){
+  const el=document.getElementById('inputArea');
+  const puedeResp=(ses.estado==='escalado'||ses.estado==='esperando')&&ses.agente_id===AGENT_ID;
+  const esCer=ses.estado==='cerrado';
+  if(esCer){
+    el.className='input-blocked';
+    el.innerHTML=`<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg><p>Conversación cerrada</p>`;
+    return;
+  }
+  if(!puedeResp&&ses.estado==='nova'){
+    el.className='input-blocked';
+    el.innerHTML=`<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 9l6 6M15 9l-6 6"/></svg><p>Nova TD está atendiendo</p>`;
+    return;
+  }
+  if(!puedeResp){
+    el.className='input-blocked';
+    el.innerHTML=`<button class="btn-tomar" style="margin:auto" onclick="tomar('${ses.telefono}')"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Tomar conversación para responder</button>`;
+    return;
+  }
+  el.className='input-area';
+  el.innerHTML=`
+    <div class="input-wrap">
+      <span class="emoji-btn" title="Emoji">😊</span>
+      <textarea id="msgTa" placeholder="Escribe un mensaje..." onkeydown="onMsgKey(event)" oninput="autoH(this)" rows="1"></textarea>
+    </div>
+    <button class="btn-send" id="btnSend" onclick="enviar()" title="Enviar">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>`;
+}
+
+function onMsgKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();enviar();}}
+function autoH(ta){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,120)+'px';}
+
+// ── TOMAR ────────────────────────────────────────
+async function tomar(tel){
+  try{
+    await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{agente_id:AGENT_ID,agente_nombre:AGENT_NAME,estado:'escalado',updated_at:new Date().toISOString()});
+    const idx=S.sesiones.findIndex(s=>s.telefono===tel);
+    if(idx>=0){S.sesiones[idx].agente_id=AGENT_ID;S.sesiones[idx].agente_nombre=AGENT_NAME;}
+    if(S.selSesion){S.selSesion.agente_id=AGENT_ID;S.selSesion.agente_nombre=AGENT_NAME;}
+    await selectConv(tel);toast('Conversación tomada. Ya puedes responder.','ok');
+  }catch(e){toast('Error: '+e.message,'err');}
+}
+
+// ── ENVIAR ───────────────────────────────────────
+async function enviar(){
+  const ta=document.getElementById('msgTa');
+  const txt=(ta?.value||'').trim();
+  if(!txt||!S.selTel)return;
+  const btn=document.getElementById('btnSend');
+  if(btn) btn.disabled=true;
+  ta.value='';ta.style.height='auto';
+  try{
+    // Enviar por WA Graph API
+    const waR=await fetch(`https://graph.facebook.com/v19.0/${WA_PHONE}/messages`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+(window.TOKEN_WHATSAPP||'__TOKEN_WHATSAPP__')},
+      body:JSON.stringify({messaging_product:'whatsapp',to:S.selTel,type:'text',text:{body:txt}}),
+    });
+    if(!waR.ok) throw new Error('Error WA: '+await waR.text());
+    // Guardar en historial
+    const ses=S.selSesion;
+    const hist=parseHist(ses.history);
+    hist.push({role:'assistant',sender:'agent',content:txt,agente_nombre:AGENT_NAME,timestamp:new Date().toISOString()});
+    await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}`,'PATCH',{history:JSON.stringify(hist),updated_at:new Date().toISOString()});
+    S.msgs=hist;renderMsgs(hist);
+  }catch(e){toast('Error al enviar: '+e.message,'err');if(ta)ta.value=txt;}
+  finally{if(btn)btn.disabled=false;if(ta)ta.focus();}
+}
+
+// ── CERRAR ───────────────────────────────────────
+function abrirCerrar(){
+  document.getElementById('cerrarObs').value='';
+  document.getElementById('cerrarTipif').value='';
+  document.getElementById('modalCerrar').classList.add('open');
+}
+async function confirmarCerrar(){
+  const tipif=document.getElementById('cerrarTipif').value;
+  const obs=document.getElementById('cerrarObs').value.trim();
+  if(!tipif){toast('Selecciona una tipificación','err');return;}
+  document.getElementById('modalCerrar').classList.remove('open');
+  try{
+    await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}`,'PATCH',{estado:'cerrado',tipificacion:tipif,observacion_cierre:obs,agente_id:AGENT_ID,updated_at:new Date().toISOString()});
+    const idx=S.sesiones.findIndex(s=>s.telefono===S.selTel);
+    if(idx>=0) S.sesiones[idx].estado='cerrado';
+    if(S.selSesion) S.selSesion.estado='cerrado';
+    renderHdr(S.selSesion);renderInput(S.selSesion);renderInfo();updateCtrs();renderLista();
+    toast('Conversación cerrada','ok');
+  }catch(e){toast('Error: '+e.message,'err');}
+}
+
+// ── TIPIFICAR ────────────────────────────────────
+async function tipificar(label){
+  if(!S.selTel)return;
+  try{
+    await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}`,'PATCH',{tipificacion:label,updated_at:new Date().toISOString()});
+    if(S.selSesion) S.selSesion.tipificacion=label;
+    renderInfo();toast('Tipificado: '+label,'ok');
+  }catch(e){toast('Error','err');}
+}
+
+// ── RR ───────────────────────────────────────────
+let rrOpen=false;
+function toggleRR(){
+  rrOpen=!rrOpen;
+  const p=document.getElementById('rrPanel');
+  if(rrOpen){
+    p.innerHTML=`<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink3);margin-bottom:8px">⚡ Respuestas rápidas</div>`+
+      RR.map(r=>`<div class="rr-item" onclick="usarRR(${JSON.stringify(r.b)})"><div class="rr-title">${escH(r.t)}</div><div class="rr-body">${escH(r.b.replace('{{ag}}',AGENT_NAME))}</div></div>`).join('');
+    p.classList.add('open');
+  } else p.classList.remove('open');
+}
+function usarRR(b){
+  const ta=document.getElementById('msgTa');
+  if(ta){ta.value=b.replace('{{ag}}',AGENT_NAME);autoH(ta);ta.focus();}
+  rrOpen=false;document.getElementById('rrPanel').classList.remove('open');
+}
+
+// ── INFO PANEL ───────────────────────────────────
+function renderInfo(){
+  const s=S.selSesion;const p=document.getElementById('infoPanel');if(!s)return;
+  const nom=s.nombre||s.telefono||'Desconocido';
+  const hist=parseHist(s.history);
+  const mc=hist.filter(m=>m.role==='user').length;
+  p.innerHTML=`
+    <div class="info-sec">
+      <div class="info-sec-title">Contacto</div>
+      <div class="info-row"><div class="info-lbl">Nombre</div><div class="info-val">${escH(nom)}</div></div>
+      <div class="info-row"><div class="info-lbl">Teléfono</div><div class="info-val ph">${s.telefono}</div></div>
+      ${s.eps?`<div class="info-row"><div class="info-lbl">EPS</div><div class="info-val"><span class="itag itag-eps">${escH(s.eps)}</span></div></div>`:''}
+      <div class="info-row"><div class="info-lbl">Estado</div><div><span class="itag ${s.estado==='nova'?'itag-nova':s.estado==='cerrado'?'itag-cer':'itag-esc'}">${s.estado==='nova'?'🤖 Nova TD':s.estado==='escalado'?'👤 Escalado':s.estado==='esperando'?'⏳ Esperando':'✅ Cerrado'}</span></div></div>
+      ${s.agente_nombre?`<div class="info-row"><div class="info-lbl">Agente</div><div class="info-val">${escH(s.agente_nombre)}</div></div>`:''}
+      <div class="info-row"><div class="info-lbl">Mensajes</div><div class="info-val">${mc} del usuario · ${hist.length} total</div></div>
+      <div class="info-row"><div class="info-lbl">Última act.</div><div class="info-val">${fmtTime(s.updated_at)}</div></div>
+      ${s.tipificacion?`<div class="info-row"><div class="info-lbl">Tipificación</div><div class="info-val">${escH(s.tipificacion)}</div></div>`:''}
+    </div>
+    <div class="info-sec">
+      <div class="info-sec-title">Tipificación</div>
+      ${TIPIFS.map(t=>`<div class="tipif-item${s.tipificacion===t.label?' sel':''}" onclick="tipificar('${escH(t.label)}')"><div class="tipif-dot" style="background:${t.color}"></div>${t.label}</div>`).join('')}
+    </div>
+    <div class="info-sec">
+      <div class="info-sec-title">Acciones</div>
+      ${s.estado!=='cerrado'?`<button onclick="abrirCerrar()" style="width:100%;background:var(--green-l);border:1px solid var(--green);color:var(--green);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;margin-bottom:6px">✓ Cerrar conversación</button>`:''}
+      ${(s.estado==='escalado'||s.estado==='esperando')&&s.agente_id!==AGENT_ID?`<button onclick="tomar('${s.telefono}')" style="width:100%;background:var(--orange-l);border:1px solid var(--orange);color:var(--orange);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer">👤 Tomar conversación</button>`:''}
+    </div>`;
+}
+
+// ── POLLING ──────────────────────────────────────
+function startPolling(){
+  S.polling=setInterval(async()=>{
+    try{
+      const data=await sb('wa_sesiones?select=*&order=updated_at.desc&limit=200')||[];
+      const prevE=S.sesiones.filter(s=>s.estado==='escalado').length;
+      S.sesiones=data;
+      const newE=data.filter(s=>s.estado==='escalado').length;
+      if(newE>prevE){
+        toast('⚡ Nueva conversación escalada','ok');
+        if(Notification.permission==='granted') new Notification('Tododrogas WhatsApp',{body:'Nueva conversación escalada al agente'});
+      }
+      updateCtrs();renderLista();
+    }catch(e){}
+  },8000);
+}
+
+// ── UTILS ────────────────────────────────────────
+function escH(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function enc(s){return encodeURIComponent(s||'');}
+function parseHist(h){if(Array.isArray(h))return h;try{return JSON.parse(h||'[]');}catch{return[];}}
+function fmtTime(iso){
+  if(!iso)return'';
+  const d=new Date(iso),now=new Date(),diff=now-d;
+  if(diff<86400000&&now.getDate()===d.getDate())return d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  if(diff<172800000)return'Ayer';
+  return d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'});
+}
+function toast(msg,type=''){
+  const t=document.createElement('div');t.className='toast '+(type==='ok'?'ok':type==='err'?'err':'');
+  t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3000);
+}
+</script>
+</body>
+</html>
