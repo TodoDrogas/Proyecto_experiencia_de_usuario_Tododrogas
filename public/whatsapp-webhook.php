@@ -10,7 +10,7 @@
 define('WA_TOKEN',        '__TOKEN_WHATSAPP__');      // Token Meta Graph API
 define('WA_VERIFY_TOKEN', '__WA_VERIFY_TOKEN__');     // Token verificación webhook (elige uno)
 define('WA_PHONE_ID',     '1004615859412103');
-define('ANTHROPIC_KEY',   '__ANTHROPIC_KEY__');
+define('OPENAI_KEY',      '__OPENAI_KEY__');
 define('SB_URL',          '__SB_URL__');
 define('SB_KEY',          '__SB_KEY__');
 
@@ -273,8 +273,8 @@ function callClaude(string $system, array $messages): string {
         CURLOPT_TIMEOUT        => 30,
         CURLOPT_HTTPHEADER     => [
             'Content-Type: application/json',
-            'x-api-key: ' . ANTHROPIC_KEY,
-            'anthropic-version: 2023-06-01',
+            'Authorization: Bearer ' . OPENAI_KEY,
+            
         ],
     ]);
     $resp = curl_exec($ch);
