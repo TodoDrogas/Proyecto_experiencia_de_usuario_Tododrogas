@@ -1091,9 +1091,31 @@ async function gZipExport(){
   if(!gCur)return;showL('Generando ZIP…','Dividiendo PDFs con páginas exactas');
   var zip=new JSZip(),files=gFolders[gCur].files;
   try{
-    for(var fd of files){
-      if(!fd.loaded||!fd.file)continue;
-      var bytes=await fd.file.arrayBuffer();
+    // FIX 1: Sync rotations from viewer (gVPages) into fd.rotations before export
+    // so that any visual rotation changes are captured correctly
+    gVPages.forEach(vp=>{
+      var fd=files[vp.fi];if(fd)fd.rotations[vp.p]=vp.rot||0;
+    });
+
+    // Pre-load todos los ArrayBuffers una sola vez (incluyendo no seleccionados)
+    var bytesCache={};
+    for(var fi=0;fi<files.length;fi++){
+      var f=files[fi];
+      if(f.file) bytesCache[fi]=await f.file.arrayBuffer();
+    }
+
+    for(var fi=0;fi<files.length;fi++){
+      var fd=files[fi];
+      if(!fd.file)continue;
+      var bytes=bytesCache[fi];if(!bytes)continue;
+
+      // Archivo NO seleccionado/cargado: se incluye intacto en el ZIP sin procesar
+      if(!fd.loaded){
+        zip.folder(gCur).file(fd.name,bytes.slice(0));
+        continue;
+      }
+
+      // Archivo seleccionado y procesado: aplicar eliminaciones y rotaciones
       if(fd.pageCount-fd.removedPages.size>0){
         var srcDoc=await PDFDocument.load(bytes.slice(0));
         var newDoc=await PDFDocument.create();
@@ -1109,8 +1131,8 @@ async function gZipExport(){
       for(var seg of fd.renamedSegments){
         var segDoc=await PDFDocument.create();
         for(var pg of seg.allPgs){
-          var sfd=files[pg.fi];if(!sfd.loaded)continue;
-          var sb=await sfd.file.arrayBuffer();
+          var sfd=files[pg.fi];if(!sfd.file)continue;
+          var sb=bytesCache[pg.fi];if(!sb)continue;
           var sd=await PDFDocument.load(sb.slice(0));
           var[c]=await segDoc.copyPages(sd,[pg.p-1]);
           if(sfd.rotations[pg.p])c.setRotation(degrees(sfd.rotations[pg.p]));
@@ -1122,7 +1144,7 @@ async function gZipExport(){
     var blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
     dlBlob(blob,'GestorDoc_'+new Date().toISOString().slice(0,10)+'.zip');
     toast('ZIP descargado ✓');gLog('ok','ZIP exportado');
-  }catch(e){toast('Error ZIP','err');console.error(e)}
+  }catch(e){toast('Error ZIP: '+e.message,'err');console.error(e)}
   hideL();
 }
 document.getElementById('vZI').onclick=()=>{gZoom=Math.min(gZoom+.15,3);gRenderViewer()};
