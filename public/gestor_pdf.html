@@ -2143,7 +2143,7 @@ function xlReset(id){
 
 // ── Renderizar página PDF a dataURL para OCR ──
 async function xlPdfPageToImg(ab, pgNum, scale){
-  scale=scale||2.5;
+  scale=scale||3.5;
   var doc=await pdfjsLib.getDocument({
     data:ab.slice(0),
     disableAutoFetch:true,
@@ -2181,70 +2181,113 @@ async function xlOcrInit(logId){
   return _xlWorker;
 }
 
-// ── OCR → matriz de filas/columnas (gap-based segmentation) ──
+// ── OCR → matriz (3.5x · yTol 0.8% · gap p50 de filas tabla · post-proceso fecha) ──
 async function xlOcrPage(dataURL, pageW, pageH, logId){
   var worker=await xlOcrInit(logId);
   var res=await worker.recognize(dataURL);
   var words=res.data.words.filter(function(w){
-    return w.confidence>25 && w.text.trim();
+    return w.confidence>20 && w.text.trim();
   });
   if(!words.length)return[];
 
-  // 1. Agrupar en filas por proximidad Y
-  var yTol=pageH*0.015;
+  // 1. Agrupar en filas con tolerancia REDUCIDA: 0.8% de altura
+  var yTol=pageH*0.008;
   words.sort(function(a,b){return a.bbox.y0-b.bbox.y0;});
   var rows=[],used=new Array(words.length).fill(false);
   for(var i=0;i<words.length;i++){
     if(used[i])continue;
-    var seed=words[i];
-    var row=[seed];used[i]=true;
+    var seed=words[i]; var row=[seed]; used[i]=true;
     for(var j=i+1;j<words.length;j++){
       if(used[j])continue;
       if(words[j].bbox.y0>seed.bbox.y0+yTol)break;
-      if(Math.abs(words[j].bbox.y0-seed.bbox.y0)<=yTol){
-        row.push(words[j]);used[j]=true;
-      }
+      if(Math.abs(words[j].bbox.y0-seed.bbox.y0)<=yTol){row.push(words[j]);used[j]=true;}
     }
     row.sort(function(a,b){return a.bbox.x0-b.bbox.x0;});
     rows.push(row);
   }
 
-  // 2. Calcular threshold de gap: percentil 75 de todos los gaps entre palabras
+  // 2. Gap threshold calculado SOLO de filas de tabla (>=4 palabras, primera es número)
+  function isDataRow(row){
+    return row.length>=4 && /^\d+$/.test(row[0].text.trim());
+  }
+  var tableRows=rows.filter(isDataRow);
   var allGaps=[];
-  rows.forEach(function(row){
+  tableRows.forEach(function(row){
     for(var i=1;i<row.length;i++){
       var g=row[i].bbox.x0-row[i-1].bbox.x1;
-      if(g>0)allGaps.push(g);
+      if(g>=5)allGaps.push(g);
     }
   });
   allGaps.sort(function(a,b){return a-b;});
-  var gapThresh=30; // mínimo
-  if(allGaps.length){
-    var p75=allGaps[Math.floor(allGaps.length*0.75)];
-    gapThresh=Math.max(p75,30);
+  var gapThresh=80; // mínimo 80px a 3.5x
+  if(allGaps.length>=4){
+    var p50=allGaps[Math.floor(allGaps.length/2)];
+    gapThresh=Math.max(p50,80);
   }
 
-  // 3. Segmentar cada fila en celdas usando el gap threshold
+  // 3. Segmentar en celdas usando gap threshold
+  function mergeTokens(ws){
+    var texts=ws.map(function(w){return w.text.trim();});
+    var result=[]; var i=0;
+    while(i<texts.length){
+      if(texts[i]==='$'&&i+1<texts.length&&/^[\d,\.]+/.test(texts[i+1])){
+        result.push('$'+texts[i+1]); i+=2;
+      }else{result.push(texts[i]);i++;}
+    }
+    return result.join(' ');
+  }
   function rowToCells(row){
     var cells=[],cur=[row[0]];
     for(var i=1;i<row.length;i++){
       var gap=row[i].bbox.x0-row[i-1].bbox.x1;
-      if(gap>gapThresh){
-        cells.push(cur.map(function(w){return w.text.trim();}).join(' '));
-        cur=[row[i]];
-      }else{cur.push(row[i]);}
+      if(gap>gapThresh){cells.push(mergeTokens(cur));cur=[row[i]];}
+      else cur.push(row[i]);
     }
-    cells.push(cur.map(function(w){return w.text.trim();}).join(' '));
+    cells.push(mergeTokens(cur));
     return cells;
   }
 
-  // 4. Construir matriz y normalizar columnas
+  // 4. Construir matriz
   var matrix=rows.map(function(row){return rowToCells(row);});
   var maxCols=matrix.reduce(function(m,r){return Math.max(m,r.length);},0);
-  matrix=matrix.map(function(r){
-    while(r.length<maxCols)r.push('');
-    return r.map(xlParseVal);
+  matrix=matrix.map(function(r){while(r.length<maxCols)r.push('');return r;});
+
+  // 5. Post-proceso: separar NumFactura de Fecha si están pegados
+  var DATE_RE=/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/;
+  matrix=matrix.map(function(row){
+    var first=String(row[0]||'').trim();
+    if(/^\d{6,8}$/.test(first)&&row.length>=2){
+      var col1=String(row[1]||'');
+      var dm=col1.match(DATE_RE);
+      if(dm){
+        var numFact=col1.slice(0,dm.index).trim();
+        var fecha=dm[1];
+        var newRow=[parseInt(first),numFact,fecha];
+        // Montos restantes convertidos a número
+        for(var ci=2;ci<row.length;ci++){
+          var cs=String(row[ci]||'').trim();
+          if(!cs)continue;
+          var clean=cs.replace(/\$/g,'').replace(/,/g,'').trim();
+          var n=parseFloat(clean);
+          newRow.push(isNaN(n)?cs:n);
+        }
+        while(newRow.length<maxCols)newRow.push('');
+        return newRow;
+      }
+      // Sin fecha pegada: solo parsear montos
+      var newRow2=[parseInt(first)];
+      for(var ci2=1;ci2<row.length;ci2++){
+        var cs2=String(row[ci2]||'').trim();
+        if(!cs2){newRow2.push('');continue;}
+        var clean2=cs2.replace(/\$/g,'').replace(/,/g,'').trim();
+        var n2=parseFloat(clean2);
+        newRow2.push((!isNaN(n2)&&/^[\d\.\$,]+$/.test(cs2))?n2:cs2);
+      }
+      return newRow2;
+    }
+    return row.map(xlParseVal);
   });
+
   return matrix;
 }
 
