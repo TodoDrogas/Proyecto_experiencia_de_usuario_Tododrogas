@@ -2108,47 +2108,54 @@ function xlLog(elId,msg,type){
 }
 
 // ── NÚCLEO: extrae texto con posición exacta de cada ítem ──
-async function pdfGetItems(bytes){
-  var doc=await pdfjsLib.getDocument({data:new Uint8Array(bytes)}).promise;
+// Recibe ArrayBuffer; siempre hace slice() para no consumirlo
+async function pdfGetItems(arrayBuffer){
+  var data=arrayBuffer.slice(0);
+  // disableAutoFetch y disableStream evitan que pdfjs use localStorage/cache
+  var doc=await pdfjsLib.getDocument({
+    data:data,
+    disableAutoFetch:true,
+    disableStream:true,
+    isEvalSupported:false,
+  }).promise;
   var pages=[];
   for(var i=1;i<=doc.numPages;i++){
     var page=await doc.getPage(i);
     var vp=page.getViewport({scale:1});
-    var content=await page.getTextContent({normalizeWhitespace:false,disableCombineTextItems:false});
-    var items=content.items.map(it=>({
-      str:it.str,
-      x:Math.round(it.transform[4]*10)/10,
-      y:Math.round((vp.height-it.transform[5])*10)/10, // invertir Y: 0=top
-      w:Math.round(it.width*10)/10,
-      h:Math.round(it.height*10)/10,
-      bold:it.fontName&&(it.fontName.toLowerCase().includes('bold')||it.fontName.toLowerCase().includes('b+')),
-    })).filter(it=>it.str.trim());
-    pages.push({num:i,items,width:vp.width,height:vp.height});
+    var content=await page.getTextContent({normalizeWhitespace:true,disableCombineTextItems:true});
+    var items=content.items.map(function(it){
+      return{str:it.str,x:Math.round(it.transform[4]*10)/10,y:Math.round((vp.height-it.transform[5])*10)/10,w:Math.round((it.width||0)*10)/10,h:Math.round((it.height||it.transform[3]||10)*10)/10};
+    }).filter(function(it){return it.str.trim().length>0;});
+    pages.push({num:i,items:items,width:vp.width,height:vp.height});
   }
   return pages;
 }
 
 // ── ALGORITMO DE RECONSTRUCCIÓN DE FILAS con tolerancia de banda ──
-function itemsToRows(items, yTol){
-  // yTol: tolerancia vertical en pts para agrupar en la misma fila
-  if(!yTol)yTol=4;
-  var rows=[];
+function itemsToRows(items,yTol){
+  if(!yTol)yTol=5;
+  if(!items||!items.length)return[];
+  // Ordenar por Y ascendente (top → bottom)
+  var indexed=items.map(function(it,i){return{it:it,i:i};}).sort(function(a,b){return a.it.y-b.it.y;});
   var used=new Array(items.length).fill(false);
-  var sorted=[...items].sort((a,b)=>a.y-b.y);
-  for(var si=0;si<sorted.length;si++){
-    var seed=sorted[si];
-    if(used[items.indexOf(seed)])continue;
-    var rowItems=[seed];
-    used[items.indexOf(seed)]=true;
-    for(var sj=si+1;sj<sorted.length;sj++){
-      var candidate=sorted[sj];
-      if(candidate.y>seed.y+Math.max(seed.h,yTol)*1.5)break;
-      if(Math.abs(candidate.y-seed.y)<=yTol){
-        rowItems.push(candidate);
-        used[items.indexOf(candidate)]=true;
+  var rows=[];
+  for(var si=0;si<indexed.length;si++){
+    var seed=indexed[si];
+    if(used[seed.i])continue;
+    var rowItems=[seed.it];
+    used[seed.i]=true;
+    var seedY=seed.it.y;
+    var seedH=seed.it.h||10;
+    for(var sj=si+1;sj<indexed.length;sj++){
+      var cand=indexed[sj];
+      if(used[cand.i])continue;
+      if(cand.it.y>seedY+Math.max(seedH,yTol)*1.2)break;
+      if(Math.abs(cand.it.y-seedY)<=yTol){
+        rowItems.push(cand.it);
+        used[cand.i]=true;
       }
     }
-    rowItems.sort((a,b)=>a.x-b.x);
+    rowItems.sort(function(a,b){return a.x-b.x;});
     rows.push(rowItems);
   }
   return rows;
