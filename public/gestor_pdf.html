@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -301,6 +302,7 @@ input[type=file]{display:none}
   <button class="ntab" onclick="goTo('imagenes',this)"><span class="ico">🖼️</span>PDF↔Imgs</button>
   <button class="ntab" onclick="goTo('comprimir',this)"><span class="ico">📦</span>Comprimir</button>
   <button class="ntab" onclick="goTo('editor',this)"><span class="ico">✏️</span>Editor PDF</button>
+  <button class="ntab" onclick="goTo('excel',this)"><span class="ico">📊</span>PDF↔Excel</button>
   <div class="nav-sp"></div>
   <button class="nav-btn" onclick="location.href='login_gestor.html'">
     <div class="nav-dot"></div><span id="navUser">RADICACION</span>
@@ -785,6 +787,95 @@ input[type=file]{display:none}
         <div class="elbl">Elementos <span class="badge badge-blue" id="edElemCt">0</span></div>
         <div id="edElemList" style="font-size:10px;color:var(--gray4)"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ PDF ↔ EXCEL ════ -->
+<div id="scr-excel" class="scr">
+  <div class="mhd">
+    <span class="mhd-title">📊 PDF ↔ Excel</span>
+    <span class="mhd-hint">💡 Extrae tablas de PDFs a Excel · Convierte Excel a PDF · 100% en tu navegador</span>
+  </div>
+  <div class="conv-pg" style="gap:22px">
+    <div class="conv-grid" style="max-width:960px">
+
+      <!-- PDF → EXCEL -->
+      <div class="conv-card">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="conv-ico" style="background:#e8f5e9">📄→📊</div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--gray8)">PDF → Excel</div>
+            <div style="font-size:10px;color:var(--gray4)">Extrae tablas y datos del PDF a .xlsx</div>
+          </div>
+        </div>
+        <div class="dz" id="p2eDZ" onclick="document.getElementById('p2eInput').click()" style="padding:20px">
+          <input type="file" id="p2eInput" accept=".pdf" multiple onchange="pdfToExcel(event)">
+          <div class="dz-ico" style="font-size:26px">📄</div>
+          <div class="dz-t" style="font-size:12px">Seleccionar PDF(s)</div>
+          <div class="dz-d">Acepta uno o varios PDFs con tablas<br>Ej: Actas de radicación COOSALUD</div>
+        </div>
+        <div id="p2eLog" style="font-size:10px;color:var(--gray5);font-family:'JetBrains Mono',monospace;background:var(--gray0);border:1px solid var(--gray2);border-radius:var(--r);padding:8px;min-height:36px;max-height:80px;overflow-y:auto;display:none"></div>
+        <div class="conv-res" id="p2eRes">
+          <div class="conv-res-name" id="p2eName"></div>
+          <button class="btn btn-green btn-sm" id="p2eDl">⬇ Descargar Excel</button>
+        </div>
+      </div>
+
+      <!-- EXCEL → PDF -->
+      <div class="conv-card">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="conv-ico" style="background:#e3f2fd">📊→📄</div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--gray8)">Excel → PDF</div>
+            <div style="font-size:10px;color:var(--gray4)">Convierte .xlsx/.csv a PDF con tabla formateada</div>
+          </div>
+        </div>
+        <div class="dz" id="e2pDZ" onclick="document.getElementById('e2pInput').click()" style="padding:20px">
+          <input type="file" id="e2pInput" accept=".xlsx,.xls,.csv" onchange="excelToPdf(event)">
+          <div class="dz-ico" style="font-size:26px">📊</div>
+          <div class="dz-t" style="font-size:12px">Seleccionar Excel o CSV</div>
+          <div class="dz-d">Convierte hojas con datos a PDF<br>Formato tabla con encabezados</div>
+        </div>
+        <div id="e2pLog" style="font-size:10px;color:var(--gray5);font-family:'JetBrains Mono',monospace;background:var(--gray0);border:1px solid var(--gray2);border-radius:var(--r);padding:8px;min-height:36px;max-height:80px;overflow-y:auto;display:none"></div>
+        <div class="conv-res" id="e2pRes">
+          <div class="conv-res-name" id="e2pName"></div>
+          <button class="btn btn-green btn-sm" id="e2pDl">⬇ Descargar PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MULTI-PDF → UN EXCEL (para actas COOSALUD) -->
+    <div style="background:var(--white);border:1px solid var(--gray2);border-radius:var(--r3);padding:22px;width:100%;max-width:960px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="conv-ico" style="background:#fff3e0;font-size:18px">📑→📊</div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--gray8)">Múltiples PDFs → Un Excel consolidado</div>
+          <div style="font-size:10px;color:var(--gray4)">Ideal para actas de radicación COOSALUD — consolida todas las tablas de facturas en una sola hoja</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start">
+        <div class="dz" id="multDZ" onclick="document.getElementById('multInput').click()" style="padding:16px;flex:1;min-width:220px">
+          <input type="file" id="multInput" accept=".pdf" multiple onchange="multiPdfToExcel(event)">
+          <div class="dz-ico" style="font-size:22px">📂</div>
+          <div class="dz-t" style="font-size:11px">Seleccionar varios PDFs</div>
+          <div class="dz-d">Todos sus tablas quedarán en hojas separadas</div>
+        </div>
+        <div style="flex:2;min-width:260px;display:flex;flex-direction:column;gap:8px">
+          <div id="multLog" style="font-size:10px;color:var(--gray5);font-family:'JetBrains Mono',monospace;background:var(--gray0);border:1px solid var(--gray2);border-radius:var(--r);padding:8px;min-height:60px;max-height:120px;overflow-y:auto">
+            <span style="opacity:.4">Agrega PDFs para comenzar…</span>
+          </div>
+          <div class="conv-res" id="multRes">
+            <div class="conv-res-name" id="multName"></div>
+            <button class="btn btn-green btn-sm" id="multDl">⬇ Descargar Excel consolidado</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#fffbeb;border:1px solid rgba(217,119,6,.3);border-radius:var(--r2);padding:12px 16px;max-width:960px;width:100%;font-size:11px;color:#92400e;line-height:1.7">
+      ⚠️ <strong>PDF→Excel:</strong> Detecta automáticamente tablas con filas y columnas. Funciona mejor con PDFs de texto (no escaneados).<br>
+      <strong>Excel→PDF:</strong> Genera PDF con tabla formateada a partir de las filas y columnas del archivo.
     </div>
   </div>
 </div>
@@ -1997,6 +2088,442 @@ document.addEventListener('keydown',e=>{
 // Init
 clearSig();
 document.getElementById('navUser').textContent=sessionStorage.getItem('rips_user')||'RADICACION';
+</script>
+
+<script>
+// ══════════════ MODULE: PDF ↔ EXCEL ══════════════
+
+// ══════════════════════════════════════════════════════════════════
+// MOTOR PDF → EXCEL  —  EXTRACCIÓN INTELIGENTE UNIVERSAL
+// Funciona con: tablas, listas, texto libre, formularios, reportes
+// ══════════════════════════════════════════════════════════════════
+
+function xlLog(elId,msg,type){
+  var el=document.getElementById(elId);if(!el)return;
+  el.style.display='block';
+  var color=type==='ok'?'#057a55':type==='err'?'#e02424':'#1a56db';
+  var ico=type==='ok'?'✓':type==='err'?'✗':'ℹ';
+  el.innerHTML+=`<div style="color:${color};padding:1px 0">${ico} ${msg}</div>`;
+  el.scrollTop=el.scrollHeight;
+}
+
+// ── NÚCLEO: extrae texto con posición exacta de cada ítem ──
+async function pdfGetItems(bytes){
+  var doc=await pdfjsLib.getDocument({data:new Uint8Array(bytes)}).promise;
+  var pages=[];
+  for(var i=1;i<=doc.numPages;i++){
+    var page=await doc.getPage(i);
+    var vp=page.getViewport({scale:1});
+    var content=await page.getTextContent({normalizeWhitespace:false,disableCombineTextItems:false});
+    var items=content.items.map(it=>({
+      str:it.str,
+      x:Math.round(it.transform[4]*10)/10,
+      y:Math.round((vp.height-it.transform[5])*10)/10, // invertir Y: 0=top
+      w:Math.round(it.width*10)/10,
+      h:Math.round(it.height*10)/10,
+      bold:it.fontName&&(it.fontName.toLowerCase().includes('bold')||it.fontName.toLowerCase().includes('b+')),
+    })).filter(it=>it.str.trim());
+    pages.push({num:i,items,width:vp.width,height:vp.height});
+  }
+  return pages;
+}
+
+// ── ALGORITMO DE RECONSTRUCCIÓN DE FILAS con tolerancia de banda ──
+function itemsToRows(items, yTol){
+  // yTol: tolerancia vertical en pts para agrupar en la misma fila
+  if(!yTol)yTol=4;
+  var rows=[];
+  var used=new Array(items.length).fill(false);
+  var sorted=[...items].sort((a,b)=>a.y-b.y);
+  for(var si=0;si<sorted.length;si++){
+    var seed=sorted[si];
+    if(used[items.indexOf(seed)])continue;
+    var rowItems=[seed];
+    used[items.indexOf(seed)]=true;
+    for(var sj=si+1;sj<sorted.length;sj++){
+      var candidate=sorted[sj];
+      if(candidate.y>seed.y+Math.max(seed.h,yTol)*1.5)break;
+      if(Math.abs(candidate.y-seed.y)<=yTol){
+        rowItems.push(candidate);
+        used[items.indexOf(candidate)]=true;
+      }
+    }
+    rowItems.sort((a,b)=>a.x-b.x);
+    rows.push(rowItems);
+  }
+  return rows;
+}
+
+// ── DETECTOR DE COLUMNAS por clustering de posiciones X ──
+function detectColumnBoundaries(rows){
+  // Recopilar todos los X de inicio de celda
+  var xs=[];
+  rows.forEach(row=>row.forEach(it=>xs.push(it.x)));
+  if(!xs.length)return[];
+  xs.sort((a,b)=>a-b);
+  // Agrupar Xs cercanos en clusters (tolerancia 12 pts)
+  var clusters=[],cur=[xs[0]];
+  for(var i=1;i<xs.length;i++){
+    if(xs[i]-xs[i-1]<14)cur.push(xs[i]);
+    else{clusters.push(cur);cur=[xs[i]];}
+  }
+  clusters.push(cur);
+  return clusters.map(c=>c.reduce((a,b)=>a+b,0)/c.length);
+}
+
+// ── ASIGNADOR: para cada ítem de una fila, determinar su columna ──
+function assignCols(rowItems, colBounds, pageWidth){
+  if(!colBounds.length)return[rowItems.map(it=>it.str.trim())];
+  var cells=new Array(colBounds.length).fill('');
+  rowItems.forEach(it=>{
+    // Columna más cercana al x del ítem
+    var best=0,bestDist=Infinity;
+    for(var ci=0;ci<colBounds.length;ci++){
+      var d=Math.abs(it.x-colBounds[ci]);
+      if(d<bestDist){bestDist=d;best=ci;}
+    }
+    cells[best]+=(cells[best]?' ':'')+it.str.trim();
+  });
+  return[cells];
+}
+
+// ── DETECTOR AUTOMÁTICO DE TABLAS dentro de las filas ──
+function detectTables(rows, colBounds){
+  // Una región es "tabla" si múltiples filas consecutivas
+  // tienen ítems alineados en >=2 columnas distintas
+  var tableRegions=[];
+  var inTable=false,tableStart=0,tableCols=0;
+  for(var ri=0;ri<rows.length;ri++){
+    var row=rows[ri];
+    var xSet=new Set(row.map(it=>{
+      var best=0,bestD=Infinity;
+      colBounds.forEach((cb,ci)=>{var d=Math.abs(it.x-cb);if(d<bestD){bestD=d;best=ci;}});
+      return best;
+    }));
+    var isStructured=xSet.size>=2;
+    if(isStructured&&!inTable){inTable=true;tableStart=ri;tableCols=xSet.size;}
+    else if(!isStructured&&inTable){
+      if(ri-tableStart>=2)tableRegions.push({start:tableStart,end:ri-1,cols:tableCols});
+      inTable=false;
+    }
+  }
+  if(inTable&&rows.length-tableStart>=2)tableRegions.push({start:tableStart,end:rows.length-1,cols:tableCols});
+  return tableRegions;
+}
+
+// ── LIMPIADOR DE TEXTO: normaliza celdas ──
+function cleanCell(str){
+  return String(str||'').replace(/\s+/g,' ').trim();
+}
+
+// ── CONVERTIDOR DE VALOR NUMÉRICO: detecta monedas, fechas, números ──
+function parseValue(str){
+  var s=cleanCell(str);
+  if(!s)return'';
+  // Moneda colombiana: $ 1.234.567,00
+  var moneda=s.replace(/\s/g,'').match(/^\$?([\d\.]+,\d{2})$/);
+  if(moneda){var n=parseFloat(moneda[1].replace(/\./g,'').replace(',','.'));if(!isNaN(n))return n;}
+  // Número puro con punto de miles
+  var numPuntos=s.match(/^([\d\.]+)$/);
+  if(numPuntos){var n2=parseFloat(s.replace(/\./g,''));if(!isNaN(n2)&&s.length>3)return n2;}
+  // Número simple
+  var numSimple=parseFloat(s.replace(',','.'));
+  if(!isNaN(numSimple)&&/^[\d,\.\-]+$/.test(s))return numSimple;
+  return s;
+}
+
+// ── APLICAR ESTILOS AL WORKBOOK (cabeceras, colores, bordes) ──
+function styleWorkbook(ws, headerRow, dataRows, totalRows){
+  // Estilo de encabezado
+  if(!ws['!rows'])ws['!rows']=[];
+  // Freeze primera fila
+  ws['!freeze']={xSplit:0,ySplit:headerRow+1,topLeftCell:'A'+(headerRow+2),activePane:'bottomLeft'};
+}
+
+// ═══════════════════════════════════════════════════
+// FUNCIÓN PRINCIPAL: PDF → EXCEL (uno o varios PDFs)
+// ═══════════════════════════════════════════════════
+async function pdfToExcel(ev){
+  var files=Array.from(ev.target.files||[]);if(!files.length)return;
+  document.getElementById('p2eLog').innerHTML='';
+  document.getElementById('p2eRes').classList.remove('on');
+  showL('Extrayendo datos…',files.length+' PDF'+(files.length>1?'s':''));
+  try{
+    var wb=XLSX.utils.book_new();
+    var sheetCount={};
+    for(var file of files){
+      xlLog('p2eLog','→ Procesando: '+file.name,'inf');
+      var bytes=await file.arrayBuffer();
+      var pages=await pdfGetItems(bytes);
+      var totalItems=0,totalTables=0;
+      // Recopilar todos los ítems del PDF para calcular columnas globales
+      var allItems=pages.flatMap(p=>p.items);
+      totalItems=allItems.length;
+      if(!totalItems){xlLog('p2eLog','⚠ PDF sin texto extraíble (escaneado)','err');continue;}
+      // Filas de todo el documento
+      var allRows=itemsToRows(allItems,5);
+      var colBounds=detectColumnBoundaries(allRows);
+      var tableRegions=detectTables(allRows,colBounds);
+      totalTables=tableRegions.length;
+      // Construir matriz final de celdas
+      var matrix=[];
+      // Cabecera del documento
+      matrix.push(['Archivo',file.name]);
+      matrix.push(['Páginas',pages.length]);
+      matrix.push(['Items de texto',totalItems]);
+      matrix.push(['Tablas detectadas',totalTables]);
+      matrix.push(['']);
+      // Procesar cada página por separado para mantener contexto
+      for(var pg of pages){
+        if(!pg.items.length)continue;
+        var pgRows=itemsToRows(pg.items,5);
+        var pgCols=detectColumnBoundaries(pgRows);
+        var pgTables=detectTables(pgRows,pgCols);
+        matrix.push(['━━━ PÁGINA '+pg.num+' ━━━']);
+        if(pgTables.length===0){
+          // Sin tabla → texto libre, una columna
+          pgRows.forEach(row=>{
+            var line=row.map(it=>it.str.trim()).join(' ');
+            if(line.trim())matrix.push([line]);
+          });
+        }else{
+          // Con tablas detectadas: texto libre antes de tabla, tabla, texto libre después
+          var tableSet=new Set();
+          pgTables.forEach(t=>{for(var r=t.start;r<=t.end;r++)tableSet.add(r);});
+          var prevWasTable=false;
+          for(var ri=0;ri<pgRows.length;ri++){
+            var row=pgRows[ri];
+            if(tableSet.has(ri)){
+              // Fila de tabla: asignar columnas
+              var assigned=assignCols(row,pgCols,pg.width)[0];
+              var parsed=assigned.map(c=>parseValue(c));
+              matrix.push(parsed);
+              prevWasTable=true;
+            }else{
+              if(prevWasTable)matrix.push(['']);
+              prevWasTable=false;
+              var line=row.map(it=>it.str.trim()).join(' ').trim();
+              if(line)matrix.push([line]);
+            }
+          }
+        }
+        matrix.push(['']);
+      }
+      // Calcular ancho óptimo de columnas
+      var colWidths=[];
+      matrix.forEach(row=>{
+        (row||[]).forEach((cell,ci)=>{
+          var l=String(cell||'').length;
+          if(!colWidths[ci]||l>colWidths[ci])colWidths[ci]=l;
+        });
+      });
+      var ws=XLSX.utils.aoa_to_sheet(matrix);
+      ws['!cols']=colWidths.map(w=>({wch:Math.min(Math.max(w+2,8),55)}));
+      // Nombre hoja único
+      var shBase=file.name.replace(/\.pdf$/i,'').replace(/[\\\/\?\*\[\]:\|'"]/g,'_').substring(0,28);
+      if(sheetCount[shBase]===undefined)sheetCount[shBase]=0;
+      else{sheetCount[shBase]++;shBase=shBase.substring(0,25)+'_'+sheetCount[shBase];}
+      XLSX.utils.book_append_sheet(wb,ws,shBase);
+      xlLog('p2eLog',file.name+' ✓ — '+totalItems+' ítems, '+totalTables+' tabla(s)','ok');
+    }
+    if(!wb.SheetNames.length){toast('No se pudo extraer texto de ningún PDF','err');hideL();return;}
+    var wbOut=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    var blob=new Blob([wbOut],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var outName=(files.length===1
+      ?files[0].name.replace(/\.pdf$/i,'')
+      :'PDFs_'+files.length+'_archivos_'+new Date().toISOString().slice(0,10))+'_extraido.xlsx';
+    document.getElementById('p2eName').textContent='✓ '+outName+' ('+wb.SheetNames.length+' hoja'+(wb.SheetNames.length>1?'s':'')+')';
+    document.getElementById('p2eDl').onclick=()=>dlBlob(blob,outName);
+    document.getElementById('p2eRes').classList.add('on');
+    toast('PDF→Excel listo ✓');
+  }catch(e){xlLog('p2eLog','Error: '+e.message,'err');toast('Error: '+e.message,'err');console.error(e);}
+  hideL();ev.target.value='';
+}
+
+// ═══════════════════════════════════════════════════
+// MULTI-PDF → EXCEL CONSOLIDADO
+// ═══════════════════════════════════════════════════
+async function multiPdfToExcel(ev){
+  var files=Array.from(ev.target.files||[]);if(!files.length)return;
+  document.getElementById('multLog').innerHTML='';
+  document.getElementById('multRes').classList.remove('on');
+  showL('Consolidando '+files.length+' PDFs…','Extrayendo y unificando tablas');
+  try{
+    var wb=XLSX.utils.book_new();
+    var consolidadoRows=null; // encabezado se crea al detectar la primera tabla
+    var consolidadoHeader=null;
+    var totalFacturas=0;
+    var sheetCount={};
+    for(var file of files){
+      xlLog('multLog','→ '+file.name,'inf');
+      var bytes=await file.arrayBuffer();
+      var pages=await pdfGetItems(bytes);
+      var allItems=pages.flatMap(p=>p.items);
+      if(!allItems.length){xlLog('multLog','⚠ '+file.name+' sin texto','err');continue;}
+      var allRows=itemsToRows(allItems,5);
+      var colBounds=detectColumnBoundaries(allRows);
+      var tableRegions=detectTables(allRows,colBounds);
+      // Para cada tabla detectada, extraer su encabezado + filas
+      var fileTableRows=[];
+      tableRegions.forEach(tr=>{
+        var tRows=allRows.slice(tr.start,tr.end+1);
+        var tCols=detectColumnBoundaries(tRows);
+        var assigned=tRows.map(row=>assignCols(row,tCols,1000)[0].map(c=>cleanCell(c)));
+        fileTableRows=fileTableRows.concat(assigned);
+      });
+      // Hoja individual
+      var shBase=file.name.replace(/\.pdf$/i,'').replace(/[\\\/\?\*\[\]:\|'"]/g,'_').substring(0,28);
+      if(sheetCount[shBase]===undefined)sheetCount[shBase]=0;
+      else{sheetCount[shBase]++;shBase=shBase.substring(0,25)+'_'+sheetCount[shBase];}
+      // Extraer texto completo también
+      var fullRows=allRows.map(row=>row.map(it=>it.str.trim()).join(' ')).filter(l=>l);
+      var wsData=[['Archivo',file.name],[''],...fileTableRows,[''],['── Texto completo ──'],...fullRows.map(l=>[l])];
+      var wsInd=XLSX.utils.aoa_to_sheet(wsData);
+      var cw=[];wsData.forEach(r=>(r||[]).forEach((c,ci)=>{var l=String(c||'').length;if(!cw[ci]||l>cw[ci])cw[ci]=l;}));
+      wsInd['!cols']=cw.map(w=>({wch:Math.min(w+2,55)}));
+      XLSX.utils.book_append_sheet(wb,wsInd,shBase);
+      // Aportar al consolidado
+      if(fileTableRows.length>0){
+        if(!consolidadoHeader){
+          consolidadoHeader=['Archivo',...fileTableRows[0].map((_,i)=>'Col'+(i+1))];
+          consolidadoRows=[consolidadoHeader];
+        }
+        fileTableRows.forEach((row,ri)=>{
+          if(ri===0)return;// saltar encabezado de la tabla individual
+          var parsed=row.map(c=>parseValue(c));
+          consolidadoRows.push([file.name,...parsed]);
+          totalFacturas++;
+        });
+      }
+      xlLog('multLog',shBase+' ✓ — '+fileTableRows.length+' filas de tabla','ok');
+    }
+    // Hoja CONSOLIDADO
+    if(consolidadoRows&&consolidadoRows.length>1){
+      var wsC=XLSX.utils.aoa_to_sheet(consolidadoRows);
+      var cw2=[];consolidadoRows.forEach(r=>(r||[]).forEach((c,ci)=>{var l=String(c||'').length;if(!cw2[ci]||l>cw2[ci])cw2[ci]=l;}));
+      wsC['!cols']=cw2.map(w=>({wch:Math.min(w+2,55)}));
+      XLSX.utils.book_append_sheet(wb,wsC,'CONSOLIDADO');
+      wb.SheetNames=['CONSOLIDADO',...wb.SheetNames.filter(n=>n!=='CONSOLIDADO')];
+    }
+    var wbOut=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    var blob=new Blob([wbOut],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var outName='CONSOLIDADO_'+files.length+'_PDFs_'+new Date().toISOString().slice(0,10)+'.xlsx';
+    document.getElementById('multName').textContent='✓ '+outName+' — '+totalFacturas+' filas consolidadas';
+    document.getElementById('multDl').onclick=()=>dlBlob(blob,outName);
+    document.getElementById('multRes').classList.add('on');
+    toast('Consolidado ✓ — '+files.length+' PDFs, '+totalFacturas+' filas');
+  }catch(e){xlLog('multLog','Error: '+e.message,'err');toast('Error: '+e.message,'err');console.error(e);}
+  hideL();ev.target.value='';
+}
+
+// ═══════════════════════════════════════════════════
+// EXCEL → PDF
+// ═══════════════════════════════════════════════════
+async function excelToPdf(ev){
+  var file=ev.target.files[0];if(!file)return;
+  document.getElementById('e2pLog').innerHTML='';
+  document.getElementById('e2pRes').classList.remove('on');
+  showL('Convirtiendo Excel→PDF…',file.name);
+  try{
+    var buf=await file.arrayBuffer();
+    var isCSV=file.name.toLowerCase().endsWith('.csv');
+    var wb=isCSV?XLSX.read(new TextDecoder('utf-8').decode(buf),{type:'string'}):XLSX.read(buf,{type:'array'});
+    xlLog('e2pLog','Hojas: '+wb.SheetNames.join(', '),'inf');
+    var pdfDoc=await PDFDocument.create();
+    var fontR=await pdfDoc.embedFont(StandardFonts.Helvetica);
+    var fontB=await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    var PW=841,PH=595,MG=30;
+    for(var shName of wb.SheetNames){
+      var ws=wb.Sheets[shName];
+      var data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}).filter(r=>r.some(c=>String(c).trim()));
+      if(!data.length)continue;
+      xlLog('e2pLog','"'+shName+'" — '+data.length+' filas','inf');
+      var cols=Math.max(...data.map(r=>r.length),1);
+      // Calcular anchos relativos de columna según contenido
+      var maxLens=new Array(cols).fill(4);
+      data.forEach(row=>{row.forEach((c,ci)=>{var l=String(c||'').length;if(l>maxLens[ci])maxLens[ci]=l;});});
+      var totalLen=maxLens.reduce((a,b)=>a+b,0);
+      var colWs=maxLens.map(l=>Math.floor((PW-MG*2)*l/totalLen));
+      var rowH=15,hdrH=19,titleH=22;
+      // Nueva página para esta hoja
+      var page=pdfDoc.addPage([PW,PH]);
+      var y=PH-MG;
+      // Título
+      page.drawRectangle({x:MG,y:y-titleH+5,width:PW-MG*2,height:titleH,color:rgb(.063,.208,.318)});
+      try{page.drawText(file.name.replace(/\.(xlsx|xls|csv)$/i,'')+' — '+shName,{x:MG+8,y:y-1,font:fontB,size:10,color:rgb(1,1,1),maxWidth:PW-MG*2-16})}catch(e){}
+      y-=titleH+2;
+      var header=data[0];
+      var drawHeader=()=>{
+        var x0=MG;
+        page.drawRectangle({x:MG,y:y-hdrH+5,width:PW-MG*2,height:hdrH,color:rgb(.141,.337,.502)});
+        header.forEach((cell,ci)=>{
+          var txt=String(cell||'').trim().substring(0,30);
+          try{page.drawText(txt,{x:x0+3,y:y-1,font:fontB,size:7.5,color:rgb(1,1,1),maxWidth:colWs[ci]-5})}catch(e){}
+          x0+=colWs[ci];
+        });
+        y-=hdrH;
+      };
+      drawHeader();
+      for(var ri=1;ri<data.length;ri++){
+        if(y-rowH<MG){
+          page=pdfDoc.addPage([PW,PH]);y=PH-MG;
+          page.drawText(shName+' (cont.)',{x:MG,y,font:fontB,size:8,color:rgb(.5,.5,.5)});y-=12;
+          drawHeader();
+        }
+        var row=data[ri];
+        var isEven=ri%2===0;
+        var bg=isEven?rgb(.953,.961,.980):rgb(1,1,1);
+        page.drawRectangle({x:MG,y:y-rowH+4,width:PW-MG*2,height:rowH,color:bg,borderColor:rgb(.82,.85,.89),borderWidth:.35});
+        var x0=MG;
+        row.forEach((cell,ci)=>{
+          var raw=String(cell||'').trim();
+          // Alinear números a la derecha
+          var isNum=typeof cell==='number'||/^[\$\d\.\,\s]+$/.test(raw)&&raw.length>1;
+          var maxW=colWs[ci]-5;
+          var txt=raw.substring(0,28);
+          try{
+            var tw=fontR.widthOfTextAtSize(txt,7.5);
+            var tx=isNum?x0+maxW-tw+2:x0+3;
+            page.drawText(txt,{x:tx,y:y-1,font:fontR,size:7.5,color:rgb(.08,.08,.08),maxWidth:maxW});
+          }catch(e){}
+          // Línea vertical separadora
+          try{page.drawLine({start:{x:x0+colWs[ci],y:y-rowH+4},end:{x:x0+colWs[ci],y:y+4},thickness:.25,color:rgb(.82,.85,.89)})}catch(e){}
+          x0+=colWs[ci];
+        });
+        y-=rowH;
+      }
+      // Línea de totales si hay números en la última fila
+      xlLog('e2pLog','"'+shName+'" → PDF ✓','ok');
+    }
+    var saved=await pdfDoc.save();
+    var blob=new Blob([saved],{type:'application/pdf'});
+    var outName=file.name.replace(/\.(xlsx|xls|csv)$/i,'')+'.pdf';
+    document.getElementById('e2pName').textContent='✓ '+outName;
+    document.getElementById('e2pDl').onclick=()=>dlBlob(blob,outName);
+    document.getElementById('e2pRes').classList.add('on');
+    toast('Excel→PDF listo ✓');
+  }catch(e){xlLog('e2pLog','Error: '+e.message,'err');toast('Error: '+e.message,'err');console.error(e);}
+  hideL();ev.target.value='';
+}
+
+// ── Drag & Drop en las tres zonas ──
+['p2eDZ','e2pDZ','multDZ'].forEach(id=>{
+  var el=document.getElementById(id);if(!el)return;
+  el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('drag')});
+  el.addEventListener('dragleave',()=>el.classList.remove('drag'));
+  el.addEventListener('drop',e=>{
+    e.preventDefault();el.classList.remove('drag');
+    var fs=Array.from(e.dataTransfer.files);
+    if(id==='e2pDZ'){excelToPdf({target:{files:fs.filter(f=>/\.(xlsx|xls|csv)$/i.test(f.name)),value:''}});}
+    else{
+      var pdfs=fs.filter(f=>/\.pdf$/i.test(f.name));
+      if(!pdfs.length)return;
+      var fakeEv={target:{files:pdfs,value:''}};
+      if(id==='p2eDZ')pdfToExcel(fakeEv);
+      else multiPdfToExcel(fakeEv);
+    }
+  });
+});
 </script>
 </body>
 </html>
