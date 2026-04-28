@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -2093,11 +2094,7 @@ document.getElementById('navUser').textContent=sessionStorage.getItem('rips_user
 <script>
 // ══════════════ MODULE: PDF ↔ EXCEL ══════════════
 
-// ══════════════════════════════════════════════════════════════════
-// MOTOR PDF → EXCEL  —  EXTRACCIÓN INTELIGENTE UNIVERSAL
-// Funciona con: tablas, listas, texto libre, formularios, reportes
-// ══════════════════════════════════════════════════════════════════
-
+// ── Log visual ──
 function xlLog(elId,msg,type){
   var el=document.getElementById(elId);if(!el)return;
   el.style.display='block';
@@ -2107,325 +2104,290 @@ function xlLog(elId,msg,type){
   el.scrollTop=el.scrollHeight;
 }
 
-// ── NÚCLEO: extrae texto con posición exacta de cada ítem ──
-// Recibe ArrayBuffer; siempre hace slice() para no consumirlo
-async function pdfGetItems(arrayBuffer){
-  var data=arrayBuffer.slice(0);
-  // disableAutoFetch y disableStream evitan que pdfjs use localStorage/cache
-  var doc=await pdfjsLib.getDocument({
-    data:data,
-    disableAutoFetch:true,
-    disableStream:true,
-    isEvalSupported:false,
-  }).promise;
-  var pages=[];
-  for(var i=1;i<=doc.numPages;i++){
-    var page=await doc.getPage(i);
-    var vp=page.getViewport({scale:1});
-    var content=await page.getTextContent({normalizeWhitespace:true,disableCombineTextItems:true});
-    var items=content.items.map(function(it){
-      return{str:it.str,x:Math.round(it.transform[4]*10)/10,y:Math.round((vp.height-it.transform[5])*10)/10,w:Math.round((it.width||0)*10)/10,h:Math.round((it.height||it.transform[3]||10)*10)/10};
-    }).filter(function(it){return it.str.trim().length>0;});
-    pages.push({num:i,items:items,width:vp.width,height:vp.height});
-  }
-  return pages;
+// ── Renderizar página PDF a canvas/dataURL para OCR ──
+async function pdfPageToDataURL(arrayBuffer, pageNum, scale){
+  scale=scale||2.5;
+  var doc=await pdfjsLib.getDocument({data:arrayBuffer.slice(0),disableAutoFetch:true,disableStream:true}).promise;
+  var page=await doc.getPage(pageNum);
+  var vp=page.getViewport({scale:scale});
+  var canvas=document.createElement('canvas');
+  canvas.width=vp.width; canvas.height=vp.height;
+  await page.render({canvasContext:canvas.getContext('2d'),viewport:vp}).promise;
+  return{dataURL:canvas.toDataURL('image/png'),width:vp.width,height:vp.height,numPages:doc.numPages};
 }
 
-// ── ALGORITMO DE RECONSTRUCCIÓN DE FILAS con tolerancia de banda ──
-function itemsToRows(items,yTol){
-  if(!yTol)yTol=5;
-  if(!items||!items.length)return[];
-  // Ordenar por Y ascendente (top → bottom)
-  var indexed=items.map(function(it,i){return{it:it,i:i};}).sort(function(a,b){return a.it.y-b.it.y;});
-  var used=new Array(items.length).fill(false);
-  var rows=[];
-  for(var si=0;si<indexed.length;si++){
-    var seed=indexed[si];
-    if(used[seed.i])continue;
-    var rowItems=[seed.it];
-    used[seed.i]=true;
-    var seedY=seed.it.y;
-    var seedH=seed.it.h||10;
-    for(var sj=si+1;sj<indexed.length;sj++){
-      var cand=indexed[sj];
-      if(used[cand.i])continue;
-      if(cand.it.y>seedY+Math.max(seedH,yTol)*1.2)break;
-      if(Math.abs(cand.it.y-seedY)<=yTol){
-        rowItems.push(cand.it);
-        used[cand.i]=true;
-      }
+// ── OCR de una imagen con Tesseract.js ──
+var _tWorker=null;
+async function ocrImage(dataURL, logId){
+  if(!_tWorker){
+    xlLog(logId,'Cargando motor OCR (primera vez)…','inf');
+    _tWorker=await Tesseract.createWorker('spa+eng',1,{
+      workerPath:'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+      langPath:'https://tessdata.projectnaptha.com/4.0.0',
+      corePath:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
+      logger:function(m){if(m.status==='recognizing text'){
+        var pct=Math.round((m.progress||0)*100);
+        var bar=document.getElementById('ocrBar');
+        if(bar)bar.style.width=pct+'%';
+      }}
+    });
+    await _tWorker.setParameters({'tessedit_pageseg_mode':'6'});
+  }
+  var result=await _tWorker.recognize(dataURL);
+  return result.data.words; // [{text,bbox:{x0,y0,x1,y1},confidence}]
+}
+
+// ── Agrupar palabras OCR en filas ──
+function ocrWordsToRows(words,yTol){
+  yTol=yTol||15;
+  var conf=words.filter(function(w){return w.confidence>25&&w.text.trim();});
+  if(!conf.length)return[];
+  conf.sort(function(a,b){return a.bbox.y0-b.bbox.y0;});
+  var rows=[],used=new Array(conf.length).fill(false);
+  for(var i=0;i<conf.length;i++){
+    if(used[i])continue;
+    var seed=conf[i];
+    var row=[seed]; used[i]=true;
+    for(var j=i+1;j<conf.length;j++){
+      if(used[j])continue;
+      if(conf[j].bbox.y0>seed.bbox.y0+yTol)break;
+      if(Math.abs(conf[j].bbox.y0-seed.bbox.y0)<=yTol){row.push(conf[j]);used[j]=true;}
     }
-    rowItems.sort(function(a,b){return a.x-b.x;});
-    rows.push(rowItems);
+    row.sort(function(a,b){return a.bbox.x0-b.bbox.x0;});
+    rows.push(row);
   }
   return rows;
 }
 
-// ── DETECTOR DE COLUMNAS por clustering de posiciones X ──
-function detectColumnBoundaries(rows){
-  // Recopilar todos los X de inicio de celda
+// ── Detectar columnas por clustering X ──
+function ocrDetectCols(rows,pageWidth){
+  // Recopilar X de inicio de cada palabra
   var xs=[];
-  rows.forEach(row=>row.forEach(it=>xs.push(it.x)));
+  rows.forEach(function(row){row.forEach(function(w){xs.push(w.bbox.x0);});});
   if(!xs.length)return[];
-  xs.sort((a,b)=>a-b);
-  // Agrupar Xs cercanos en clusters (tolerancia 12 pts)
+  xs.sort(function(a,b){return a-b;});
   var clusters=[],cur=[xs[0]];
   for(var i=1;i<xs.length;i++){
-    if(xs[i]-xs[i-1]<14)cur.push(xs[i]);
+    if(xs[i]-xs[i-1]<pageWidth*0.04)cur.push(xs[i]);
     else{clusters.push(cur);cur=[xs[i]];}
   }
   clusters.push(cur);
-  return clusters.map(c=>c.reduce((a,b)=>a+b,0)/c.length);
+  return clusters.map(function(c){return c.reduce(function(a,b){return a+b;},0)/c.length;});
 }
 
-// ── ASIGNADOR: para cada ítem de una fila, determinar su columna ──
-function assignCols(rowItems, colBounds, pageWidth){
-  if(!colBounds.length)return[rowItems.map(it=>it.str.trim())];
+// ── Asignar palabras de una fila a columnas ──
+function ocrAssignCols(rowWords,colBounds){
   var cells=new Array(colBounds.length).fill('');
-  rowItems.forEach(it=>{
-    // Columna más cercana al x del ítem
-    var best=0,bestDist=Infinity;
-    for(var ci=0;ci<colBounds.length;ci++){
-      var d=Math.abs(it.x-colBounds[ci]);
-      if(d<bestDist){bestDist=d;best=ci;}
-    }
-    cells[best]+=(cells[best]?' ':'')+it.str.trim();
+  rowWords.forEach(function(w){
+    var best=0,bestD=Infinity;
+    colBounds.forEach(function(cb,ci){var d=Math.abs(w.bbox.x0-cb);if(d<bestD){bestD=d;best=ci;}});
+    cells[best]+=(cells[best]?' ':'')+w.text.trim();
   });
-  return[cells];
+  return cells;
 }
 
-// ── DETECTOR AUTOMÁTICO DE TABLAS dentro de las filas ──
-function detectTables(rows, colBounds){
-  // Una región es "tabla" si múltiples filas consecutivas
-  // tienen ítems alineados en >=2 columnas distintas
-  var tableRegions=[];
-  var inTable=false,tableStart=0,tableCols=0;
-  for(var ri=0;ri<rows.length;ri++){
-    var row=rows[ri];
-    var xSet=new Set(row.map(it=>{
-      var best=0,bestD=Infinity;
-      colBounds.forEach((cb,ci)=>{var d=Math.abs(it.x-cb);if(d<bestD){bestD=d;best=ci;}});
-      return best;
-    }));
-    var isStructured=xSet.size>=2;
-    if(isStructured&&!inTable){inTable=true;tableStart=ri;tableCols=xSet.size;}
-    else if(!isStructured&&inTable){
-      if(ri-tableStart>=2)tableRegions.push({start:tableStart,end:ri-1,cols:tableCols});
-      inTable=false;
-    }
-  }
-  if(inTable&&rows.length-tableStart>=2)tableRegions.push({start:tableStart,end:rows.length-1,cols:tableCols});
-  return tableRegions;
-}
-
-// ── LIMPIADOR DE TEXTO: normaliza celdas ──
-function cleanCell(str){
-  return String(str||'').replace(/\s+/g,' ').trim();
-}
-
-// ── CONVERTIDOR DE VALOR NUMÉRICO: detecta monedas, fechas, números ──
-function parseValue(str){
-  var s=cleanCell(str);
+// ── Convertir valor a número si aplica ──
+function xlParseNum(s){
   if(!s)return'';
-  // Moneda colombiana: $ 1.234.567,00
-  var moneda=s.replace(/\s/g,'').match(/^\$?([\d\.]+,\d{2})$/);
-  if(moneda){var n=parseFloat(moneda[1].replace(/\./g,'').replace(',','.'));if(!isNaN(n))return n;}
-  // Número puro con punto de miles
-  var numPuntos=s.match(/^([\d\.]+)$/);
-  if(numPuntos){var n2=parseFloat(s.replace(/\./g,''));if(!isNaN(n2)&&s.length>3)return n2;}
+  var clean=s.replace(/\s/g,'');
+  // Moneda: $1.234.567,00 o $1,234,567.00
+  var m=clean.match(/^\$?([\d\.]+,\d{2})$/);
+  if(m)return parseFloat(m[1].replace(/\./g,'').replace(',','.'));
+  var m2=clean.match(/^\$?([\d,]+\.\d{2})$/);
+  if(m2)return parseFloat(m2[1].replace(/,/g,''));
+  // Entero con puntos de miles
+  if(/^\d{1,3}(\.\d{3})+$/.test(clean))return parseInt(clean.replace(/\./g,''));
   // Número simple
-  var numSimple=parseFloat(s.replace(',','.'));
-  if(!isNaN(numSimple)&&/^[\d,\.\-]+$/.test(s))return numSimple;
+  var n=parseFloat(clean.replace(',','.'));
+  if(!isNaN(n)&&/^[\d\.\,\-]+$/.test(clean))return n;
   return s;
 }
 
-// ── APLICAR ESTILOS AL WORKBOOK (cabeceras, colores, bordes) ──
-function styleWorkbook(ws, headerRow, dataRows, totalRows){
-  // Estilo de encabezado
-  if(!ws['!rows'])ws['!rows']=[];
-  // Freeze primera fila
-  ws['!freeze']={xSplit:0,ySplit:headerRow+1,topLeftCell:'A'+(headerRow+2),activePane:'bottomLeft'};
+// ── EXTRACTOR PRINCIPAL: texto o OCR automático ──
+async function extractPdfToMatrix(arrayBuffer, fileName, logId){
+  // 1. Intentar extracción de texto nativo con pdfjs
+  var textPages=[];
+  try{
+    var doc=await pdfjsLib.getDocument({data:arrayBuffer.slice(0),disableAutoFetch:true,disableStream:true}).promise;
+    for(var i=1;i<=doc.numPages;i++){
+      var page=await doc.getPage(i);
+      var vp=page.getViewport({scale:1});
+      var content=await page.getTextContent({normalizeWhitespace:true,disableCombineTextItems:true});
+      var items=content.items.filter(function(it){return it.str&&it.str.trim();});
+      textPages.push({num:i,items:items,width:vp.width,height:vp.height});
+    }
+  }catch(e){xlLog(logId,'Error leyendo PDF: '+e.message,'err');}
+
+  var totalNativeItems=textPages.reduce(function(a,p){return a+p.items.length;},0);
+
+  // 2. Si hay texto nativo → usar extractor vectorial
+  if(totalNativeItems>10){
+    xlLog(logId,'PDF con texto nativo ('+totalNativeItems+' ítems)','inf');
+    var matrix=[];
+    textPages.forEach(function(pg){
+      if(!pg.items.length)return;
+      // Agrupar por Y → filas
+      var rowMap={};
+      pg.items.forEach(function(it){
+        var y=Math.round((pg.height-it.transform[5])/5)*5;
+        if(!rowMap[y])rowMap[y]=[];
+        rowMap[y].push({text:it.str.trim(),x:it.transform[4]});
+      });
+      var ys=Object.keys(rowMap).map(Number).sort(function(a,b){return a-b;});
+      // Detectar columnas
+      var allXs=[];
+      ys.forEach(function(y){rowMap[y].forEach(function(it){allXs.push(it.x);});});
+      allXs.sort(function(a,b){return a-b;});
+      var clusters=[],cur=[allXs[0]||0];
+      for(var i=1;i<allXs.length;i++){
+        if(allXs[i]-allXs[i-1]<pg.width*0.05)cur.push(allXs[i]);
+        else{clusters.push(cur);cur=[allXs[i]];}
+      }
+      clusters.push(cur);
+      var colBounds=clusters.map(function(c){return c.reduce(function(a,b){return a+b;},0)/c.length;});
+      if(colBounds.length>8)colBounds=colBounds.slice(0,8);
+      ys.forEach(function(y){
+        var rowItems=rowMap[y].sort(function(a,b){return a.x-b.x;});
+        if(colBounds.length>=2){
+          var cells=new Array(colBounds.length).fill('');
+          rowItems.forEach(function(it){
+            var best=0,bestD=Infinity;
+            colBounds.forEach(function(cb,ci){var d=Math.abs(it.x-cb);if(d<bestD){bestD=d;best=ci;}});
+            cells[best]+=(cells[best]?' ':'')+it.text;
+          });
+          matrix.push(cells.map(xlParseNum));
+        }else{
+          matrix.push([rowItems.map(function(it){return it.text;}).join(' ')]);
+        }
+      });
+      matrix.push(['']);
+    });
+    return matrix;
+  }
+
+  // 3. PDF sin texto → OCR automático página por página
+  xlLog(logId,'PDF imagen detectado → activando OCR…','inf');
+  var ocrMatrix=[];
+  var firstRender=await pdfPageToDataURL(arrayBuffer,1,2.5);
+  var numPages=firstRender.numPages;
+  for(var pg=1;pg<=numPages;pg++){
+    xlLog(logId,'OCR página '+pg+'/'+numPages+'…','inf');
+    var rendered=pg===1?firstRender:await pdfPageToDataURL(arrayBuffer,pg,2.5);
+    var words=await ocrImage(rendered.dataURL,logId);
+    var rows=ocrWordsToRows(words,rendered.height*0.018);
+    var colBounds=ocrDetectCols(rows,rendered.width);
+    if(pg>1)ocrMatrix.push(['']);
+    if(colBounds.length>=2){
+      rows.forEach(function(row){
+        var cells=ocrAssignCols(row,colBounds);
+        ocrMatrix.push(cells.map(xlParseNum));
+      });
+    }else{
+      rows.forEach(function(row){
+        ocrMatrix.push([row.map(function(w){return w.text;}).join(' ')]);
+      });
+    }
+  }
+  xlLog(logId,'OCR completado ✓','ok');
+  return ocrMatrix;
 }
 
-// ═══════════════════════════════════════════════════
-// FUNCIÓN PRINCIPAL: PDF → EXCEL (uno o varios PDFs)
-// ═══════════════════════════════════════════════════
+// ══ PDF → EXCEL (uno o varios PDFs) ══
 async function pdfToExcel(ev){
   var files=Array.from(ev.target.files||[]);if(!files.length)return;
   document.getElementById('p2eLog').innerHTML='';
   document.getElementById('p2eRes').classList.remove('on');
-  showL('Extrayendo datos…',files.length+' PDF'+(files.length>1?'s':''));
+  // Barra de progreso OCR
+  var logEl=document.getElementById('p2eLog');
+  logEl.style.display='block';
+  logEl.innerHTML='<div style="background:var(--gray2);border-radius:4px;height:6px;margin-bottom:6px"><div id="ocrBar" style="height:6px;background:var(--c1);border-radius:4px;width:0%;transition:width .3s"></div></div>';
+  showL('Procesando PDFs…',files.length+' archivo(s)');
   try{
     var wb=XLSX.utils.book_new();
     var sheetCount={};
-    for(var file of files){
-      xlLog('p2eLog','→ Procesando: '+file.name,'inf');
+    for(var fi=0;fi<files.length;fi++){
+      var file=files[fi];
+      xlLog('p2eLog','['+( fi+1)+'/'+files.length+'] '+file.name,'inf');
       var bytes=await file.arrayBuffer();
-      var pages=await pdfGetItems(bytes);
-      var totalItems=0,totalTables=0;
-      // Recopilar todos los ítems del PDF para calcular columnas globales
-      var allItems=pages.flatMap(p=>p.items);
-      totalItems=allItems.length;
-      if(!totalItems){xlLog('p2eLog','⚠ PDF sin texto extraíble (escaneado)','err');continue;}
-      // Filas de todo el documento
-      var allRows=itemsToRows(allItems,5);
-      var colBounds=detectColumnBoundaries(allRows);
-      var tableRegions=detectTables(allRows,colBounds);
-      totalTables=tableRegions.length;
-      // Construir matriz final de celdas
-      var matrix=[];
-      // Cabecera del documento
-      matrix.push(['Archivo',file.name]);
-      matrix.push(['Páginas',pages.length]);
-      matrix.push(['Items de texto',totalItems]);
-      matrix.push(['Tablas detectadas',totalTables]);
-      matrix.push(['']);
-      // Procesar cada página por separado para mantener contexto
-      for(var pg of pages){
-        if(!pg.items.length)continue;
-        var pgRows=itemsToRows(pg.items,5);
-        var pgCols=detectColumnBoundaries(pgRows);
-        var pgTables=detectTables(pgRows,pgCols);
-        matrix.push(['━━━ PÁGINA '+pg.num+' ━━━']);
-        if(pgTables.length===0){
-          // Sin tabla → texto libre, una columna
-          pgRows.forEach(row=>{
-            var line=row.map(it=>it.str.trim()).join(' ');
-            if(line.trim())matrix.push([line]);
-          });
-        }else{
-          // Con tablas detectadas: texto libre antes de tabla, tabla, texto libre después
-          var tableSet=new Set();
-          pgTables.forEach(t=>{for(var r=t.start;r<=t.end;r++)tableSet.add(r);});
-          var prevWasTable=false;
-          for(var ri=0;ri<pgRows.length;ri++){
-            var row=pgRows[ri];
-            if(tableSet.has(ri)){
-              // Fila de tabla: asignar columnas
-              var assigned=assignCols(row,pgCols,pg.width)[0];
-              var parsed=assigned.map(c=>parseValue(c));
-              matrix.push(parsed);
-              prevWasTable=true;
-            }else{
-              if(prevWasTable)matrix.push(['']);
-              prevWasTable=false;
-              var line=row.map(it=>it.str.trim()).join(' ').trim();
-              if(line)matrix.push([line]);
-            }
-          }
-        }
-        matrix.push(['']);
-      }
-      // Calcular ancho óptimo de columnas
-      var colWidths=[];
-      matrix.forEach(row=>{
-        (row||[]).forEach((cell,ci)=>{
-          var l=String(cell||'').length;
-          if(!colWidths[ci]||l>colWidths[ci])colWidths[ci]=l;
-        });
-      });
-      var ws=XLSX.utils.aoa_to_sheet(matrix);
-      ws['!cols']=colWidths.map(w=>({wch:Math.min(Math.max(w+2,8),55)}));
-      // Nombre hoja único
+      var matrix=await extractPdfToMatrix(bytes,file.name,'p2eLog');
+      if(!matrix||!matrix.length){xlLog('p2eLog','Sin datos en '+file.name,'err');continue;}
       var shBase=file.name.replace(/\.pdf$/i,'').replace(/[\\\/\?\*\[\]:\|'"]/g,'_').substring(0,28);
-      if(sheetCount[shBase]===undefined)sheetCount[shBase]=0;
-      else{sheetCount[shBase]++;shBase=shBase.substring(0,25)+'_'+sheetCount[shBase];}
+      if(sheetCount[shBase]!==undefined){sheetCount[shBase]++;shBase=shBase.substring(0,25)+'_'+sheetCount[shBase];}
+      else sheetCount[shBase]=0;
+      var ws=XLSX.utils.aoa_to_sheet(matrix);
+      var cw=[];matrix.forEach(function(r){(r||[]).forEach(function(c,ci){var l=String(c||'').length;if(!cw[ci]||l>cw[ci])cw[ci]=l;});});
+      ws['!cols']=cw.map(function(w){return{wch:Math.min(Math.max(w+2,8),55)};});
       XLSX.utils.book_append_sheet(wb,ws,shBase);
-      xlLog('p2eLog',file.name+' ✓ — '+totalItems+' ítems, '+totalTables+' tabla(s)','ok');
+      xlLog('p2eLog',file.name+' → '+matrix.filter(function(r){return r.some(function(c){return String(c).trim();});}).length+' filas ✓','ok');
     }
-    if(!wb.SheetNames.length){toast('No se pudo extraer texto de ningún PDF','err');hideL();return;}
+    if(!wb.SheetNames.length){toast('No se pudieron extraer datos','err');hideL();return;}
     var wbOut=XLSX.write(wb,{bookType:'xlsx',type:'array'});
     var blob=new Blob([wbOut],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-    var outName=(files.length===1
-      ?files[0].name.replace(/\.pdf$/i,'')
-      :'PDFs_'+files.length+'_archivos_'+new Date().toISOString().slice(0,10))+'_extraido.xlsx';
-    document.getElementById('p2eName').textContent='✓ '+outName+' ('+wb.SheetNames.length+' hoja'+(wb.SheetNames.length>1?'s':'')+')';
-    document.getElementById('p2eDl').onclick=()=>dlBlob(blob,outName);
+    var outName=(files.length===1?files[0].name.replace(/\.pdf$/i,''):'PDFs_'+files.length+'_'+new Date().toISOString().slice(0,10))+'_extraido.xlsx';
+    document.getElementById('p2eName').textContent='✓ '+outName;
+    document.getElementById('p2eDl').onclick=function(){dlBlob(blob,outName);};
     document.getElementById('p2eRes').classList.add('on');
     toast('PDF→Excel listo ✓');
   }catch(e){xlLog('p2eLog','Error: '+e.message,'err');toast('Error: '+e.message,'err');console.error(e);}
   hideL();ev.target.value='';
 }
 
-// ═══════════════════════════════════════════════════
-// MULTI-PDF → EXCEL CONSOLIDADO
-// ═══════════════════════════════════════════════════
+// ══ MULTI-PDF → EXCEL CONSOLIDADO ══
 async function multiPdfToExcel(ev){
   var files=Array.from(ev.target.files||[]);if(!files.length)return;
-  document.getElementById('multLog').innerHTML='';
+  document.getElementById('multLog').innerHTML='<div style="background:var(--gray2);border-radius:4px;height:6px;margin-bottom:6px"><div id="ocrBar" style="height:6px;background:var(--c1);border-radius:4px;width:0%;transition:width .3s"></div></div>';
   document.getElementById('multRes').classList.remove('on');
-  showL('Consolidando '+files.length+' PDFs…','Extrayendo y unificando tablas');
+  showL('Consolidando '+files.length+' PDFs…','OCR automático si es necesario');
   try{
     var wb=XLSX.utils.book_new();
-    var consolidadoRows=null; // encabezado se crea al detectar la primera tabla
-    var consolidadoHeader=null;
-    var totalFacturas=0;
+    var consolidado=null,consHeader=null;
     var sheetCount={};
-    for(var file of files){
-      xlLog('multLog','→ '+file.name,'inf');
+    for(var fi=0;fi<files.length;fi++){
+      var file=files[fi];
+      xlLog('multLog','['+( fi+1)+'/'+files.length+'] '+file.name,'inf');
       var bytes=await file.arrayBuffer();
-      var pages=await pdfGetItems(bytes);
-      var allItems=pages.flatMap(p=>p.items);
-      if(!allItems.length){xlLog('multLog','⚠ '+file.name+' sin texto','err');continue;}
-      var allRows=itemsToRows(allItems,5);
-      var colBounds=detectColumnBoundaries(allRows);
-      var tableRegions=detectTables(allRows,colBounds);
-      // Para cada tabla detectada, extraer su encabezado + filas
-      var fileTableRows=[];
-      tableRegions.forEach(tr=>{
-        var tRows=allRows.slice(tr.start,tr.end+1);
-        var tCols=detectColumnBoundaries(tRows);
-        var assigned=tRows.map(row=>assignCols(row,tCols,1000)[0].map(c=>cleanCell(c)));
-        fileTableRows=fileTableRows.concat(assigned);
-      });
+      var matrix=await extractPdfToMatrix(bytes,file.name,'multLog');
+      if(!matrix||!matrix.length)continue;
       // Hoja individual
       var shBase=file.name.replace(/\.pdf$/i,'').replace(/[\\\/\?\*\[\]:\|'"]/g,'_').substring(0,28);
-      if(sheetCount[shBase]===undefined)sheetCount[shBase]=0;
-      else{sheetCount[shBase]++;shBase=shBase.substring(0,25)+'_'+sheetCount[shBase];}
-      // Extraer texto completo también
-      var fullRows=allRows.map(row=>row.map(it=>it.str.trim()).join(' ')).filter(l=>l);
-      var wsData=[['Archivo',file.name],[''],...fileTableRows,[''],['── Texto completo ──'],...fullRows.map(l=>[l])];
-      var wsInd=XLSX.utils.aoa_to_sheet(wsData);
-      var cw=[];wsData.forEach(r=>(r||[]).forEach((c,ci)=>{var l=String(c||'').length;if(!cw[ci]||l>cw[ci])cw[ci]=l;}));
-      wsInd['!cols']=cw.map(w=>({wch:Math.min(w+2,55)}));
-      XLSX.utils.book_append_sheet(wb,wsInd,shBase);
-      // Aportar al consolidado
-      if(fileTableRows.length>0){
-        if(!consolidadoHeader){
-          consolidadoHeader=['Archivo',...fileTableRows[0].map((_,i)=>'Col'+(i+1))];
-          consolidadoRows=[consolidadoHeader];
+      if(sheetCount[shBase]!==undefined){sheetCount[shBase]++;shBase=shBase.substring(0,25)+'_'+sheetCount[shBase];}
+      else sheetCount[shBase]=0;
+      var ws=XLSX.utils.aoa_to_sheet(matrix);
+      var cw=[];matrix.forEach(function(r){(r||[]).forEach(function(c,ci){var l=String(c||'').length;if(!cw[ci]||l>cw[ci])cw[ci]=l;});});
+      ws['!cols']=cw.map(function(w){return{wch:Math.min(Math.max(w+2,8),55)};});
+      XLSX.utils.book_append_sheet(wb,ws,shBase);
+      // Detectar filas de tabla (>=3 columnas con contenido)
+      var tableRows=matrix.filter(function(r){return r.filter(function(c){return String(c||'').trim();}).length>=3;});
+      if(tableRows.length>1){
+        if(!consHeader){
+          consHeader=['Archivo'].concat(tableRows[0].map(function(_,i){return'Col'+(i+1);}));
+          consolidado=[consHeader];
         }
-        fileTableRows.forEach((row,ri)=>{
-          if(ri===0)return;// saltar encabezado de la tabla individual
-          var parsed=row.map(c=>parseValue(c));
-          consolidadoRows.push([file.name,...parsed]);
-          totalFacturas++;
+        tableRows.slice(1).forEach(function(row){
+          consolidado.push([file.name].concat(row));
         });
       }
-      xlLog('multLog',shBase+' ✓ — '+fileTableRows.length+' filas de tabla','ok');
+      xlLog('multLog',file.name+' ✓ '+tableRows.length+' filas','ok');
     }
-    // Hoja CONSOLIDADO
-    if(consolidadoRows&&consolidadoRows.length>1){
-      var wsC=XLSX.utils.aoa_to_sheet(consolidadoRows);
-      var cw2=[];consolidadoRows.forEach(r=>(r||[]).forEach((c,ci)=>{var l=String(c||'').length;if(!cw2[ci]||l>cw2[ci])cw2[ci]=l;}));
-      wsC['!cols']=cw2.map(w=>({wch:Math.min(w+2,55)}));
+    if(consolidado&&consolidado.length>1){
+      var wsC=XLSX.utils.aoa_to_sheet(consolidado);
+      var cw2=[];consolidado.forEach(function(r){(r||[]).forEach(function(c,ci){var l=String(c||'').length;if(!cw2[ci]||l>cw2[ci])cw2[ci]=l;});});
+      wsC['!cols']=cw2.map(function(w){return{wch:Math.min(Math.max(w+2,8),55)};});
       XLSX.utils.book_append_sheet(wb,wsC,'CONSOLIDADO');
-      wb.SheetNames=['CONSOLIDADO',...wb.SheetNames.filter(n=>n!=='CONSOLIDADO')];
+      wb.SheetNames=['CONSOLIDADO'].concat(wb.SheetNames.filter(function(n){return n!=='CONSOLIDADO';}));
     }
     var wbOut=XLSX.write(wb,{bookType:'xlsx',type:'array'});
     var blob=new Blob([wbOut],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     var outName='CONSOLIDADO_'+files.length+'_PDFs_'+new Date().toISOString().slice(0,10)+'.xlsx';
-    document.getElementById('multName').textContent='✓ '+outName+' — '+totalFacturas+' filas consolidadas';
-    document.getElementById('multDl').onclick=()=>dlBlob(blob,outName);
+    document.getElementById('multName').textContent='✓ '+outName;
+    document.getElementById('multDl').onclick=function(){dlBlob(blob,outName);};
     document.getElementById('multRes').classList.add('on');
-    toast('Consolidado ✓ — '+files.length+' PDFs, '+totalFacturas+' filas');
+    toast('Consolidado ✓ — '+files.length+' PDFs');
   }catch(e){xlLog('multLog','Error: '+e.message,'err');toast('Error: '+e.message,'err');console.error(e);}
   hideL();ev.target.value='';
 }
 
-// ═══════════════════════════════════════════════════
-// EXCEL → PDF
-// ═══════════════════════════════════════════════════
+// ══ EXCEL → PDF ══
 async function excelToPdf(ev){
   var file=ev.target.files[0];if(!file)return;
   document.getElementById('e2pLog').innerHTML='';
@@ -2433,39 +2395,37 @@ async function excelToPdf(ev){
   showL('Convirtiendo Excel→PDF…',file.name);
   try{
     var buf=await file.arrayBuffer();
-    var isCSV=file.name.toLowerCase().endsWith('.csv');
-    var wb=isCSV?XLSX.read(new TextDecoder('utf-8').decode(buf),{type:'string'}):XLSX.read(buf,{type:'array'});
+    var wb=file.name.toLowerCase().endsWith('.csv')
+      ?XLSX.read(new TextDecoder('utf-8').decode(buf),{type:'string'})
+      :XLSX.read(buf,{type:'array'});
     xlLog('e2pLog','Hojas: '+wb.SheetNames.join(', '),'inf');
     var pdfDoc=await PDFDocument.create();
     var fontR=await pdfDoc.embedFont(StandardFonts.Helvetica);
     var fontB=await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     var PW=841,PH=595,MG=30;
-    for(var shName of wb.SheetNames){
+    for(var si=0;si<wb.SheetNames.length;si++){
+      var shName=wb.SheetNames[si];
       var ws=wb.Sheets[shName];
-      var data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}).filter(r=>r.some(c=>String(c).trim()));
+      var data=XLSX.utils.sheet_to_json(ws,{header:1,defval:''}).filter(function(r){return r.some(function(c){return String(c).trim();});});
       if(!data.length)continue;
       xlLog('e2pLog','"'+shName+'" — '+data.length+' filas','inf');
-      var cols=Math.max(...data.map(r=>r.length),1);
-      // Calcular anchos relativos de columna según contenido
+      var cols=Math.max.apply(null,data.map(function(r){return r.length;}));
       var maxLens=new Array(cols).fill(4);
-      data.forEach(row=>{row.forEach((c,ci)=>{var l=String(c||'').length;if(l>maxLens[ci])maxLens[ci]=l;});});
-      var totalLen=maxLens.reduce((a,b)=>a+b,0);
-      var colWs=maxLens.map(l=>Math.floor((PW-MG*2)*l/totalLen));
+      data.forEach(function(row){row.forEach(function(c,ci){var l=String(c||'').length;if(l>maxLens[ci])maxLens[ci]=l;});});
+      var totalLen=maxLens.reduce(function(a,b){return a+b;},0)||1;
+      var colWs=maxLens.map(function(l){return Math.floor((PW-MG*2)*l/totalLen);});
       var rowH=15,hdrH=19,titleH=22;
-      // Nueva página para esta hoja
       var page=pdfDoc.addPage([PW,PH]);
       var y=PH-MG;
-      // Título
       page.drawRectangle({x:MG,y:y-titleH+5,width:PW-MG*2,height:titleH,color:rgb(.063,.208,.318)});
-      try{page.drawText(file.name.replace(/\.(xlsx|xls|csv)$/i,'')+' — '+shName,{x:MG+8,y:y-1,font:fontB,size:10,color:rgb(1,1,1),maxWidth:PW-MG*2-16})}catch(e){}
+      try{page.drawText(file.name.replace(/\.(xlsx|xls|csv)$/i,'')+' — '+shName,{x:MG+8,y:y-1,font:fontB,size:10,color:rgb(1,1,1),maxWidth:PW-MG*2-16});}catch(e){}
       y-=titleH+2;
       var header=data[0];
-      var drawHeader=()=>{
+      var drawHeader=function(){
         var x0=MG;
         page.drawRectangle({x:MG,y:y-hdrH+5,width:PW-MG*2,height:hdrH,color:rgb(.141,.337,.502)});
-        header.forEach((cell,ci)=>{
-          var txt=String(cell||'').trim().substring(0,30);
-          try{page.drawText(txt,{x:x0+3,y:y-1,font:fontB,size:7.5,color:rgb(1,1,1),maxWidth:colWs[ci]-5})}catch(e){}
+        header.forEach(function(cell,ci){
+          try{page.drawText(String(cell||'').trim().substring(0,30),{x:x0+3,y:y-1,font:fontB,size:7.5,color:rgb(1,1,1),maxWidth:colWs[ci]-5});}catch(e){}
           x0+=colWs[ci];
         });
         y-=hdrH;
@@ -2474,18 +2434,16 @@ async function excelToPdf(ev){
       for(var ri=1;ri<data.length;ri++){
         if(y-rowH<MG){
           page=pdfDoc.addPage([PW,PH]);y=PH-MG;
-          page.drawText(shName+' (cont.)',{x:MG,y,font:fontB,size:8,color:rgb(.5,.5,.5)});y-=12;
-          drawHeader();
+          try{page.drawText(shName+' (cont.)',{x:MG,y,font:fontB,size:8,color:rgb(.5,.5,.5)});}catch(e){}
+          y-=12;drawHeader();
         }
         var row=data[ri];
-        var isEven=ri%2===0;
-        var bg=isEven?rgb(.953,.961,.980):rgb(1,1,1);
+        var bg=ri%2===0?rgb(.953,.961,.980):rgb(1,1,1);
         page.drawRectangle({x:MG,y:y-rowH+4,width:PW-MG*2,height:rowH,color:bg,borderColor:rgb(.82,.85,.89),borderWidth:.35});
         var x0=MG;
-        row.forEach((cell,ci)=>{
+        row.forEach(function(cell,ci){
           var raw=String(cell||'').trim();
-          // Alinear números a la derecha
-          var isNum=typeof cell==='number'||/^[\$\d\.\,\s]+$/.test(raw)&&raw.length>1;
+          var isNum=typeof cell==='number';
           var maxW=colWs[ci]-5;
           var txt=raw.substring(0,28);
           try{
@@ -2493,43 +2451,42 @@ async function excelToPdf(ev){
             var tx=isNum?x0+maxW-tw+2:x0+3;
             page.drawText(txt,{x:tx,y:y-1,font:fontR,size:7.5,color:rgb(.08,.08,.08),maxWidth:maxW});
           }catch(e){}
-          // Línea vertical separadora
-          try{page.drawLine({start:{x:x0+colWs[ci],y:y-rowH+4},end:{x:x0+colWs[ci],y:y+4},thickness:.25,color:rgb(.82,.85,.89)})}catch(e){}
+          try{page.drawLine({start:{x:x0+colWs[ci],y:y-rowH+4},end:{x:x0+colWs[ci],y:y+4},thickness:.25,color:rgb(.82,.85,.89)});}catch(e){}
           x0+=colWs[ci];
         });
         y-=rowH;
       }
-      // Línea de totales si hay números en la última fila
       xlLog('e2pLog','"'+shName+'" → PDF ✓','ok');
     }
     var saved=await pdfDoc.save();
     var blob=new Blob([saved],{type:'application/pdf'});
     var outName=file.name.replace(/\.(xlsx|xls|csv)$/i,'')+'.pdf';
     document.getElementById('e2pName').textContent='✓ '+outName;
-    document.getElementById('e2pDl').onclick=()=>dlBlob(blob,outName);
+    document.getElementById('e2pDl').onclick=function(){dlBlob(blob,outName);};
     document.getElementById('e2pRes').classList.add('on');
     toast('Excel→PDF listo ✓');
   }catch(e){xlLog('e2pLog','Error: '+e.message,'err');toast('Error: '+e.message,'err');console.error(e);}
   hideL();ev.target.value='';
 }
 
-// ── Drag & Drop en las tres zonas ──
-['p2eDZ','e2pDZ','multDZ'].forEach(id=>{
+// ── Drag & Drop ──
+['p2eDZ','e2pDZ','multDZ'].forEach(function(id){
   var el=document.getElementById(id);if(!el)return;
-  el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('drag')});
-  el.addEventListener('dragleave',()=>el.classList.remove('drag'));
-  el.addEventListener('drop',e=>{
+  el.addEventListener('dragover',function(e){e.preventDefault();el.classList.add('drag');});
+  el.addEventListener('dragleave',function(){el.classList.remove('drag');});
+  el.addEventListener('drop',function(e){
     e.preventDefault();el.classList.remove('drag');
     var fs=Array.from(e.dataTransfer.files);
-    if(id==='e2pDZ'){excelToPdf({target:{files:fs.filter(f=>/\.(xlsx|xls|csv)$/i.test(f.name)),value:''}});}
+    if(id==='e2pDZ'){excelToPdf({target:{files:fs.filter(function(f){return/\.(xlsx|xls|csv)$/i.test(f.name);}),value:''}});}
     else{
-      var pdfs=fs.filter(f=>/\.pdf$/i.test(f.name));
+      var pdfs=fs.filter(function(f){return/\.pdf$/i.test(f.name);});
       if(!pdfs.length)return;
       var fakeEv={target:{files:pdfs,value:''}};
       if(id==='p2eDZ')pdfToExcel(fakeEv);
       else multiPdfToExcel(fakeEv);
     }
   });
+});
 });
 </script>
 </body>
