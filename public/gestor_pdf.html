@@ -2181,7 +2181,7 @@ async function xlOcrInit(logId){
   return _xlWorker;
 }
 
-// ── OCR → matriz de filas/columnas ──
+// ── OCR → matriz de filas/columnas (gap-based segmentation) ──
 async function xlOcrPage(dataURL, pageW, pageH, logId){
   var worker=await xlOcrInit(logId);
   var res=await worker.recognize(dataURL);
@@ -2190,55 +2190,60 @@ async function xlOcrPage(dataURL, pageW, pageH, logId){
   });
   if(!words.length)return[];
 
-  // Agrupar en filas por Y (tolerancia 1.5% de altura de página)
+  // 1. Agrupar en filas por proximidad Y
   var yTol=pageH*0.015;
   words.sort(function(a,b){return a.bbox.y0-b.bbox.y0;});
-  var rowGroups=[],used=new Array(words.length).fill(false);
+  var rows=[],used=new Array(words.length).fill(false);
   for(var i=0;i<words.length;i++){
     if(used[i])continue;
     var seed=words[i];
-    var row=[seed]; used[i]=true;
+    var row=[seed];used[i]=true;
     for(var j=i+1;j<words.length;j++){
       if(used[j])continue;
       if(words[j].bbox.y0>seed.bbox.y0+yTol)break;
       if(Math.abs(words[j].bbox.y0-seed.bbox.y0)<=yTol){
-        row.push(words[j]); used[j]=true;
+        row.push(words[j]);used[j]=true;
       }
     }
     row.sort(function(a,b){return a.bbox.x0-b.bbox.x0;});
-    rowGroups.push(row);
+    rows.push(row);
   }
 
-  // Detectar columnas por clustering X
-  var allX=[];
-  rowGroups.forEach(function(row){row.forEach(function(w){allX.push(w.bbox.x0);});});
-  allX.sort(function(a,b){return a-b;});
-  var colTol=pageW*0.035;
-  var cols=[],cur=[allX[0]];
-  for(var i=1;i<allX.length;i++){
-    if(allX[i]-allX[i-1]<colTol)cur.push(allX[i]);
-    else{cols.push(cur);cur=[allX[i]];}
-  }
-  cols.push(cur);
-  var colBounds=cols.map(function(c){return c.reduce(function(a,b){return a+b;},0)/c.length;});
-
-  // Asignar palabras a columnas
-  var matrix=[];
-  rowGroups.forEach(function(row){
-    if(colBounds.length>=2){
-      var cells=new Array(colBounds.length).fill('');
-      row.forEach(function(w){
-        var best=0,bestD=1e9;
-        colBounds.forEach(function(cb,ci){
-          var d=Math.abs(w.bbox.x0-cb);
-          if(d<bestD){bestD=d;best=ci;}
-        });
-        cells[best]+=(cells[best]?' ':'')+w.text.trim();
-      });
-      matrix.push(cells.map(xlParseVal));
-    }else{
-      matrix.push([row.map(function(w){return w.text.trim();}).join(' ')]);
+  // 2. Calcular threshold de gap: percentil 75 de todos los gaps entre palabras
+  var allGaps=[];
+  rows.forEach(function(row){
+    for(var i=1;i<row.length;i++){
+      var g=row[i].bbox.x0-row[i-1].bbox.x1;
+      if(g>0)allGaps.push(g);
     }
+  });
+  allGaps.sort(function(a,b){return a-b;});
+  var gapThresh=30; // mínimo
+  if(allGaps.length){
+    var p75=allGaps[Math.floor(allGaps.length*0.75)];
+    gapThresh=Math.max(p75,30);
+  }
+
+  // 3. Segmentar cada fila en celdas usando el gap threshold
+  function rowToCells(row){
+    var cells=[],cur=[row[0]];
+    for(var i=1;i<row.length;i++){
+      var gap=row[i].bbox.x0-row[i-1].bbox.x1;
+      if(gap>gapThresh){
+        cells.push(cur.map(function(w){return w.text.trim();}).join(' '));
+        cur=[row[i]];
+      }else{cur.push(row[i]);}
+    }
+    cells.push(cur.map(function(w){return w.text.trim();}).join(' '));
+    return cells;
+  }
+
+  // 4. Construir matriz y normalizar columnas
+  var matrix=rows.map(function(row){return rowToCells(row);});
+  var maxCols=matrix.reduce(function(m,r){return Math.max(m,r.length);},0);
+  matrix=matrix.map(function(r){
+    while(r.length<maxCols)r.push('');
+    return r.map(xlParseVal);
   });
   return matrix;
 }
@@ -2267,52 +2272,58 @@ async function xlNativeExtract(ab, logId){
 
   if(totalItems<5)return null; // PDF imagen
 
-  // Construir matriz
+  // Construir matriz con gap-based segmentation (igual que OCR)
   var matrix=[];
   allPgData.forEach(function(pg){
     if(!pg.items.length)return;
-    // Agrupar por Y
+    // Agrupar por Y con tolerancia
     var rowMap={};
     pg.items.forEach(function(it){
-      var y=Math.round((pg.h-it.transform[5])/4)*4;
+      var y=Math.round((pg.h-it.transform[5])/5)*5;
       if(!rowMap[y])rowMap[y]=[];
-      rowMap[y].push({t:it.str.trim(),x:it.transform[4]});
+      rowMap[y].push({
+        t:it.str.trim(),
+        x:Math.round(it.transform[4]),
+        x1:Math.round(it.transform[4]+(it.width||0))
+      });
     });
     var ys=Object.keys(rowMap).map(Number).sort(function(a,b){return a-b;});
 
-    // Columnas globales de la página
-    var allX=[];
-    ys.forEach(function(y){rowMap[y].forEach(function(it){allX.push(it.x);});});
-    allX.sort(function(a,b){return a-b;});
-    var colTol=pg.w*0.04;
-    var cols=[],cur=[allX[0]];
-    for(var i=1;i<allX.length;i++){
-      if(allX[i]-allX[i-1]<colTol)cur.push(allX[i]);
-      else{cols.push(cur);cur=[allX[i]];}
+    // Calcular gap threshold: percentil 75 de gaps entre ítems en filas multi-ítem
+    var allGaps=[];
+    ys.forEach(function(y){
+      var row=rowMap[y].sort(function(a,b){return a.x-b.x;});
+      for(var i=1;i<row.length;i++){
+        var g=row[i].x-row[i-1].x1;
+        if(g>0)allGaps.push(g);
+      }
+    });
+    allGaps.sort(function(a,b){return a-b;});
+    var gapThresh=8;
+    if(allGaps.length){
+      var p75=allGaps[Math.floor(allGaps.length*0.75)];
+      gapThresh=Math.max(p75,8);
     }
-    cols.push(cur);
-    var colBounds=cols.map(function(c){return c.reduce(function(a,b){return a+b;},0)/c.length;});
-    if(colBounds.length>10)colBounds=colBounds.slice(0,10);
 
     ys.forEach(function(y){
       var row=rowMap[y].sort(function(a,b){return a.x-b.x;});
-      if(colBounds.length>=2){
-        var cells=new Array(colBounds.length).fill('');
-        row.forEach(function(it){
-          var best=0,bestD=1e9;
-          colBounds.forEach(function(cb,ci){
-            var d=Math.abs(it.x-cb);
-            if(d<bestD){bestD=d;best=ci;}
-          });
-          cells[best]+=(cells[best]?' ':'')+it.t;
-        });
-        matrix.push(cells.map(xlParseVal));
-      }else{
-        matrix.push([row.map(function(it){return it.t;}).join(' ')]);
+      // Segmentar en celdas por gap
+      var cells=[],cur=[row[0]];
+      for(var i=1;i<row.length;i++){
+        var gap=row[i].x-row[i-1].x1;
+        if(gap>gapThresh){
+          cells.push(cur.map(function(it){return it.t;}).join(' '));
+          cur=[row[i]];
+        }else{cur.push(row[i]);}
       }
+      cells.push(cur.map(function(it){return it.t;}).join(' '));
+      matrix.push(cells.map(xlParseVal));
     });
     matrix.push(['']);
   });
+  // Normalizar columnas
+  var maxC=matrix.reduce(function(m,r){return Math.max(m,r.length);},0);
+  matrix=matrix.map(function(r){while(r.length<maxC)r.push('');return r;});
   return matrix;
 }
 
