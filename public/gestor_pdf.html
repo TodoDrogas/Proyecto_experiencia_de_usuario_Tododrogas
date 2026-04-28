@@ -1088,62 +1088,70 @@ function gLog(type,msg){
   if(area.querySelectorAll('.le').length>30)area.querySelectorAll('.le')[30].remove();
 }
 async function gZipExport(){
-  if(!gCur)return;showL('Generando ZIP…','Dividiendo PDFs con páginas exactas');
-  var zip=new JSZip(),files=gFolders[gCur].files;
+  var carpetas=Object.keys(gFolders);
+  if(!carpetas.length)return;
+  showL('Generando ZIP…','Procesando todos los expedientes');
+  var zip=new JSZip();
   try{
-    // FIX 1: Sync rotations from viewer (gVPages) into fd.rotations before export
-    // so that any visual rotation changes are captured correctly
-    gVPages.forEach(vp=>{
-      var fd=files[vp.fi];if(fd)fd.rotations[vp.p]=vp.rot||0;
-    });
-
-    // Pre-load todos los ArrayBuffers una sola vez (incluyendo no seleccionados)
-    var bytesCache={};
-    for(var fi=0;fi<files.length;fi++){
-      var f=files[fi];
-      if(f.file) bytesCache[fi]=await f.file.arrayBuffer();
+    // Sync rotaciones del visor activo antes de exportar
+    if(gCur){
+      var activeFiles=gFolders[gCur].files;
+      gVPages.forEach(vp=>{var fd=activeFiles[vp.fi];if(fd)fd.rotations[vp.p]=vp.rot||0;});
     }
 
-    for(var fi=0;fi<files.length;fi++){
-      var fd=files[fi];
-      if(!fd.file)continue;
-      var bytes=bytesCache[fi];if(!bytes)continue;
+    // Iterar sobre TODAS las carpetas/expedientes
+    for(var carpeta of carpetas){
+      var files=gFolders[carpeta].files;
 
-      // Archivo NO seleccionado/cargado: se incluye intacto en el ZIP sin procesar
-      if(!fd.loaded){
-        zip.folder(gCur).file(fd.name,bytes.slice(0));
-        continue;
+      // Pre-cargar todos los ArrayBuffers de esta carpeta de una sola vez
+      var bytesCache={};
+      for(var fi=0;fi<files.length;fi++){
+        if(files[fi].file) bytesCache[fi]=await files[fi].file.arrayBuffer();
       }
 
-      // Archivo seleccionado y procesado: aplicar eliminaciones y rotaciones
-      if(fd.pageCount-fd.removedPages.size>0){
-        var srcDoc=await PDFDocument.load(bytes.slice(0));
-        var newDoc=await PDFDocument.create();
-        for(var p=1;p<=fd.pageCount;p++){
-          if(!fd.removedPages.has(p)){
-            var[cp]=await newDoc.copyPages(srcDoc,[p-1]);
-            if(fd.rotations[p])cp.setRotation(degrees(fd.rotations[p]));
-            newDoc.addPage(cp);
+      for(var fi=0;fi<files.length;fi++){
+        var fd=files[fi];
+        if(!fd.file)continue;
+        var bytes=bytesCache[fi];if(!bytes)continue;
+
+        // Archivo NO seleccionado/cargado: se incluye intacto tal como está
+        if(!fd.loaded){
+          zip.folder(carpeta).file(fd.name,bytes.slice(0));
+          continue;
+        }
+
+        // Archivo seleccionado y procesado: aplicar eliminaciones y rotaciones
+        if(fd.pageCount-fd.removedPages.size>0){
+          var srcDoc=await PDFDocument.load(bytes.slice(0));
+          var newDoc=await PDFDocument.create();
+          for(var p=1;p<=fd.pageCount;p++){
+            if(!fd.removedPages.has(p)){
+              var[cp]=await newDoc.copyPages(srcDoc,[p-1]);
+              if(fd.rotations[p])cp.setRotation(degrees(fd.rotations[p]));
+              newDoc.addPage(cp);
+            }
           }
+          zip.folder(carpeta).file(fd.name,await newDoc.save());
         }
-        zip.folder(gCur).file(fd.name,await newDoc.save());
-      }
-      for(var seg of fd.renamedSegments){
-        var segDoc=await PDFDocument.create();
-        for(var pg of seg.allPgs){
-          var sfd=files[pg.fi];if(!sfd.file)continue;
-          var sb=bytesCache[pg.fi];if(!sb)continue;
-          var sd=await PDFDocument.load(sb.slice(0));
-          var[c]=await segDoc.copyPages(sd,[pg.p-1]);
-          if(sfd.rotations[pg.p])c.setRotation(degrees(sfd.rotations[pg.p]));
-          segDoc.addPage(c);
+        // Segmentos renombrados
+        for(var seg of fd.renamedSegments){
+          var segDoc=await PDFDocument.create();
+          for(var pg of seg.allPgs){
+            var sfd=files[pg.fi];if(!sfd.file)continue;
+            var sb=bytesCache[pg.fi];if(!sb)continue;
+            var sd=await PDFDocument.load(sb.slice(0));
+            var[c]=await segDoc.copyPages(sd,[pg.p-1]);
+            if(sfd.rotations[pg.p])c.setRotation(degrees(sfd.rotations[pg.p]));
+            segDoc.addPage(c);
+          }
+          zip.folder(carpeta).file(seg.name,await segDoc.save());
         }
-        zip.folder(gCur).file(seg.name,await segDoc.save());
       }
     }
     var blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
     dlBlob(blob,'GestorDoc_'+new Date().toISOString().slice(0,10)+'.zip');
-    toast('ZIP descargado ✓');gLog('ok','ZIP exportado');
+    toast('ZIP descargado — '+carpetas.length+' expedientes ✓');
+    gLog('ok','ZIP exportado: '+carpetas.length+' carpetas');
   }catch(e){toast('Error ZIP: '+e.message,'err');console.error(e)}
   hideL();
 }
