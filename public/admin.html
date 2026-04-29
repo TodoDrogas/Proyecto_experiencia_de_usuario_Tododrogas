@@ -2734,9 +2734,9 @@ function renderOverview() {
   chartEstados=destroyChart(chartEstados);
   chartEstados=new Chart(document.getElementById('chartEstados').getContext('2d'),{
     type:'doughnut',
-    data:{labels:['Pendiente','En Gestión','Gestionado','Solucionado','Pte. firma'],
-      datasets:[{data:['pendiente','gestion','gestionado','solucionado','pendiente_firma'].map(s=>E.filter(e=>e.estado===s).length),
-        backgroundColor:['#fef9c3','#eff4ff','#fff7ed','#dcfce7','#f5f3ff'],borderColor:['#ca8a04','#2563eb','#ea580c','#16a34a','#7c3aed'],borderWidth:2}]},
+    data:{labels:['Sin asignar','Pendiente','En Gestión','Gestionado','Solucionado','Pte. firma'],
+      datasets:[{data:['sin_asignar','pendiente','gestion','gestionado','solucionado','pendiente_firma'].map(s=>E.filter(e=>e.estado===s).length),
+        backgroundColor:['#f1f5f9','#fef9c3','#eff4ff','#fff7ed','#dcfce7','#f5f3ff'],borderColor:['#ca8a04','#2563eb','#ea580c','#16a34a','#7c3aed'],borderWidth:2}]},
     options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{position:'right',labels:{font:{family:'Poppins',size:11},padding:10}}}}
   });
 
@@ -2804,7 +2804,7 @@ function renderOperaciones() {
   });
 
   // Prioridad en backlog activo
-  const act=E.filter(e=>e.estado==='pendiente'||e.estado==='gestion'||e.estado==='pendiente_firma');
+  const act=E.filter(e=>['sin_asignar','pendiente','gestion','pendiente_firma'].includes(e.estado));
   chartPrioBacklog=destroyChart(chartPrioBacklog);
   chartPrioBacklog=new Chart(document.getElementById('chartPrioBacklog').getContext('2d'),{
     type:'doughnut',
@@ -3236,7 +3236,7 @@ function renderFolderAgents() {
   el.innerHTML = activos.map((a,i)=>{
     const mis      = all.filter(e=>e.agente_id===a.id&&e.origen!=='saliente'&&e.origen!=='borrador');
     const total    = mis.length;
-    const pendiente= mis.filter(e=>e.estado==='pendiente').length;
+    const pendiente= mis.filter(e=>e.estado==='pendiente'||e.estado==='sin_asignar').length;
     const sinResp  = mis.filter(e=>!idsConResp.has(e.id)&&e.estado!=='solucionado'&&e.estado!=='gestionado'&&e.estado!=='informacion').length;
     const ini      = (a.nombre||'?').charAt(0).toUpperCase();
     const color    = COLORS[i%COLORS.length];
@@ -8030,17 +8030,22 @@ async function renderMediaFormulario(email) {
 // ══════════════════════════════════════════════════════
 async function loadEncuestas() {
   try {
-    // Carga historial_eventos filtrando encuesta_recibida (lleva datos_extra completos)
-    const data = await sb('historial_eventos?evento=eq.encuesta_recibida&order=created_at.desc&limit=2000');
+    // Lee directamente de encuestas_satisfaccion (radicar-encuesta.php inserta aquí)
+    const data = await sb('encuestas_satisfaccion?order=created_at.desc&limit=5000&select=id,created_at,calificacion,nombre,cedula,telefono,correo,sede_nombre,sede_ciudad,tipo_pqr,origen,canal,datos_extra');
     state.encuestas = (data || []).map(ev => {
       let ex = {};
       try { ex = typeof ev.datos_extra === 'string' ? JSON.parse(ev.datos_extra) : (ev.datos_extra || {}); } catch(_) {}
       return {
         id:           ev.id,
         created_at:   ev.created_at,
-        calificacion: ex.calificacion || null,
+        calificacion: ev.calificacion || ex.calificacion || null,
         comentario:   ex.comentario   || null,
-        canal:        ex.canal        || 'web',
+        canal:        ev.canal || ev.origen || ex.canal || 'web',
+        nombre:       ev.nombre || ex.nombre || null,
+        cedula:       ev.cedula || ex.cedula || null,
+        sede_nombre:  ev.sede_nombre || ex.sede_nombre || null,
+        sede_ciudad:  ev.sede_ciudad || ex.sede_ciudad || null,
+        tipo_pqr:     ev.tipo_pqr || ex.tipo_pqr || null,
         datos_extra:  ex,
       };
     });
@@ -8367,27 +8372,30 @@ async function loadNovaMetrics(){
   const qS=base=>q(base,'created_at');    // sesiones
 
   const [
-    radWeb, radWebOld,
+    radWeb, radWebOld, radWebLegacy,
     radNovaWeb, radNovaDir,
     radQr,
     encWeb, encWebOld,
     encNovaWeb, encNovaDir,
     encQr,
-    sesNovaWeb, sesNovaDir, sesNovaBv,
+    sesNovaWeb, sesNovaDir, sesNovaBv, sesNovaQr,
   ] = await Promise.all([
     sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
     sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
+    // graph_sync con ticket_id TD- son correos web/QR que llegaron antes del fix de origen
+    sb(qC('correos?origen=eq.graph_sync&ticket_id=like.TD-*&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
     sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
     sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
     sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?or=(origen.eq.nova_directo,origen.eq.nova_td)&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.qr&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_web&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_bienvenida&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=2000')).catch(()=>[]),
+    sb(qS('nova_sesiones?or=(origen.eq.nova_web,origen.eq.web)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
+    sb(qS('nova_sesiones?or=(origen.eq.nova_directo,origen.eq.nova_td)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_bienvenida&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
+    sb(qS('nova_sesiones?or=(origen.eq.nova_qr,origen.eq.qr)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
   ]);
 
   // Cargar mapas de referencia (sedes, usuarios, historial) en paralelo
@@ -8425,11 +8433,11 @@ async function loadNovaMetrics(){
   });
 
   novaDatos={
-    radWeb:[...(radWeb||[]),...(radWebOld||[])],
+    radWeb:[...(radWeb||[]),...(radWebOld||[]),...(radWebLegacy||[])],
     radNovaWeb:radNovaWeb||[], radNovaDir:radNovaDir||[], radQr:radQr||[],
     encWeb:[...(encWeb||[]),...(encWebOld||[])],
     encNovaWeb:encNovaWeb||[], encNovaDir:encNovaDir||[], encQr:encQr||[],
-    sesNovaWeb:sesNovaWeb||[], sesNovaDir:sesNovaDir||[], sesNovaBv:sesNovaBv||[],
+    sesNovaWeb:sesNovaWeb||[], sesNovaDir:sesNovaDir||[], sesNovaBv:sesNovaBv||[], sesNovaQr:sesNovaQr||[],
     desde, hasta,
   };
 
@@ -8487,7 +8495,7 @@ function renderNovaMetrics(){
     if(!dl||dl.children.length>0) return; // solo poblar una vez
     allSedes.forEach(s=>{const o=document.createElement('option');o.value=s;dl.appendChild(o);});
   });
-  const allSesFlat=[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])];
+  const allSesFlat=[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])];
   // Poblar datalists municipio y EPS de Nova
   const mnDl=document.getElementById('novaFiltroMunList');
   if(mnDl&&mnDl.children.length===0) [...new Set(allSesFlat.map(s=>s.municipio).filter(Boolean))].sort().forEach(m=>{const o=document.createElement('option');o.value=m;mnDl.appendChild(o);});
@@ -8540,9 +8548,10 @@ function renderNovaMetrics(){
   if(wTB){ const rows=radWebF.slice().sort((a,b)=>new Date(b.received_at)-new Date(a.received_at)).slice(0,50); wTB.innerHTML=rows.length?rows.map(r=>{const nom=r.nombre_solicitud||_parseNombreBody(r.body_content)||r.nombre||'—';return`<tr><td style="white-space:nowrap;color:var(--ink3)">${r.received_at?new Date(r.received_at).toLocaleDateString('es-CO'):''}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.ticket_id||'—'}</td><td style="font-family:'DM Mono',monospace;font-size:10px">${r.cedula||'—'}</td><td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600">${esc(nom)}</td><td>${tipoBadge(r.tipo_pqr)}</td><td style="font-size:11px">${sentEmoji(r.sentimiento)}</td><td><span class="mpqr-badge" style="background:var(--bg2);color:var(--ink2)">${r.prioridad||'—'}</span></td><td>${estadoBadge(r.estado)}</td></tr>`;}).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink3)">Sin radicados en el período</td></tr>'; }
 
   // ═══ 2. QR ═════════════════════════════════════════════════════════════
-  const qrTotal=radQrF.length+(D.encQr||[]).length;
+  const sesQrF=(D.sesNovaQr||[]).filter(s=>{const t=new Date(s.created_at);return t>=d1&&t<=d2;});
+  const qrTotal=radQrF.length+(D.encQr||[]).length+sesQrF.length;
   const gTot=(radWebF.length+radQrF.length+(D.radNovaWeb||[]).length+(D.radNovaDir||[]).length)+(( D.encWeb||[]).length+(D.encQr||[]).length+(D.encNovaWeb||[]).length+(D.encNovaDir||[]).length);
-  set('qrKpiRad',radQrF.length); set('qrKpiEnc',(D.encQr||[]).length);
+  set('qrKpiRad',radQrF.length); set('qrKpiEnc',(D.encQr||[]).length); set('qrKpiSes',sesQrF.length);
   set('qrKpiTotal',qrTotal); set('qrKpiPct',(gTot>0?Math.round(qrTotal/gTot*100):0)+'%'); set('qrKpiProm',(qrTotal/dias).toFixed(1));
   _mDestroyChart('chartQrTipos');
   const cQT=document.getElementById('chartQrTipos');
@@ -9092,7 +9101,7 @@ function renderAgentes(){
   const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
   const total   = E.filter(e=>_pqr(e)&&e.estado!=='informacion').length;
   const solv    = E.filter(e=>_pqr(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
-  const backlog = E.filter(e=>_pqr(e)&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
+  const backlog = E.filter(e=>_pqr(e)&&['pendiente','sin_asignar','gestion','pendiente_firma'].includes(e.estado)).length;
   const resol   = E.filter(e=>_pqr(e)&&e.fecha_resolucion&&e.received_at);
   const avgH    = resol.length>0
     ? (resol.reduce((a,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return a+(h>0?h:0);},0)/resol.length).toFixed(1)+'h'
