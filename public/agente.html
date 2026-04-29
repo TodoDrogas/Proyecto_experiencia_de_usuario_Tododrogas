@@ -1132,7 +1132,51 @@ async function _buscarPorCedula(cedula) {
       state.cedulaConsulta = cedula;
 
       if(!rows.length) {
-        el.innerHTML = '<div class="empty-state"><p>Sin tickets para cédula ' + cedula + '</p></div>';
+        // Fallback 1: buscar en body_content en memoria (correos propios, instantáneo)
+        const _strip = html => html.replace(/<[^>]*>/g,'').replace(/&nbsp;/g,' ');
+        const enBody = (state.emails||[]).filter(e => _strip(e.body_content||'').includes(cedula));
+
+        // Fallback 2: buscar en body_content de TODOS los agentes via Supabase
+        let rowsBody = [];
+        try {
+          rowsBody = await sb(
+            `correos?body_content=ilike.*${encodeURIComponent(cedula)}*&origen=neq.saliente&origen=neq.borrador` +
+            `&order=received_at.desc&limit=30&select=id,ticket_id,subject,from_name,from_email,received_at,estado,agente_id,asignado_a,prioridad,es_urgente,tipo_pqr,fecha_limite_sla,origen,is_read,nombre,cedula_paciente,cedula`
+          ) || [];
+        } catch(_e) { console.warn('[body-search]', _e.message); }
+
+        // Unir ambos resultados sin duplicados — Supabase primero (cubre todos los agentes)
+        const idsVistos = new Set(rowsBody.map(r=>r.id));
+        // Agregar los de memoria que no estén ya en rowsBody
+        const extraBody = enBody.filter(e=>!idsVistos.has(e.id)).map(e=>({
+          id: e.id, subject: e.asunto, from_name: e.remitente_nombre, from_email: e.remitente,
+          received_at: e.fecha, estado: e.estado, agente_id: e.raw?.agente_id,
+          asignado_a: e.asignado_a||e.raw?.asignado_a, prioridad: e.prioridad,
+          es_urgente: e.es_urgente, tipo_pqr: e.tipo_pqr, fecha_limite_sla: e.fecha_limite_sla,
+          origen: e.origen, is_read: e.is_read,
+        }));
+        const todos = [...rowsBody, ...extraBody];
+
+        if(!todos.length) {
+          el.innerHTML = '<div class="empty-state"><p>Sin tickets para cédula ' + cedula + '</p></div>';
+          return;
+        }
+
+        el.innerHTML = '<div style="padding:5px 10px 3px;background:#f0fdf4;color:#15803d;font-size:11px;font-weight:600;border-radius:6px;margin:4px 6px 6px">📄 ' + todos.length + ' resultado' + (todos.length!==1?'s':'') + ' en cuerpo del correo</div>' +
+        todos.sort((a,b)=>new Date(b.received_at||b.fecha||0)-new Date(a.received_at||a.fecha||0)).map(e => {
+          const esMio = e.agente_id === AGENT_ID;
+          const agNom = e.asignado_a || '—';
+          return `<div class="email-item${!e.is_read?' unread':''}" data-consulta-id="${e.id}" onclick="_selectConsulta('${e.id}','${e.agente_id||''}')">
+            ${!e.is_read?'<div class="unread-pip"></div>':''}
+            ${!esMio?`<div style="background:#eff6ff;color:#2563eb;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px;margin-bottom:3px;display:inline-block">👁 ${esc(agNom)}</div>`:''}
+            <div class="ei-from">${esc(e.from_name||e.from_email||'')}</div>
+            <div class="ei-subj">${esc(e.subject||e.asunto||'')}</div>
+            <div class="ei-foot">
+              <span class="ei-time">${e.received_at||e.fecha?formatDate(new Date(e.received_at||e.fecha)):''}</span>
+              <span class="badge ${e.estado||''}">${estadoLabel(e.estado||'')}</span>
+            </div>
+          </div>`;
+        }).join('');
         return;
       }
 
