@@ -8354,6 +8354,20 @@ function initNovaFechas(){
 
 async function loadNovaMetrics(){
   document.getElementById('novaLastUpdate').textContent='Cargando...';
+  // Sincronizar fechas según tab activo — cada tab tiene su propio par de inputs
+  // Web=novaDesde/novaHasta, QR=novaDesde2/2, Nova=novaDesde3/3, Global=novaDesde4/4
+  const _activeTabEl = document.querySelector('.mtab.active');
+  const _activeTabName = _activeTabEl?.textContent?.trim().toLowerCase() || '';
+  const _tabDateMap = {qr:['novaDesde2','novaHasta2'], nova:['novaDesde3','novaHasta3'], global:['novaDesde4','novaHasta4']};
+  for(const [tab, [dId, hId]] of Object.entries(_tabDateMap)) {
+    if(_activeTabName.includes(tab)) {
+      const dv = document.getElementById(dId)?.value;
+      const hv = document.getElementById(hId)?.value;
+      if(dv) document.getElementById('novaDesde').value = dv;
+      if(hv) document.getElementById('novaHasta').value = hv;
+      break;
+    }
+  }
   const desde=document.getElementById('novaDesde')?.value||'';
   const hasta=document.getElementById('novaHasta')?.value||'';
   const dISO=desde?desde+'T00:00:00-05:00':'';
