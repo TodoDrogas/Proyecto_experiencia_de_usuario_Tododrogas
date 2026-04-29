@@ -123,8 +123,15 @@ $bg_cal    = $calificacion >= 3 ? '#dcfce7'  : ($calificacion >= 2 ? '#fef9c3' :
 $nivel_cal = $calificacion >= 3 ? 'SATISFACTORIO' : ($calificacion >= 2 ? 'NEUTRO' : 'INSATISFACTORIO');
 
 // ── PASO 1: INSERTAR EN encuestas_satisfaccion ────────────────────────
-// Leer origen del canal (viene del frontend)
+// Leer origen del canal (viene del frontend) y normalizar
 $origen_enc = trim($body['origen'] ?? $body['canal'] ?? 'web');
+// Normalizar nova_td → nova_directo para consistencia con admin
+$origen_enc = match($origen_enc) {
+    'nova_td'       => 'nova_directo',
+    'nova'          => 'nova_web',
+    'formulario_web'=> 'web',
+    default         => $origen_enc,
+};
 
 $payload = [
     'calificacion'    => $calificacion,
