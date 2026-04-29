@@ -8372,9 +8372,9 @@ async function loadNovaMetrics(){
   const qS=base=>q(base,'created_at');    // sesiones
 
   const [
-    radWeb, radWebOld, radWebLegacy,
+    radWeb, radWebOld, radWebLegacy, radGraphSync,
     radNovaWeb, radNovaDir,
-    radQr,
+    radQr, radCorreoElec,
     encWeb, encWebOld,
     encNovaWeb, encNovaDir,
     encQr,
@@ -8384,9 +8384,11 @@ async function loadNovaMetrics(){
     sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
     // graph_sync con ticket_id TD- son correos web/QR que llegaron antes del fix de origen
     sb(qC('correos?origen=eq.graph_sync&ticket_id=like.TD-*&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
+    sb(qC('correos?origen=eq.graph_sync&ticket_id=is.null&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud&limit=5000')).catch(()=>[]),
     sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
     sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
     sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud')).catch(()=>[]),
+    sb(qC('correos?origen=eq.CORREO ELECTRONICO&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,cedula_paciente,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud&limit=5000')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
@@ -8434,6 +8436,8 @@ async function loadNovaMetrics(){
 
   novaDatos={
     radWeb:[...(radWeb||[]),...(radWebOld||[]),...(radWebLegacy||[])],
+    radGraphSync:radGraphSync||[],
+    radCorreoElec:radCorreoElec||[],
     radNovaWeb:radNovaWeb||[], radNovaDir:radNovaDir||[], radQr:radQr||[],
     encWeb:[...(encWeb||[]),...(encWebOld||[])],
     encNovaWeb:encNovaWeb||[], encNovaDir:encNovaDir||[], encQr:encQr||[],
@@ -8511,10 +8515,14 @@ function renderNovaMetrics(){
 
   // Correo 'interno/SIGI': llega del buzón sin datos de formulario (sin sede en body, sin cédula, sin ciudad)
   const _esInterno=r=>{
-    const tieneSede=_parseSedeBody(r.body_content||'');
-    const tieneCedula=!!(r.cedula||r.cedula_paciente||'').trim();
-    const tieneCiudad=!!(r.ciudad_paciente||'').trim();
-    return !tieneSede&&!tieneCedula&&!tieneCiudad;
+    // Solo filtrar correos que claramente son internos/sistema (sin ningún dato de ciudadano)
+    const tieneSede    = !!_parseSedeBody(r.body_content||'');
+    const tieneCedula  = !!(r.cedula||r.cedula_paciente||'').trim();
+    const tieneCiudad  = !!(r.ciudad_paciente||'').trim();
+    const tieneNombre  = !!(r.nombre||r.from_name||'').trim();
+    const tieneTicket  = !!(r.ticket_id||'').trim();
+    // Es interno solo si no tiene NINGÚN dato identificador
+    return !tieneSede && !tieneCedula && !tieneCiudad && !tieneNombre && !tieneTicket;
   };
   const radWebF = (D.radWeb||[]).filter(r=>!_esInterno(r)&&(!wSede||fmtSede(r)===wSede)&&(!wTipo||(r.tipo_pqr||'')===wTipo));
   const radQrF  = (D.radQr||[]).filter(r=>!_esInterno(r)&&(!qrSede||fmtSede(r)===qrSede));
@@ -8604,14 +8612,20 @@ function renderNovaMetrics(){
   if(nUB){nUB.innerHTML=topU.length?topU.map(([ced,v])=>`<tr><td style="font-family:'DM Mono',monospace;font-size:10px">${ced}</td><td style="font-weight:600">${v.nombre||'—'}</td><td><span class="mpqr-badge" style="background:#dbeafe;color:#1d4ed8">${v.eps||'—'}</span></td><td>${v.municipio||'—'}</td><td style="text-align:center;font-weight:700;color:#7c3aed">${v.sesiones}</td><td style="text-align:center">${v.turnos}</td><td style="text-align:center">${v.cal||'—'}</td><td style="text-align:center">${v.vip?'<span style="color:#d97706;font-weight:700">⭐ VIP</span>':'—'}</td></tr>`).join(''):'<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink3)">Sin sesiones con cédula</td></tr>';}
 
   // ═══ 4. GLOBAL ══════════════════════════════════════════════════════════
-  const allRads=[...radWebF,...radQrF,...(D.radNovaWeb||[]),...(D.radNovaDir||[])];
+  const radGraphSyncF=(D.radGraphSync||[]).filter(r=>!_esInterno(r));
+  // CORREO ELECTRONICO: solo radicados reales (con ticket o con agente)
+  const radCorreoElecF=(D.radCorreoElec||[]).filter(r=>
+    (r.ticket_id && (r.ticket_id.startsWith('TD-')||r.ticket_id.startsWith('EXT-'))) ||
+    r.agente_id
+  );
+  const allRads=[...radWebF,...radQrF,...(D.radNovaWeb||[]),...(D.radNovaDir||[]),...radGraphSyncF,...radCorreoElecF];
   const gRad=allRads.length, gEnc=(D.encWeb||[]).length+(D.encQr||[]).length+allEncNova;
   const domCh=[{n:'Web',v:radWebF.length},{n:'QR',v:radQrF.length},{n:'Nova Web',v:(D.radNovaWeb||[]).length},{n:'Nova Directo',v:(D.radNovaDir||[]).length}].sort((a,b)=>b.v-a.v)[0];
   set('gKpiRad',gRad); set('gKpiEnc',gEnc); set('gKpiDom',domCh&&domCh.v>0?domCh.n:'—'); set('gKpiDigital',(gRad>0?Math.round(allRadNova/gRad*100):0)+'%');
   // Radicados por canal
   _mDestroyChart('chartGlobalRad');
   const cGR2=document.getElementById('chartGlobalRad');
-  if(cGR2){_mCharts.chartGlobalRad=new Chart(cGR2.getContext('2d'),{type:'bar',data:{labels:['🖥️ Web','📷 QR','🤖 Nova Web','🤖 Nova Dir.'],datasets:[{data:[radWebF.length,radQrF.length,(D.radNovaWeb||[]).length,(D.radNovaDir||[]).length],backgroundColor:['rgba(37,99,235,.7)','rgba(245,158,11,.7)','rgba(124,58,237,.7)','rgba(109,40,217,.7)'],borderColor:['#2563eb','#f59e0b','#7c3aed','#6d28d9'],borderWidth:2,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{color:'rgba(255,255,255,.5)',font:{size:9}}},y:{ticks:{color:'rgba(255,255,255,.7)',font:{size:10,weight:'600'}}}}}}); }
+  if(cGR2){_mCharts.chartGlobalRad=new Chart(cGR2.getContext('2d'),{type:'bar',data:{labels:['🖥️ Web','📷 QR','🤖 Nova Web','🤖 Nova Dir.','📧 Institucional','📞 Presencial/Tel'],datasets:[{data:[radWebF.length,radQrF.length,(D.radNovaWeb||[]).length,(D.radNovaDir||[]).length,radGraphSyncF.length,radCorreoElecF.length],backgroundColor:['rgba(37,99,235,.7)','rgba(245,158,11,.7)','rgba(124,58,237,.7)','rgba(109,40,217,.7)','rgba(20,184,166,.7)','rgba(239,68,68,.7)'],borderColor:['#2563eb','#f59e0b','#7c3aed','#6d28d9','#14b8a6','#ef4444'],borderWidth:2,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{color:'rgba(255,255,255,.5)',font:{size:9}}},y:{ticks:{color:'rgba(255,255,255,.7)',font:{size:10,weight:'600'}}}}}}); }
   // Tipos global donut
   _mDestroyChart('chartGlobalTipos');
   const cGT2=document.getElementById('chartGlobalTipos'); const tGl=TIPOS.map(t=>allRads.filter(r=>(r.tipo_pqr||'')===t).length); const sGl=allRads.filter(r=>!r.tipo_pqr).length;
@@ -8632,7 +8646,7 @@ function renderNovaMetrics(){
   // Tabla global
   const ctT=(arr,t)=>arr.filter(r=>(r.tipo_pqr||'')===t).length; const ePr=arr=>{const v=arr.filter(e=>(e.calificacion||0)>0);return v.length?(v.reduce((a,e)=>a+(e.calificacion||0),0)/v.length).toFixed(1):''};
   const pasoA=arr=>arr.filter(s=>(s.motivo_cierre||'').toLowerCase().includes('asesor')).length;
-  const cRows=[{n:'🖥️ Web',rads:radWebF,encs:D.encWeb||[],ses:[]},{n:'📷 QR',rads:radQrF,encs:D.encQr||[],ses:[]},{n:'🤖 Nova Web',rads:D.radNovaWeb||[],encs:D.encNovaWeb||[],ses:D.sesNovaWeb||[]},{n:'🤖 Nova Directo',rads:D.radNovaDir||[],encs:D.encNovaDir||[],ses:D.sesNovaDir||[]},{n:'<strong>TOTAL</strong>',rads:allRads,encs:[...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])],ses:[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[])]}];
+  const cRows=[{n:'🖥️ Web',rads:radWebF,encs:D.encWeb||[],ses:[]},{n:'📷 QR',rads:radQrF,encs:D.encQr||[],ses:D.sesNovaQr||[]},{n:'🤖 Nova Web',rads:D.radNovaWeb||[],encs:D.encNovaWeb||[],ses:D.sesNovaWeb||[]},{n:'🤖 Nova Directo',rads:D.radNovaDir||[],encs:D.encNovaDir||[],ses:D.sesNovaDir||[]},{n:'📧 Institucional',rads:radGraphSyncF,encs:[],ses:[]},{n:'📞 Presencial/Tel',rads:radCorreoElecF,encs:[],ses:[]},{n:'<strong>TOTAL</strong>',rads:allRads,encs:[...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])],ses:[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaQr||[])]}];
   const gTB=document.getElementById('gTabBody');
   if(gTB){gTB.innerHTML=cRows.map(c=>`<tr><td style="font-weight:600;color:rgba(255,255,255,.8);white-space:nowrap">${c.n}</td><td style="text-align:center;font-weight:700;color:#60a5fa">${c.rads.length}</td><td style="text-align:center">${ctT(c.rads,'peticion')||''}</td><td style="text-align:center">${ctT(c.rads,'queja')||''}</td><td style="text-align:center">${ctT(c.rads,'reclamo')||''}</td><td style="text-align:center">${ctT(c.rads,'sugerencia')||''}</td><td style="text-align:center">${ctT(c.rads,'felicitacion')||''}</td><td style="text-align:center">${ctT(c.rads,'denuncia')||''}</td><td style="text-align:center;color:rgba(255,255,255,.4)">${c.rads.filter(r=>!r.tipo_pqr).length||''}</td><td style="text-align:center;color:#a78bfa">${c.encs.length||''}</td><td style="text-align:center;color:#34d399">${ePr(c.encs)||'—'}</td><td style="text-align:center;color:#c084fc">${c.ses.length||''}</td><td style="text-align:center;color:#f87171">${pasoA(c.ses)||''}</td><td style="text-align:center;font-weight:700;color:#fff">${c.rads.length+c.encs.length+c.ses.length}</td></tr>`).join('');}
 
