@@ -426,8 +426,93 @@ if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
     $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 }
 
-// ── PASO 2: SUPABASE ELIMINADO — esta versión solo envía correos ──────
-$correo_id = null; // No hay ID de BD en esta versión
+// ── PASO 2: INSERT EN SUPABASE — guardar radicado con todos los campos ──
+$correo_id = null;
+try {
+    $ch_sb = curl_init("$SB_URL/rest/v1/correos");
+    $cedula_limpia = preg_replace('/\D/', '', $documento);
+    $sb_payload = [
+        'ticket_id'        => $ticket_id,
+        'from_email'       => $correo ?: null,
+        'from_name'        => $nombre  ?: null,
+        'subject'          => $subject ?? "[{$ticket_id}] Radicado {$origen}",
+        'body_preview'     => mb_substr($descripcion, 0, 500),
+        'body_type'        => 'text',
+        'received_at'      => $now,
+        'origen'           => in_array($origen, ['nova_web','nova_directo','nova_td']) ? $origen : ($origen === 'qr' ? 'qr' : 'web'),
+        'canal_contacto'   => $canal_contacto ?: 'formulario_web',
+        'estado'           => 'sin_asignar',
+        'prioridad'        => 'media',
+        'cedula'           => $cedula_limpia ?: null,
+        'cedula_paciente'  => $cedula_limpia ?: null,
+        'nombre'           => $nombre  ?: null,
+        'telefono_contacto'=> $telefono ?: null,
+        'correo'           => $correo  ?: null,
+        'tipo_pqr'         => $tipo_pqr ?: 'peticion',
+        'has_attachments'  => false,
+        'num_gestiones'    => 0,
+        'is_draft'         => false,
+    ];
+    // Añadir sede si viene del QR
+    if ($sede_nombre) $sb_payload['sede_nombre'] = $sede_nombre;
+    if ($sede_ciudad) $sb_payload['ciudad_paciente'] = $sede_ciudad;
+
+    curl_setopt_array($ch_sb, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($sb_payload),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_HTTPHEADER     => [
+            "apikey: $SB_KEY",
+            "Authorization: Bearer $SB_KEY",
+            'Content-Type: application/json',
+            'Prefer: return=representation',
+        ],
+    ]);
+    $sb_resp = curl_exec($ch_sb);
+    $sb_code = curl_getinfo($ch_sb, CURLINFO_HTTP_CODE);
+    curl_close($ch_sb);
+    if ($sb_code >= 200 && $sb_code < 300) {
+        $sb_data  = json_decode($sb_resp, true);
+        $correo_id = $sb_data[0]['id'] ?? null;
+        // Registrar evento inicial en historial
+        if ($correo_id) {
+            $ch_hist = curl_init("$SB_URL/rest/v1/historial_eventos");
+            curl_setopt_array($ch_hist, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode([
+                    'correo_id'   => $correo_id,
+                    'evento'      => 'pqr_recibida',
+                    'descripcion' => 'PQR radicada vía ' . $origen,
+                    'datos_extra' => json_encode([
+                        'ticket_id'   => $ticket_id,
+                        'origen'      => $origen,
+                        'canal'       => $canal_contacto,
+                        'sede_nombre' => $sede_nombre ?: null,
+                        'sede_ciudad' => $sede_ciudad ?: null,
+                        'nombre'      => $nombre,
+                        'cedula'      => $cedula_limpia,
+                        'tipo_pqr'    => $tipo_pqr,
+                    ]),
+                    'created_at'  => $now,
+                ]),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 8,
+                CURLOPT_HTTPHEADER     => [
+                    "apikey: $SB_KEY",
+                    "Authorization: Bearer $SB_KEY",
+                    'Content-Type: application/json',
+                    'Prefer: return=minimal',
+                ],
+            ]);
+            curl_exec($ch_hist);
+            curl_close($ch_hist);
+        }
+    }
+} catch (Exception $e_sb) {
+    // No fallar el radicado si Supabase falla — el correo ya se envió
+    error_log('[radicar-pqr] Supabase error: ' . $e_sb->getMessage());
+}
 
 // ── PASO 3: ENVIAR CORREO A pqrsfd via Graph API ─────────────────────
 date_default_timezone_set('America/Bogota'); // Hora Colombia UTC-5
