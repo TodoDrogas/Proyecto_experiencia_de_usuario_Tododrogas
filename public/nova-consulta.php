@@ -343,8 +343,20 @@ switch ($accion) {
         $resumen      = trim($body['resumen']      ?? '');
         $motivo       = trim($body['motivo_cierre'] ?? 'manual');
         $fecha        = trim($body['fecha']        ?? date('c'));
+        // Normalizar origen: nova_td→nova_directo, nova→nova_web, web→nova_web, qr→nova_qr
+        $origen_raw   = trim($body['origen'] ?? 'nova_web');
+        $origen_ses   = match($origen_raw) {
+            'nova_td'        => 'nova_directo',
+            'nova'           => 'nova_web',
+            'nova_bienvenida'=> 'nova_bienvenida',
+            'nova_directo'   => 'nova_directo',
+            'nova_web'       => 'nova_web',
+            'qr'             => 'nova_qr',
+            'web'            => 'nova_web',
+            default          => 'nova_web',
+        };
 
-        // Insertar en tabla nova_sesiones (créala si no existe)
+        // Insertar en tabla nova_sesiones
         $ch = curl_init("$SB_URL/rest/v1/nova_sesiones");
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
@@ -357,6 +369,7 @@ switch ($accion) {
                 'resumen'       => $resumen,
                 'motivo_cierre' => $motivo,
                 'created_at'    => $fecha,
+                'origen'        => $origen_ses,
             ]),
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT        => 10,
