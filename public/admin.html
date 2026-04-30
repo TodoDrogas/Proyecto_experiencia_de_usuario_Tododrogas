@@ -8531,16 +8531,14 @@ function renderNovaMetrics(){
 
   // Correo 'interno/SIGI': llega del buzón sin datos de formulario (sin sede en body, sin cédula, sin ciudad)
   const _esInterno=r=>{
+    // Excluir: sin datos de ciudadano O ticket ENC- (son encuestas no radicados)
     const tid = (r.ticket_id||'').trim();
-    // Excluir ENC-, EXT- — no son radicados de ciudadano
-    if (tid && !tid.startsWith('TD-')) return true;
-    // Excluir correos del propio buzón sin ticket TD- (son notificaciones internas)
-    const fromOwn = (r.from_email||'').toLowerCase().includes('tododrogas.com.co');
-    if (fromOwn && !tid) return true;
-    const tieneSede   = !!_parseSedeBody(r.body_content||'');
-    const tieneCedula = !!(r.cedula||r.cedula_paciente||'').trim();
-    const tieneCiudad = !!(r.ciudad_paciente||'').trim();
-    const tieneTicket = !!tid;
+    if (tid && !tid.startsWith('TD-')) return true; // ENC- o EXT- no son radicados
+    const tieneSede    = !!_parseSedeBody(r.body_content||'');
+    const tieneCedula  = !!(r.cedula||r.cedula_paciente||'').trim();
+    const tieneCiudad  = !!(r.ciudad_paciente||'').trim();
+    const tieneTicket  = !!tid;
+    // Es interno si no tiene NINGÚN dato identificador
     return !tieneSede && !tieneCedula && !tieneCiudad && !tieneTicket;
   };
   const radWebF = (D.radWeb||[]).filter(r=>!_esInterno(r)&&(!wSede||fmtSede(r)===wSede)&&(!wTipo||(r.tipo_pqr||'')===wTipo));
@@ -8723,7 +8721,6 @@ async function _mExportInit() {
     return m ? m[1].trim() : '';
   }
   function getSede(r) {
-    if (r.sede_id && sedesNombreMap[r.sede_id]) return sedesNombreMap[r.sede_id]; // sede directa
     if (r.id && correoSedeMap[r.id]) return correoSedeMap[r.id];
     const fromBody = _parseSedeBody(r.body_content);
     if (fromBody) return fromBody;
@@ -8751,13 +8748,6 @@ async function _mExportInit() {
   const sentLabel = s => s ? (s.charAt(0).toUpperCase()+s.slice(1)) : 'Sin clasificar';
 
   // ── Mapas de enriquecimiento ────────────────────────────────────────
-  // sedesNombreMap: sede_id → nombre de sede
-  const sedesNombreMap = {};
-  try {
-    const sedesR = await fetch(`${sbUrl}/rest/v1/sedes?select=id,nombre&activa=eq.true&limit=200`,sbH).then(r=>r.json()).catch(()=>[]);
-    (sedesR||[]).forEach(s=>{ if(s.id) sedesNombreMap[s.id]=s.nombre; });
-  } catch(_){}
-
   // correoMap: id → {ticket_id, cedula, nombre, eps_id, ciudad_paciente}
   const allRadsFlat = [...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])];
   const correoMap = {};
@@ -8830,16 +8820,15 @@ async function exportWebExcel() {
   const h_wEnc = encByCanal('web').map(e => {
     const ex = e.datos_extra || {};
     const cal = e.calificacion || 0;
-    // Sede: primero desde sede_id de la encuesta, luego desde correo vinculado
-    const corrEnc = e.correo_id ? (correoMap[e.correo_id]||{}) : {};
-    const sedeEnc = e.sede_id ? (novaSedesMap[e.sede_id] || getSede({id:e.correo_id,...corrEnc})) : getSede(corrEnc);
+    // Buscar sede desde correos cruzando por ticket_id del ENC-
+    const corrEnc = (D.radWeb||[]).find(r=>r.ticket_id===e.ticket_id) || {};
     const eps = e.eps || getEps(e.cedula||'', {});
     return {
       'Fecha':        fmtD(e.created_at),
       'Hora':         fmtH(e.created_at),
       'Ticket_ENC':   e.ticket_id   || '',
       'Ticket_TD':    e.ticket_td   || '',
-      'Sede':         sedeEnc,
+      'Sede':         getSede(corrEnc),
       'Cédula':       e.cedula || '',
       'Nombre':       e.nombre || '',
       'EPS':          eps,
@@ -8855,15 +8844,14 @@ async function exportWebExcel() {
 
   // ── WEB_Radicacion ──────────────────────────────────────────────────
   const _esInterno = r => {
-    const tid = (r.ticket_id||'').trim();
-    if (tid && !tid.startsWith('TD-')) return true;
-    const fromOwn = (r.from_email||'').toLowerCase().includes('tododrogas.com.co');
-    if (fromOwn && !tid) return true;
+    // Excluir ENC- (encuestas en correos) y registros sin ningún dato de ciudadano
+    if ((r.ticket_id||'').startsWith('ENC-')) return true;
     const b=r.body_content||'';
     const s=b.match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i);
     const c=!!(r.cedula||r.cedula_paciente||'').trim();
     const ci=!!(r.ciudad_paciente||'').trim();
-    return !s&&!c&&!ci&&!tid;
+    const nom=!!(r.nombre||'').trim();
+    return !s&&!c&&!ci&&!nom;
   };
   const h_wRad = (D.radWeb||[]).filter(r=>!_esInterno(r)).map(r => {
     const re = enrichRad(r);
@@ -8903,8 +8891,7 @@ async function exportQrExcel() {
   const h_qEnc = encByCanal('qr').map(e => {
     const ex = e.datos_extra || {};
     const cal = e.calificacion || 0;
-    const corrEnc = e.correo_id ? (correoMap[e.correo_id]||{}) : {};
-    const sedeEnc = e.sede_id ? (sedesNombreMap[e.sede_id]||getSede(corrEnc)) : getSede(corrEnc);
+    const corrEnc = (D.radQr||[]).find(r=>r.ticket_id===e.ticket_id) || {};
     const eps = e.eps || getEps(e.cedula||'', {});
     return {
       'Fecha':        fmtD(e.created_at),
@@ -8927,16 +8914,15 @@ async function exportQrExcel() {
 
   // ── QR_Radicacion ───────────────────────────────────────────────────
   const _esInterno = r => {
-    const tid = (r.ticket_id||'').trim();
-    if (tid && !tid.startsWith('TD-')) return true;
-    const fromOwn = (r.from_email||'').toLowerCase().includes('tododrogas.com.co');
-    if (fromOwn && !tid) return true;
+    if ((r.ticket_id||'').startsWith('ENC-')) return true;
     const b=r.body_content||'';
     const s=b.match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i);
     const c=!!(r.cedula||r.cedula_paciente||'').trim();
     const ci=!!(r.ciudad_paciente||'').trim();
-    return !s&&!c&&!ci&&!tid;
+    const nom=!!(r.nombre||'').trim();
+    return !s&&!c&&!ci&&!nom;
   };
+  const h_qRad = (D.radQr||[]).filter(r=>!_esInterno(r)).map(r => {
     const re = enrichRad(r);
     return {
       'Fecha':       fmtD(re.received_at),
