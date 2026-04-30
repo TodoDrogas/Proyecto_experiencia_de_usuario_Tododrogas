@@ -8721,6 +8721,7 @@ async function _mExportInit() {
     return m ? m[1].trim() : '';
   }
   function getSede(r) {
+    if (r.sede_id && sedesNombreMap[r.sede_id]) return sedesNombreMap[r.sede_id];
     if (r.id && correoSedeMap[r.id]) return correoSedeMap[r.id];
     const fromBody = _parseSedeBody(r.body_content);
     if (fromBody) return fromBody;
@@ -8748,6 +8749,13 @@ async function _mExportInit() {
   const sentLabel = s => s ? (s.charAt(0).toUpperCase()+s.slice(1)) : 'Sin clasificar';
 
   // ── Mapas de enriquecimiento ────────────────────────────────────────
+  // sedesNombreMap: sede_id → nombre
+  const sedesNombreMap = {};
+  try {
+    const sedesR = await fetch(`${sbUrl}/rest/v1/sedes?select=id,nombre&activa=eq.true&limit=200`,sbH).then(r=>r.json()).catch(()=>[]);
+    (sedesR||[]).forEach(s=>{ if(s.id) sedesNombreMap[s.id]=s.nombre; });
+  } catch(_){}
+
   // correoMap: id → {ticket_id, cedula, nombre, eps_id, ciudad_paciente}
   const allRadsFlat = [...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])];
   const correoMap = {};
@@ -8804,7 +8812,7 @@ async function _mExportInit() {
     return true;
   }).map(enrichEnc);
 
-  return { D, fmtD, fmtH, getSede, getEps, encAll, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap, correoMap };
+  return { D, fmtD, fmtH, getSede, getEps, encAll, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap, correoMap, sedesNombreMap };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -8820,15 +8828,15 @@ async function exportWebExcel() {
   const h_wEnc = encByCanal('web').map(e => {
     const ex = e.datos_extra || {};
     const cal = e.calificacion || 0;
-    // Buscar sede desde correos cruzando por ticket_id del ENC-
-    const corrEnc = (D.radWeb||[]).find(r=>r.ticket_id===e.ticket_id) || {};
+    const corrEnc = e.correo_id ? (correoMap[e.correo_id]||{}) : {};
+    const sedeEnc = e.sede_id ? (sedesNombreMap[e.sede_id]||getSede(corrEnc)) : getSede(corrEnc);
     const eps = e.eps || getEps(e.cedula||'', {});
     return {
       'Fecha':        fmtD(e.created_at),
       'Hora':         fmtH(e.created_at),
       'Ticket_ENC':   e.ticket_id   || '',
       'Ticket_TD':    e.ticket_td   || '',
-      'Sede':         getSede(corrEnc),
+      'Sede':         sedeEnc,
       'Cédula':       e.cedula || '',
       'Nombre':       e.nombre || '',
       'EPS':          eps,
@@ -8891,14 +8899,15 @@ async function exportQrExcel() {
   const h_qEnc = encByCanal('qr').map(e => {
     const ex = e.datos_extra || {};
     const cal = e.calificacion || 0;
-    const corrEnc = (D.radQr||[]).find(r=>r.ticket_id===e.ticket_id) || {};
+    const corrEnc = e.correo_id ? (correoMap[e.correo_id]||{}) : {};
+    const sedeEnc = e.sede_id ? (sedesNombreMap[e.sede_id]||getSede(corrEnc)) : getSede(corrEnc);
     const eps = e.eps || getEps(e.cedula||'', {});
     return {
       'Fecha':        fmtD(e.created_at),
       'Hora':         fmtH(e.created_at),
       'Ticket_ENC':   e.ticket_id   || '',
       'Ticket_TD':    e.ticket_td   || '',
-      'Sede':         getSede(corrEnc),
+      'Sede':         sedeEnc,
       'Cédula':       e.cedula      || '',
       'Nombre':       e.nombre      || '',
       'EPS':          eps,
@@ -8914,13 +8923,15 @@ async function exportQrExcel() {
 
   // ── QR_Radicacion ───────────────────────────────────────────────────
   const _esInterno = r => {
-    if ((r.ticket_id||'').startsWith('ENC-')) return true;
+    const tid = (r.ticket_id||'').trim();
+    if (tid && !tid.startsWith('TD-')) return true;
+    const fromOwn = (r.from_email||'').toLowerCase().includes('tododrogas.com.co');
+    if (fromOwn && !tid) return true;
     const b=r.body_content||'';
     const s=b.match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i);
     const c=!!(r.cedula||r.cedula_paciente||'').trim();
     const ci=!!(r.ciudad_paciente||'').trim();
-    const nom=!!(r.nombre||'').trim();
-    return !s&&!c&&!ci&&!nom;
+    return !s&&!c&&!ci&&!tid;
   };
   const h_qRad = (D.radQr||[]).filter(r=>!_esInterno(r)).map(r => {
     const re = enrichRad(r);
