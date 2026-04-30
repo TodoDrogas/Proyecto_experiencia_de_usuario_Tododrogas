@@ -8031,7 +8031,7 @@ async function renderMediaFormulario(email) {
 async function loadEncuestas() {
   try {
     // Lee directamente de encuestas_satisfaccion (radicar-encuesta.php inserta aquí)
-    const data = await sb('encuestas_satisfaccion?order=created_at.desc&limit=5000&select=id,created_at,calificacion,nombre,cedula,telefono,correo,sede_nombre,sede_ciudad,tipo_pqr,origen,canal,datos_extra');
+    const data = await sb('encuestas_satisfaccion?order=created_at.desc&limit=5000&select=id,created_at,calificacion,nombre,cedula,correo,sede_id,origen,canal,comentario,datos_extra,ticket_id,correo_id');
     state.encuestas = (data || []).map(ev => {
       let ex = {};
       try { ex = typeof ev.datos_extra === 'string' ? JSON.parse(ev.datos_extra) : (ev.datos_extra || {}); } catch(_) {}
@@ -8763,30 +8763,19 @@ async function exportWebExcel() {
   const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
   const h_wEnc = encByCanal('web').map(e => {
     const ex = e.datos_extra || {};
+    const cal = e.calificacion || 0;
     return {
-      'Fecha':             fmtD(e.created_at),
-      'Hora':              fmtH(e.created_at),
-      'Sede':              ex.sede_nombre || '',
-      'Municipio':         ex.sede_ciudad || '',
-      'Cédula':            ex.cedula      || ex.documento || '',
-      'Nombre':            ex.nombre      || '',
-      'Teléfono':          ex.telefono    || '',
-      'EPS':               getEps(ex.cedula||ex.documento||'', ex),
-      'Correo':            ex.correo      || '',
-      'Resultado':         (e.calificacion||0)>=3?'SATISFACTORIO':(e.calificacion||0)>=2?'NEUTRO':'INSATISFACTORIO',
-      'Promedio':          ex.promedio    || '',
-      'Instalaciones':     ex.instalaciones || '',
-      'Cal_Instalaciones': calLabel(ex.instalaciones),
-      'Atencion':          ex.atencion    || '',
-      'Cal_Atencion':      calLabel(ex.atencion),
-      'Tiempos':           ex.tiempos     || '',
-      'Cal_Tiempos':       calLabel(ex.tiempos),
-      'Medicamentos':      ex.medicamentos|| '',
-      'Cal_Medicamentos':  calLabel(ex.medicamentos),
-      'Recomendacion':     ex.recomendacion||'',
-      'Cal_Recomendacion': calLabel(ex.recomendacion),
-      'Comentario':        e.comentario || ex.comentario || '',
-      'Canal':             'Web',
+      'Fecha':      fmtD(e.created_at),
+      'Hora':       fmtH(e.created_at),
+      'Ticket':     e.ticket_id   || '',
+      'Cédula':     e.cedula      || ex.cedula || ex.documento || '',
+      'Nombre':     e.nombre      || ex.nombre || '',
+      'Correo':     e.correo      || ex.correo || '',
+      'EPS':        getEps(e.cedula||ex.cedula||'', ex),
+      'Calificacion': cal,
+      'Resultado':  cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
+      'Comentario': e.comentario  || ex.comentario || '',
+      'Canal':      'Web',
     };
   });
   const ws_wEnc = XLSX.utils.json_to_sheet(h_wEnc.length ? h_wEnc : [{'Sin_datos':'Sin encuestas Web en el período'}]);
@@ -8828,30 +8817,19 @@ async function exportQrExcel() {
   const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
   const h_qEnc = encByCanal('qr').map(e => {
     const ex = e.datos_extra || {};
+    const cal = e.calificacion || 0;
     return {
-      'Fecha':             fmtD(e.created_at),
-      'Hora':              fmtH(e.created_at),
-      'Sede':              ex.sede_nombre || '',
-      'Municipio':         ex.sede_ciudad || '',
-      'Cédula':            ex.cedula      || ex.documento || '',
-      'Nombre':            ex.nombre      || '',
-      'Teléfono':          ex.telefono    || '',
-      'EPS':               getEps(ex.cedula||ex.documento||'', ex),
-      'Correo':            ex.correo      || '',
-      'Resultado':         (e.calificacion||0)>=3?'SATISFACTORIO':(e.calificacion||0)>=2?'NEUTRO':'INSATISFACTORIO',
-      'Promedio':          ex.promedio    || '',
-      'Instalaciones':     ex.instalaciones || '',
-      'Cal_Instalaciones': calLabel(ex.instalaciones),
-      'Atencion':          ex.atencion    || '',
-      'Cal_Atencion':      calLabel(ex.atencion),
-      'Tiempos':           ex.tiempos     || '',
-      'Cal_Tiempos':       calLabel(ex.tiempos),
-      'Medicamentos':      ex.medicamentos|| '',
-      'Cal_Medicamentos':  calLabel(ex.medicamentos),
-      'Recomendacion':     ex.recomendacion||'',
-      'Cal_Recomendacion': calLabel(ex.recomendacion),
-      'Comentario':        e.comentario || ex.comentario || '',
-      'Canal':             'QR',
+      'Fecha':      fmtD(e.created_at),
+      'Hora':       fmtH(e.created_at),
+      'Ticket':     e.ticket_id   || '',
+      'Cédula':     e.cedula      || ex.cedula || ex.documento || '',
+      'Nombre':     e.nombre      || ex.nombre || '',
+      'Correo':     e.correo      || ex.correo || '',
+      'EPS':        getEps(e.cedula||ex.cedula||'', ex),
+      'Calificacion': cal,
+      'Resultado':  cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
+      'Comentario': e.comentario  || ex.comentario || '',
+      'Canal':      'QR',
     };
   });
   const ws_qEnc = XLSX.utils.json_to_sheet(h_qEnc.length ? h_qEnc : [{'Sin_datos':'Sin encuestas QR en el período'}]);
