@@ -8031,7 +8031,7 @@ async function renderMediaFormulario(email) {
 async function loadEncuestas() {
   try {
     // Lee directamente de encuestas_satisfaccion (radicar-encuesta.php inserta aquí)
-    const data = await sb('encuestas_satisfaccion?order=created_at.desc&limit=5000&select=id,created_at,calificacion,nombre,cedula,correo,sede_id,origen,canal,comentario,datos_extra,ticket_id,correo_id');
+    const data = await sb('encuestas_satisfaccion?order=created_at.desc&limit=5000&select=id,created_at,calificacion,nombre,cedula,eps,sede_id,origen,canal,comentario,ticket_id,correo_id');
     state.encuestas = (data || []).map(ev => {
       let ex = {};
       try { ex = typeof ev.datos_extra === 'string' ? JSON.parse(ev.datos_extra) : (ev.datos_extra || {}); } catch(_) {}
@@ -8039,13 +8039,14 @@ async function loadEncuestas() {
         id:           ev.id,
         created_at:   ev.created_at,
         calificacion: ev.calificacion || ex.calificacion || null,
-        comentario:   ex.comentario   || null,
+        comentario:   ev.comentario   || ex.comentario || null,
         canal:        ev.canal || ev.origen || ex.canal || 'web',
-        nombre:       ev.nombre || ex.nombre || null,
-        cedula:       ev.cedula || ex.cedula || null,
-        sede_nombre:  ev.sede_nombre || ex.sede_nombre || null,
-        sede_ciudad:  ev.sede_ciudad || ex.sede_ciudad || null,
-        tipo_pqr:     ev.tipo_pqr || ex.tipo_pqr || null,
+        nombre:       ev.nombre || null,
+        cedula:       ev.cedula || null,
+        eps:          ev.eps    || null,
+        sede_nombre:  null,
+        sede_ciudad:  null,
+        tipo_pqr:     null,
         datos_extra:  ex,
       };
     });
@@ -8737,11 +8738,17 @@ async function _mExportInit() {
     return '';
   }
 
-  // Encuestas por canal
+  // Encuestas por canal — filtrar por período de métricas activo
   const encAll = state.encuestas || [];
+  const _encDesde = document.getElementById('novaDesde')?.value || '';
+  const _encHasta = document.getElementById('novaHasta')?.value || '';
   const encByCanal = canal => encAll.filter(e => {
-    const c = e.canal || (e.datos_extra||{}).canal || 'web';
-    return c === canal;
+    const c = e.canal || e.origen || 'web';
+    if (c !== canal) return false;
+    const fecha = (e.created_at||'').substring(0,10);
+    if (_encDesde && fecha < _encDesde) return false;
+    if (_encHasta && fecha > _encHasta) return false;
+    return true;
   });
 
   // Tipo badge text
@@ -8768,10 +8775,9 @@ async function exportWebExcel() {
       'Fecha':      fmtD(e.created_at),
       'Hora':       fmtH(e.created_at),
       'Ticket':     e.ticket_id   || '',
-      'Cédula':     e.cedula      || ex.cedula || ex.documento || '',
-      'Nombre':     e.nombre      || ex.nombre || '',
-      'Correo':     e.correo      || ex.correo || '',
-      'EPS':        getEps(e.cedula||ex.cedula||'', ex),
+      'Cédula':     e.cedula || '',
+      'Nombre':     e.nombre || '',
+      'EPS':        e.eps    || getEps(e.cedula||'', ex),
       'Calificacion': cal,
       'Resultado':  cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
       'Comentario': e.comentario  || ex.comentario || '',
@@ -8795,7 +8801,7 @@ async function exportWebExcel() {
     'Sentimiento': sentLabel(r.sentimiento),
     'Prioridad':   r.prioridad   || '',
     'Estado':      r.estado      || '',
-    'Canal':       r.canal_contacto || r.origen || 'web',
+    'Canal':       'Web',
   }));
   const ws_wRad = XLSX.utils.json_to_sheet(h_wRad.length ? h_wRad : [{'Sin_datos':'Sin radicados Web en el período'}]);
   ws_wRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:14}];
@@ -8822,10 +8828,9 @@ async function exportQrExcel() {
       'Fecha':      fmtD(e.created_at),
       'Hora':       fmtH(e.created_at),
       'Ticket':     e.ticket_id   || '',
-      'Cédula':     e.cedula      || ex.cedula || ex.documento || '',
-      'Nombre':     e.nombre      || ex.nombre || '',
-      'Correo':     e.correo      || ex.correo || '',
-      'EPS':        getEps(e.cedula||ex.cedula||'', ex),
+      'Cédula':     e.cedula || '',
+      'Nombre':     e.nombre || '',
+      'EPS':        e.eps    || getEps(e.cedula||'', ex),
       'Calificacion': cal,
       'Resultado':  cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
       'Comentario': e.comentario  || ex.comentario || '',
@@ -8868,7 +8873,7 @@ async function exportNovaExcel() {
   const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
 
   const MENU_OPCIONES = ['Medicamentos','Sedes','Requisitos','Radicar','Radicado','Horarios','Encuesta','PreguntaLibre'];
-  const allSes = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])];
+  const allSes = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])];
 
   // ── NOVA_TD_Detalle ─────────────────────────────────────────────────
   const h_det = allSes.map(s => {
@@ -8980,7 +8985,7 @@ async function exportGlobalExcel() {
   const wb = XLSX.utils.book_new();
   const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
 
-  const allSes = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[])];
+  const allSes = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])];
   const ctT = (arr,t) => arr.filter(r=>(r.tipo_pqr||'').toLowerCase()===t).length;
   const ePr = arr => { const v=arr.filter(e=>(e.calificacion||0)>0); return v.length?(v.reduce((a,e)=>a+(e.calificacion||0),0)/v.length).toFixed(2):'N/A'; };
   const pasoA = arr => arr.filter(s=>(s.motivo_cierre||'').toLowerCase().includes('asesor')).length;
@@ -9016,20 +9021,20 @@ async function exportGlobalExcel() {
   XLSX.utils.book_append_sheet(wb, ws_g, 'GLOBAL_Canal');
 
   // Resumen por sede (de encuestas)
+  // GLOBAL_Sede: agrupar por origen/canal ya que datos_extra es null
   const bySede = {};
   encAll.forEach(e => {
-    const ex = e.datos_extra||{};
-    const k  = ex.sede_nombre || '(Sin sede)';
-    if (!bySede[k]) bySede[k]={ciudad:ex.sede_ciudad||'',total:0,suma:0,sat:0,insat:0,canales:new Set()};
-    bySede[k].total++;
-    bySede[k].suma += e.calificacion||0;
-    if ((e.calificacion||0)>=3) bySede[k].sat++;
-    if ((e.calificacion||0)<=1) bySede[k].insat++;
-    bySede[k].canales.add(e.canal||'web');
+    const k = e.canal || e.origen || 'web';
+    const kLabel = k==='web'?'Web':k==='qr'?'QR':k==='nova_directo'?'Nova Directo':k==='nova_web'?'Nova Web':k;
+    if (!bySede[kLabel]) bySede[kLabel]={ciudad:'',total:0,suma:0,sat:0,insat:0,canales:new Set()};
+    bySede[kLabel].total++;
+    bySede[kLabel].suma += e.calificacion||0;
+    if ((e.calificacion||0)>=3) bySede[kLabel].sat++;
+    if ((e.calificacion||0)<=1) bySede[kLabel].insat++;
+    bySede[kLabel].canales.add(e.canal||'web');
   });
   const h_sede = Object.entries(bySede).sort((a,b)=>b[1].total-a[1].total).map(([sede,v])=>({
-    'Sede':           sede,
-    'Ciudad':         v.ciudad,
+    'Canal':          sede,
     'Total_Encuestas':v.total,
     'Promedio':       v.total?(v.suma/v.total).toFixed(2):'',
     'Satisfechos':    v.sat,
@@ -9356,11 +9361,11 @@ function exportAgentesExcel(){
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'Sin asesores'}]), 'Resumen Asesores');
 
   // Hoja 2: Tickets con tiempos
-  const h2 = E.filter(c=>c.asignado_a).map(c=>({
+  const h2 = E.filter(c=>c.agente_id).map(c=>({
     Ticket:              c.ticket_id||'',
     Asunto:              c.subject||'',
     Remitente:           c.nombre||c.from_email||'',
-    Asesor:              agMap[c.asignado_a]||'',
+    Asesor:              agMap[c.agente_id]||agMap[c.asignado_a]||'',
     Estado:              c.estado||'',
     Prioridad:           c.prioridad||'',
     Sentimiento:         c.sentimiento||'',
