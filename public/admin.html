@@ -8346,10 +8346,15 @@ function initNovaFechas(){
   const hoy=new Date(), hace30=new Date(hoy);
   hace30.setDate(hoy.getDate()-30);
   const fmt=d=>d.toISOString().split('T')[0];
-  const dEl=document.getElementById('novaDesde');
-  const hEl=document.getElementById('novaHasta');
-  if(dEl&&!dEl.value) dEl.value=fmt(hace30);
-  if(hEl&&!hEl.value) hEl.value=fmt(hoy);
+  // Inicializar TODOS los pares de fechas: Web(1), QR(2), Nova TD(3), Global(4)
+  ['novaDesde','novaDesde2','novaDesde3','novaDesde4'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&!el.value) el.value=fmt(hace30);
+  });
+  ['novaHasta','novaHasta2','novaHasta3','novaHasta4'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el&&!el.value) el.value=fmt(hoy);
+  });
 }
 
 async function loadNovaMetrics(){
@@ -8386,7 +8391,7 @@ async function loadNovaMetrics(){
   const qS=base=>q(base,'created_at');    // sesiones
 
   const [
-    radWeb, radWebOld, radWebLegacy,
+    radWeb, radWebOld,
     radNovaWeb, radNovaDir,
     radQr,
     encWeb, encWebOld,
@@ -8446,7 +8451,7 @@ async function loadNovaMetrics(){
   });
 
   novaDatos={
-    radWeb:[...(radWeb||[]),...(radWebOld||[]),...(radWebLegacy||[])],
+    radWeb:[...(radWeb||[]),...(radWebOld||[])],
     radNovaWeb:radNovaWeb||[], radNovaDir:radNovaDir||[], radQr:radQr||[],
     encWeb:[...(encWeb||[]),...(encWebOld||[])],
     encNovaWeb:encNovaWeb||[], encNovaDir:encNovaDir||[], encQr:encQr||[],
