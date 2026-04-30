@@ -8037,16 +8037,17 @@ async function loadEncuestas() {
       try { ex = typeof ev.datos_extra === 'string' ? JSON.parse(ev.datos_extra) : (ev.datos_extra || {}); } catch(_) {}
       return {
         id:           ev.id,
+        ticket_id:    ev.ticket_id    || null,
+        correo_id:    ev.correo_id    || null,
         created_at:   ev.created_at,
-        calificacion: ev.calificacion || ex.calificacion || null,
-        comentario:   ev.comentario   || ex.comentario || null,
-        canal:        ev.canal || ev.origen || ex.canal || 'web',
+        calificacion: ev.calificacion || null,
+        comentario:   ev.comentario   || null,
+        canal:        ev.canal || ev.origen || 'web',
+        origen:       ev.origen || ev.canal || 'web',
         nombre:       ev.nombre || null,
         cedula:       ev.cedula || null,
         eps:          ev.eps    || null,
-        sede_nombre:  null,
-        sede_ciudad:  null,
-        tipo_pqr:     null,
+        sede_id:      ev.sede_id || null,
         datos_extra:  ex,
       };
     });
@@ -8530,14 +8531,15 @@ function renderNovaMetrics(){
 
   // Correo 'interno/SIGI': llega del buzón sin datos de formulario (sin sede en body, sin cédula, sin ciudad)
   const _esInterno=r=>{
-    // Solo filtrar correos que claramente son internos/sistema (sin ningún dato de ciudadano)
+    // Excluir: sin datos de ciudadano O ticket ENC- (son encuestas no radicados)
+    const tid = (r.ticket_id||'').trim();
+    if (tid && !tid.startsWith('TD-')) return true; // ENC- o EXT- no son radicados
     const tieneSede    = !!_parseSedeBody(r.body_content||'');
     const tieneCedula  = !!(r.cedula||r.cedula_paciente||'').trim();
     const tieneCiudad  = !!(r.ciudad_paciente||'').trim();
-    const tieneNombre  = !!(r.nombre||r.from_name||'').trim();
-    const tieneTicket  = !!(r.ticket_id||'').trim();
-    // Es interno solo si no tiene NINGÚN dato identificador
-    return !tieneSede && !tieneCedula && !tieneCiudad && !tieneNombre && !tieneTicket;
+    const tieneTicket  = !!tid;
+    // Es interno si no tiene NINGÚN dato identificador
+    return !tieneSede && !tieneCedula && !tieneCiudad && !tieneTicket;
   };
   const radWebF = (D.radWeb||[]).filter(r=>!_esInterno(r)&&(!wSede||fmtSede(r)===wSede)&&(!wTipo||(r.tipo_pqr||'')===wTipo));
   const radQrF  = (D.radQr||[]).filter(r=>!_esInterno(r)&&(!qrSede||fmtSede(r)===qrSede));
@@ -8771,25 +8773,38 @@ async function exportWebExcel() {
   const h_wEnc = encByCanal('web').map(e => {
     const ex = e.datos_extra || {};
     const cal = e.calificacion || 0;
+    // Buscar sede desde correos cruzando por ticket_id del ENC-
+    const corrEnc = (D.radWeb||[]).find(r=>r.ticket_id===e.ticket_id) || {};
+    const eps = e.eps || getEps(e.cedula||'', {});
     return {
-      'Fecha':      fmtD(e.created_at),
-      'Hora':       fmtH(e.created_at),
-      'Ticket':     e.ticket_id   || '',
-      'Cédula':     e.cedula || '',
-      'Nombre':     e.nombre || '',
-      'EPS':        e.eps    || getEps(e.cedula||'', ex),
+      'Fecha':        fmtD(e.created_at),
+      'Hora':         fmtH(e.created_at),
+      'Ticket':       e.ticket_id   || '',
+      'Sede':         getSede(corrEnc),
+      'Cédula':       e.cedula || '',
+      'Nombre':       e.nombre || '',
+      'EPS':          eps,
       'Calificacion': cal,
-      'Resultado':  cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
-      'Comentario': e.comentario  || ex.comentario || '',
-      'Canal':      'Web',
+      'Resultado':    cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
+      'Comentario':   e.comentario  || '',
+      'Canal':        'Web',
     };
   });
   const ws_wEnc = XLSX.utils.json_to_sheet(h_wEnc.length ? h_wEnc : [{'Sin_datos':'Sin encuestas Web en el período'}]);
-  ws_wEnc['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:18},{wch:13},{wch:26},{wch:13},{wch:16},{wch:28},{wch:16},{wch:9},{wch:13},{wch:16},{wch:10},{wch:12},{wch:8},{wch:11},{wch:13},{wch:16},{wch:13},{wch:18},{wch:40},{wch:8}];
+  ws_wEnc['!cols'] = [{wch:12},{wch:8},{wch:20},{wch:34},{wch:13},{wch:26},{wch:16},{wch:12},{wch:16},{wch:12},{wch:40},{wch:8}];
   XLSX.utils.book_append_sheet(wb, ws_wEnc, 'WEB_Encuesta');
 
   // ── WEB_Radicacion ──────────────────────────────────────────────────
-  const _esInterno = r => { const b=r.body_content||''; const s=b.match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i); const c=!!(r.cedula||r.cedula_paciente||'').trim(); const ci=!!(r.ciudad_paciente||'').trim(); return !s&&!c&&!ci; };
+  const _esInterno = r => {
+    // Excluir ENC- (encuestas en correos) y registros sin ningún dato de ciudadano
+    if ((r.ticket_id||'').startsWith('ENC-')) return true;
+    const b=r.body_content||'';
+    const s=b.match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i);
+    const c=!!(r.cedula||r.cedula_paciente||'').trim();
+    const ci=!!(r.ciudad_paciente||'').trim();
+    const nom=!!(r.nombre||'').trim();
+    return !s&&!c&&!ci&&!nom;
+  };
   const h_wRad = (D.radWeb||[]).filter(r=>!_esInterno(r)).map(r => ({
     'Fecha':       fmtD(r.received_at),
     'Hora':        fmtH(r.received_at),
@@ -8797,6 +8812,7 @@ async function exportWebExcel() {
     'Cédula':      r.cedula      || '',
     'Nombre':      r.nombre_solicitud || _parseNombreBody(r.body_content) || r.nombre || '',
     'Ticket':      r.ticket_id   || '',
+    'EPS':         getEps(r.cedula||'', {}),
     'Tipo_PQR':    tipoLabel(r.tipo_pqr),
     'Sentimiento': sentLabel(r.sentimiento),
     'Prioridad':   r.prioridad   || '',
@@ -8824,25 +8840,36 @@ async function exportQrExcel() {
   const h_qEnc = encByCanal('qr').map(e => {
     const ex = e.datos_extra || {};
     const cal = e.calificacion || 0;
+    const corrEnc = (D.radQr||[]).find(r=>r.ticket_id===e.ticket_id) || {};
+    const eps = e.eps || getEps(e.cedula||'', {});
     return {
-      'Fecha':      fmtD(e.created_at),
-      'Hora':       fmtH(e.created_at),
-      'Ticket':     e.ticket_id   || '',
-      'Cédula':     e.cedula || '',
-      'Nombre':     e.nombre || '',
-      'EPS':        e.eps    || getEps(e.cedula||'', ex),
+      'Fecha':        fmtD(e.created_at),
+      'Hora':         fmtH(e.created_at),
+      'Ticket':       e.ticket_id   || '',
+      'Sede':         getSede(corrEnc),
+      'Cédula':       e.cedula      || '',
+      'Nombre':       e.nombre      || '',
+      'EPS':          eps,
       'Calificacion': cal,
-      'Resultado':  cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
-      'Comentario': e.comentario  || ex.comentario || '',
-      'Canal':      'QR',
+      'Resultado':    cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
+      'Comentario':   e.comentario  || '',
+      'Canal':        'QR',
     };
   });
   const ws_qEnc = XLSX.utils.json_to_sheet(h_qEnc.length ? h_qEnc : [{'Sin_datos':'Sin encuestas QR en el período'}]);
-  ws_qEnc['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:18},{wch:13},{wch:26},{wch:13},{wch:16},{wch:28},{wch:16},{wch:9},{wch:13},{wch:16},{wch:10},{wch:12},{wch:8},{wch:11},{wch:13},{wch:16},{wch:13},{wch:18},{wch:40},{wch:8}];
+  ws_qEnc['!cols'] = [{wch:12},{wch:8},{wch:20},{wch:34},{wch:13},{wch:26},{wch:16},{wch:12},{wch:16},{wch:12},{wch:40},{wch:8}];
   XLSX.utils.book_append_sheet(wb, ws_qEnc, 'QR_Encuesta');
 
   // ── QR_Radicacion ───────────────────────────────────────────────────
-  const _esInterno = r => { const b=r.body_content||''; const s=b.match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i); const c=!!(r.cedula||r.cedula_paciente||'').trim(); const ci=!!(r.ciudad_paciente||'').trim(); return !s&&!c&&!ci; };
+  const _esInterno = r => {
+    if ((r.ticket_id||'').startsWith('ENC-')) return true;
+    const b=r.body_content||'';
+    const s=b.match(/Sede<\/td>[^<]*<td[^>]*>([^<·\n]+)/i);
+    const c=!!(r.cedula||r.cedula_paciente||'').trim();
+    const ci=!!(r.ciudad_paciente||'').trim();
+    const nom=!!(r.nombre||'').trim();
+    return !s&&!c&&!ci&&!nom;
+  };
   const h_qRad = (D.radQr||[]).filter(r=>!_esInterno(r)).map(r => ({
     'Fecha':       fmtD(r.received_at),
     'Hora':        fmtH(r.received_at),
@@ -8850,6 +8877,7 @@ async function exportQrExcel() {
     'Cédula':      r.cedula      || '',
     'Nombre':      r.nombre_solicitud || _parseNombreBody(r.body_content) || r.nombre || '',
     'Ticket':      r.ticket_id   || '',
+    'EPS':         getEps(r.cedula||'', {}),
     'Tipo_PQR':    tipoLabel(r.tipo_pqr),
     'Sentimiento': sentLabel(r.sentimiento),
     'Prioridad':   r.prioridad   || '',
@@ -8891,9 +8919,9 @@ async function exportNovaExcel() {
       'EPS':              s.eps_paciente    || s.eps || '',
       'Cédula':           s.cedula          || '',
       'Nombre':           s.nombre          || '',
-      'Turnos':           s.turnos          || 0,
-      'Consultas':        s.consultas_count || 0,
-      'Preguntas_Libres': s.preguntas_libres|| 0,
+      'Turnos':           s.turnos !== null && s.turnos !== undefined ? s.turnos : 0,
+      'Consultas':        s.consultas_count !== null && s.consultas_count !== undefined ? s.consultas_count : 0,
+      'Preguntas_Libres': s.preguntas_libres !== null && s.preguntas_libres !== undefined ? s.preguntas_libres : 0,
       'Motivo_Cierre':    s.motivo_cierre   || '',
       'Paso_Asesor':      (s.motivo_cierre||'').toLowerCase().includes('asesor')?'Sí':'No',
       'Calificacion':     s.calificacion    || '',
@@ -8912,9 +8940,9 @@ async function exportNovaExcel() {
     const k = s.municipio || '(Sin municipio)';
     if (!byMuni[k]) byMuni[k] = {sesiones:0,turnos:0,preguntas_libres:0,consultas:0,paso_asesor:0,eps_set:new Set(),cedulas:[],vip:0};
     byMuni[k].sesiones++;
-    byMuni[k].turnos          += s.turnos||0;
-    byMuni[k].preguntas_libres+= s.preguntas_libres||0;
-    byMuni[k].consultas       += s.consultas_count||0;
+    byMuni[k].turnos          += s.turnos??0;
+    byMuni[k].preguntas_libres+= s.preguntas_libres??0;
+    byMuni[k].consultas       += s.consultas_count??0;
     if ((s.motivo_cierre||'').toLowerCase().includes('asesor')) byMuni[k].paso_asesor++;
     if (s.eps_paciente||s.eps) byMuni[k].eps_set.add(s.eps_paciente||s.eps);
     if (s.cedula) byMuni[k].cedulas.push(s.cedula);
