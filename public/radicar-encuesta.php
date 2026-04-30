@@ -144,7 +144,16 @@ $payload = [
     'eps'             => trim($body['eps']    ?? '') ?: null,
     'ip_origen'       => $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? 'web',
     'ticket_id'       => $ticket_enc,
-    'correo_id'       => null,
+    'correo_id'       => (function() use ($SB_URL, $SB_KEY, $documento, $origen_enc) {
+        if (!$documento) return null;
+        $cedula = trim($documento);
+        $ch = curl_init("$SB_URL/rest/v1/correos?cedula=eq.{$cedula}&origen=eq.{$origen_enc}&ticket_id=like.TD-*&order=received_at.desc&limit=1&select=id");
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER=>true, CURLOPT_TIMEOUT=>5,
+            CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY"]]);
+        $r = curl_exec($ch); curl_close($ch);
+        $rows = json_decode($r, true);
+        return $rows[0]['id'] ?? null;
+    })(),
     'created_at'      => $now,
 ];
 
