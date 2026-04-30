@@ -407,10 +407,11 @@ if ($accion === 'reconciliar') {
         $from_name  = $c['from']['emailAddress']['name'] ?? '';
         $subject    = $c['subject'] ?? '(sin asunto)';
 
-        // Ignorar correos del propio buzón — EXCEPCIÓN: reenvíos externos
+        // Ignorar correos del propio buzón — EXCEPCIÓN: reenvíos externos y radicados TD-/ENC-
         $es_reenvio_externo_rec = preg_match('/^(RV:|RE:|FWD?:)\s*/i', trim($subject));
+        $es_radicado_propio_rec = preg_match('/^\[(TD|ENC)-\d{8}-\d{4}\]/i', trim($subject));
         $buzones_propios_rec = array_map('strtolower', array_column($BUZONES, 'mailbox'));
-        if (in_array($from_email, $buzones_propios_rec) && !$es_reenvio_externo_rec) {
+        if (in_array($from_email, $buzones_propios_rec) && !$es_reenvio_externo_rec && !$es_radicado_propio_rec) {
             log_msg("  Ignorado propio (no reenvío): " . substr($subject, 0, 50));
             continue;
         }
@@ -600,11 +601,13 @@ foreach ($todos_correos as $c) {
     $subject    = $c['subject'] ?? '(sin asunto)';
 
     // ── FIX 1: Ignorar correos del propio buzon ───────────────────────
-    // EXCEPCIÓN: si es un RV/FWD desde el buzón propio, puede ser una PQR
-    // reenviada desde pqrs.institucional u otro buzón — NO ignorar
+    // EXCEPCIÓN 1: RV/FWD desde el buzón propio — puede ser PQR reenviada
+    // EXCEPCIÓN 2: asunto empieza con [TD- o [ENC- — son radicados/encuestas
+    //              generados por radicar-pqr.php / radicar-encuesta.php
     $es_reenvio_externo = preg_match('/^(RV:|RE:|FWD?:)\s*/i', trim($subject));
+    $es_radicado_propio = preg_match('/^\[(TD|ENC)-\d{8}-\d{4}\]/i', trim($subject));
     $buzones_propios = array_map('strtolower', array_column($BUZONES, 'mailbox'));
-    if (in_array($from_email, $buzones_propios) && !$es_reenvio_externo) {
+    if (in_array($from_email, $buzones_propios) && !$es_reenvio_externo && !$es_radicado_propio) {
         log_msg("  Ignorado correo propio (no reenvío): " . substr($subject, 0, 50));
         $stats['ignorados_propios']++;
         $nuevo_cursor = $received_raw;
