@@ -8740,8 +8740,59 @@ async function _mExportInit() {
     return '';
   }
 
-  // Encuestas por canal — filtrar por período de métricas activo
+  // encAll para exportGlobalExcel
   const encAll = state.encuestas || [];
+
+  // Tipo badge text
+  const tipoLabel = t => t ? (t.charAt(0).toUpperCase()+t.slice(1)) : 'Sin clasificar';
+  const sentLabel = s => s ? (s.charAt(0).toUpperCase()+s.slice(1)) : 'Sin clasificar';
+
+  // ── Mapas de enriquecimiento ────────────────────────────────────────
+  // correoMap: id → {ticket_id, cedula, nombre, eps_id, ciudad_paciente}
+  const allRadsFlat = [...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])];
+  const correoMap = {};
+  allRadsFlat.forEach(r => { if(r.id) correoMap[r.id] = r; });
+
+  // epsMap: cargar eps_catalogo para resolver eps_id → nombre
+  let epsMap = {};
+  try {
+    const epsRaw = await fetch(`${sbUrl}/rest/v1/eps_catalogo?select=id,nombre&activa=eq.true&limit=200`, sbH).then(r=>r.json()).catch(()=>[]);
+    (epsRaw||[]).forEach(e => { if(e.id) epsMap[e.id] = e.nombre; });
+  } catch(_) {}
+
+  // contactosMap: email → {nombre, cedula}
+  let contactosMap = {};
+  try {
+    const ctRaw = await fetch(`${sbUrl}/rest/v1/contactos_frecuentes?select=email,nombre&limit=2000`, sbH).then(r=>r.json()).catch(()=>[]);
+    (ctRaw||[]).forEach(c => { if(c.email) contactosMap[c.email.toLowerCase()] = c; });
+  } catch(_) {}
+
+  // Función para enriquecer encuesta con datos del correo vinculado
+  const enrichEnc = e => {
+    const correo = e.correo_id ? correoMap[e.correo_id] : null;
+    return {
+      ...e,
+      ticket_td:  correo?.ticket_id || null,  // TD- del radicado vinculado
+      eps:        e.eps || (correo?.eps_id ? epsMap[correo.eps_id] : null) || getEps(e.cedula||'', {}),
+      cedula:     e.cedula || correo?.cedula || null,
+      nombre:     e.nombre || correo?.nombre || null,
+    };
+  };
+
+  // Función para enriquecer radicado con datos de contactos
+  const enrichRad = r => {
+    if (r.cedula && r.nombre) return r; // ya tiene datos
+    const ct = r.from_email ? contactosMap[r.from_email.toLowerCase()] : null;
+    const epsNombre = r.eps_id ? epsMap[r.eps_id] : null;
+    return {
+      ...r,
+      cedula: r.cedula || r.cedula_paciente || null,
+      nombre: r.nombre || r.nombre_solicitud || ct?.nombre || null,
+      eps_nombre: epsNombre || getEps(r.cedula||'', {}),
+    };
+  };
+
+  // Encuestas por canal — con enriquecimiento
   const _encDesde = document.getElementById('novaDesde')?.value || '';
   const _encHasta = document.getElementById('novaHasta')?.value || '';
   const encByCanal = canal => encAll.filter(e => {
@@ -8751,20 +8802,16 @@ async function _mExportInit() {
     if (_encDesde && fecha < _encDesde) return false;
     if (_encHasta && fecha > _encHasta) return false;
     return true;
-  });
+  }).map(enrichEnc);
 
-  // Tipo badge text
-  const tipoLabel = t => t ? (t.charAt(0).toUpperCase()+t.slice(1)) : 'Sin clasificar';
-  const sentLabel = s => s ? (s.charAt(0).toUpperCase()+s.slice(1)) : 'Sin clasificar';
-
-  return { D, fmtD, fmtH, getSede, getEps, encAll, encByCanal, tipoLabel, sentLabel, _parseNombreBody };
+  return { D, fmtD, fmtH, getSede, getEps, encAll, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap, correoMap };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // EXPORT WEB → WEB_Encuesta + WEB_Radicacion
 // ═══════════════════════════════════════════════════════════════════════
 async function exportWebExcel() {
-  const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody } = await _mExportInit();
+  const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap } = await _mExportInit();
   const wb = XLSX.utils.book_new();
   const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
 
@@ -8779,7 +8826,8 @@ async function exportWebExcel() {
     return {
       'Fecha':        fmtD(e.created_at),
       'Hora':         fmtH(e.created_at),
-      'Ticket':       e.ticket_id   || '',
+      'Ticket_ENC':   e.ticket_id   || '',
+      'Ticket_TD':    e.ticket_td   || '',
       'Sede':         getSede(corrEnc),
       'Cédula':       e.cedula || '',
       'Nombre':       e.nombre || '',
@@ -8805,20 +8853,23 @@ async function exportWebExcel() {
     const nom=!!(r.nombre||'').trim();
     return !s&&!c&&!ci&&!nom;
   };
-  const h_wRad = (D.radWeb||[]).filter(r=>!_esInterno(r)).map(r => ({
-    'Fecha':       fmtD(r.received_at),
-    'Hora':        fmtH(r.received_at),
-    'Sede':        getSede(r),
-    'Cédula':      r.cedula      || '',
-    'Nombre':      r.nombre_solicitud || _parseNombreBody(r.body_content) || r.nombre || '',
-    'Ticket':      r.ticket_id   || '',
-    'EPS':         getEps(r.cedula||'', {}),
-    'Tipo_PQR':    tipoLabel(r.tipo_pqr),
-    'Sentimiento': sentLabel(r.sentimiento),
-    'Prioridad':   r.prioridad   || '',
-    'Estado':      r.estado      || '',
-    'Canal':       'Web',
-  }));
+  const h_wRad = (D.radWeb||[]).filter(r=>!_esInterno(r)).map(r => {
+    const re = enrichRad(r);
+    return {
+      'Fecha':       fmtD(re.received_at),
+      'Hora':        fmtH(re.received_at),
+      'Sede':        getSede(re),
+      'Cédula':      re.cedula      || '',
+      'Nombre':      re.nombre_solicitud || _parseNombreBody(re.body_content) || re.nombre || '',
+      'EPS':         re.eps_nombre  || getEps(re.cedula||'', {}),
+      'Ticket':      re.ticket_id   || '',
+      'Tipo_PQR':    tipoLabel(re.tipo_pqr),
+      'Sentimiento': sentLabel(re.sentimiento),
+      'Prioridad':   re.prioridad   || '',
+      'Estado':      re.estado      || '',
+      'Canal':       'Web',
+    };
+  });
   const ws_wRad = XLSX.utils.json_to_sheet(h_wRad.length ? h_wRad : [{'Sin_datos':'Sin radicados Web en el período'}]);
   ws_wRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws_wRad, 'WEB_Radicacion');
@@ -8831,7 +8882,7 @@ async function exportWebExcel() {
 // EXPORT QR → QR_Encuesta + QR_Radicacion
 // ═══════════════════════════════════════════════════════════════════════
 async function exportQrExcel() {
-  const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody } = await _mExportInit();
+  const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap } = await _mExportInit();
   const wb = XLSX.utils.book_new();
   const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
 
@@ -8845,7 +8896,8 @@ async function exportQrExcel() {
     return {
       'Fecha':        fmtD(e.created_at),
       'Hora':         fmtH(e.created_at),
-      'Ticket':       e.ticket_id   || '',
+      'Ticket_ENC':   e.ticket_id   || '',
+      'Ticket_TD':    e.ticket_td   || '',
       'Sede':         getSede(corrEnc),
       'Cédula':       e.cedula      || '',
       'Nombre':       e.nombre      || '',
@@ -8870,20 +8922,23 @@ async function exportQrExcel() {
     const nom=!!(r.nombre||'').trim();
     return !s&&!c&&!ci&&!nom;
   };
-  const h_qRad = (D.radQr||[]).filter(r=>!_esInterno(r)).map(r => ({
-    'Fecha':       fmtD(r.received_at),
-    'Hora':        fmtH(r.received_at),
-    'Sede':        getSede(r),
-    'Cédula':      r.cedula      || '',
-    'Nombre':      r.nombre_solicitud || _parseNombreBody(r.body_content) || r.nombre || '',
-    'Ticket':      r.ticket_id   || '',
-    'EPS':         getEps(r.cedula||'', {}),
-    'Tipo_PQR':    tipoLabel(r.tipo_pqr),
-    'Sentimiento': sentLabel(r.sentimiento),
-    'Prioridad':   r.prioridad   || '',
-    'Estado':      r.estado      || '',
-    'Canal':       'QR',
-  }));
+  const h_qRad = (D.radQr||[]).filter(r=>!_esInterno(r)).map(r => {
+    const re = enrichRad(r);
+    return {
+      'Fecha':       fmtD(re.received_at),
+      'Hora':        fmtH(re.received_at),
+      'Sede':        getSede(re),
+      'Cédula':      re.cedula      || '',
+      'Nombre':      re.nombre_solicitud || _parseNombreBody(re.body_content) || re.nombre || '',
+      'EPS':         re.eps_nombre  || getEps(re.cedula||'', {}),
+      'Ticket':      re.ticket_id   || '',
+      'Tipo_PQR':    tipoLabel(re.tipo_pqr),
+      'Sentimiento': sentLabel(re.sentimiento),
+      'Prioridad':   re.prioridad   || '',
+      'Estado':      re.estado      || '',
+      'Canal':       'QR',
+    };
+  });
   const ws_qRad = XLSX.utils.json_to_sheet(h_qRad.length ? h_qRad : [{'Sin_datos':'Sin radicados QR en el período'}]);
   ws_qRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:8}];
   XLSX.utils.book_append_sheet(wb, ws_qRad, 'QR_Radicacion');
