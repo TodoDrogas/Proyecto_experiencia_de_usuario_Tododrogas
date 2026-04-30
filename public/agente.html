@@ -3417,7 +3417,28 @@ async function sendReply() {
 
     // ── Intentar usar /reply nativo de Graph si tenemos el message_id del correo entrante ──
     // Esto preserva In-Reply-To, References y el hilo en Outlook automáticamente
-    const _internetMsgId = email?.raw?.message_id || email?.message_id || null;
+    let _internetMsgId = email?.raw?.message_id || email?.message_id || null;
+
+    // Si tenemos internet_message_id, resolver el message_id actual en Graph
+    // (el message_id cambia si el correo fue movido de carpeta)
+    const _inetMsgId = email?.raw?.internet_message_id || email?.internet_message_id || null;
+    if(_inetMsgId && _internetMsgId) {
+      try {
+        const _filterEnc = encodeURIComponent(`internetMessageId eq '${_inetMsgId}'`);
+        const _findR = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${userId}/messages?$filter=${_filterEnc}&$select=id&$top=1`,
+          {headers:{'Authorization':'Bearer '+token}}
+        );
+        if(_findR.ok) {
+          const _findD = await _findR.json();
+          const _currentId = _findD?.value?.[0]?.id;
+          if(_currentId) {
+            _internetMsgId = _currentId; // usar el id actual del mensaje
+            console.log('[sendReply] message_id actualizado via internetMessageId');
+          }
+        }
+      } catch(_e) { console.warn('[sendReply] no se pudo resolver internetMessageId:', _e.message); }
+    }
 
     let r;
     if(_internetMsgId && largeFiles.length === 0) {
@@ -6239,9 +6260,7 @@ async function enviarCorreoNuevoAg() {
     const attachments=[];
     for(const {file} of inlineFiles){ const b64=await _fileToBase64(file); attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:b64}); }
     const fullBody=`<div style="font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;color:#000">${body}</div>`;
-    const _toList = toInput.split(';').map(s=>s.trim()).filter(Boolean);
-    if(!_toList.length){ showToast('El campo Para no tiene un destinatario válido','error'); if(sendBtn){sendBtn.disabled=false;sendBtn.innerHTML='<svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Enviar';} return; }
-    const payload={subject,body:{contentType:'HTML',content:fullBody},toRecipients:_toList.map(a=>({emailAddress:{address:a}}))}; 
+    const payload={subject,body:{contentType:'HTML',content:fullBody},toRecipients:toInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}))};
     if(ccInput) payload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
     if(attachments.length) payload.attachments=attachments;
     const r=largeFiles.length>0?await _sendMailWithLargeAttachments(token,userId,payload,largeFiles):await _sendMailDirect(token,userId,payload);
