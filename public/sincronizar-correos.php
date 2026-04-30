@@ -430,9 +430,19 @@ if ($accion === 'reconciliar') {
         if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))  $origen = 'nova_directo';
         elseif (preg_match('/NOVA\s+TD/ui', $subject))         $origen = 'nova_web';
         elseif (preg_match('/QR\b/u', $subject))               $origen = 'qr';
+        elseif (preg_match('/\bWEB\b/ui', $subject))           $origen = 'web';
 
         $ticket_id = null;
         if (preg_match('/\[?(TD-\d{8}-\d{4})\]?/i', $subject, $mt)) $ticket_id = $mt[1];
+        // Si hay ticket_id y origen sigue siendo graph_sync, forzar 'web'
+        if ($ticket_id && $origen === 'graph_sync') $origen = 'web';
+
+    // Extraer nombre del paciente del body HTML (tabla de datos del ciudadano)
+    $nombre_extraido = null;
+    if (preg_match('/Nombre<\/td>[^<]*<td[^>]*>([^<\n]{3,80})/i', $body_cont ?? '', $mn))
+        $nombre_extraido = trim(strip_tags($mn[1]));
+    if ($nombre_extraido && strlen($nombre_extraido) >= 3)
+        $payload['nombre'] = $nombre_extraido;
 
         $payload = [
             'message_id'          => $msg_id,
@@ -646,6 +656,7 @@ foreach ($todos_correos as $c) {
     if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))  $origen = 'nova_directo';
     elseif (preg_match('/NOVA\s+TD/ui', $subject))          $origen = 'nova_web';
     elseif (preg_match('/QR\b/u', $subject))                $origen = 'qr';
+    elseif (preg_match('/\bWEB\b/ui', $subject))            $origen = 'web';
     elseif ($ticket_id)                                     $origen = 'web';
 
     $payload = [
@@ -670,11 +681,24 @@ foreach ($todos_correos as $c) {
     ];
     if ($ticket_id) $payload['ticket_id'] = $ticket_id;
 
-    if ($ticket_id) {
-        $body_texto = strip_tags($body_cont ?? '');
-        if (preg_match('/(?:C[ee]dula|Documento|C\.C\.|Doc\.?)[:\s#]*(\d{6,12})/i', $body_texto, $mc))
-            $payload['cedula'] = preg_replace('/\D/', '', $mc[1]);
-    }
+    // Extraer nombre del paciente del body HTML (tabla de datos del ciudadano)
+    $nombre_extraido = null;
+    if (preg_match('/Nombre<\/td>[^<]*<td[^>]*>([^<\n]{3,80})/i', $body_cont ?? '', $mn))
+        $nombre_extraido = trim(strip_tags($mn[1]));
+    if ($nombre_extraido && strlen($nombre_extraido) >= 3)
+        $payload['nombre'] = $nombre_extraido;
+
+    // Extraer cédula del body — intentar siempre, no solo si hay ticket_id
+    $body_texto = strip_tags(html_entity_decode($body_cont ?? '', ENT_QUOTES, 'UTF-8'));
+    $cedula_extraida = null;
+    // Regex 1: "Documento: 43418217" o "Cédula: 43.418.217" o "C.C. 43418217"
+    if (preg_match('/(?:C[eé]dula|Documento|C\.C\.|Doc\.?|N[°º]\.?\s*Doc)[:\s#Nº°]*(\d[\d\.]{5,14})/iu', $body_texto, $mc))
+        $cedula_extraida = preg_replace('/\D/', '', $mc[1]);
+    // Regex 2: buscar en estructura HTML de tabla (td con label + td con valor)
+    if (!$cedula_extraida && preg_match('/Documento<\/td>[^<]*<td[^>]*>([\d\.]{6,15})/i', $body_cont ?? '', $mc2))
+        $cedula_extraida = preg_replace('/\D/', '', $mc2[1]);
+    if ($cedula_extraida && strlen($cedula_extraida) >= 6 && strlen($cedula_extraida) <= 12)
+        $payload['cedula'] = $cedula_extraida;
 
     $r = sbUpsert('correos', [$payload], 'message_id');
 
@@ -687,7 +711,7 @@ foreach ($todos_correos as $c) {
     // ── Determinar si es realmente nuevo ─────────────────────────────
     // Es nuevo si: no tiene sentimiento (no fue clasificado aún) Y
     // no tiene un estado de gestión activo (no sobreescribir trabajo ya hecho)
-    $estados_protegidos = ['pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'];
+    $estados_protegidos = ['pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion','sin_asignar'];
     $estado_actual = $fila['estado'] ?? '';
     $es_nuevo = empty($fila['sentimiento']) && !in_array($estado_actual, $estados_protegidos);
     // Caso especial: si estaba 'enviado' (respuesta previa en hilo) y llega
@@ -854,7 +878,10 @@ function clasificarCorreo(string $correo_id, string $subject, string $body, stri
     if (!$ia) return null;
     $horas_sla=intval($ia['horas_sla']??120);
     $fecha_limite_sla=date('c',strtotime("+{$horas_sla} hours"));
-    $ticket_id_ext="EXT-".date('Ymd')."-".str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
+    // Solo asignar ticket_id EXT- si el correo aún no tiene uno (no sobreescribir TD-)
+    $tiene_ticket = sbGet("correos?id=eq.$correo_id&select=ticket_id&limit=1");
+    $ticket_id_actual = $tiene_ticket[0]['ticket_id'] ?? null;
+    $ticket_id_ext = $ticket_id_actual ?: "EXT-".date('Ymd')."-".str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
     sbPatch('correos',"id=eq.$correo_id",[
         'tipo_pqr'=>$ia['tipo_pqr']??'peticion','sentimiento'=>$ia['sentimiento']??'neutro',
         'datos_legales'=>json_encode(['tono'=>$ia['tono']??'neutro']),'prioridad'=>$ia['prioridad']??'media',
