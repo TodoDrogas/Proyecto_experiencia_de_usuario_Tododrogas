@@ -144,6 +144,12 @@ elseif  ($transcripcion)                            $canal = 'audio';
 
 $canal_contacto = $body['contacto_preferido'] ?? $body['canal'] ?? 'formulario_web';
 $origen         = $body['origen'] ?? 'formulario_web'; // nova_td | formulario_web
+// Normalizar origen igual que radicar-encuesta.php
+$origen = match($origen) {
+    'nova_td'        => 'nova_directo',
+    'formulario_web' => 'web',
+    default          => $origen,
+};
 
 $sede_nombre    = trim($body['sede_nombre']    ?? '');
 $sede_ciudad    = trim($body['sede_ciudad']    ?? '');
@@ -426,64 +432,8 @@ if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
     $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 }
 
-// ── PASO 2: INSERTAR EN SUPABASE ─────────────────────────────────────
-$correo_id = null;
-try {
-    $sb_payload = [
-        'ticket_id'         => $ticket_id,
-        'origen'            => $origen,
-        'canal_contacto'    => $canal_contacto,
-        'from_email'        => $correo    ?: null,
-        'from_name'         => $nombre    ?: null,
-        'nombre'            => $nombre    ?: null,
-        'correo'            => $correo    ?: null,
-        'telefono_contacto' => $telefono  ?: null,
-        'cedula'            => $documento ?: null,
-        'subject'           => $subject,
-        'descripcion'       => $texto_pqr ?: null,
-        'body_content'      => $texto_pqr ?: null,
-        'transcripcion'     => $transcripcion ?: null,
-        'audio_url'         => $audio_url  ?: null,
-        'canvas_url'        => $canvas_url ?: null,
-        'tipo_pqr'          => $tipo_pqr   ?: null,
-        'sentimiento'       => $sentimiento ?: 'neutro',
-        'prioridad'         => $prioridad   ?: 'media',
-        'nivel_riesgo'      => $nivel_riesgo ?: 'bajo',
-        'resumen_corto'     => $resumen_corto ?: null,
-        'ley_aplicable'     => $ley_aplicable ?: null,
-        'categoria_ia'      => $categoria_ia  ?: null,
-        'ciudad_paciente'   => $sede_ciudad   ?: null,
-        'estado'            => 'sin_asignar',
-        'is_draft'          => false,
-        'has_attachments'   => false,
-        'received_at'       => $now,
-        'created_at'        => $now,
-        'updated_at'        => $now,
-    ];
-    $ch_sb = curl_init("$SB_URL/rest/v1/correos");
-    curl_setopt_array($ch_sb, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode([$sb_payload]),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_HTTPHEADER     => [
-            "apikey: $SB_KEY",
-            "Authorization: Bearer $SB_KEY",
-            'Content-Type: application/json',
-            'Prefer: return=representation',
-        ],
-    ]);
-    $sb_resp = curl_exec($ch_sb);
-    $sb_code = curl_getinfo($ch_sb, CURLINFO_HTTP_CODE);
-    curl_close($ch_sb);
-    if ($sb_code >= 200 && $sb_code < 300) {
-        $sb_inserted = json_decode($sb_resp, true);
-        $correo_id   = $sb_inserted[0]['id'] ?? null;
-    }
-} catch (\Throwable $e) {
-    // Si Supabase falla el flujo continua — el sync recupera el correo
-    $correo_id = null;
-}
+// ── PASO 2: SUPABASE ELIMINADO — esta versión solo envía correos ──────
+$correo_id = null; // No hay ID de BD en esta versión
 
 // ── PASO 3: ENVIAR CORREO A pqrsfd via Graph API ─────────────────────
 date_default_timezone_set('America/Bogota'); // Hora Colombia UTC-5
