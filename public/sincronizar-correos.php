@@ -407,7 +407,7 @@ if ($accion === 'reconciliar') {
         $from_name  = $c['from']['emailAddress']['name'] ?? '';
         $subject    = $c['subject'] ?? '(sin asunto)';
 
-        // Ignorar correos del propio buzón — EXCEPCIÓN: reenvíos externos y radicados TD-/ENC-
+        // Ignorar correos del propio buzón — EXCEPCIÓN: reenvíos externos
         $es_reenvio_externo_rec = preg_match('/^(RV:|RE:|FWD?:)\s*/i', trim($subject));
         $es_radicado_propio_rec = preg_match('/^\[(TD|ENC)-\d{8}-\d{4}\]/i', trim($subject));
         $buzones_propios_rec = array_map('strtolower', array_column($BUZONES, 'mailbox'));
@@ -430,7 +430,7 @@ if ($accion === 'reconciliar') {
         $origen = 'graph_sync';
         if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))  $origen = 'nova_directo';
         elseif (preg_match('/NOVA\s+TD/ui', $subject))         $origen = 'nova_web';
-        elseif (preg_match('/QR\b/u', $subject))               $origen = 'qr';
+        elseif (preg_match('/📷\s*QR|\[(?:TD|ENC)-\d{8}-\d{4}\].*📷/u', $subject))  $origen = 'qr';
         elseif (preg_match('/\bWEB\b/ui', $subject))           $origen = 'web';
 
         $ticket_id = null;
@@ -601,9 +601,8 @@ foreach ($todos_correos as $c) {
     $subject    = $c['subject'] ?? '(sin asunto)';
 
     // ── FIX 1: Ignorar correos del propio buzon ───────────────────────
-    // EXCEPCIÓN 1: RV/FWD desde el buzón propio — puede ser PQR reenviada
-    // EXCEPCIÓN 2: asunto empieza con [TD- o [ENC- — son radicados/encuestas
-    //              generados por radicar-pqr.php / radicar-encuesta.php
+    // EXCEPCIÓN: si es un RV/FWD desde el buzón propio, puede ser una PQR
+    // reenviada desde pqrs.institucional u otro buzón — NO ignorar
     $es_reenvio_externo = preg_match('/^(RV:|RE:|FWD?:)\s*/i', trim($subject));
     $es_radicado_propio = preg_match('/^\[(TD|ENC)-\d{8}-\d{4}\]/i', trim($subject));
     $buzones_propios = array_map('strtolower', array_column($BUZONES, 'mailbox'));
@@ -658,7 +657,7 @@ foreach ($todos_correos as $c) {
     $origen = 'graph_sync';
     if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))  $origen = 'nova_directo';
     elseif (preg_match('/NOVA\s+TD/ui', $subject))          $origen = 'nova_web';
-    elseif (preg_match('/QR\b/u', $subject))                $origen = 'qr';
+    elseif (preg_match('/📷\s*QR|\[(?:TD|ENC)-\d{8}-\d{4}\].*📷/u', $subject))  $origen = 'qr';
     elseif (preg_match('/\bWEB\b/ui', $subject))            $origen = 'web';
     elseif ($ticket_id)                                     $origen = 'web';
 
