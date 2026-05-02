@@ -3606,9 +3606,6 @@ async function selectEmail(id) {
   // Siempre intentar cargar adjuntos — no depender solo de has_attachments
   loadAttachments(id, email.message_id);
 
-  // ── Renderizar audio/canvas del formulario web (audio_url / canvas_url desde Supabase) ──
-  renderMediaFormulario(email);
-
   // ── Renderizar cuerpo del correo resolviendo cid: antes de construir el iframe ──
   const _bodyContent = email.body_content || '';
   const _esHtml = email.body_type === 'html' || _bodyContent.trimStart().startsWith('<');
@@ -9182,7 +9179,7 @@ async function loadAgentesMetrics(){
 
   const [correos, eventos, agentes] = await Promise.all([
     sb(qC('correos?origen=neq.saliente&origen=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
-    sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=5000','created_at')).catch(()=>[]),
+    sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=20000','created_at')).catch(()=>[]),
     sb('agentes?select=id,nombre,email,activo,sede&order=nombre.asc').catch(()=>[]),
   ]);
 
@@ -9211,7 +9208,10 @@ function renderAgentes(){
   const avgH    = resol.length>0
     ? (resol.reduce((a,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return a+(h>0?h:0);},0)/resol.length).toFixed(1)+'h'
     : '—';
-  const gestCount = H.filter(h=>h.agente_id&&!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length;
+  const _EXCL_GEST = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+    'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+    'pendiente_firma','firma_confirmada']);
+  const gestCount = H.filter(h=>h.agente_id&&!_EXCL_GEST.has(h.evento)).length;
 
   const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   setV('agKpiTotal',   total);
@@ -9223,7 +9223,9 @@ function renderAgentes(){
   setV('agKpiAutoCerrado', autoCerrados);
 
   // ── KPIs globales Con/Sin Respuesta ──
-  const _EXCL_KPI = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado']);
+  const _EXCL_KPI = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+    'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+    'pendiente_firma','firma_confirmada']);
   const _idsConGest   = new Set(H.filter(h=>h.correo_id && !_EXCL_KPI.has(h.evento)).map(h=>h.correo_id));
   const _idsConResp   = new Set(H.filter(h=>h.correo_id && h.evento==='correo_respondido').map(h=>h.correo_id));
   const _globalConResp = _idsConResp.size;
@@ -9311,9 +9313,15 @@ function renderAgentes(){
     const tColor  = tRes==='—'?'var(--ink3)':tResNum>48?'var(--red)':tResNum>24?'#ca8a04':'var(--green)';
     const resp    = myH.filter(h=>h.evento==='correo_respondido').length;
     const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
-    const gestReg = myH.filter(h=>!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length;
+    // Gestiones reales = solo lo que viene del botón "Añadir Gestión" + respuestas enviadas
+    const _SOLO_GESTION = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+      'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+      'pendiente_firma','firma_confirmada']);
+    const gestReg = myH.filter(h=>!_SOLO_GESTION.has(h.evento)).length;
     // ── Etiquetas Con/Sin Respuesta por agente ──
-    const _EXCL_EV = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado']);
+    const _EXCL_EV = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+      'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+      'pendiente_firma','firma_confirmada']);
     const _ticketsConGest = new Set(myH.filter(h=>!_EXCL_EV.has(h.evento)).map(h=>h.correo_id));
     const _ticketsResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
     const conRespCount = _ticketsResp.size;
