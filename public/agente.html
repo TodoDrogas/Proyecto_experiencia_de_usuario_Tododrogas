@@ -950,7 +950,7 @@ async function loadEmails() {
     let data = [], offset = 0;
     const PAGE = 500;
     while(true) {
-      const page = await sb(`correos?agente_id=eq.${AGENT_ID}&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&order=received_at.desc&limit=${PAGE}&offset=${offset}`);
+      const page = await sb(`correos?or=(agente_id.eq.${AGENT_ID},asignado_a.eq.${encodeURIComponent(AGENT_NAME)})&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&order=received_at.desc&limit=${PAGE}&offset=${offset}`);
       if(!page || page.length === 0) break;
       data = data.concat(page);
       if(page.length < PAGE) break;
@@ -2952,6 +2952,17 @@ async function saveGestion() {
     } else if(email?.estado==='pendiente') {
       patchCorreo.estado = 'gestion';
     }
+
+    // ── Actualizar campos SIGI si el asesor los modificó (todas las gestiones) ──
+    const _nombreSolUp = document.getElementById('gNombreSolVal')?.value||'';
+    const _detalleUp   = document.getElementById('gDetalleVal')?.value||'';
+    const _categoriaUp = document.getElementById('gCategoria')?.value||'';
+    const _epsIdUp     = document.getElementById('gEpsId')?.value||null;
+    if(_nombreSolUp) patchCorreo.nombre_solicitud = _nombreSolUp;
+    if(_detalleUp)   patchCorreo.detalle_solicitud = _detalleUp;
+    if(_categoriaUp) patchCorreo.categoria_sigi   = _categoriaUp;
+    if(_epsIdUp)     patchCorreo.eps_id            = _epsIdUp;
+    if(_gTutela !== null) patchCorreo.tiene_tutela = _gTutela;
 
     await sb(`correos?id=eq.${id}`, 'PATCH', patchCorreo);
 
@@ -6054,9 +6065,11 @@ html[data-theme="dark"] #panelRR [style*="border-bottom:1px solid #e2e8f0"]{bord
                 <th>Ticket</th>
                 <th>Paciente</th>
                 <th>EPS</th>
-                <th>Tipo</th>
+                <th>Nombre Solicitud</th>
+                <th>Detalle</th>
                 <th style="text-align:center">#Gest</th>
                 <th style="text-align:center">Tutela</th>
+                <th>Categoría</th>
                 <th>Estado</th>
               </tr>
             </thead>
@@ -6119,58 +6132,103 @@ async function cargarMetricasAgente() {
   var desde = document.getElementById('agMDesde').value;
   var hasta = document.getElementById('agMHasta').value;
   document.getElementById('agMetSub').textContent = AGENT_NAME + ' · ' + desde + ' → ' + hasta;
-  var correos = [];
+
+  // PASO 1: Traer eventos filtrados por fecha de GESTIÓN (no de llegada del correo)
+  var _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+    'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+    'pendiente_firma','firma_confirmada']);
+  var eventos = [];
   try {
-    correos = await sb('correos?agente_id=eq.' + AGENT_ID + '&num_gestiones=gt.0' +
-      '&origen=neq.saliente&origen=neq.borrador&is_draft=is.false' +
-      '&received_at=gte.' + desde + 'T00:00:00-05:00&received_at=lte.' + hasta + 'T23:59:59-05:00' +
-      '&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente,created_at' +
-      '&order=created_at.desc&limit=500') || [];
-  } catch(e) { correos = []; }
+    eventos = await sb('historial_eventos?agente_id=eq.' + AGENT_ID +
+      '&created_at=gte.' + desde + 'T00:00:00-05:00' +
+      '&created_at=lte.' + hasta + 'T23:59:59-05:00' +
+      '&select=id,created_at,correo_id,evento,descripcion' +
+      '&order=created_at.desc&limit=5000') || [];
+  } catch(e) { eventos = []; }
+
+  var eventosGestion = eventos.filter(function(h){ return !_EXCL.has(h.evento); });
+  var correoIdsSet   = new Set(eventosGestion.map(function(h){ return h.correo_id; }).filter(Boolean));
+  var correoIds      = Array.from(correoIdsSet);
+
+  // PASO 2: Datos de los tickets gestionados en ese período
+  var correos = [];
+  if(correoIds.length > 0) {
+    try {
+      correos = await sb('correos?id=in.(' + correoIds.slice(0,400).join(',') + ')' +
+        '&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,' +
+        'tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente' +
+        '&limit=500') || [];
+    } catch(e) { correos = []; }
+  }
+
   var epsCat = [];
   try { epsCat = await sb('eps_catalogo?select=id,nombre&order=nombre.asc') || []; } catch(e) {}
   var epsMap = {};
-  epsCat.forEach(function(e) { epsMap[e.id] = e.nombre; });
-  var total = correos.length;
-  var totalG = correos.reduce(function(s,c) { return s+(c.num_gestiones||0); }, 0);
-  document.getElementById('agKpiCasos').textContent = total;
-  document.getElementById('agKpiGest').textContent = totalG;
-  document.getElementById('agKpiProm').textContent = total ? (totalG/total).toFixed(1) : '0';
-  document.getElementById('agKpiTutela').textContent = correos.filter(function(c){return c.tiene_tutela===true;}).length;
-  document.getElementById('agKpiCerrados').textContent = correos.filter(function(c){return c.estado==='solucionado'||c.estado==='gestionado';}).length;
+  epsCat.forEach(function(e){ epsMap[e.id] = e.nombre; });
+
+  // KPIs reales del período
+  var total    = correoIds.length;
+  var totalG   = eventosGestion.length;
+  var cerrados = correos.filter(function(c){ return c.estado==='solucionado'||c.estado==='gestionado'; }).length;
+  var conTutela = correos.filter(function(c){ return c.tiene_tutela===true; }).length;
+
+  document.getElementById('agKpiCasos').textContent    = total;
+  document.getElementById('agKpiGest').textContent     = totalG;
+  document.getElementById('agKpiProm').textContent     = total ? (totalG/total).toFixed(1) : '0';
+  document.getElementById('agKpiTutela').textContent   = conTutela;
+  document.getElementById('agKpiCerrados').textContent = cerrados;
+
   var PAL = ['#60a5fa','#4ade80','#a78bfa','#fb923c','#f472b6','#38bdf8','#facc15','#94a3b8'];
   function contar(arr,k){return arr.reduce(function(a,c){var v=c[k]||'Sin dato';a[v]=(a[v]||0)+1;return a;},{});}
   function topN(obj,n){return Object.entries(obj).sort(function(a,b){return b[1]-a[1];}).slice(0,n);}
-  function drawDoughnut(id,data,key){
-    var ctx=document.getElementById(id);if(!ctx)return;
-    if(_agCharts[key])_agCharts[key].destroy();
-    _agCharts[key]=new Chart(ctx,{type:'doughnut',data:{labels:data.map(function(d){return d[0];}),datasets:[{data:data.map(function(d){return d[1];}),backgroundColor:PAL.slice(0,data.length),borderWidth:2,borderColor:'#fff',hoverOffset:6}]},options:{plugins:{legend:{display:true,position:'right',labels:{color:'#64748b',font:{size:10,family:'Poppins'},padding:8,boxWidth:10,usePointStyle:true}}},responsive:true,maintainAspectRatio:false,cutout:'65%'}});
-  }
   function draw(id,data,key){
     var ctx=document.getElementById(id);if(!ctx)return;
     if(_agCharts[key])_agCharts[key].destroy();
     _agCharts[key]=new Chart(ctx,{type:'bar',data:{labels:data.map(function(d){return d[0];}),datasets:[{data:data.map(function(d){return d[1];}),backgroundColor:PAL.slice(0,data.length),borderRadius:6}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'#f1f5f9'},ticks:{color:'#94a3b8',font:{size:10}}},y:{grid:{display:false},ticks:{color:'#64748b',font:{size:10},maxTicksLimit:8}}},responsive:true,maintainAspectRatio:false}});
   }
-  draw('agChartTipo', topN(contar(correos,'nombre_solicitud'),7), 'tipo');
-  draw('agChartCat',  topN(contar(correos,'categoria_sigi'),6), 'cat');
+  draw('agChartTipo',  topN(contar(correos,'nombre_solicitud'),7), 'tipo');
+  draw('agChartCat',   topN(contar(correos,'categoria_sigi'),6),   'cat');
   var epsObj={};
   correos.forEach(function(c){var n=epsMap[c.eps_id]||'Sin EPS';epsObj[n]=(epsObj[n]||0)+1;});
-  draw('agChartEps', topN(epsObj,7), 'eps');
+  draw('agChartEps',   topN(epsObj,7), 'eps');
   draw('agChartDepto', topN(contar(correos,'departamento_paciente'),8), 'depto');
+
+  // Tendencia por día: gestiones reales del historial
   var porDia={};
-  correos.forEach(function(c){var d=c.created_at&&c.created_at.split('T')[0];if(d)porDia[d]=(porDia[d]||0)+(c.num_gestiones||0);});
+  eventosGestion.forEach(function(h){
+    var d=h.created_at&&h.created_at.split('T')[0];
+    if(d) porDia[d]=(porDia[d]||0)+1;
+  });
   var dias=Object.keys(porDia).sort();
   var ctxT=document.getElementById('agChartTend');
   if(ctxT){
     if(_agCharts.tend)_agCharts.tend.destroy();
-    _agCharts.tend=new Chart(ctxT,{type:'line',data:{labels:dias.map(function(d){var p=d.split('-');return parseInt(p[2])+' '+['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(p[1])-1];}),datasets:[{data:dias.map(function(d){return porDia[d];}),borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,.1)',tension:.4,pointBackgroundColor:'#4ade80',pointRadius:4,fill:true,borderWidth:2}]},options:{plugins:{legend:{display:false}},scales:{x:{grid:{color:'#f1f5f9'},ticks:{color:'#94a3b8',font:{size:10}}},y:{beginAtZero:true,grid:{color:'#f1f5f9'},ticks:{color:'#94a3b8',font:{size:10}}}},responsive:true,maintainAspectRatio:false}});
+    _agCharts.tend=new Chart(ctxT,{type:'line',data:{
+      labels:dias.map(function(d){var p=d.split('-');return parseInt(p[2])+' '+['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(p[1])-1];}),
+      datasets:[{data:dias.map(function(d){return porDia[d];}),borderColor:'#4ade80',backgroundColor:'rgba(74,222,128,.1)',tension:.4,pointBackgroundColor:'#4ade80',pointRadius:4,fill:true,borderWidth:2}]
+    },options:{plugins:{legend:{display:false}},scales:{x:{grid:{color:'#f1f5f9'},ticks:{color:'#94a3b8',font:{size:10}}},y:{beginAtZero:true,grid:{color:'#f1f5f9'},ticks:{color:'#94a3b8',font:{size:10}}}},responsive:true,maintainAspectRatio:false}});
   }
+
+  // Tabla: gestiones del período por ticket (columna #Gest = gestiones en el período, no total)
+  var gestPorTicket={};
+  eventosGestion.forEach(function(h){if(h.correo_id)gestPorTicket[h.correo_id]=(gestPorTicket[h.correo_id]||0)+1;});
   var tbody=document.getElementById('agTablaBody');
-  if(!correos.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8">Sin casos en el período</td></tr>';return;}
-  tbody.innerHTML=correos.slice(0,50).map(function(c){
+  if(!correos.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:#94a3b8">Sin gestiones en el período</td></tr>';return;}
+  tbody.innerHTML=correos.map(function(c){
     var eps=epsMap[c.eps_id]||'—';
     var bst=c.estado==='solucionado'?'background:#dcfce7;color:#16a34a':'background:#dbeafe;color:#2563eb';
-    return '<tr><td style="color:#2563eb;font-weight:700;white-space:nowrap">'+(c.ticket_id||'—')+'</td><td style="color:#0f172a;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(c.nombre||'—')+'</td><td style="color:#64748b;font-size:10px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+eps+'">'+eps+'</td><td style="color:#64748b;font-size:10px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(c.nombre_solicitud||'—')+'</td><td style="text-align:center;font-weight:800;color:#7c3aed;font-size:14px">'+(c.num_gestiones||0)+'</td><td style="text-align:center;font-size:10px;font-weight:700;color:'+(c.tiene_tutela===true?'#dc2626':'#94a3b8')+'">'+(c.tiene_tutela===true?'SÍ':'NO')+'</td><td><span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:99px;'+bst+'">'+((c.estado||'').toUpperCase())+'</span></td></tr>';
+    var gPer=gestPorTicket[c.id]||0;
+    return '<tr>'
+      +'<td style="color:#2563eb;font-weight:700;white-space:nowrap">'+(c.ticket_id||'—')+'</td>'
+      +'<td style="color:#0f172a;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(c.nombre||'—')+'</td>'
+      +'<td style="color:#64748b;font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+eps+'">'+eps+'</td>'
+      +'<td style="color:#64748b;font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(c.nombre_solicitud||'—')+'</td>'
+      +'<td style="color:#64748b;font-size:10px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(c.detalle_solicitud||'')+'">'+(c.detalle_solicitud||'—')+'</td>'
+      +'<td style="text-align:center;font-weight:800;color:#7c3aed;font-size:14px">'+gPer+'</td>'
+      +'<td style="text-align:center;font-size:10px;font-weight:700;color:'+(c.tiene_tutela===true?'#dc2626':'#94a3b8')+'">'+(c.tiene_tutela===true?'SÍ':'NO')+'</td>'
+      +'<td style="color:#64748b;font-size:10px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(c.categoria_sigi||'—')+'</td>'
+      +'<td><span style="font-size:10px;font-weight:700;padding:3px 10px;border-radius:99px;'+bst+'">'+((c.estado||'').toUpperCase())+'</span></td>'
+      +'</tr>';
   }).join('');
 }
 
