@@ -626,13 +626,9 @@ if ($token) {
                ($canvas_vision_error ? "<p style='margin:6px 0 0;font-size:10px;color:#c0392b'>Error: " . htmlspecialchars($canvas_vision_error) . "</p>" : ""))
 
         // ── Audio: transcripción Whisper ─────────────────────────────
-        : ($canal === 'audio'
-            ? ($transcripcion
-                ? "<p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>🎤 Transcripción Whisper AI</p>
-                   <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . nl2br(htmlspecialchars($transcripcion)) . "</p>"
-                : "<p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#c0392b;text-transform:uppercase;letter-spacing:2px'>🎤 Transcripción no disponible</p>
-                   <p style='margin:0;font-size:12px;color:#7a90a8;line-height:1.7'>Whisper no pudo procesar el audio. Escuchar el archivo adjunto." .
-                   ($whisper_error_pre ? "<br><span style='font-size:10px;color:#c0392b'>Error: " . htmlspecialchars($whisper_error_pre) . "</span>" : "") . "</p>")
+        : ($canal === 'audio' && $transcripcion
+            ? "<p style='margin:0 0 8px;font-size:9px;font-weight:500;color:#7a90a8;text-transform:uppercase;letter-spacing:2px'>🎤 Transcripción Whisper AI</p>
+               <p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7;font-style:italic'>" . nl2br(htmlspecialchars($transcripcion)) . "</p>"
 
         // ── Escrito: texto directo ───────────────────────────────────
         : "<p style='margin:0;font-size:12px;color:#3a4a5a;line-height:1.7'>" . nl2br(htmlspecialchars($texto_pqr ?: '[Sin contenido de texto]')) . "</p>")) .
@@ -690,26 +686,25 @@ if ($token) {
         'attachments' => [],
     ];
 
-    // Adjuntar audio si existe (máx 4MB inline)
+    // Adjuntar audio si existe (máx 4MB bytes reales — límite Graph API sendMail inline)
     if ($audio_url) {
-        // Soporte para data URL base64 (enviado directo desde el formulario)
         if (strpos($audio_url, 'data:audio') === 0) {
-            // Usar strpos/substr en lugar de preg_match para evitar backtracking en base64 grande
-            $b64sep = strpos($audio_url, ';base64,');
+            $b64sep     = strpos($audio_url, ';base64,');
             $mime_audio = $b64sep ? substr($audio_url, 5, $b64sep - 5) : 'audio/webm';
             $ext_audio  = (substr($mime_audio, -4) === 'webm') ? 'webm' : substr($mime_audio, strrpos($mime_audio,'/')+1);
             $audio_b64  = $b64sep ? substr($audio_url, $b64sep + 8) : '';
-            // FIX: decodificar para medir bytes reales antes de adjuntar
+            // FIX: decodificar para medir bytes reales — base64 pesa ~33% más que el archivo real
             $audio_raw  = $audio_b64 ? base64_decode($audio_b64) : '';
             if ($audio_raw && strlen($audio_raw) < 4 * 1024 * 1024) {
                 $mail_payload['attachments'][] = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
                     'name'         => "audio_{$ticket_id}.{$ext_audio}",
                     'contentType'  => $mime_audio,
-                    'contentBytes' => $audio_b64, // Graph API espera base64
+                    'contentBytes' => $audio_b64,
                 ];
             }
         } else {
+            // URL de Supabase Storage — descargar y adjuntar
             $audio_data = fetchUrlBytes($audio_url, $SB_KEY);
             if ($audio_data && strlen($audio_data) < 4 * 1024 * 1024) {
                 $mail_payload['attachments'][] = [
@@ -1079,26 +1074,24 @@ if ($token && $correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
     ];
 
     // Adjuntar su propio audio/canvas como evidencia
-    // Audio: adjuntar solo si es < 4MB bytes reales (límite Graph API inline attachment)
+    // Audio: adjuntar solo si es < 3MB (límite Graph API inline attachment)
     if ($audio_url) {
         if (strpos($audio_url, 'data:audio') === 0) {
-            $b64sep2    = strpos($audio_url, ';base64,');
-            $mime_au2   = $b64sep2 ? substr($audio_url, 5, $b64sep2 - 5) : 'audio/webm';
-            $ext_au2    = (substr($mime_au2, -4) === 'webm') ? 'webm' : substr($mime_au2, strrpos($mime_au2,'/')+1);
+            $b64sep2 = strpos($audio_url, ';base64,');
+            $mime_au2 = $b64sep2 ? substr($audio_url, 5, $b64sep2 - 5) : 'audio/webm';
+            $ext_au2  = (substr($mime_au2, -4) === 'webm') ? 'webm' : substr($mime_au2, strrpos($mime_au2,'/')+1);
             $audio_b642 = $b64sep2 ? substr($audio_url, $b64sep2 + 8) : '';
-            // FIX: decodificar para medir bytes reales, no el string base64
-            $audio_raw2 = $audio_b642 ? base64_decode($audio_b642) : '';
-            if ($audio_raw2 && strlen($audio_raw2) < 4 * 1024 * 1024) {
+            if ($audio_b642 && strlen($audio_b642) < 3*1024*1024) {
                 $acuse_payload['attachments'][] = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
                     'name'         => "su_audio_{$ticket_id}.{$ext_au2}",
                     'contentType'  => $mime_au2,
-                    'contentBytes' => $audio_b642, // Graph API espera base64
+                    'contentBytes' => $audio_b642,
                 ];
             }
         } else {
             $audio_ev = fetchUrlBytes($audio_url, $SB_KEY);
-            if ($audio_ev && strlen($audio_ev) < 4 * 1024 * 1024) { // FIX: subido de 2MB a 4MB igual que admin
+            if ($audio_ev && strlen($audio_ev) < 2*1024*1024) { // <2MB
                 $acuse_payload['attachments'][] = [
                     '@odata.type'  => '#microsoft.graph.fileAttachment',
                     'name'         => "su_audio_{$ticket_id}.webm",
