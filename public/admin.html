@@ -8401,12 +8401,12 @@ async function loadNovaMetrics(){
     encQr,
     sesNovaWeb, sesNovaDir, sesNovaBv, sesNovaQr,
   ] = await Promise.all([
-    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente')).catch(()=>[]),
-    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente')).catch(()=>[]),
+    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
+    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
 
-    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente')).catch(()=>[]),
-    sb(qC('correos?or=(origen.eq.nova_directo,origen.eq.nova_td)&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente')).catch(()=>[]),
-    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
+    sb(qC('correos?or=(origen.eq.nova_directo,origen.eq.nova_td)&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
+    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
@@ -8790,14 +8790,17 @@ async function _mExportInit() {
 
   // Función para enriquecer radicado con datos de contactos
   const enrichRad = r => {
-    if (r.cedula && r.nombre) return r; // ya tiene datos
     const ct = r.from_email ? contactosMap[r.from_email.toLowerCase()] : null;
     const epsNombre = r.eps_id ? epsMap[r.eps_id] : null;
+    // Leer eps_nombre de datos_legales si existe
+    let dl = {};
+    try { dl = typeof r.datos_legales==='string' ? JSON.parse(r.datos_legales) : (r.datos_legales||{}); } catch(_){}
+    const epsFromDL = dl.eps_nombre || null;
     return {
       ...r,
       cedula: r.cedula || r.cedula_paciente || null,
       nombre: r.nombre || r.nombre_solicitud || ct?.nombre || null,
-      eps_nombre: epsNombre || getEps(r.cedula||'', {}),
+      eps_nombre: epsNombre || epsFromDL || getEps(r.cedula||'', {}),
     };
   };
 
