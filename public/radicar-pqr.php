@@ -762,8 +762,8 @@ if ($token) {
 
     $correo_enviado = ($mail_code === 202);
 
-    // Actualizar body_content con HTML completo una vez enviado el correo
-    if ($correo_enviado && $correo_id) {
+    // Actualizar body_content con HTML completo (siempre que exista el id y el HTML)
+    if ($correo_id && $cuerpo_html) {
         try {
             $ch_patch = curl_init("$SB_URL/rest/v1/correos?id=eq.{$correo_id}");
             curl_setopt_array($ch_patch, [
