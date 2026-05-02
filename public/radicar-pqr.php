@@ -458,7 +458,7 @@ try {
         'datos_legales'     => !empty($eps_paciente) ? json_encode(['eps_nombre' => $eps_paciente]) : json_encode([]),
         'estado'            => 'sin_asignar',
         'is_draft'          => false,
-        'has_attachments'   => false,
+        'has_attachments'   => !empty($audio_url) || !empty($canvas_url),
         'received_at'       => $now,
         'created_at'        => $now,
         'updated_at'        => $now,
