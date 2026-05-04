@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin WhatsApp · Tododrogas</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="config.js" onerror="console.warn('config.js not found')"></script>
+<style>
+:root{
+  --ink:#0a0e1a;--ink2:#3a4258;--ink3:#8892a4;
+  --bg:#f2f4f8;--bg2:#e8ebf2;--surface:#fff;--surface2:#f7f8fb;--border:#dde1eb;
+  --blue:#2563eb;--blue-d:#1d4ed8;--blue-l:#eff4ff;
+  --green:#16a34a;--green-l:#dcfce7;
+  --wa:#25d366;--wa-d:#128c7e;--wa-l:#e7fce8;
+  --nova:#6366f1;--nova-l:#eef2ff;
+  --yellow:#ca8a04;--yellow-l:#fef9c3;
+  --red:#dc2626;--red-l:#fee2e2;
+  --orange:#ea580c;--orange-l:#fff7ed;
+  --purple:#7c3aed;--purple-l:#f5f3ff;
+  --shadow:0 1px 3px rgba(10,14,26,.08),0 4px 12px rgba(10,14,26,.04);
+  --shadow-l:0 2px 8px rgba(10,14,26,.12),0 8px 24px rgba(10,14,26,.08);
+  --r:12px;--r2:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-height:100dvh;display:flex;flex-direction:column}
+
+/* TOPBAR */
+.topbar{background:var(--ink);color:#fff;height:52px;display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:200;flex-shrink:0}
+.tb-brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;letter-spacing:-.3px}
+.tb-brand svg{opacity:.8}
+.tb-pill{background:rgba(37,211,102,.15);color:#25d366;border:1px solid rgba(37,211,102,.3);border-radius:99px;font-size:10px;font-weight:600;padding:2px 8px}
+.tb-admin-badge{background:rgba(124,58,237,.2);color:#a78bfa;border:1px solid rgba(124,58,237,.3);border-radius:99px;font-size:10px;font-weight:600;padding:2px 8px}
+.tb-nav{display:flex;gap:2px;margin-left:auto}
+.tb-nav-btn{background:none;border:none;color:rgba(255,255,255,.5);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;font-family:'Poppins',sans-serif;transition:all .15s}
+.tb-nav-btn:hover,.tb-nav-btn.active{background:rgba(255,255,255,.1);color:#fff}
+.tb-right{display:flex;align-items:center;gap:10px;margin-left:12px}
+.btn-logout{background:none;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);padding:4px 10px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .15s}
+.btn-logout:hover{border-color:var(--red);color:#fca5a5}
+
+/* MAIN */
+.main{flex:1;padding:20px;max-width:1400px;width:100%;margin:0 auto}
+
+/* SECTION */
+.section{display:none}
+.section.active{display:block}
+
+/* CARDS STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--surface);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);border:1px solid var(--border)}
+.stat-card .label{font-size:11px;color:var(--ink3);font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.stat-card .value{font-size:28px;font-weight:700;line-height:1}
+.stat-card .sub{font-size:11px;color:var(--ink3);margin-top:4px}
+.stat-card.c-green .value{color:var(--green)}
+.stat-card.c-blue .value{color:var(--blue)}
+.stat-card.c-orange .value{color:var(--orange)}
+.stat-card.c-purple .value{color:var(--purple)}
+.stat-card.c-red .value{color:var(--red)}
+.stat-card.c-nova .value{color:var(--nova)}
+
+/* PANEL */
+.panel{background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;margin-bottom:20px}
+.panel-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;justify-content:space-between}
+.panel-hdr h3{font-size:13px;font-weight:600}
+.panel-body{padding:16px 18px}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse;font-size:12px}
+.tbl th{font-size:11px;font-weight:500;color:var(--ink3);padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
+.tbl td{padding:10px 10px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--ink)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:var(--bg)}
+.tbl .mono{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink3)}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px}
+.badge-nova{background:var(--nova-l);color:var(--nova)}
+.badge-escalado{background:#fef3c7;color:#92400e}
+.badge-cerrado{background:var(--green-l);color:var(--green)}
+.badge-esperando{background:var(--blue-l);color:var(--blue)}
+.badge-online{background:var(--green-l);color:var(--green)}
+.badge-offline{background:var(--bg2);color:var(--ink3)}
+
+/* BTN */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:'Poppins',sans-serif;transition:all .15s}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:var(--blue-d)}
+.btn-sm{padding:4px 10px;font-size:11px}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--ink2)}
+.btn-ghost:hover{background:var(--bg);border-color:var(--ink3)}
+.btn-danger{background:var(--red-l);color:var(--red);border:1px solid rgba(220,38,38,.2)}
+.btn-danger:hover{background:var(--red);color:#fff}
+.btn-success{background:var(--green-l);color:var(--green);border:1px solid rgba(22,163,74,.2)}
+.btn-success:hover{background:var(--green);color:#fff}
+.btn-wa{background:var(--wa);color:#fff}
+.btn-wa:hover{background:var(--wa-d)}
+
+/* SEARCH / FILTERS */
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.search-box{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;flex:1;min-width:180px}
+.search-box input{border:none;outline:none;font-size:12px;font-family:'Poppins',sans-serif;background:transparent;width:100%;color:var(--ink)}
+.filter-select{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-family:'Poppins',sans-serif;background:var(--surface);color:var(--ink);cursor:pointer;outline:none}
+
+/* AGENTE ROW */
+.ag-row{display:flex;align-items:center;gap:10px}
+.ag-av{width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0}
+
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(10,14,26,.5);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+.modal-bg.open{display:flex}
+.modal{background:var(--surface);border-radius:var(--r);padding:24px;width:100%;max-width:480px;box-shadow:var(--shadow-l)}
+.modal h3{font-size:15px;font-weight:600;margin-bottom:16px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:11px;font-weight:500;color:var(--ink3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.form-group select,.form-group input,.form-group textarea{width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;background:var(--surface2)}
+.form-group select:focus,.form-group input:focus{border-color:var(--blue)}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;z-index:999;transform:translateY(60px);opacity:0;transition:all .25s;pointer-events:none}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.ok{background:var(--green)}
+.toast.err{background:var(--red)}
+
+/* CHAT VIEW EN MODAL */
+.chat-msgs{max-height:300px;overflow-y:auto;padding:12px;background:var(--bg);border-radius:8px;display:flex;flex-direction:column;gap:6px}
+.chat-bubble{max-width:80%;padding:8px 12px;border-radius:10px;font-size:12px;line-height:1.5}
+.chat-bubble.user{background:#fff;align-self:flex-start;border:1px solid var(--border)}
+.chat-bubble.agent{background:var(--wa-out);align-self:flex-end}
+.chat-bubble.nova{background:var(--nova-l);align-self:flex-start;border:1px solid rgba(99,102,241,.2)}
+.chat-bubble .ts{font-size:10px;color:var(--ink3);margin-top:3px}
+
+/* GRID 2 cols */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.grid-2{grid-template-columns:1fr}}
+
+/* PROGRESS */
+.progress-bar{height:6px;background:var(--bg2);border-radius:99px;overflow:hidden;margin-top:6px}
+.progress-fill{height:100%;border-radius:99px;background:var(--blue);transition:width .3s}
+
+/* EMPTY */
+.empty{text-align:center;padding:40px;color:var(--ink3);font-size:13px}
+
+/* TAGS */
+.tag{display:inline-block;font-size:10px;font-weight:500;padding:1px 6px;border-radius:4px;background:var(--bg2);color:var(--ink3)}
+
+/* RECURRENTE */
+.recurrente-badge{background:var(--orange-l);color:var(--orange);font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="tb-brand">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.555 4.122 1.528 5.855L.057 23.012a.75.75 0 0 0 .931.931l5.157-1.471A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75A9.745 9.745 0 0 1 6.38 20.07l-.37-.22-3.827 1.091 1.091-3.827-.22-.37A9.745 9.745 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z" fill="currentColor" opacity=".3"/></svg>
+    Tododrogas
+  </div>
+  <span class="tb-pill">WhatsApp</span>
+  <span class="tb-admin-badge">⚙ Admin</span>
+  <nav class="tb-nav">
+    <button class="tb-nav-btn active" onclick="showSection('dashboard',this)">Dashboard</button>
+    <button class="tb-nav-btn" onclick="showSection('conversaciones',this)">Conversaciones</button>
+    <button class="tb-nav-btn" onclick="showSection('agentes',this)">Agentes</button>
+    <button class="tb-nav-btn" onclick="showSection('reportes',this)">Reportes</button>
+    <button class="tb-nav-btn" onclick="showSection('config',this)">Configuración</button>
+  </nav>
+  <div class="tb-right">
+    <button class="btn-logout" onclick="logout()">Salir</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- ═══════════════════ DASHBOARD ═══════════════════ -->
+  <div class="section active" id="sec-dashboard">
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card c-blue"><div class="label">Total hoy</div><div class="value" id="st-hoy">—</div><div class="sub">conversaciones</div></div>
+      <div class="stat-card c-green"><div class="label">Activas</div><div class="value" id="st-activas">—</div><div class="sub">en este momento</div></div>
+      <div class="stat-card c-orange"><div class="label">Escaladas</div><div class="value" id="st-escaladas">—</div><div class="sub">esperando agente</div></div>
+      <div class="stat-card c-nova"><div class="label">Nova TD</div><div class="value" id="st-nova">—</div><div class="sub">atendiendo</div></div>
+      <div class="stat-card c-purple"><div class="label">Resueltas Nova</div><div class="value" id="st-nova-pct">—</div><div class="sub">sin agente humano</div></div>
+      <div class="stat-card c-red"><div class="label">Recurrentes</div><div class="value" id="st-recurrentes">—</div><div class="sub">más de 2 contactos</div></div>
+    </div>
+
+    <div class="grid-2">
+      <!-- Agentes en línea -->
+      <div class="panel">
+        <div class="panel-hdr">
+          <h3>👥 Agentes en línea</h3>
+          <button class="btn btn-sm btn-ghost" onclick="loadAgentes()">↻ Actualizar</button>
+        </div>
+        <div class="panel-body" id="agentesOnlineList"><div class="empty">Cargando...</div></div>
+      </div>
+
+      <!-- Conversaciones recientes -->
+      <div class="panel">
+        <div class="panel-hdr">
+          <h3>💬 Conversaciones recientes</h3>
+          <button class="btn btn-sm btn-ghost" onclick="loadDashboard()">↻</button>
+        </div>
+        <div class="panel-body" style="padding:0">
+          <table class="tbl" id="recentTbl">
+            <thead><tr><th>Usuario</th><th>Estado</th><th>Agente</th><th>Última act.</th></tr></thead>
+            <tbody id="recentBody"><tr><td colspan="4" class="empty">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Eficiencia Nova -->
+    <div class="panel">
+      <div class="panel-hdr"><h3>🤖 Eficiencia Nova TD</h3></div>
+      <div class="panel-body">
+        <div class="grid-2">
+          <div>
+            <div style="font-size:12px;color:var(--ink3);margin-bottom:4px">Resuelto por Nova (sin agente)</div>
+            <div style="font-size:22px;font-weight:700;color:var(--nova)" id="novaEficiencia">—%</div>
+            <div class="progress-bar"><div class="progress-fill" id="novaBar" style="width:0%;background:var(--nova)"></div></div>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--ink3);margin-bottom:4px">Escalado a agente humano</div>
+            <div style="font-size:22px;font-weight:700;color:var(--orange)" id="novaEscalado">—%</div>
+            <div class="progress-bar"><div class="progress-fill" id="novaEscBar" style="width:0%;background:var(--orange)"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ CONVERSACIONES ═══════════════════ -->
+  <div class="section" id="sec-conversaciones">
+    <div class="panel">
+      <div class="panel-hdr">
+        <h3>💬 Todas las conversaciones</h3>
+        <div class="toolbar">
+          <div class="search-box">
+            <svg width="13" height="13" fill="none" stroke="var(--ink3)" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="convSearch" placeholder="Buscar por nombre, teléfono..." oninput="filterConvs()">
+          </div>
+          <select class="filter-select" id="convFiltroEstado" onchange="filterConvs()">
+            <option value="">Todos los estados</option>
+            <option value="nova">Nova TD</option>
+            <option value="escalado">Escaladas</option>
+            <option value="esperando">Esperando</option>
+            <option value="cerrado">Cerradas</option>
+          </select>
+          <select class="filter-select" id="convFiltroAgente" onchange="filterConvs()">
+            <option value="">Todos los agentes</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="loadConversaciones()">↻ Actualizar</button>
+        </div>
+      </div>
+      <div style="padding:0">
+        <table class="tbl">
+          <thead><tr><th>Usuario</th><th>Teléfono</th><th>EPS</th><th>Estado</th><th>Agente</th><th>Mensajes</th><th>Última act.</th><th>Acciones</th></tr></thead>
+          <tbody id="convBody"><tr><td colspan="8" class="empty">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+      <div style="padding:10px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--ink3)" id="convFooter"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ AGENTES ═══════════════════ -->
+  <div class="section" id="sec-agentes">
+    <div class="panel">
+      <div class="panel-hdr">
+        <h3>👥 Gestión de agentes</h3>
+        <button class="btn btn-primary btn-sm" onclick="loadAgentes()">↻ Actualizar</button>
+      </div>
+      <div style="padding:0">
+        <table class="tbl">
+          <thead><tr><th>Agente</th><th>Cédula</th><th>Estado</th><th>Chats activos</th><th>Cerrados hoy</th><th>Acciones</th></tr></thead>
+          <tbody id="agentesBody"><tr><td colspan="6" class="empty">Cargando...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ REPORTES ═══════════════════ -->
+  <div class="section" id="sec-reportes">
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-hdr"><h3>📊 Exportar datos</h3></div>
+        <div class="panel-body">
+          <div class="form-group">
+            <label>Desde</label>
+            <input type="date" id="repDesde">
+          </div>
+          <div class="form-group">
+            <label>Hasta</label>
+            <input type="date" id="repHasta">
+          </div>
+          <div class="form-group">
+            <label>Estado</label>
+            <select id="repEstado">
+              <option value="">Todos</option>
+              <option value="cerrado">Cerradas</option>
+              <option value="escalado">Escaladas</option>
+              <option value="nova">Nova TD</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="exportarCSV()" style="width:100%;justify-content:center">
+            📥 Exportar CSV
+          </button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr"><h3>📈 Resumen del período</h3></div>
+        <div class="panel-body" id="resumenPeriodo">
+          <div class="empty">Selecciona un rango de fechas y exporta para ver el resumen</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top tipificaciones -->
+    <div class="panel">
+      <div class="panel-hdr"><h3>🏷️ Top motivos de contacto</h3></div>
+      <div class="panel-body" id="topTipifs"><div class="empty">Cargando...</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ CONFIGURACIÓN ═══════════════════ -->
+  <div class="section" id="sec-config">
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-hdr"><h3>⚙️ Reglas de sesión</h3></div>
+        <div class="panel-body">
+          <div class="form-group">
+            <label>Cierre automático por inactividad (horas)</label>
+            <input type="number" id="cfg-cierre" value="24" min="1" max="72">
+          </div>
+          <div class="form-group">
+            <label>Archivar conversaciones cerradas (días)</label>
+            <input type="number" id="cfg-archivo" value="30" min="7" max="180">
+          </div>
+          <div class="form-group">
+            <label>Eliminar archivadas (días)</label>
+            <input type="number" id="cfg-eliminar" value="90" min="30" max="365">
+          </div>
+          <button class="btn btn-primary" onclick="guardarConfig()" style="width:100%;justify-content:center">
+            💾 Guardar cambios
+          </button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr"><h3>🤖 Reglas de escalamiento Nova</h3></div>
+        <div class="panel-body">
+          <div class="form-group">
+            <label>Intentos para medicamentos</label>
+            <input type="number" id="cfg-int-med" value="1" min="1" max="5">
+            <div style="font-size:10px;color:var(--ink3);margin-top:3px">Escala inmediato (Nova no tiene datos de inventario)</div>
+          </div>
+          <div class="form-group">
+            <label>Intentos para PQRSFD</label>
+            <input type="number" id="cfg-int-pqr" value="3" min="1" max="5">
+          </div>
+          <div class="form-group">
+            <label>Intentos por defecto</label>
+            <input type="number" id="cfg-int-def" value="2" min="1" max="5">
+          </div>
+          <button class="btn btn-primary" onclick="guardarConfig()" style="width:100%;justify-content:center">
+            💾 Guardar cambios
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mensajes predeterminados -->
+    <div class="panel">
+      <div class="panel-hdr"><h3>💬 Mensajes predeterminados del agente</h3></div>
+      <div class="panel-body" id="rrsConfig">
+        <div class="empty">Edición de respuestas rápidas — próximamente</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- MODAL: Ver conversación -->
+<div class="modal-bg" id="modalConv">
+  <div class="modal" style="max-width:600px">
+    <h3 id="modalConvTitulo">Conversación</h3>
+    <div id="modalConvInfo" style="margin-bottom:12px;font-size:12px;color:var(--ink3)"></div>
+    <div class="chat-msgs" id="modalConvMsgs"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modalConv')">Cerrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Reasignar -->
+<div class="modal-bg" id="modalReasignar">
+  <div class="modal">
+    <h3>🔄 Reasignar conversación</h3>
+    <div id="reasignarInfo" style="font-size:12px;color:var(--ink3);margin-bottom:12px"></div>
+    <div class="form-group">
+      <label>Asignar a</label>
+      <select id="reasignarAgente"></select>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modalReasignar')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarReasignar()">Reasignar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Confirmar acción -->
+<div class="modal-bg" id="modalConfirm">
+  <div class="modal">
+    <h3 id="confirmTitulo">¿Confirmar acción?</h3>
+    <p id="confirmMsg" style="font-size:13px;color:var(--ink2);margin-bottom:8px"></p>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="cerrarModal('modalConfirm')">Cancelar</button>
+      <button class="btn btn-danger" id="confirmBtn" onclick="">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<script>
+const SB_URL  = window.SUPABASE_URL  || '';
+const SB_KEY  = window.SUPABASE_KEY  || '';
+
+// ── AUTH ─────────────────────────────────────────
+const ADMIN_NAME = sessionStorage.getItem('pqr_name') || 'Admin';
+const ADMIN_ROLE = sessionStorage.getItem('pqr_role') || '';
+function logout(){ sessionStorage.clear(); window.location.href='login.html'; }
+
+// ── SB HELPER ────────────────────────────────────
+async function sb(path, method='GET', body=null){
+  const h={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+  if(method!=='GET') h['Prefer']='return=representation';
+  const r=await fetch(`${SB_URL}/rest/v1/${path}`,{method,headers:h,body:body?JSON.stringify(body):undefined});
+  if(!r.ok&&r.status!==201&&r.status!==204) throw new Error(await r.text());
+  if(r.status===204) return null;
+  try{return await r.json();}catch{return null;}
+}
+
+// ── HELPERS ──────────────────────────────────────
+function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtFecha(ts){if(!ts)return'—';const d=new Date(ts);return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});}
+function fmtHace(ts){if(!ts)return'—';const d=Math.floor((Date.now()-new Date(ts))/60000);if(d<1)return'ahora';if(d<60)return d+'m';if(d<1440)return Math.floor(d/60)+'h';return Math.floor(d/1440)+'d';}
+function parseHist(h){try{return Array.isArray(h)?h:(typeof h==='string'?JSON.parse(h):[]);}catch{return[];}}
+function estadoBadge(e){const m={nova:'badge-nova',escalado:'badge-escalado',cerrado:'badge-cerrado',esperando:'badge-esperando'};return`<span class="badge ${m[e]||'badge-nova'}">${e||'nova'}</span>`;}
+function toast(msg,tipo=''){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(tipo?' '+tipo:'');setTimeout(()=>t.className='toast',2800);}
+
+// ── STATE ─────────────────────────────────────────
+const A={
+  sesiones:[],agentes:[],
+  convFiltradas:[],
+  reasignarTel:null,
+};
+
+// ── NAVEGACIÓN ────────────────────────────────────
+function showSection(id, btn){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  document.querySelectorAll('.tb-nav-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  // Cargar datos de la sección
+  if(id==='dashboard') loadDashboard();
+  if(id==='conversaciones') loadConversaciones();
+  if(id==='agentes') loadAgentes();
+  if(id==='reportes') loadReportes();
+}
+
+// ── DASHBOARD ─────────────────────────────────────
+async function loadDashboard(){
+  try{
+    const [sesiones, agentes] = await Promise.all([
+      sb('wa_sesiones?select=*&order=updated_at.desc&limit=500'),
+      sb('agentes?select=*&order=nombre.asc'),
+    ]);
+    A.sesiones = sesiones || [];
+    A.agentes  = agentes  || [];
+
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const hoyStr = hoy.toISOString();
+    const sesHoy = A.sesiones.filter(s=>s.updated_at>=hoyStr);
+    const activas = A.sesiones.filter(s=>s.estado!=='cerrado');
+    const escaladas = A.sesiones.filter(s=>s.estado==='escalado');
+    const nova = A.sesiones.filter(s=>s.estado==='nova');
+    const cerradas = A.sesiones.filter(s=>s.estado==='cerrado');
+    const novaResueltas = cerradas.filter(s=>!s.agente_id);
+    const novaPct = cerradas.length ? Math.round(novaResueltas.length/cerradas.length*100) : 0;
+    const escPct  = cerradas.length ? Math.round((cerradas.length-novaResueltas.length)/cerradas.length*100) : 0;
+
+    // Recurrentes: usuarios que aparecen más de una vez en historial (simulado por teléfono duplicado en sesiones)
+    const recurrentes = A.sesiones.filter(s=>{
+      const contactos = A.sesiones.filter(x=>x.telefono===s.telefono).length;
+      return contactos>1;
+    }).length;
+
+    document.getElementById('st-hoy').textContent       = sesHoy.length;
+    document.getElementById('st-activas').textContent   = activas.length;
+    document.getElementById('st-escaladas').textContent = escaladas.length;
+    document.getElementById('st-nova').textContent      = nova.length;
+    document.getElementById('st-nova-pct').textContent  = novaPct+'%';
+    document.getElementById('st-recurrentes').textContent = recurrentes;
+    document.getElementById('novaEficiencia').textContent = novaPct+'%';
+    document.getElementById('novaEscalado').textContent   = escPct+'%';
+    document.getElementById('novaBar').style.width        = novaPct+'%';
+    document.getElementById('novaEscBar').style.width     = escPct+'%';
+
+    // Agentes en línea
+    renderAgentesOnline();
+
+    // Recientes
+    const recientes = A.sesiones.slice(0,10);
+    document.getElementById('recentBody').innerHTML = recientes.map(s=>`
+      <tr>
+        <td><div class="ag-row"><div class="ag-av" style="width:26px;height:26px;font-size:11px">${(s.nombre||'?').charAt(0)}</div><span style="font-size:12px">${escH(s.nombre||'Sin nombre')}</span></div></td>
+        <td>${estadoBadge(s.estado)}</td>
+        <td style="font-size:11px;color:var(--ink3)">${escH(s.agente_nombre||'—')}</td>
+        <td style="font-size:11px;color:var(--ink3)">${fmtHace(s.updated_at)}</td>
+      </tr>
+    `).join('');
+
+  }catch(e){ toast('Error cargando dashboard: '+e.message,'err'); }
+}
+
+function renderAgentesOnline(){
+  const el = document.getElementById('agentesOnlineList');
+  const online = A.agentes.filter(a=>a.activo);
+  if(!online.length){ el.innerHTML='<div class="empty">Ningún agente en línea</div>'; return; }
+  el.innerHTML = online.map(a=>{
+    const chats = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado!=='cerrado').length;
+    return`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div class="ag-av">${(a.nombre||'?').charAt(0)}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:500">${escH(a.nombre)}</div>
+        <div style="font-size:11px;color:var(--ink3)">${chats} chat${chats!==1?'s':''} activo${chats!==1?'s':''}</div>
+      </div>
+      <span class="badge badge-online">● En línea</span>
+    </div>`;
+  }).join('');
+}
+
+// ── CONVERSACIONES ────────────────────────────────
+async function loadConversaciones(){
+  try{
+    const data = await sb('wa_sesiones?select=*&order=updated_at.desc&limit=500');
+    A.sesiones = data||[];
+    // Llenar filtro de agentes
+    const agentesUnicos = [...new Set(A.sesiones.filter(s=>s.agente_nombre).map(s=>s.agente_nombre))];
+    const sel = document.getElementById('convFiltroAgente');
+    sel.innerHTML = '<option value="">Todos los agentes</option>' +
+      agentesUnicos.map(a=>`<option value="${escH(a)}">${escH(a)}</option>`).join('');
+    filterConvs();
+  }catch(e){ toast('Error: '+e.message,'err'); }
+}
+
+function filterConvs(){
+  const q     = (document.getElementById('convSearch')?.value||'').toLowerCase();
+  const est   = document.getElementById('convFiltroEstado')?.value||'';
+  const agn   = document.getElementById('convFiltroAgente')?.value||'';
+  let list    = [...A.sesiones];
+  if(est) list = list.filter(s=>s.estado===est);
+  if(agn) list = list.filter(s=>s.agente_nombre===agn);
+  if(q)   list = list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q)||(s.cedula||'').includes(q));
+  A.convFiltradas = list;
+  document.getElementById('convFooter').textContent = `${list.length} conversación${list.length!==1?'es':''}`;
+  document.getElementById('convBody').innerHTML = list.length ? list.map(s=>{
+    const hist = parseHist(s.history);
+    return`<tr>
+      <td><div class="ag-row">
+        <div class="ag-av" style="width:26px;height:26px;font-size:11px">${(s.nombre||'?').charAt(0)}</div>
+        <div><div style="font-size:12px;font-weight:500">${escH(s.nombre||'Sin nombre')}</div>
+        ${s.cedula?`<div class="mono">${escH(s.cedula)}</div>`:''}
+        </div></div></td>
+      <td class="mono">${escH(s.telefono)}</td>
+      <td style="font-size:11px">${escH(s.eps||'—')}</td>
+      <td>${estadoBadge(s.estado)}</td>
+      <td style="font-size:11px;color:var(--ink3)">${escH(s.agente_nombre||'—')}</td>
+      <td style="font-size:11px;text-align:center">${hist.length}</td>
+      <td style="font-size:11px;color:var(--ink3)">${fmtHace(s.updated_at)}</td>
+      <td>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-ghost" onclick='verConv(${JSON.stringify(s.telefono)})'>👁 Ver</button>
+          ${s.estado!=='cerrado'?`<button class="btn btn-sm btn-ghost" onclick='abrirReasignar(${JSON.stringify(s.telefono)})'>🔄</button>`:''}
+          ${s.estado!=='cerrado'?`<button class="btn btn-sm btn-danger" onclick='confirmarCerrar(${JSON.stringify(s.telefono)})'>✕</button>`:''}
+          ${s.estado==='cerrado'?`<button class="btn btn-sm btn-success" onclick='reabrirConv(${JSON.stringify(s.telefono)})'>↩ Reabrir</button>`:''}
+        </div>
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="8" class="empty">Sin conversaciones</td></tr>`;
+}
+
+// Ver conversación completa
+async function verConv(tel){
+  const ses = A.sesiones.find(s=>s.telefono===tel);
+  if(!ses) return;
+  const hist = parseHist(ses.history);
+  document.getElementById('modalConvTitulo').textContent = (ses.nombre||tel)+' · '+tel;
+  document.getElementById('modalConvInfo').innerHTML = `
+    <span class="badge ${ses.estado==='cerrado'?'badge-cerrado':'badge-escalado'}">${ses.estado}</span>
+    ${ses.agente_nombre?` · Agente: <strong>${escH(ses.agente_nombre)}</strong>`:''}
+    ${ses.eps?` · EPS: ${escH(ses.eps)}`:''}
+    ${ses.resumen_nova?`<div style="margin-top:8px;padding:8px;background:var(--nova-l);border-radius:6px;font-size:11px;border-left:3px solid var(--nova)">📋 <strong>Resumen Nova:</strong> ${escH(ses.resumen_nova)}</div>`:''}
+  `;
+  document.getElementById('modalConvMsgs').innerHTML = hist.length ? hist.map(m=>`
+    <div class="chat-bubble ${m.role==='user'?'user':m.role==='nova'?'nova':'agent'}">
+      ${m.role==='nova'?'<div style="font-size:10px;font-weight:600;color:var(--nova);margin-bottom:2px">Nova TD</div>':''}
+      ${m.role==='assistant'?`<div style="font-size:10px;font-weight:600;color:var(--wa-d);margin-bottom:2px">${escH(m.agente||'Agente')}</div>`:''}
+      ${escH(m.content||'')}
+      <div class="ts">${fmtFecha(m.ts)}</div>
+    </div>
+  `).join('') : '<div class="empty">Sin mensajes</div>';
+  // Scroll al final
+  setTimeout(()=>{const c=document.getElementById('modalConvMsgs');c.scrollTop=c.scrollHeight;},100);
+  document.getElementById('modalConv').classList.add('open');
+}
+
+// Reasignar
+async function abrirReasignar(tel){
+  A.reasignarTel = tel;
+  const ses = A.sesiones.find(s=>s.telefono===tel);
+  document.getElementById('reasignarInfo').textContent = `Conversación de ${ses?.nombre||tel}. Agente actual: ${ses?.agente_nombre||'Sin agente'}`;
+  const agentes = await sb('agentes?select=id,nombre,activo&order=nombre.asc');
+  document.getElementById('reasignarAgente').innerHTML = (agentes||[]).map(a=>
+    `<option value="${escH(a.id)}" data-nombre="${escH(a.nombre)}">${escH(a.nombre)}${a.activo?' ●':''}</option>`
+  ).join('');
+  document.getElementById('modalReasignar').classList.add('open');
+}
+
+async function confirmarReasignar(){
+  const sel = document.getElementById('reasignarAgente');
+  const aId = sel.value;
+  const aNom = sel.options[sel.selectedIndex]?.dataset?.nombre||'';
+  if(!aId||!A.reasignarTel) return;
+  try{
+    const ses = A.sesiones.find(s=>s.telefono===A.reasignarTel);
+    const hist = parseHist(ses?.history);
+    hist.push({role:'system',content:`🔄 Reasignado de ${ses?.agente_nombre||'Sin agente'} a ${aNom} — ${new Date().toLocaleString('es-CO')}`,ts:new Date().toISOString()});
+    await sb(`wa_sesiones?telefono=eq.${encodeURIComponent(A.reasignarTel)}`,'PATCH',{
+      agente_id:aId, agente_nombre:aNom,
+      history:JSON.stringify(hist),
+      updated_at:new Date().toISOString()
+    });
+    toast(`✅ Reasignado a ${aNom}`,'ok');
+    cerrarModal('modalReasignar');
+    loadConversaciones();
+  }catch(e){ toast('Error: '+e.message,'err'); }
+}
+
+// Cerrar conversación (admin)
+let _cerrarTel = null;
+function confirmarCerrar(tel){
+  _cerrarTel = tel;
+  const ses = A.sesiones.find(s=>s.telefono===tel);
+  document.getElementById('confirmTitulo').textContent = 'Cerrar conversación';
+  document.getElementById('confirmMsg').textContent = `¿Cerrar la conversación de ${ses?.nombre||tel}? Se marcará como cerrada.`;
+  document.getElementById('confirmBtn').onclick = ejecutarCerrar;
+  document.getElementById('modalConfirm').classList.add('open');
+}
+async function ejecutarCerrar(){
+  if(!_cerrarTel) return;
+  try{
+    await sb(`wa_sesiones?telefono=eq.${encodeURIComponent(_cerrarTel)}`,'PATCH',{
+      estado:'cerrado',
+      observacion_cierre:'Cerrada por administrador',
+      updated_at:new Date().toISOString()
+    });
+    toast('Conversación cerrada','ok');
+    cerrarModal('modalConfirm');
+    loadConversaciones();
+  }catch(e){ toast('Error: '+e.message,'err'); }
+}
+
+// Reabrir conversación
+async function reabrirConv(tel){
+  try{
+    await sb(`wa_sesiones?telefono=eq.${encodeURIComponent(tel)}`,'PATCH',{
+      estado:'escalado',
+      observacion_cierre:null,
+      updated_at:new Date().toISOString()
+    });
+    toast('Conversación reabierta','ok');
+    loadConversaciones();
+  }catch(e){ toast('Error: '+e.message,'err'); }
+}
+
+// ── AGENTES ───────────────────────────────────────
+async function loadAgentes(){
+  try{
+    const [agentes, sesiones] = await Promise.all([
+      sb('agentes?select=*&order=nombre.asc'),
+      sb('wa_sesiones?select=agente_id,agente_nombre,estado,updated_at&order=updated_at.desc&limit=500'),
+    ]);
+    A.agentes  = agentes||[];
+    A.sesiones = sesiones||[];
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    document.getElementById('agentesBody').innerHTML = A.agentes.map(a=>{
+      const activos  = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado!=='cerrado').length;
+      const hoyOk    = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='cerrado'&&new Date(s.updated_at)>=hoy).length;
+      return`<tr>
+        <td><div class="ag-row">
+          <div class="ag-av">${(a.nombre||'?').charAt(0)}</div>
+          <div><div style="font-size:13px;font-weight:500">${escH(a.nombre)}</div>
+          <div style="font-size:11px;color:var(--ink3)">${escH(a.rol||'agente')}</div></div>
+        </div></td>
+        <td class="mono">${escH(a.cedula||'—')}</td>
+        <td>${a.activo?'<span class="badge badge-online">● En línea</span>':'<span class="badge badge-offline">Ausente</span>'}</td>
+        <td style="text-align:center;font-weight:600">${activos}</td>
+        <td style="text-align:center;color:var(--green);font-weight:600">${hoyOk}</td>
+        <td>
+          <div style="display:flex;gap:4px">
+            <button class="btn btn-sm ${a.activo?'btn-danger':'btn-success'}" onclick='toggleAgente("${escH(a.id)}",${!a.activo})'>
+              ${a.activo?'⏸ Pausar':'▶ Activar'}
+            </button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+    renderAgentesOnline();
+  }catch(e){ toast('Error: '+e.message,'err'); }
+}
+
+async function toggleAgente(id, activo){
+  try{
+    await sb(`agentes?id=eq.${id}`,'PATCH',{activo, updated_at:new Date().toISOString()});
+    toast(activo?'Agente activado':'Agente pausado', activo?'ok':'');
+    loadAgentes();
+  }catch(e){ toast('Error: '+e.message,'err'); }
+}
+
+// ── REPORTES ──────────────────────────────────────
+async function loadReportes(){
+  try{
+    const data = await sb('wa_sesiones?select=tipificacion,estado,agente_nombre&limit=1000');
+    const tipifs = {};
+    (data||[]).forEach(s=>{
+      const t = s.tipificacion||'Sin tipificar';
+      tipifs[t]=(tipifs[t]||0)+1;
+    });
+    const sorted = Object.entries(tipifs).sort((a,b)=>b[1]-a[1]);
+    const total  = sorted.reduce((s,x)=>s+x[1],0);
+    document.getElementById('topTipifs').innerHTML = sorted.length ? sorted.map(([t,n])=>`
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+          <span>${escH(t)}</span><span style="font-weight:600">${n} <span style="color:var(--ink3);font-weight:400">(${Math.round(n/total*100)}%)</span></span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(n/total*100)}%"></div></div>
+      </div>
+    `).join('') : '<div class="empty">Sin datos</div>';
+  }catch(e){ toast('Error: '+e.message,'err'); }
+}
+
+async function exportarCSV(){
+  const desde = document.getElementById('repDesde').value;
+  const hasta = document.getElementById('repHasta').value;
+  const est   = document.getElementById('repEstado').value;
+  let path = 'wa_sesiones?select=telefono,nombre,cedula,eps,ciudad,estado,agente_nombre,tipificacion,observacion_cierre,resumen_nova,updated_at&order=updated_at.desc&limit=2000';
+  if(desde) path+=`&updated_at=gte.${desde}T00:00:00`;
+  if(hasta) path+=`&updated_at=lte.${hasta}T23:59:59`;
+  if(est)   path+=`&estado=eq.${est}`;
+  try{
+    const data = await sb(path);
+    if(!data?.length){ toast('Sin datos para exportar','err'); return; }
+    const cols = Object.keys(data[0]);
+    const csv  = [cols.join(','), ...data.map(r=>cols.map(c=>'"'+(r[c]||'').toString().replace(/"/g,'""')+'"').join(','))].join('\n');
+    const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+    const a    = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `wa-sesiones-${desde||'all'}-${hasta||'all'}.csv`;
+    a.click();
+    toast(`✅ ${data.length} registros exportados`,'ok');
+    document.getElementById('resumenPeriodo').innerHTML = `
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card c-blue"><div class="label">Total</div><div class="value">${data.length}</div></div>
+        <div class="stat-card c-green"><div class="label">Cerradas</div><div class="value">${data.filter(s=>s.estado==='cerrado').length}</div></div>
+        <div class="stat-card c-orange"><div class="label">Escaladas</div><div class="value">${data.filter(s=>s.estado==='escalado').length}</div></div>
+      </div>
+    `;
+  }catch(e){ toast('Error exportando: '+e.message,'err'); }
+}
+
+// ── CONFIG ────────────────────────────────────────
+function guardarConfig(){
+  toast('✅ Configuración guardada (próximamente se sincronizará con el servidor)','ok');
+}
+
+// ── MODAL ─────────────────────────────────────────
+function cerrarModal(id){ document.getElementById(id).classList.remove('open'); }
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+
+// ── INIT ──────────────────────────────────────────
+(async()=>{
+  // Verificar fecha default en reportes
+  const hoy = new Date().toISOString().split('T')[0];
+  const hace30 = new Date(Date.now()-30*864e5).toISOString().split('T')[0];
+  document.getElementById('repDesde').value = hace30;
+  document.getElementById('repHasta').value = hoy;
+
+  await loadDashboard();
+
+  // Auto-refresh cada 30 segundos
+  setInterval(()=>{
+    const secActiva = document.querySelector('.section.active')?.id;
+    if(secActiva==='sec-dashboard') loadDashboard();
+    if(secActiva==='sec-conversaciones') loadConversaciones();
+    if(secActiva==='sec-agentes') loadAgentes();
+  }, 30000);
+})();
+</script>
+</body>
+</html>
