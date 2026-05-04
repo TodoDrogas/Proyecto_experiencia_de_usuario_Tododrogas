@@ -786,38 +786,43 @@ function toast(msg,type=''){
 ═══════════════════════════════════════════════════════ -->
 <style>
 #flotante-correo{
-  position:fixed;bottom:24px;right:24px;z-index:9999;
-  display:flex;flex-direction:column;align-items:center;gap:6px;
+  position:fixed;bottom:24px;left:24px;z-index:9999;
+  display:flex;flex-direction:row;align-items:center;gap:10px;
   cursor:pointer;user-select:none;
 }
 #flotante-correo .fc-btn{
-  position:relative;width:52px;height:52px;border-radius:14px;
+  position:relative;width:64px;height:64px;border-radius:16px;
   background:linear-gradient(135deg,#1565c0,#1e88e5);
   box-shadow:0 4px 16px rgba(21,101,192,.4);
   display:flex;align-items:center;justify-content:center;
   transition:transform .2s,box-shadow .2s;border:none;cursor:pointer;
-  outline:none;
+  outline:none;flex-shrink:0;
 }
-#flotante-correo .fc-btn:hover{transform:scale(1.08);box-shadow:0 6px 20px rgba(21,101,192,.55);}
+#flotante-correo .fc-btn:hover{transform:scale(1.06);box-shadow:0 6px 20px rgba(21,101,192,.55);}
 #flotante-correo .fc-badge{
-  position:absolute;top:-7px;right:-7px;
-  min-width:18px;height:18px;border-radius:99px;
+  position:absolute;top:-8px;right:-8px;
+  min-width:20px;height:20px;border-radius:99px;
   background:var(--red,#dc2626);color:#fff;
-  font-size:10px;font-weight:700;font-family:'Poppins',sans-serif;
+  font-size:11px;font-weight:700;font-family:'Poppins',sans-serif;
   display:flex;align-items:center;justify-content:center;
-  padding:0 4px;border:2px solid #fff;
+  padding:0 5px;border:2px solid #fff;
   opacity:0;transition:opacity .3s;
 }
 #flotante-correo .fc-badge.visible{opacity:1;}
-#flotante-correo .fc-tooltip{
-  background:rgba(10,14,26,.92);color:#fff;
-  font-size:11px;font-weight:500;font-family:'Poppins',sans-serif;
-  padding:5px 10px;border-radius:7px;white-space:nowrap;
-  opacity:0;transform:translateY(4px);
-  transition:opacity .2s,transform .2s;pointer-events:none;
-  text-align:center;line-height:1.5;
+
+/* Etiquetas siempre visibles */
+#flotante-correo .fc-labels{
+  display:flex;flex-direction:column;gap:4px;
 }
-#flotante-correo:hover .fc-tooltip{opacity:1;transform:translateY(0);}
+#flotante-correo .fc-label{
+  background:rgba(10,14,26,.85);color:#fff;
+  font-size:11px;font-weight:500;font-family:'Poppins',sans-serif;
+  padding:4px 10px;border-radius:6px;white-space:nowrap;
+  display:flex;align-items:center;gap:5px;
+  border-left:3px solid #1e88e5;
+}
+#flotante-correo .fc-label.urgente{border-left-color:#ef4444;}
+#flotante-correo .fc-label .lval{font-weight:700;font-size:12px;}
 
 /* Alerta urgente — ícono titila */
 @keyframes fc-pulso{
@@ -833,22 +838,24 @@ function toast(msg,type=''){
 
 <div id="flotante-correo" onclick="irACorreos()" title="Ir a Gestión de Correos">
   <div class="fc-btn">
-    <!-- Ícono Outlook/correo en SVG puro -->
-    <svg width="28" height="28" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- Fondo cuadrado azul oscuro -->
-      <rect x="4" y="8" width="22" height="32" rx="3" fill="#0d47a1"/>
-      <!-- Letra O blanca -->
-      <text x="15" y="29" text-anchor="middle" font-size="18" font-weight="700" fill="white" font-family="Arial,sans-serif">O</text>
-      <!-- Sobre azul claro detrás -->
-      <rect x="18" y="14" width="26" height="22" rx="3" fill="#42a5f5"/>
-      <!-- Línea V del sobre -->
-      <polyline points="18,14 31,24 44,14" fill="none" stroke="#0d47a1" stroke-width="2" stroke-linejoin="round"/>
-      <!-- Flecha abajo -->
-      <polygon points="34,30 38,30 36,34" fill="#0d47a1"/>
+    <!-- Ícono correo/Outlook SVG puro -->
+    <svg width="34" height="34" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="3" y="7" width="21" height="34" rx="3" fill="#0d47a1"/>
+      <text x="13.5" y="30" text-anchor="middle" font-size="20" font-weight="800" fill="white" font-family="Arial,sans-serif">O</text>
+      <rect x="17" y="13" width="28" height="23" rx="3" fill="#42a5f5"/>
+      <polyline points="17,13 31,24 45,13" fill="none" stroke="#0d47a1" stroke-width="2.5" stroke-linejoin="round"/>
+      <line x1="17" y1="36" x2="45" y2="36" stroke="#0d47a1" stroke-width="1"/>
     </svg>
     <span class="fc-badge" id="fc-badge">0</span>
   </div>
-  <div class="fc-tooltip" id="fc-tooltip">Cargando...</div>
+  <div class="fc-labels">
+    <div class="fc-label" id="fc-pendientes">
+      📧 <span>Pendientes</span> <span class="lval" id="fc-val-pend">—</span>
+    </div>
+    <div class="fc-label urgente" id="fc-sinresp">
+      🔴 <span>Sin responder</span> <span class="lval" id="fc-val-sinresp">—</span>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -890,21 +897,26 @@ function toast(msg,type=''){
 
       // Actualizar badge
       const badge   = document.getElementById('fc-badge');
-      const tooltip = document.getElementById('fc-tooltip');
       const cont    = document.getElementById('flotante-correo');
 
-      if(total > 0 || sinAsignar.length > 0){
+      // Actualizar etiquetas siempre visibles
+      const elPend    = document.getElementById('fc-val-pend');
+      const elSinResp = document.getElementById('fc-val-sinresp');
+      const elLblPend = document.getElementById('fc-pendientes');
+      const elLblSinR = document.getElementById('fc-sinresp');
+
+      if(elPend)    elPend.textContent    = total;
+      if(elSinResp) elSinResp.textContent = sinResp;
+
+      // Resaltar si hay pendientes
+      if(elLblPend) elLblPend.style.background = total > 0 ? 'rgba(21,101,192,.85)' : 'rgba(10,14,26,.85)';
+      if(elLblSinR) elLblSinR.style.background = sinResp > 0 ? 'rgba(185,28,28,.85)' : 'rgba(10,14,26,.85)';
+
+      if(total > 0){
         badge.textContent = total;
         badge.classList.add('visible');
-        let lineas = [];
-        if(sinResp > 0)        lineas.push(`📧 ${sinResp} sin responder`);
-        if(urgentes > 0)       lineas.push(`🔴 ${urgentes} urgente${urgentes>1?'s':''}`);
-        if(sinAsignar.length)  lineas.push(`📥 ${sinAsignar.length} sin asignar`);
-        if(!lineas.length)     lineas.push(`${total} en gestión`);
-        tooltip.innerHTML = lineas.join('<br>');
       } else {
         badge.classList.remove('visible');
-        tooltip.textContent = '✅ Sin pendientes';
       }
 
       // Alerta urgente — ícono titila
