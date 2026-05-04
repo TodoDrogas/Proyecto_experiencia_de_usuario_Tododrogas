@@ -6395,5 +6395,156 @@ async function enviarCorreoNuevoAg() {
     </div>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════
+     FLOTANTE WHATSAPP — indicador cruzado de canal
+     Bloque independiente, no toca ninguna función existente
+═══════════════════════════════════════════════════════ -->
+<style>
+#flotante-wa{
+  position:fixed;bottom:24px;left:24px;z-index:9999;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  cursor:pointer;user-select:none;
+}
+#flotante-wa .fw-btn{
+  position:relative;width:52px;height:52px;border-radius:14px;
+  background:linear-gradient(135deg,#128c7e,#25d366);
+  box-shadow:0 4px 16px rgba(37,211,102,.35);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .2s,box-shadow .2s;border:none;cursor:pointer;
+  outline:none;flex-shrink:0;
+}
+#flotante-wa .fw-btn:hover{transform:scale(1.06);box-shadow:0 6px 20px rgba(37,211,102,.5);}
+#flotante-wa .fw-badge{
+  position:absolute;top:-7px;right:-7px;
+  min-width:18px;height:18px;border-radius:99px;
+  background:#dc2626;color:#fff;
+  font-size:10px;font-weight:700;font-family:'Poppins',sans-serif;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 4px;border:2px solid #fff;
+  opacity:0;transition:opacity .3s;
+}
+#flotante-wa .fw-badge.visible{opacity:1;}
+
+/* Etiquetas debajo del ícono */
+#flotante-wa .fw-labels{
+  display:flex;flex-direction:column;gap:3px;width:100%;
+}
+#flotante-wa .fw-label{
+  background:rgba(10,14,26,.82);color:#fff;
+  font-size:10px;font-weight:500;font-family:'Poppins',sans-serif;
+  padding:3px 8px;border-radius:5px;white-space:nowrap;
+  display:flex;align-items:center;justify-content:space-between;gap:6px;
+  border-left:3px solid #25d366;min-width:120px;
+}
+#flotante-wa .fw-label.alerta{border-left-color:#ef4444;}
+#flotante-wa .fw-label .lval{
+  font-weight:700;font-size:11px;
+  background:rgba(255,255,255,.15);
+  padding:1px 5px;border-radius:4px;
+}
+
+/* Sin titilado — solo cambio de color cuando hay alertas */
+#flotante-wa.urgente .fw-btn{
+  background:linear-gradient(135deg,#065f46,#16a34a);
+  box-shadow:0 4px 20px rgba(22,163,74,.5);
+}
+</style>
+
+<div id="flotante-wa" onclick="irAWhatsApp()" title="Ir a WhatsApp">
+  <div class="fw-btn">
+    <!-- Ícono WhatsApp SVG puro -->
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.555 4.122 1.528 5.855L.057 23.012a.75.75 0 0 0 .931.931l5.157-1.471A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75A9.745 9.745 0 0 1 6.38 20.07l-.37-.22-3.827 1.091 1.091-3.827-.22-.37A9.745 9.745 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z" opacity=".35"/>
+    </svg>
+    <span class="fw-badge" id="fw-badge">0</span>
+  </div>
+  <div class="fw-labels">
+    <div class="fw-label" id="fw-activos">
+      💬 <span>Chats activos</span> <span class="lval" id="fw-val-activos">—</span>
+    </div>
+    <div class="fw-label alerta" id="fw-sinresp">
+      ⏰ <span>Sin responder</span> <span class="lval" id="fw-val-sinresp">—</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const WA_URL   = 'agente-wa.html';
+  const INTERVALO = 30000;
+  const MINUTOS_ALERTA = 5;
+  let fwUrgente = false;
+
+  window.irAWhatsApp = function(){
+    window.location.href = WA_URL;
+  };
+
+  async function fetchWA(){
+    if(!AGENT_ID || !SB_URL || !SB_KEY) return;
+    try{
+      const h = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+
+      // Chats activos asignados al agente
+      const r = await fetch(
+        `${SB_URL}/rest/v1/wa_sesiones?agente_id=eq.${encodeURIComponent(AGENT_ID)}&estado=neq.cerrado&select=telefono,estado,updated_at,unread_count`,
+        {headers:h}
+      );
+      const activos = r.ok ? await r.json() : [];
+
+      // Detectar chats sin respuesta +5min
+      const ahora = Date.now();
+      const sinResp = activos.filter(s=>{
+        const mins = Math.floor((ahora - new Date(s.updated_at).getTime()) / 60000);
+        return mins >= MINUTOS_ALERTA;
+      });
+
+      const total    = activos.length;
+      const nSinResp = sinResp.length;
+      const hayAlerta = nSinResp > 0;
+
+      // Actualizar etiquetas
+      const elActivos  = document.getElementById('fw-val-activos');
+      const elSinResp  = document.getElementById('fw-val-sinresp');
+      const elBadge    = document.getElementById('fw-badge');
+      const cont       = document.getElementById('flotante-wa');
+      const lblSinResp = document.getElementById('fw-sinresp');
+
+      if(elActivos)  elActivos.textContent  = total;
+      if(elSinResp)  elSinResp.textContent  = nSinResp;
+
+      // Badge total
+      if(total > 0){
+        elBadge.textContent = total;
+        elBadge.classList.add('visible');
+      } else {
+        elBadge.classList.remove('visible');
+      }
+
+      // Resaltar sin respuesta
+      if(lblSinResp) lblSinResp.style.background = nSinResp > 0
+        ? 'rgba(185,28,28,.85)' : 'rgba(10,14,26,.82)';
+
+      // Cambio de color silencioso — sin animación ni toast
+      if(hayAlerta && !fwUrgente){
+        cont.classList.add('urgente');
+        fwUrgente = true;
+      } else if(!hayAlerta && fwUrgente){
+        cont.classList.remove('urgente');
+        fwUrgente = false;
+      }
+
+    }catch(e){
+      console.warn('flotante-wa error:', e.message);
+    }
+  }
+
+  setTimeout(fetchWA, 3000);
+  setInterval(fetchWA, INTERVALO);
+})();
+</script>
+<!-- ══════════════════════════════ FIN FLOTANTE WA ══ -->
+
 </body>
 </html>
