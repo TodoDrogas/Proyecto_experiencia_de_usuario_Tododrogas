@@ -193,6 +193,147 @@ jobs:
           target:   /var/www/pqr/
           strip_components: 1
 
+      # ── 7b. GENERAR webhook-twilio/server.js ────────────────────
+      - name: Generar webhook-twilio/server.js
+        run: |
+          mkdir -p webhook-twilio
+          cat > webhook-twilio/server.js << 'JSEOF'
+          const express = require('express');
+          const twilio  = require('twilio');
+          const { createClient } = require('@supabase/supabase-js');
+          require('dotenv').config();
+
+          const app = express();
+          app.use(express.urlencoded({ extended: false }));
+          app.use(express.json());
+
+          const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+          const supabase     = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+          const WA_NUMBER    = 'whatsapp:+14155238886';
+          const PORT         = process.env.PORT || 3000;
+
+          app.get('/', (req, res) => res.json({ status: 'ok', service: 'webhook-twilio-tododrogas' }));
+
+          app.post('/webhook/twilio', async (req, res) => {
+            res.set('Content-Type', 'text/xml');
+            try {
+              const from     = req.body.From || '';
+              const body     = req.body.Body || '';
+              const profile  = req.body.ProfileName || '';
+              const telefono = from.replace('whatsapp:', '');
+
+              const { data: sesion } = await supabase
+                .from('wa_sesiones').select('*').eq('telefono', telefono).single();
+
+              const nuevoMsg = { role: 'user', content: body, ts: new Date().toISOString() };
+
+              if (sesion) {
+                const history = Array.isArray(sesion.history) ? sesion.history : [];
+                history.push(nuevoMsg);
+                await supabase.from('wa_sesiones').update({
+                  history,
+                  unread_count: (sesion.unread_count || 0) + 1,
+                  updated_at: new Date().toISOString(),
+                  ...(profile && !sesion.nombre ? { nombre: profile } : {})
+                }).eq('telefono', telefono);
+              } else {
+                await supabase.from('wa_sesiones').insert({
+                  telefono, nombre: profile || '',
+                  history: [nuevoMsg], estado: 'nova',
+                  unread_count: 1, updated_at: new Date().toISOString()
+                });
+              }
+              res.send('<Response></Response>');
+            } catch (err) {
+              console.error('Error webhook:', err.message);
+              res.send('<Response></Response>');
+            }
+          });
+
+          app.post('/send', async (req, res) => {
+            try {
+              const { telefono, mensaje, agente_nombre } = req.body;
+              if (!telefono || !mensaje)
+                return res.status(400).json({ error: 'telefono y mensaje son requeridos' });
+
+              const msg = await twilioClient.messages.create({
+                from: WA_NUMBER,
+                to:   `whatsapp:${telefono}`,
+                body: mensaje
+              });
+
+              const { data: sesion } = await supabase
+                .from('wa_sesiones').select('history').eq('telefono', telefono).single();
+
+              const history = Array.isArray(sesion?.history) ? sesion.history : [];
+              history.push({
+                role: 'assistant', content: mensaje,
+                agente: agente_nombre || 'Agente',
+                ts: new Date().toISOString()
+              });
+
+              await supabase.from('wa_sesiones')
+                .update({ history, updated_at: new Date().toISOString() })
+                .eq('telefono', telefono);
+
+              res.json({ ok: true, sid: msg.sid });
+            } catch (err) {
+              console.error('Error send:', err.message);
+              res.status(500).json({ error: err.message });
+            }
+          });
+
+          app.listen(PORT, () => console.log(`✅ webhook-twilio corriendo en :${PORT}`));
+          JSEOF
+          echo "✅ webhook-twilio/server.js generado"
+
+      # ── 7c. GENERAR webhook-twilio/.env ─────────────────────────
+      - name: Generar webhook-twilio/.env
+        run: |
+          cat > webhook-twilio/.env << 'ENVEOF'
+          TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY=${{ secrets.SUPABASE_KEY_SERVICE }}
+          PORT=3000
+          ENVEOF
+          echo "✅ webhook-twilio/.env generado"
+
+      # ── 7d. COPIAR webhook-twilio al VPS ────────────────────────
+      - name: Copiar webhook-twilio al VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host:     ${{ secrets.VPS_WEB_HOST }}
+          username: root
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          source:   "webhook-twilio/"
+          target:   /opt/webhook-twilio/
+          strip_components: 1
+
+      # ── 7e. INSTALAR DEPS Y REINICIAR PM2 ───────────────────────
+      - name: Reiniciar webhook-twilio con PM2
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.VPS_WEB_HOST }}
+          username: root
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/webhook-twilio
+            npm list twilio                > /dev/null 2>&1 || npm install twilio
+            npm list @supabase/supabase-js > /dev/null 2>&1 || npm install @supabase/supabase-js
+            npm list express               > /dev/null 2>&1 || npm install express
+            npm list dotenv                > /dev/null 2>&1 || npm install dotenv
+            if pm2 list | grep -q "webhook-twilio"; then
+              pm2 restart webhook-twilio
+              echo "✅ PM2 reiniciado"
+            else
+              pm2 start server.js --name webhook-twilio
+              pm2 save
+              echo "✅ PM2 iniciado por primera vez"
+            fi
+            sleep 2
+            curl -sf http://localhost:3000 && echo "✅ webhook-twilio OK" || echo "❌ No responde"
+
       # ── 8. MIGRAR TABLAS SUPABASE ──────────────────────────────
       - name: Migrar tablas Supabase
         continue-on-error: true
