@@ -202,11 +202,37 @@ jobs:
           const twilio  = require('twilio');
           const { createClient } = require('@supabase/supabase-js');
           const ws = require('ws');
+          const crypto = require('crypto');
           require('dotenv').config();
 
           const app = express();
+
+          // ── CORS — solo tododrogas.online puede llamar a /send ──
+          const ALLOWED_ORIGINS = ['https://tododrogas.online','https://www.tododrogas.online'];
+          app.use((req, res, next) => {
+            const origin = req.headers.origin || '';
+            if (ALLOWED_ORIGINS.includes(origin)) {
+              res.setHeader('Access-Control-Allow-Origin', origin);
+              res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+              res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            }
+            if (req.method === 'OPTIONS') return res.sendStatus(200);
+            next();
+          });
+
           app.use(express.urlencoded({ extended: false }));
           app.use(express.json());
+
+          // ── RATE LIMITING — máx 30 msgs/min por número ──
+          const ratemap = new Map();
+          function rateLimit(telefono) {
+            const now = Date.now();
+            const entry = ratemap.get(telefono) || { count: 0, ts: now };
+            if (now - entry.ts > 60000) { entry.count = 0; entry.ts = now; }
+            entry.count++;
+            ratemap.set(telefono, entry);
+            return entry.count > 30;
+          }
 
           const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
           const supabase     = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY, {
@@ -215,15 +241,44 @@ jobs:
           const WA_NUMBER    = 'whatsapp:+14155238886';
           const PORT         = process.env.PORT || 3000;
 
+          // ── VALIDAR FIRMA TWILIO (HMAC-SHA1) ──
+          function validarFirmaTwilio(req) {
+            const token     = process.env.TWILIO_AUTH_TOKEN;
+            const signature = req.headers['x-twilio-signature'] || '';
+            const url       = 'https://tododrogas.online/twilio/webhook/twilio';
+            const params    = req.body || {};
+            const sorted    = Object.keys(params).sort().reduce((s, k) => s + k + params[k], url);
+            const expected  = crypto.createHmac('sha1', token).update(sorted).digest('base64');
+            return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+          }
+
           app.get('/', (req, res) => res.json({ status: 'ok', service: 'webhook-twilio-tododrogas' }));
 
           app.post('/webhook/twilio', async (req, res) => {
             res.set('Content-Type', 'text/xml');
+
+            // Validar que viene de Twilio
+            try {
+              if (!validarFirmaTwilio(req)) {
+                console.warn('⚠️ Firma Twilio inválida — petición rechazada');
+                return res.status(403).send('<Response></Response>');
+              }
+            } catch(e) {
+              console.warn('⚠️ Error validando firma:', e.message);
+              return res.status(403).send('<Response></Response>');
+            }
+
             try {
               const from     = req.body.From || '';
               const body     = req.body.Body || '';
               const profile  = req.body.ProfileName || '';
               const telefono = from.replace('whatsapp:', '');
+
+              // Rate limiting por número
+              if (rateLimit(telefono)) {
+                console.warn('⚠️ Rate limit excedido para', telefono);
+                return res.send('<Response></Response>');
+              }
 
               const { data: sesion } = await supabase
                 .from('wa_sesiones').select('*').eq('telefono', telefono).single();
@@ -254,6 +309,11 @@ jobs:
           });
 
           app.post('/send', async (req, res) => {
+            // Solo permitir desde tododrogas.online (ya cubierto por CORS)
+            const origin = req.headers.origin || req.headers.referer || '';
+            if (!ALLOWED_ORIGINS.some(o => origin.startsWith(o))) {
+              return res.status(403).json({ error: 'Origen no permitido' });
+            }
             try {
               const { telefono, mensaje, agente_nombre } = req.body;
               if (!telefono || !mensaje)
@@ -325,8 +385,8 @@ jobs:
             npm list twilio                > /dev/null 2>&1 || npm install twilio
             npm list @supabase/supabase-js > /dev/null 2>&1 || npm install @supabase/supabase-js
             npm list express               > /dev/null 2>&1 || npm install express
-            npm list dotenv                > /dev/null 2>            npm list dotenv                > /dev/null 2>&1 || npm install dotenv1 || npm install dotenv
-            npm list ws                    > /dev/null 2>            npm list dotenv                > /dev/null 2>&1 || npm install dotenv1 || npm install ws
+            npm list dotenv                > /dev/null 2>&1 || npm install dotenv
+            npm list ws                    > /dev/null 2>&1 || npm install ws
             if pm2 list | grep -q "webhook-twilio"; then
               pm2 restart webhook-twilio
               echo "✅ PM2 reiniciado"
