@@ -52,6 +52,7 @@ jobs:
             public/login.php
             public/login_gestor.php
             public/whatsapp-webhook.php
+            public/nova-wa.php
           )
           for f in "${PHP_FILES[@]}"; do
             [ -f "$f" ] || { echo "⚠️  $f no existe — omitiendo"; continue; }
@@ -72,6 +73,7 @@ jobs:
             sed -i "s|__WA_VERIFY_TOKEN__|${{ secrets.WA_VERIFY_TOKEN }}|g"        "$f"
             sed -i "s|__APP_SECRET__|${{ secrets.APP_SECRET }}|g"                  "$f"
             sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_KEY }}|g"            "$f"
+            sed -i "s|__NOVA_TOKEN__|${{ secrets.NOVA_TOKEN }}|g"                "$f"
             echo "✅ $f inyectado"
           done
 
@@ -304,23 +306,90 @@ jobs:
                 .from('wa_sesiones').select('*').eq('telefono', telefono).single();
 
               const nuevoMsg = { role: 'user', content: body, ts: new Date().toISOString() };
+              const history = sesion ? (Array.isArray(sesion.history) ? sesion.history : []) : [];
+              if (history.length >= 200) history.splice(0, history.length - 199);
+              history.push(nuevoMsg);
+
+              // ── Llamar a Nova TD para responder automáticamente ──
+              let novaRespuesta = null;
+              try {
+                const novaRes = await fetch('http://localhost/nova-wa.php', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'X-Nova-Token': process.env.NOVA_TOKEN || ''
+                  },
+                  body: JSON.stringify({
+                    telefono,
+                    mensaje: body,
+                    sesion: sesion || {
+                      telefono,
+                      nombre: profile || '',
+                      history: [],
+                      intentos_nova: 0,
+                      origen_canal: 'whatsapp_directo'
+                    }
+                  })
+                });
+                if (novaRes.ok) novaRespuesta = await novaRes.json();
+              } catch(novaErr) {
+                console.error('Error llamando a Nova:', novaErr.message);
+              }
+
+              // Si Nova respondió, agregar al historial y enviar por Twilio
+              if (novaRespuesta?.respuesta) {
+                const novaMsg = {
+                  role: 'nova',
+                  content: novaRespuesta.respuesta,
+                  ts: new Date().toISOString()
+                };
+                if (history.length >= 200) history.splice(0, history.length - 199);
+                history.push(novaMsg);
+
+                // Enviar respuesta de Nova al usuario por WhatsApp
+                try {
+                  await twilioClient.messages.create({
+                    from: WA_NUMBER,
+                    to: `whatsapp:${telefono}`,
+                    body: novaRespuesta.respuesta
+                  });
+                } catch(sendErr) {
+                  console.error('Error enviando respuesta Nova:', sendErr.message);
+                }
+              }
+
+              // Preparar actualización de Supabase
+              const updateData = {
+                history,
+                unread_count: (sesion?.unread_count || 0) + 1,
+                updated_at: new Date().toISOString(),
+                intentos_nova: novaRespuesta?.intentos ?? (sesion?.intentos_nova || 0),
+              };
+
+              // Actualizar campos de identidad si Nova los resolvió
+              if (novaRespuesta?.cedula) updateData.cedula = novaRespuesta.cedula;
+              if (novaRespuesta?.nombre) updateData.nombre = novaRespuesta.nombre;
+              if (novaRespuesta?.eps)    updateData.eps    = novaRespuesta.eps;
+              if (novaRespuesta?.ciudad) updateData.ciudad = novaRespuesta.ciudad;
 
               if (sesion) {
-                const history = Array.isArray(sesion.history) ? sesion.history : [];
-                // Limitar history a 200 mensajes para evitar desbordamiento en Supabase
-                if (history.length >= 200) history.splice(0, history.length - 199);
-                history.push(nuevoMsg);
-                await supabase.from('wa_sesiones').update({
-                  history,
-                  unread_count: (sesion.unread_count || 0) + 1,
-                  updated_at: new Date().toISOString(),
-                  ...(profile && !sesion.nombre ? { nombre: profile } : {})
-                }).eq('telefono', telefono);
+                if (profile && !sesion.nombre) updateData.nombre = profile;
+                await supabase.from('wa_sesiones').update(updateData).eq('telefono', telefono);
               } else {
                 await supabase.from('wa_sesiones').insert({
-                  telefono, nombre: profile || '',
-                  history: [nuevoMsg], estado: 'nova',
-                  unread_count: 1, updated_at: new Date().toISOString()
+                  telefono,
+                  nombre: novaRespuesta?.nombre || profile || '',
+                  eps: novaRespuesta?.eps || '',
+                  ciudad: novaRespuesta?.ciudad || '',
+                  cedula: novaRespuesta?.cedula || null,
+                  historia: history,
+                  history,
+                  estado: novaRespuesta?.accion === 'ESCALADO' ? 'escalado' : 'nova',
+                  origen_canal: 'whatsapp_directo',
+                  intentos_nova: novaRespuesta?.intentos ?? 0,
+                  resumen_nova: novaRespuesta?.resumen || null,
+                  unread_count: 1,
+                  updated_at: new Date().toISOString()
                 });
               }
               res.send('<Response></Response>');
@@ -409,6 +478,7 @@ jobs:
           TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
           SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY=${{ secrets.SUPABASE_KEY_SERVICE }}
+          NOVA_TOKEN=${{ secrets.NOVA_TOKEN }}
           PORT=3000
           ENVEOF
           echo "✅ webhook-twilio/.env generado"
@@ -472,6 +542,17 @@ jobs:
           [ "$CODE" = "200" ] && echo "✅ correos.is_draft OK" || echo "⚠️ $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS sent_at timestamptz;")
           [ "$CODE" = "200" ] && echo "✅ correos.sent_at OK" || echo "⚠️ $CODE"
+          # ── Migrar wa_sesiones — nuevas columnas Nova TD ──
+          CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS cedula text;")
+          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.cedula OK" || echo "⚠️ $CODE"
+          CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS ciudad text DEFAULT '';")
+          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.ciudad OK" || echo "⚠️ $CODE"
+          CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS intentos_nova integer DEFAULT 0;")
+          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.intentos_nova OK" || echo "⚠️ $CODE"
+          CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS resumen_nova text;")
+          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.resumen_nova OK" || echo "⚠️ $CODE"
+          CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS origen_canal text DEFAULT 'whatsapp_directo';")
+          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.origen_canal OK" || echo "⚠️ $CODE"
           echo "✅ Migración completada"
 
       # ── 9. CONFIGURAR CRON ──────────────────────────────────────
