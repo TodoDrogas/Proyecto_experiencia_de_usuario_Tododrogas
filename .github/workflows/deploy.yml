@@ -287,6 +287,8 @@ jobs:
 
               if (sesion) {
                 const history = Array.isArray(sesion.history) ? sesion.history : [];
+                // Limitar history a 200 mensajes para evitar desbordamiento en Supabase
+                if (history.length >= 200) history.splice(0, history.length - 199);
                 history.push(nuevoMsg);
                 await supabase.from('wa_sesiones').update({
                   history,
@@ -329,6 +331,8 @@ jobs:
                 .from('wa_sesiones').select('history').eq('telefono', telefono).single();
 
               const history = Array.isArray(sesion?.history) ? sesion.history : [];
+              // Limitar history a 200 mensajes
+              if (history.length >= 200) history.splice(0, history.length - 199);
               history.push({
                 role: 'assistant', content: mensaje,
                 agente: agente_nombre || 'Agente',
@@ -345,6 +349,33 @@ jobs:
               res.status(500).json({ error: err.message });
             }
           });
+
+          // ── CLEANUP SESIONES ZOMBIE ──────────────────────────────
+          // Cierra sesiones sin actividad por más de 24 horas
+          async function cleanupZombies() {
+            try {
+              const hace24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+              const { data, error } = await supabase
+                .from('wa_sesiones')
+                .update({
+                  estado: 'cerrado',
+                  observacion_cierre: 'Cierre automático por inactividad (24h)',
+                  updated_at: new Date().toISOString()
+                })
+                .neq('estado', 'cerrado')
+                .lt('updated_at', hace24h);
+              if (error) throw error;
+              const n = data?.length || 0;
+              if (n > 0) console.log(`🧹 Zombie cleanup: ${n} sesión(es) cerrada(s)`);
+            } catch(e) {
+              console.error('Error cleanup zombies:', e.message);
+            }
+          }
+
+          // Ejecutar cleanup cada hora
+          setInterval(cleanupZombies, 60 * 60 * 1000);
+          // Y también al iniciar
+          setTimeout(cleanupZombies, 5000);
 
           app.listen(PORT, () => console.log(`✅ webhook-twilio corriendo en :${PORT}`));
           JSEOF
