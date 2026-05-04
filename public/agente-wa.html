@@ -779,5 +779,155 @@ function toast(msg,type=''){
   t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3000);
 }
 </script>
+
+<!-- ═══════════════════════════════════════════════════════
+     FLOTANTE CORREOS — indicador cruzado de canal
+     Bloque independiente, no toca ninguna función existente
+═══════════════════════════════════════════════════════ -->
+<style>
+#flotante-correo{
+  position:fixed;bottom:24px;right:24px;z-index:9999;
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  cursor:pointer;user-select:none;
+}
+#flotante-correo .fc-btn{
+  position:relative;width:52px;height:52px;border-radius:14px;
+  background:linear-gradient(135deg,#1565c0,#1e88e5);
+  box-shadow:0 4px 16px rgba(21,101,192,.4);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .2s,box-shadow .2s;border:none;cursor:pointer;
+  outline:none;
+}
+#flotante-correo .fc-btn:hover{transform:scale(1.08);box-shadow:0 6px 20px rgba(21,101,192,.55);}
+#flotante-correo .fc-badge{
+  position:absolute;top:-7px;right:-7px;
+  min-width:18px;height:18px;border-radius:99px;
+  background:var(--red,#dc2626);color:#fff;
+  font-size:10px;font-weight:700;font-family:'Poppins',sans-serif;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 4px;border:2px solid #fff;
+  opacity:0;transition:opacity .3s;
+}
+#flotante-correo .fc-badge.visible{opacity:1;}
+#flotante-correo .fc-tooltip{
+  background:rgba(10,14,26,.92);color:#fff;
+  font-size:11px;font-weight:500;font-family:'Poppins',sans-serif;
+  padding:5px 10px;border-radius:7px;white-space:nowrap;
+  opacity:0;transform:translateY(4px);
+  transition:opacity .2s,transform .2s;pointer-events:none;
+  text-align:center;line-height:1.5;
+}
+#flotante-correo:hover .fc-tooltip{opacity:1;transform:translateY(0);}
+
+/* Alerta urgente — ícono titila */
+@keyframes fc-pulso{
+  0%,100%{opacity:1;transform:scale(1);}
+  50%{opacity:.55;transform:scale(.93);}
+}
+#flotante-correo.alerta .fc-btn{
+  animation:fc-pulso 1s ease-in-out infinite;
+  background:linear-gradient(135deg,#b91c1c,#ef4444);
+  box-shadow:0 4px 20px rgba(185,28,28,.6);
+}
+</style>
+
+<div id="flotante-correo" onclick="irACorreos()" title="Ir a Gestión de Correos">
+  <div class="fc-btn">
+    <!-- Ícono Outlook/correo en SVG puro -->
+    <svg width="28" height="28" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Fondo cuadrado azul oscuro -->
+      <rect x="4" y="8" width="22" height="32" rx="3" fill="#0d47a1"/>
+      <!-- Letra O blanca -->
+      <text x="15" y="29" text-anchor="middle" font-size="18" font-weight="700" fill="white" font-family="Arial,sans-serif">O</text>
+      <!-- Sobre azul claro detrás -->
+      <rect x="18" y="14" width="26" height="22" rx="3" fill="#42a5f5"/>
+      <!-- Línea V del sobre -->
+      <polyline points="18,14 31,24 44,14" fill="none" stroke="#0d47a1" stroke-width="2" stroke-linejoin="round"/>
+      <!-- Flecha abajo -->
+      <polygon points="34,30 38,30 36,34" fill="#0d47a1"/>
+    </svg>
+    <span class="fc-badge" id="fc-badge">0</span>
+  </div>
+  <div class="fc-tooltip" id="fc-tooltip">Cargando...</div>
+</div>
+
+<script>
+(function(){
+  // ── Configuración ──────────────────────────────
+  const CORREO_URL = 'agente.html'; // URL del módulo de correos
+  const INTERVALO  = 30000;         // cada 30 segundos
+  let fcAlerta = false;
+
+  // ── Ir a correos ───────────────────────────────
+  window.irACorreos = function(){
+    window.location.href = CORREO_URL;
+  };
+
+  // ── Consultar correos del agente ───────────────
+  async function fetchCorreos(){
+    if(!AGENT_ID || !SB_URL || !SB_KEY) return;
+    try{
+      const h = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+
+      // Pendientes asignados al agente
+      const rPend = await fetch(
+        `${SB_URL}/rest/v1/correos?agente_id=eq.${encodeURIComponent(AGENT_ID)}&estado=neq.solucionado&is_draft=is.false&select=id,es_urgente,estado,updated_at`,
+        {headers:h}
+      );
+      const pendientes = rPend.ok ? await rPend.json() : [];
+
+      // Sin asignar (para que el agente sepa que hay nuevos)
+      const rSinAsig = await fetch(
+        `${SB_URL}/rest/v1/correos?agente_id=is.null&estado=eq.pendiente&is_draft=is.false&select=id`,
+        {headers:h}
+      );
+      const sinAsignar = rSinAsig.ok ? await rSinAsig.json() : [];
+
+      const total    = pendientes.length;
+      const urgentes = pendientes.filter(c=>c.es_urgente).length;
+      const sinResp  = pendientes.filter(c=>c.estado==='pendiente').length;
+      const hayAlerta= urgentes > 0;
+
+      // Actualizar badge
+      const badge   = document.getElementById('fc-badge');
+      const tooltip = document.getElementById('fc-tooltip');
+      const cont    = document.getElementById('flotante-correo');
+
+      if(total > 0 || sinAsignar.length > 0){
+        badge.textContent = total;
+        badge.classList.add('visible');
+        let lineas = [];
+        if(sinResp > 0)        lineas.push(`📧 ${sinResp} sin responder`);
+        if(urgentes > 0)       lineas.push(`🔴 ${urgentes} urgente${urgentes>1?'s':''}`);
+        if(sinAsignar.length)  lineas.push(`📥 ${sinAsignar.length} sin asignar`);
+        if(!lineas.length)     lineas.push(`${total} en gestión`);
+        tooltip.innerHTML = lineas.join('<br>');
+      } else {
+        badge.classList.remove('visible');
+        tooltip.textContent = '✅ Sin pendientes';
+      }
+
+      // Alerta urgente — ícono titila
+      if(hayAlerta && !fcAlerta){
+        cont.classList.add('alerta');
+        fcAlerta = true;
+        toast('🔴 Tienes correos urgentes sin responder','err');
+      } else if(!hayAlerta && fcAlerta){
+        cont.classList.remove('alerta');
+        fcAlerta = false;
+      }
+
+    }catch(e){
+      console.warn('flotante-correo error:', e.message);
+    }
+  }
+
+  // ── Iniciar ────────────────────────────────────
+  setTimeout(fetchCorreos, 2000); // primera carga 2s después de que todo cargue
+  setInterval(fetchCorreos, INTERVALO);
+})();
+</script>
+<!-- ═══════════════════════════════════ FIN FLOTANTE ═══ -->
+
 </body>
 </html>
