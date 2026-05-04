@@ -613,11 +613,30 @@ function autoH(ta){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeig
 // ── TOMAR ────────────────────────────────────────
 async function tomar(tel){
   try{
+    // Verificar asignación exclusiva y obtener resumen Nova
+    const fresh=await sb(`wa_sesiones?telefono=eq.${enc(tel)}&select=agente_id,estado,nombre,resumen_nova`);
+    if(fresh&&fresh[0]&&fresh[0].agente_id&&fresh[0].agente_id!==AGENT_ID){
+      toast('⚠️ Otro agente ya tomó esta conversación','err');
+      await loadSesiones();return;
+    }
     await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{agente_id:AGENT_ID,agente_nombre:AGENT_NAME,estado:'escalado',updated_at:new Date().toISOString()});
     const idx=S.sesiones.findIndex(s=>s.telefono===tel);
     if(idx>=0){S.sesiones[idx].agente_id=AGENT_ID;S.sesiones[idx].agente_nombre=AGENT_NAME;}
     if(S.selSesion){S.selSesion.agente_id=AGENT_ID;S.selSesion.agente_nombre=AGENT_NAME;}
-    await selectConv(tel);toast('Conversación tomada. Ya puedes responder.','ok');
+    await selectConv(tel);
+    // Pre-llenar con mensaje personalizado basado en resumen de Nova
+    const sesData=fresh&&fresh[0]?fresh[0]:{};
+    const primerNombre=(sesData.nombre||'').split(' ')[0]||'';
+    const resumen=sesData.resumen_nova||'';
+    const ta=document.getElementById('msgTa');
+    if(ta){
+      const saludo=primerNombre
+        ?`Hola ${primerNombre}, soy ${AGENT_NAME} de Tododrogas. ${resumen?resumen.split('.')[0]+'. ':''}¿Le puedo ayudar con algo más?`
+        :`Hola, soy ${AGENT_NAME} de Tododrogas. ¿En qué le puedo ayudar?`;
+      ta.value=saludo;autoH(ta);ta.focus();
+      if(resumen) toast('📋 Resumen de Nova cargado','ok');
+    }
+    toast('Conversación tomada. Revisa el mensaje antes de enviar.','ok');
   }catch(e){toast('Error: '+e.message,'err');}
 }
 
@@ -709,6 +728,9 @@ function renderInfo(){
       ${s.eps?`<div class="info-row"><div class="info-lbl">EPS</div><div class="info-val"><span class="itag itag-eps">${escH(s.eps)}</span></div></div>`:''}
       <div class="info-row"><div class="info-lbl">Estado</div><div><span class="itag ${s.estado==='nova'?'itag-nova':s.estado==='cerrado'?'itag-cer':'itag-esc'}">${s.estado==='nova'?'🤖 Nova TD':s.estado==='escalado'?'👤 Escalado':s.estado==='esperando'?'⏳ Esperando':'✅ Cerrado'}</span></div></div>
       ${s.agente_nombre?`<div class="info-row"><div class="info-lbl">Agente</div><div class="info-val">${escH(s.agente_nombre)}</div></div>`:''}
+      ${s.resumen_nova?`<div class="info-row" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="info-lbl">📋 Resumen Nova</div><div class="info-val" style="font-size:11px;line-height:1.5;color:var(--ink2);background:var(--nova-l);padding:6px 8px;border-radius:6px;border-left:3px solid var(--nova)">${escH(s.resumen_nova)}</div></div>`:''}
+      ${s.ciudad?`<div class="info-row"><div class="info-lbl">Ciudad</div><div class="info-val">${escH(s.ciudad)}</div></div>`:''}
+      ${s.cedula?`<div class="info-row"><div class="info-lbl">Cédula</div><div class="info-val">${escH(s.cedula)}</div></div>`:''}
       <div class="info-row"><div class="info-lbl">Mensajes</div><div class="info-val">${mc} del usuario · ${hist.length} total</div></div>
       <div class="info-row"><div class="info-lbl">Última act.</div><div class="info-val">${fmtTime(s.updated_at)}</div></div>
       ${s.tipificacion?`<div class="info-row"><div class="info-lbl">Tipificación</div><div class="info-val">${escH(s.tipificacion)}</div></div>`:''}
