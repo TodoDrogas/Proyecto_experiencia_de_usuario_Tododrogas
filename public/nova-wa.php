@@ -11,8 +11,8 @@ $SB_URL      = '__SB_URL__';
 $SB_KEY      = '__SB_KEY__';
 $OPENAI_KEY  = '__OPENAI_KEY__';
 $NOVA_TOKEN  = '__NOVA_TOKEN__';
-$VALIDAR_URL = 'http://localhost/validar-paciente.php';
-$CONSULTA_URL= 'http://localhost/nova-consulta.php';
+$VALIDAR_URL = 'https://tododrogas.online/validar-paciente.php';
+$CONSULTA_URL= 'https://tododrogas.online/nova-consulta.php';
 
 // ── Autenticación interna ─────────────────────────────────────────────
 $token = $_SERVER['HTTP_X_NOVA_TOKEN'] ?? '';
@@ -37,6 +37,8 @@ function httpPost(string $url, array $data, array $headers = []): array {
         CURLOPT_POSTFIELDS     => json_encode($data),
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 20,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
         CURLOPT_HTTPHEADER     => array_merge(['Content-Type: application/json'], $headers),
     ]);
     $resp = curl_exec($ch);
@@ -137,7 +139,7 @@ if ($origen_canal === 'whatsapp_directo' && !$cedula) {
         // Pedir cédula — primer contacto
         $esPrimerMensaje = count($history) <= 1;
         $respValidar = $esPrimerMensaje
-            ? "¡Hola! Bienvenido/a a *Tododrogas CIA SAS*. Soy *Nova TD*, su asistente virtual 🤖\n\nPara brindarle una atención personalizada, por favor indíqueme su *número de documento de identidad* (sin puntos ni espacios)."
+            ? "¡Hola! Bienvenido/a a *Tododrogas*. Soy *Nova TD*, su asistente virtual.\n\nPara brindarle una atención personalizada, por favor indíqueme su *número de documento de identidad* (sin puntos ni espacios)."
             : "Para continuar necesito verificar su identidad. Por favor indíqueme su *número de documento* (sin puntos ni espacios).";
 
         echo json_encode([
@@ -263,7 +265,7 @@ echo json_encode([
 
 function construirSistema(string $nombre, string $eps, string $ciudad, string $cedula, bool $ofrecerAsesor): string {
     $primerNombre = $nombre ? (explode(' ', trim($nombre))[0]) : 'usuario';
-    $s  = "Eres Nova TD, asistente virtual de Tododrogas CIA SAS por WhatsApp.\n";
+    $s  = "Eres Nova TD, asistente virtual de Tododrogas por WhatsApp.\n";
     $s .= "Usuario identificado: $nombre | Cédula: $cedula | EPS: $eps | Ciudad: $ciudad\n";
     $s .= "Canal: WhatsApp — responde de forma concisa, clara y cálida. Usa *negritas* con asteriscos para WhatsApp.\n";
     $s .= "No uses markdown de encabezados (#). Usa listas con guiones o números.\n\n";
