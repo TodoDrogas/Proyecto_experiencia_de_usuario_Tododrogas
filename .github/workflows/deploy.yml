@@ -313,6 +313,37 @@ jobs:
               // ── Llamar a Nova TD para responder automáticamente ──
               let novaRespuesta = null;
               try {
+                // Si es sesión nueva, buscar datos previos del usuario en correos
+                let sesionParaNova = sesion;
+                if (!sesion) {
+                  const telNum = telefono.replace(/\D/g,'');
+                  const { data: correoWA } = await supabase
+                    .from('correos')
+                    .select('cedula_paciente,nombre,eps_id,ciudad_paciente,telefono_contacto')
+                    .eq('ticket_id', `WA-${telNum}`)
+                    .single();
+                  if (correoWA) {
+                    // Usuario conocido — pre-llenar datos para que Nova no pida cédula
+                    const { data: epsData } = await supabase
+                      .from('eps_catalogo').select('nombre').eq('id', correoWA.eps_id).single();
+                    sesionParaNova = {
+                      telefono,
+                      nombre: correoWA.nombre || profile || '',
+                      cedula: correoWA.cedula_paciente || '',
+                      eps: epsData?.nombre || '',
+                      ciudad: correoWA.ciudad_paciente || '',
+                      history: [],
+                      intentos_nova: 0,
+                      origen_canal: 'whatsapp_directo'
+                    };
+                    console.log(`✅ Usuario conocido: ${correoWA.nombre} - cédula pre-llenada`);
+                  } else {
+                    sesionParaNova = {
+                      telefono, nombre: profile || '',
+                      history: [], intentos_nova: 0, origen_canal: 'whatsapp_directo'
+                    };
+                  }
+                }
                 const https = require('https');
                 const novaAgent = new https.Agent({ rejectUnauthorized: false });
                 const novaRes = await fetch('https://tododrogas.online/nova-wa.php', {
@@ -322,17 +353,7 @@ jobs:
                     'Content-Type': 'application/json',
                     'X-Nova-Token': process.env.NOVA_TOKEN || ''
                   },
-                  body: JSON.stringify({
-                    telefono,
-                    mensaje: body,
-                    sesion: sesion || {
-                      telefono,
-                      nombre: profile || '',
-                      history: [],
-                      intentos_nova: 0,
-                      origen_canal: 'whatsapp_directo'
-                    }
-                  })
+                  body: JSON.stringify({ telefono, mensaje: body, sesion: sesionParaNova })
                 });
                 if (novaRes.ok) novaRespuesta = await novaRes.json();
               } catch(novaErr) {
