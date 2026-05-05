@@ -329,11 +329,18 @@ html[data-theme="dark"]{--bg:#0f1117;--bg2:#1a1d27;--surface:#1e2130;--surface2:
 
 <!-- MODAL CERRAR -->
 <div class="modal-bd" id="modalCerrar">
-  <div class="modal-box">
-    <div class="modal-ttl">Cerrar conversación</div>
-    <div class="modal-sub">Tipifica y añade una observación de cierre.</div>
-    <select id="cerrarTipif" class="minput" style="resize:none;min-height:auto">
-      <option value="">-- Selecciona tipificación --</option>
+  <div class="modal-box" style="max-width:560px;width:95%;max-height:90vh;overflow-y:auto">
+    <div class="modal-ttl" id="gWaTitulo">Añadir gestión — #1 (registro completo)</div>
+    <div class="modal-sub" id="gWaSub" style="color:var(--blue);font-size:11px;margin-bottom:12px">Primera gestión: completa todos los campos para registrar en SIGI.</div>
+
+    <!-- OBSERVACIONES siempre obligatorias -->
+    <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px">Observaciones *</label>
+    <textarea class="minput" id="gWaObs" placeholder="Describe la gestión realizada..." rows="3" style="margin-top:4px;margin-bottom:12px"></textarea>
+
+    <!-- ACCIÓN / TIPIFICACIÓN siempre obligatoria -->
+    <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px">Acción / Tipificación *</label>
+    <select id="gWaAccion" class="minput" style="resize:none;min-height:auto;margin-top:4px;margin-bottom:14px">
+      <option value="">— Seleccionar acción —</option>
       <option>PQRSFD radicada</option>
       <option>Información brindada</option>
       <option>Sede indicada</option>
@@ -342,10 +349,105 @@ html[data-theme="dark"]{--bg:#0f1117;--bg2:#1a1d27;--surface:#1e2130;--surface2:
       <option>Escalado a área</option>
       <option>Otro</option>
     </select>
-    <textarea class="minput" id="cerrarObs" placeholder="Observación de cierre (opcional)..." rows="3"></textarea>
+
+    <!-- DATOS PRIMERA GESTIÓN -->
+    <div id="gWaPrimeraSeccion">
+      <!-- DATOS DEL PACIENTE -->
+      <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:10px;display:flex;align-items:center;gap:6px">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          DATOS DEL PACIENTE <span style="font-weight:400;color:var(--ink3)">(se autocompleta al ingresar cédula)</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Tipo documento</label>
+            <select id="gWaTipoDoc" class="minput" style="min-height:auto;margin-top:3px;font-size:12px">
+              <option value="">— Seleccionar —</option>
+              <option>CÉDULA DE CIUDADANÍA</option>
+              <option>TARJETA DE IDENTIDAD</option>
+              <option>REGISTRO CIVIL DE NACIMIENTO</option>
+              <option>CÉDULA DE EXTRANJERÍA</option>
+              <option>PASAPORTE</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Nº Documento → autocompleta</label>
+            <input id="gWaCedula" class="minput" placeholder="Ej: 1020304050" style="margin-top:3px;font-size:12px" oninput="gWaBuscarPaciente(this.value)">
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Nombre y apellidos</label>
+          <input id="gWaNombre" class="minput" placeholder="Se autocompleta..." style="margin-top:3px;font-size:12px">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          <div>
+            <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Teléfono</label>
+            <input id="gWaTelefono" class="minput" placeholder="Se autocompleta..." style="margin-top:3px;font-size:12px">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Ciudad</label>
+            <input id="gWaCiudad" class="minput" placeholder="Se autocompleta..." style="margin-top:3px;font-size:12px">
+          </div>
+        </div>
+      </div>
+
+      <!-- EPS, ORIGEN Y CLASIFICACIÓN -->
+      <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:10px">EPS, ORIGEN Y CLASIFICACIÓN</div>
+        <div>
+          <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">EPS *</label>
+          <input id="gWaEpsSearch" class="minput" placeholder="Escribir para buscar EPS..." style="margin-top:3px;font-size:12px" oninput="gWaBuscarEps(this.value)" autocomplete="off">
+          <input type="hidden" id="gWaEpsId">
+          <div id="gWaEpsDrop" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:140px;overflow-y:auto;margin-top:2px;position:relative;z-index:100"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          <div>
+            <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Origen</label>
+            <input id="gWaOrigen" class="minput" value="WHATSAPP" readonly style="margin-top:3px;font-size:12px;background:var(--bg2);color:var(--ink3)">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Tipo de solicitud</label>
+            <select id="gWaTipoSol" class="minput" style="min-height:auto;margin-top:3px;font-size:12px">
+              <option value="">— Seleccionar —</option>
+              <option>PETICIÓN</option>
+              <option>QUEJA</option>
+              <option>RECLAMO</option>
+              <option>SUGERENCIA</option>
+              <option>FELICITACIÓN</option>
+              <option>DENUNCIA</option>
+              <option>Consulta medicamento</option>
+              <option>Información sede</option>
+              <option>Información general</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:8px">
+          <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Detalle solicitud</label>
+          <input id="gWaDetalle" class="minput" placeholder="Describe el detalle..." style="margin-top:3px;font-size:12px">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          <div>
+            <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Departamento</label>
+            <input id="gWaDepto" class="minput" placeholder="Se autocompleta..." style="margin-top:3px;font-size:12px">
+          </div>
+          <div>
+            <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Categoría</label>
+            <select id="gWaCategoria" class="minput" style="min-height:auto;margin-top:3px;font-size:12px">
+              <option value="">— Seleccionar —</option>
+              <option>Medicamentos</option>
+              <option>Dispensación</option>
+              <option>Atención al usuario</option>
+              <option>Facturación</option>
+              <option>Otro</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="modal-acts">
       <button class="btn-mc" onclick="document.getElementById('modalCerrar').classList.remove('open')">Cancelar</button>
-      <button class="btn-mok" onclick="confirmarCerrar()">Cerrar conversación</button>
+      <button class="btn-mok" id="btnConfirmarCerrar" onclick="confirmarCerrar()">Guardar gestión y cerrar</button>
     </div>
   </div>
 </div>
@@ -411,7 +513,7 @@ const RR=[
 // ── CARGAR SESIONES ──────────────────────────────
 async function loadSesiones(){
   try{
-    const data=await sb('wa_sesiones?select=*&estado=neq.nova&order=updated_at.desc&limit=200')||[];
+    const data=await sb('wa_sesiones?select=*&order=updated_at.desc&limit=200')||[];
     S.sesiones=data;
     updateCtrs();renderLista();
   }catch(e){
@@ -422,13 +524,18 @@ async function loadSesiones(){
 // ── CONTADORES ───────────────────────────────────
 function updateCtrs(){
   const s=S.sesiones;
-  document.getElementById('fc-todas').textContent=s.length;
-  document.getElementById('fc-nova').textContent=s.filter(x=>x.estado==='nova').length;
-  document.getElementById('fc-escalado').textContent=s.filter(x=>x.estado==='escalado').length;
-  document.getElementById('fc-esperando').textContent=s.filter(x=>x.estado==='esperando').length;
-  document.getElementById('fc-cerrado').textContent=s.filter(x=>x.estado==='cerrado').length;
+  const nova=s.filter(x=>x.estado==='nova').length;
+  const escaladas=s.filter(x=>x.estado==='escalado').length;
+  const esperando=s.filter(x=>x.estado==='esperando').length;
+  const cerradas=s.filter(x=>x.estado==='cerrado').length;
+  // "Todas" excluye las de Nova — el agente no las atiende directamente
+  document.getElementById('fc-todas').textContent=s.length-nova;
+  document.getElementById('fc-nova').textContent=nova;
+  document.getElementById('fc-escalado').textContent=escaladas;
+  document.getElementById('fc-esperando').textContent=esperando;
+  document.getElementById('fc-cerrado').textContent=cerradas;
   document.getElementById('stat-total').textContent=s.length;
-  document.getElementById('stat-activas').textContent=s.filter(x=>x.estado!=='cerrado').length;
+  document.getElementById('stat-activas').textContent=s.filter(x=>x.estado!=='cerrado'&&x.estado!=='nova').length;
 }
 
 // ── FILTROS ──────────────────────────────────────
@@ -447,7 +554,9 @@ function setTab(t,el){
 function renderLista(){
   const q=document.getElementById('searchInput').value.trim().toLowerCase();
   let list=[...S.sesiones];
-  if(S.filtro!=='todas') list=list.filter(s=>s.estado===S.filtro);
+  // "Todas" muestra todo EXCEPTO las que Nova está atendiendo
+  if(S.filtro==='todas') list=list.filter(s=>s.estado!=='nova');
+  else list=list.filter(s=>s.estado===S.filtro);
   if(S.tab==='activas') list=list.filter(s=>s.estado!=='cerrado');
   if(S.tab==='cerradas') list=list.filter(s=>s.estado==='cerrado');
   if(q) list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q));
@@ -671,25 +780,252 @@ async function enviar(){
   finally{if(btn)btn.disabled=false;if(ta)ta.focus();}
 }
 
-// ── CERRAR ───────────────────────────────────────
-function abrirCerrar(){
-  document.getElementById('cerrarObs').value='';
-  document.getElementById('cerrarTipif').value='';
+// ── CERRAR — GESTIÓN SIGI ────────────────────────
+let _gWaEpsData = []; // cache EPS cargadas
+
+async function abrirCerrar(){
+  if(!S.selSesion) return;
+  const ses = S.selSesion;
+
+  // Determinar si es primera gestión consultando correos
+  let numGest = 0;
+  const telWA = S.selTel.replace('+','').replace(/\D/g,'');
+  const ticketId = `WA-${telWA}`;
+  try{
+    const r = await sb(`correos?ticket_id=eq.${enc(ticketId)}&select=num_gestiones&limit=1`);
+    if(r&&r[0]) numGest = r[0].num_gestiones||0;
+  }catch(e){}
+
+  const esPrimera = numGest === 0;
+  document.getElementById('gWaTitulo').textContent = esPrimera
+    ? 'Añadir gestión — #1 (registro completo)'
+    : `Añadir gestión — #${numGest+1}`;
+  document.getElementById('gWaSub').textContent = esPrimera
+    ? 'Primera gestión: completa todos los campos para registrar en SIGI.'
+    : `${numGest} gestión(es) registrada(s). Solo Gestión y Observaciones son obligatorias.`;
+  document.getElementById('gWaSub').style.color = esPrimera ? 'var(--blue)' : 'var(--green)';
+
+  // Mostrar/ocultar sección de primera gestión
+  document.getElementById('gWaPrimeraSeccion').style.display = esPrimera ? 'block' : 'none';
+
+  // Limpiar campos
+  document.getElementById('gWaObs').value = '';
+  document.getElementById('gWaAccion').value = '';
+
+  if(esPrimera){
+    // Pre-llenar con datos de la sesión
+    document.getElementById('gWaCedula').value = ses.cedula||'';
+    document.getElementById('gWaNombre').value = ses.nombre||'';
+    document.getElementById('gWaTelefono').value = S.selTel||'';
+    document.getElementById('gWaCiudad').value = ses.ciudad||'';
+    document.getElementById('gWaDepto').value = ses.ciudad||'';
+    document.getElementById('gWaEpsSearch').value = ses.eps||'';
+    document.getElementById('gWaEpsId').value = '';
+    document.getElementById('gWaTipoDoc').value = '';
+    document.getElementById('gWaTipoSol').value = '';
+    document.getElementById('gWaDetalle').value = '';
+    document.getElementById('gWaCategoria').value = '';
+    // Cargar EPS si no están cargadas
+    if(!_gWaEpsData.length){
+      try{
+        const eps = await sb('eps_catalogo?select=id,nombre,nit&activa=is.true&order=nombre.asc&limit=200');
+        _gWaEpsData = eps||[];
+      }catch(e){}
+    }
+    // Si ya tenemos EPS del paciente, buscarla
+    if(ses.eps){
+      const found = _gWaEpsData.find(e=>e.nombre.toUpperCase().includes(ses.eps.toUpperCase()));
+      if(found) document.getElementById('gWaEpsId').value = found.id;
+    }
+  }
+
   document.getElementById('modalCerrar').classList.add('open');
 }
+
+// Buscar paciente por cédula
+let _gWaBuscarTimer = null;
+async function gWaBuscarPaciente(cedula){
+  clearTimeout(_gWaBuscarTimer);
+  if(!cedula||cedula.length<6) return;
+  _gWaBuscarTimer = setTimeout(async()=>{
+    try{
+      const r = await fetch(`${SB_URL}/rest/v1/rpc/buscar_paciente`,{
+        method:'POST',
+        headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+        body:JSON.stringify({p_cedula:cedula.replace(/\D/g,'')})
+      });
+      const rows = r.ok ? await r.json() : [];
+      if(rows&&rows[0]){
+        const p = rows[0];
+        document.getElementById('gWaNombre').value = p['Nombre Paciente']||'';
+        document.getElementById('gWaTelefono').value = p['Telefono']||S.selTel||'';
+        document.getElementById('gWaCiudad').value = p['Ciudad']||'';
+        document.getElementById('gWaDepto').value = p['Departamento']||'';
+        if(p['EPS']){
+          document.getElementById('gWaEpsSearch').value = p['EPS'];
+          const found = _gWaEpsData.find(e=>e.nombre.toUpperCase().includes(p['EPS'].toUpperCase()));
+          if(found) document.getElementById('gWaEpsId').value = found.id;
+        }
+        toast('Paciente encontrado ✓','ok');
+      }
+    }catch(e){}
+  },600);
+}
+
+// Buscar EPS
+function gWaBuscarEps(q){
+  const drop = document.getElementById('gWaEpsDrop');
+  if(!q||q.length<2){drop.style.display='none';return;}
+  const matches = _gWaEpsData.filter(e=>e.nombre.toLowerCase().includes(q.toLowerCase())).slice(0,10);
+  if(!matches.length){drop.style.display='none';return;}
+  drop.innerHTML = matches.map(e=>`<div style="padding:8px 10px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)" onclick="gWaSelEps('${e.id}','${e.nombre.replace(/'/g,"\'")}')">
+    ${e.nombre}<span style="color:var(--ink3);font-size:10px;margin-left:6px">${e.nit||''}</span>
+  </div>`).join('');
+  drop.style.display='block';
+}
+
+function gWaSelEps(id,nombre){
+  document.getElementById('gWaEpsId').value = id;
+  document.getElementById('gWaEpsSearch').value = nombre;
+  document.getElementById('gWaEpsDrop').style.display='none';
+}
+
 async function confirmarCerrar(){
-  const tipif=document.getElementById('cerrarTipif').value;
-  const obs=document.getElementById('cerrarObs').value.trim();
-  if(!tipif){toast('Selecciona una tipificación','err');return;}
-  document.getElementById('modalCerrar').classList.remove('open');
+  const obs    = document.getElementById('gWaObs').value.trim();
+  const accion = document.getElementById('gWaAccion').value;
+
+  // Validaciones obligatorias
+  if(!obs){ toast('Las observaciones son obligatorias','err'); document.getElementById('gWaObs').focus(); return; }
+  if(!accion){ toast('Selecciona una acción/tipificación','err'); return; }
+
+  const telWA   = S.selTel.replace('+','').replace(/\D/g,'');
+  const ticketId = `WA-${telWA}`;
+  const btn = document.getElementById('btnConfirmarCerrar');
+  btn.disabled=true; btn.textContent='Guardando…';
+
   try{
-    await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}`,'PATCH',{estado:'cerrado',tipificacion:tipif,observacion_cierre:obs,agente_id:AGENT_ID,updated_at:new Date().toISOString()});
+    // ── Verificar si es primera gestión ──
+    let numGest = 0;
+    let correoId = null;
+    const rCorreo = await sb(`correos?ticket_id=eq.${enc(ticketId)}&select=id,num_gestiones&limit=1`);
+    if(rCorreo&&rCorreo[0]){
+      correoId = rCorreo[0].id;
+      numGest  = rCorreo[0].num_gestiones||0;
+    }
+    const esPrimera = numGest === 0;
+
+    // ── Validaciones primera gestión ──
+    if(esPrimera){
+      if(!document.getElementById('gWaEpsId').value){ toast('EPS es obligatoria en la primera gestión','err'); btn.disabled=false; btn.textContent='Guardar gestión y cerrar'; return; }
+      if(!document.getElementById('gWaTipoSol').value){ toast('Tipo de solicitud es obligatorio en la primera gestión','err'); btn.disabled=false; btn.textContent='Guardar gestión y cerrar'; return; }
+    }
+
+    const ses = S.selSesion;
+    const now = new Date().toISOString();
+
+    // ── Metadata de la gestión ──
+    const metadata = {
+      agente_id:AGENT_ID, agente_nombre:AGENT_NAME,
+      por:'agente', observaciones:obs,
+      num_gestion: numGest+1,
+      canal:'whatsapp', telefono_wa: S.selTel
+    };
+
+    if(esPrimera){
+      metadata.tipo_documento   = document.getElementById('gWaTipoDoc').value||'';
+      metadata.cedula_paciente  = document.getElementById('gWaCedula').value||'';
+      metadata.nombre_paciente  = document.getElementById('gWaNombre').value||'';
+      metadata.telefono         = document.getElementById('gWaTelefono').value||S.selTel||'';
+      metadata.ciudad           = document.getElementById('gWaCiudad').value||'';
+      metadata.departamento     = document.getElementById('gWaDepto').value||'';
+      metadata.eps_id           = document.getElementById('gWaEpsId').value||'';
+      metadata.eps_nombre       = document.getElementById('gWaEpsSearch').value||'';
+      metadata.origen           = 'WHATSAPP';
+      metadata.nombre_solicitud = document.getElementById('gWaTipoSol').value||'';
+      metadata.detalle_solicitud= document.getElementById('gWaDetalle').value||'';
+      metadata.categoria_sigi   = document.getElementById('gWaCategoria').value||'';
+    }
+
+    // ── OPERACIÓN 1: Crear o actualizar correos ──
+    const patchCorreo = {
+      num_gestiones: numGest+1,
+      estado: 'solucionado',
+      fecha_resolucion: now,
+      updated_at: now,
+      agente_id: AGENT_ID,
+      asignado_a: AGENT_NAME,
+      canal_contacto: 'whatsapp',
+    };
+
+    if(esPrimera){
+      Object.assign(patchCorreo,{
+        ticket_id:      ticketId,
+        origen:         'WHATSAPP',
+        canal_contacto: 'whatsapp',
+        tipo_documento: metadata.tipo_documento,
+        cedula_paciente:metadata.cedula_paciente,
+        nombre:         metadata.nombre_paciente,
+        telefono_contacto: metadata.telefono,
+        eps_id:         metadata.eps_id||null,
+        nombre_solicitud: metadata.nombre_solicitud,
+        detalle_solicitud: metadata.detalle_solicitud,
+        departamento_paciente: metadata.departamento,
+        ciudad_paciente: metadata.ciudad,
+        categoria_sigi: metadata.categoria_sigi,
+        from_name:      ses.nombre||'',
+        from_email:     `wa_${telWA}@tododrogas.online`,
+        subject:        `WhatsApp - ${ses.nombre||S.selTel}`,
+        received_at:    ses.updated_at||now,
+        created_at:     ses.updated_at||now,
+        is_draft:       false,
+        tipo_pqr:       metadata.nombre_solicitud,
+      });
+      // Crear nuevo registro en correos
+      await sb('correos','POST',patchCorreo);
+      // Obtener el ID creado
+      const created = await sb(`correos?ticket_id=eq.${enc(ticketId)}&select=id&limit=1`);
+      correoId = created&&created[0]?created[0].id:null;
+    } else {
+      // Actualizar el registro existente
+      await sb(`correos?ticket_id=eq.${enc(ticketId)}`,'PATCH',patchCorreo);
+    }
+
+    // ── OPERACIÓN 2: Registrar en historial_eventos ──
+    if(correoId){
+      await sb('historial_eventos','POST',{
+        correo_id:   correoId,
+        agente_id:   AGENT_ID,
+        evento:      'solucionado',
+        descripcion: `${accion} | ${obs}`,
+        subject:     `WhatsApp - ${ses.nombre||S.selTel}`,
+        from_email:  `wa_${telWA}@tododrogas.online`,
+        datos_extra: JSON.stringify(metadata),
+      });
+    }
+
+    // ── OPERACIÓN 3: Cerrar wa_sesiones ──
+    await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}`,'PATCH',{
+      estado:'cerrado',
+      tipificacion:accion,
+      observacion_cierre:obs,
+      agente_id:AGENT_ID,
+      updated_at:now
+    });
+
+    document.getElementById('modalCerrar').classList.remove('open');
     const idx=S.sesiones.findIndex(s=>s.telefono===S.selTel);
     if(idx>=0) S.sesiones[idx].estado='cerrado';
     if(S.selSesion) S.selSesion.estado='cerrado';
     renderHdr(S.selSesion);renderInput(S.selSesion);renderInfo();updateCtrs();renderLista();
-    toast('Conversación cerrada','ok');
-  }catch(e){toast('Error: '+e.message,'err');}
+    toast(`Gestión #${numGest+1} registrada y conversación cerrada ✓`,'ok');
+
+  }catch(e){
+    toast('Error: '+e.message,'err');
+    console.error('[cerrarWA]',e);
+  }finally{
+    btn.disabled=false;
+    btn.textContent='Guardar gestión y cerrar';
+  }
 }
 
 // ── TIPIFICAR ────────────────────────────────────
@@ -755,7 +1091,7 @@ function renderInfo(){
 function startPolling(){
   S.polling=setInterval(async()=>{
     try{
-      const data=await sb('wa_sesiones?select=*&estado=neq.nova&order=updated_at.desc&limit=200')||[];
+      const data=await sb('wa_sesiones?select=*&order=updated_at.desc&limit=200')||[];
       const prevE=S.sesiones.filter(s=>s.estado==='escalado').length;
       S.sesiones=data;
       const newE=data.filter(s=>s.estado==='escalado').length;
