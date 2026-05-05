@@ -554,20 +554,25 @@ function renderHdr(ses){
 // ── RENDER MENSAJES ──────────────────────────────
 function renderMsgs(hist){
   const el=document.getElementById('chatMsgs');
-  if(!hist.length){el.innerHTML=`<div class="sys-msg nova-s"><span>🤖 Nova TD inició la conversación</span></div>`;return;}
+  if(!hist.length){el.innerHTML=`<div class="sys-msg nova-s"><span>Nova TD inició la conversación</span></div>`;return;}
   let html='',lastD='';
   hist.forEach(msg=>{
-    const ts=msg.timestamp?new Date(msg.timestamp):null;
+    // Soportar tanto msg.ts (server.js) como msg.timestamp (legado)
+    const tsRaw=msg.ts||msg.timestamp||null;
+    const ts=tsRaw?new Date(tsRaw):null;
     const ds=ts?ts.toLocaleDateString('es-CO',{day:'numeric',month:'long'}):'';
     if(ds&&ds!==lastD){html+=`<div class="day-sep"><span>${ds}</span></div>`;lastD=ds;}
     const tm=ts?ts.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):'';
     const c=escH(msg.content||'').replace(/\n/g,'<br>');
     if(msg.role==='user'){
       html+=`<div class="msg-row inc"><div class="msg-bub">${c}<div class="msg-meta"><span class="msg-time">${tm}</span></div></div></div>`;
-    } else if(msg.role==='assistant'&&msg.sender==='agent'){
-      html+=`<div class="msg-row out"><span class="msg-sender agent">Tú · ${escH(msg.agente_nombre||AGENT_NAME)}</span><div class="msg-bub">${c}<div class="msg-meta"><span class="msg-time">${tm}</span><span class="tick-r">✓✓</span></div></div></div>`;
     } else if(msg.role==='assistant'){
-      html+=`<div class="msg-row nova-m inc"><span class="msg-sender nova">🤖 Nova TD</span><div class="msg-bub">${c}<div class="msg-meta"><span class="msg-time">${tm}</span></div></div></div>`;
+      // Mensaje del agente humano
+      const nombreAgente=escH(msg.agente||msg.agente_nombre||AGENT_NAME);
+      html+=`<div class="msg-row out"><span class="msg-sender agent">Tú · ${nombreAgente}</span><div class="msg-bub">${c}<div class="msg-meta"><span class="msg-time">${tm}</span><span class="tick-r">✓✓</span></div></div></div>`;
+    } else if(msg.role==='nova'){
+      // Mensaje de Nova TD — badge morado
+      html+=`<div class="msg-row inc nova-m"><span class="msg-sender nova" style="color:var(--nova,#6366f1);font-size:10px;font-weight:600;margin-bottom:2px">⬡ Nova TD</span><div class="msg-bub" style="background:var(--nova-l,#eef2ff);border:1px solid rgba(99,102,241,.2)">${c}<div class="msg-meta"><span class="msg-time">${tm}</span></div></div></div>`;
     } else if(msg.role==='system'){
       const isEsc=(msg.content||'').toLowerCase().includes('escal');
       html+=`<div class="sys-msg ${isEsc?'esc':'nova-s'}"><span>${escH(msg.content||'')}</span></div>`;
