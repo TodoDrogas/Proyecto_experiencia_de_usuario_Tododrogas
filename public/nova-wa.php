@@ -374,6 +374,28 @@ function ntdNormMun(string $s): string {
     return strtr($s, ['Á'=>'A','À'=>'A','É'=>'E','È'=>'E','Í'=>'I','Ì'=>'I','Ó'=>'O','Ò'=>'O','Ú'=>'U','Ù'=>'U','Ñ'=>'N']);
 }
 
+// Cargar sedes desde Supabase (igual que ntdCargarSedes en nova.html)
+// Fallback al catálogo local si falla
+function cargarSedesActualizadas(array $sedesLocal): array {
+    global $SB_URL, $SB_KEY;
+    try {
+        $ch = curl_init("$SB_URL/rest/v1/sedes?activa=eq.true&select=nombre,municipio_norm,direccion,telefono,lat,lng,eps,horario&limit=200");
+        curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>8,CURLOPT_SSL_VERIFYPEER=>false,
+            CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY"]]);
+        $resp = curl_exec($ch); curl_close($ch);
+        $data = json_decode($resp, true) ?? [];
+        if (empty($data)) return $sedesLocal;
+        // Normalizar campo municipio desde municipio_norm
+        foreach ($data as &$s) {
+            if (!isset($s['municipio'])) $s['municipio'] = $s['municipio_norm'] ?? '';
+            $s['municipio'] = strtoupper(trim($s['municipio']));
+        }
+        return $data;
+    } catch(\Exception $e) {
+        return $sedesLocal;
+    }
+}
+
 function buscarSedes(string $municipio, string $epsFilter, array $sedes): string {
     $munN = ntdNormMun($municipio);
     $epsN = strtoupper(trim(str_replace(['SAVIA SALUD','PREVENTIVA SALUD'],['SAVIA','PREVENTIVA'], $epsFilter)));
@@ -399,14 +421,26 @@ function buscarSedes(string $municipio, string $epsFilter, array $sedes): string
     }
 
     $munDisplay = ucwords(strtolower($municipio));
-    $txt = "📍 *Sedes en $munDisplay:*\n\n";
+    $txt = "📍 *Sedes en $munDisplay";
+    if (!$todas && $epsN) $txt .= " para *$epsN*";
+    $txt .= ":*\n\n";
     $i = 1;
     foreach (array_slice(array_values($encontradas), 0, 4) as $s) {
-        $epsArr = is_array($s['eps']) ? implode(', ', $s['eps']) : ($s['eps']??'');
         $txt .= "$i. *{$s['nombre']}*\n";
         if (!empty($s['direccion'])) $txt .= "   📌 {$s['direccion']}\n";
-        $txt .= "   🏥 EPS: $epsArr\n\n";
+        // Si es consulta de EPS específica, NO mostrar todas las EPS (solo la dirección importa)
+        // Si es TODAS, sí mostrar las EPS disponibles
+        if ($todas) {
+            $epsArr = is_array($s['eps']) ? implode(', ', $s['eps']) : ($s['eps']??'');
+            $txt .= "   🏥 EPS: $epsArr\n";
+        }
+        $txt .= "\n";
         $i++;
+    }
+    // Nota especial para Medellín (misma dirección, diferente EPS)
+    $munUP = strtoupper($municipio);
+    if (str_contains($munUP, 'MEDELLIN') || str_contains($munUP, 'MEDELLÍN')) {
+        $txt .= "_Nota: En Medellín hay dos sedes en la misma dirección que atienden diferentes EPS._\n";
     }
     return trim($txt);
 }
@@ -436,6 +470,9 @@ function consultarRadicado(string $valor, string $novaToken): string {
     if (!empty($d['fecha'])) $txt .= "Fecha: ".date('d/m/Y', strtotime($d['fecha']));
     return $txt;
 }
+
+// ── Cargar sedes actualizadas desde Supabase (fallback local) ─────────
+$NTD_SEDES_LOCAL = cargarSedesActualizadas($NTD_SEDES_LOCAL);
 
 // ── Cargar reglas dinámicas ───────────────────────────────────────────
 $reglas = sbGet('nova_reglas?activo=eq.true&select=triggers,instruccion,prioridad&order=prioridad.desc&limit=50');
@@ -743,11 +780,18 @@ if ($esOfreceAsesor) {
         echo json_encode(['respuesta'=>"Perfecto, *$pn*. Le conecto con un asesor. En breve le atienden. 🙂",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
         exit;
     }
-    // Respondió No — volver al menú
-    $limite = limiteIntentos($histGPT);
-    $resp = "Entendido, *$pn*. Estoy aquí para ayudarle.".menuMini($intentos, $limite);
+    // Respondió No — mostrar menú completo y esperar selección
+    $menuCompleto = "Entendido, *$pn*. ¿En qué más le puedo ayudar?\n\n"
+        . "1️⃣ Estado o entrega de medicamentos\n"
+        . "2️⃣ Puntos de dispensación\n"
+        . "3️⃣ Requisitos para reclamar\n"
+        . "4️⃣ Radicar PQRSFD\n"
+        . "5️⃣ Estado de mi radicado\n"
+        . "6️⃣ Horarios y canales\n"
+        . "7️⃣ Encuesta de satisfacción\n"
+        . "8️⃣ 💬 Pregunta a Nova TD";
     actualizarSesion($telefono, ['fase'=>'libre']);
-    echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'libre','intentos'=>$intentos+1]);
+    echo json_encode(['respuesta'=>$menuCompleto,'accion'=>'MENU','fase'=>'libre','intentos'=>$intentos]);
     exit;
 }
 
