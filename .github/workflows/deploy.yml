@@ -303,7 +303,7 @@ jobs:
               }
 
               const { data: sesion } = await supabase
-                .from('wa_sesiones').select('*').eq('telefono', telefono).single();
+                .from('wa_sesiones').select('*').eq('telefono', telefono).maybeSingle();
 
               const nuevoMsg = { role: 'user', content: body, ts: new Date().toISOString() };
               const history = sesion ? (Array.isArray(sesion.history) ? sesion.history : []) : [];
@@ -321,11 +321,11 @@ jobs:
                     .from('correos')
                     .select('cedula_paciente,nombre,eps_id,ciudad_paciente,telefono_contacto')
                     .eq('ticket_id', `WA-${telNum}`)
-                    .single();
+                    .maybeSingle();
                   if (correoWA) {
                     // Usuario conocido — pre-llenar datos para que Nova no pida cédula
                     const { data: epsData } = await supabase
-                      .from('eps_catalogo').select('nombre').eq('id', correoWA.eps_id).single();
+                      .from('eps_catalogo').select('nombre').eq('id', correoWA.eps_id).maybeSingle();
                     sesionParaNova = {
                       telefono,
                       nombre: correoWA.nombre || profile || '',
@@ -406,7 +406,6 @@ jobs:
                   eps: novaRespuesta?.eps || '',
                   ciudad: novaRespuesta?.ciudad || '',
                   cedula: novaRespuesta?.cedula || null,
-                  historia: history,
                   history,
                   estado: novaRespuesta?.accion === 'ESCALADO' ? 'escalado' : 'nova',
                   origen_canal: 'whatsapp_directo',
@@ -441,7 +440,7 @@ jobs:
               });
 
               const { data: sesion } = await supabase
-                .from('wa_sesiones').select('history').eq('telefono', telefono).single();
+                .from('wa_sesiones').select('history').eq('telefono', telefono).maybeSingle();
 
               const history = Array.isArray(sesion?.history) ? sesion.history : [];
               // Limitar history a 200 mensajes
