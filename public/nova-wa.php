@@ -346,15 +346,16 @@ function construirSistema(string $nombre, string $eps, string $ciudad, string $v
 
 
 // ── Menú mini post-respuesta ──────────────────────────────────────────
+// USA LETRAS para evitar colisión con el menú numérico principal
 function menuMini(int $intentos, int $limite): string {
     $base = "
 
 *¿En qué más le puedo ayudar?*
-1️⃣ 🏠 Menú principal
-2️⃣ 💬 Tengo otra pregunta";
+🏠 Escriba *M* → Menú principal
+💬 Escriba *P* → Tengo otra pregunta";
     if ($intentos >= $limite) {
         $base .= "
-3️⃣ 📞 Hablar con un asesor";
+📞 Escriba *A* → Hablar con un asesor";
     }
     return $base;
 }
@@ -667,6 +668,38 @@ if ($respondeSiAsesor && $intentos >= 1) {
     $resumen = generarResumen($histGPT, $nombre, $eps);
     escalar($telefono, $resumen);
     echo json_encode(['respuesta'=>"Perfecto, *$pn*. Le conecto con un asesor. En breve le atienden. 🙂",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+    exit;
+}
+
+// ── Respuestas al menú mini (M=menú, P=pregunta, A=asesor) ──────────
+$msgTrim = strtoupper(trim($mensaje));
+if (in_array($msgTrim, ['M','MENU','MENÚ','MENÚ PRINCIPAL','MENU PRINCIPAL'])) {
+    $menuCompleto = "¿En qué le puedo ayudar, *$pn*?\n\n"
+        . "1️⃣ Estado o entrega de medicamentos\n"
+        . "2️⃣ Puntos de dispensación\n"
+        . "3️⃣ Requisitos para reclamar\n"
+        . "4️⃣ Radicar PQRSFD\n"
+        . "5️⃣ Estado de mi radicado\n"
+        . "6️⃣ Horarios y canales\n"
+        . "7️⃣ Encuesta de satisfacción\n"
+        . "8️⃣ 💬 Pregunta a Nova TD";
+    actualizarSesion($telefono, ['fase'=>'libre']);
+    echo json_encode(['respuesta'=>$menuCompleto,'accion'=>'MENU','fase'=>'libre','intentos'=>$intentos]);
+    exit;
+}
+if (in_array($msgTrim, ['P','PREGUNTA','OTRA PREGUNTA','TENGO OTRA PREGUNTA'])) {
+    $limite = limiteIntentos($histGPT);
+    $resp = "Con gusto, *$pn*. ¿Cuál es su pregunta?".menuMini($intentos, $limite);
+    actualizarSesion($telefono, ['fase'=>'libre']);
+    echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'libre','intentos'=>$intentos]);
+    exit;
+}
+if (in_array($msgTrim, ['A','ASESOR'])) {
+    $histGPT[] = ['role'=>'user','content'=>$mensaje];
+    $resumen = generarResumen($histGPT, $nombre, $eps);
+    escalar($telefono, $resumen);
+    cerrarNovaSesion($telefono, 'solicitud_asesor', $intentos+1);
+    echo json_encode(['respuesta'=>"Por supuesto, *$pn*. Le conecto con un asesor. En un momento le atienden. 🙂",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
     exit;
 }
 
