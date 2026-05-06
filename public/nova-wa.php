@@ -1,16 +1,19 @@
 <?php
 /**
  * nova-wa.php — Nova TD completa para WhatsApp
- * Mismo sistema de prompt que nova.html, adaptado para canal de texto
+ * Replica exactamente el comportamiento de nova.html
+ * Fases: politica → ident_ced → libre
+ * Usa: validar-paciente.php, nova-proxy.php, nova-consulta.php
  */
 header('Content-Type: application/json');
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') { http_response_code(200); exit; }
 
 $SB_URL     = '__SB_URL__';
 $SB_KEY     = '__SB_KEY__';
-$OPENAI_KEY = '__OPENAI_KEY__';
 $NOVA_TOKEN = '__NOVA_TOKEN__';
+$BASE_URL   = 'https://tododrogas.online';
 
+// ── Autenticación ─────────────────────────────────────────────────────
 $token = $_SERVER['HTTP_X_NOVA_TOKEN'] ?? '';
 if ($NOVA_TOKEN !== '__NOVA_TOKEN__' && $token !== $NOVA_TOKEN) {
     http_response_code(401); echo json_encode(['error'=>'Token inválido']); exit;
@@ -25,197 +28,661 @@ if (!$telefono || !$mensaje) {
     http_response_code(400); echo json_encode(['error'=>'telefono y mensaje requeridos']); exit;
 }
 
+// ── Helpers HTTP ──────────────────────────────────────────────────────
 function httpPost(string $url, array $data, array $headers = []): array {
     $ch = curl_init($url);
-    curl_setopt_array($ch, [CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($data),CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>25,CURLOPT_SSL_VERIFYPEER=>false,CURLOPT_SSL_VERIFYHOST=>false,CURLOPT_HTTPHEADER=>array_merge(['Content-Type: application/json'],$headers)]);
-    $resp = curl_exec($ch); $code = curl_getinfo($ch,CURLINFO_HTTP_CODE); curl_close($ch);
-    return ['code'=>$code,'body'=>json_decode($resp,true)??[],'raw'=>$resp];
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($data),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 30,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER     => array_merge(['Content-Type: application/json'], $headers),
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['code' => $code, 'body' => json_decode($resp, true) ?? [], 'raw' => $resp];
 }
 
-function sbGet(string $sb_url,string $sb_key,string $path): array {
-    $ch = curl_init("$sb_url/rest/v1/$path");
-    curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>10,CURLOPT_SSL_VERIFYPEER=>false,CURLOPT_HTTPHEADER=>["apikey: $sb_key","Authorization: Bearer $sb_key",'Content-Type: application/json']]);
+function sbGet(string $path): array {
+    global $SB_URL, $SB_KEY;
+    $ch = curl_init("$SB_URL/rest/v1/$path");
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_HTTPHEADER     => ["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Content-Type: application/json'],
+    ]);
     $resp = curl_exec($ch); curl_close($ch);
-    return json_decode($resp,true)??[];
+    return json_decode($resp, true) ?? [];
 }
 
-function sbPatch(string $sb_url,string $sb_key,string $tabla,string $filtro,array $data): void {
-    $ch = curl_init("$sb_url/rest/v1/$tabla?$filtro");
-    curl_setopt_array($ch,[CURLOPT_CUSTOMREQUEST=>'PATCH',CURLOPT_POSTFIELDS=>json_encode($data),CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>10,CURLOPT_SSL_VERIFYPEER=>false,CURLOPT_HTTPHEADER=>["apikey: $sb_key","Authorization: Bearer $sb_key",'Content-Type: application/json','Prefer: return=minimal']]);
+function sbPatch(string $tabla, string $filtro, array $data): void {
+    global $SB_URL, $SB_KEY;
+    $ch = curl_init("$SB_URL/rest/v1/$tabla?$filtro");
+    curl_setopt_array($ch, [
+        CURLOPT_CUSTOMREQUEST  => 'PATCH',
+        CURLOPT_POSTFIELDS     => json_encode($data),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_HTTPHEADER     => ["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Content-Type: application/json','Prefer: return=minimal'],
+    ]);
     curl_exec($ch); curl_close($ch);
 }
 
-$cedula       = trim($sesion['cedula']        ?? '');
-$nombre       = trim($sesion['nombre']        ?? '');
-$eps          = trim($sesion['eps']           ?? '');
-$ciudad       = trim($sesion['ciudad']        ?? '');
-$intentos     = (int)($sesion['intentos_nova'] ?? 0);
-$origen_canal = trim($sesion['origen_canal']  ?? 'whatsapp_directo');
-$history      = is_array($sesion['history']) ? $sesion['history'] : [];
-$primerNombre = $nombre ? explode(' ',trim($nombre))[0] : '';
-$msgUpper     = mb_strtoupper($mensaje,'UTF-8');
+function sbInsert(string $tabla, array $data): array {
+    global $SB_URL, $SB_KEY;
+    $ch = curl_init("$SB_URL/rest/v1/$tabla");
+    curl_setopt_array($ch, [
+        CURLOPT_POST           => true,
+        CURLOPT_POSTFIELDS     => json_encode($data),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_HTTPHEADER     => ["apikey: $SB_KEY","Authorization: Bearer $SB_KEY",'Content-Type: application/json','Prefer: return=representation'],
+    ]);
+    $resp = curl_exec($ch); curl_close($ch);
+    return json_decode($resp, true) ?? [];
+}
 
-$histGPT = array_map(fn($m)=>['role'=>in_array($m['role']??'',['assistant','nova'])?'assistant':'user','content'=>$m['content']??''],
-    array_filter($history,fn($m)=>in_array($m['role']??'',['user','nova','assistant'])));
-$histGPT = array_slice(array_values($histGPT),-12);
+// ── Normalizar texto ──────────────────────────────────────────────────
+function ntdNorm(string $s): string {
+    $s = mb_strtoupper(trim($s), 'UTF-8');
+    $s = str_replace(['Á','À','Â','Ä','É','È','Ê','Ë','Í','Ì','Î','Ï','Ó','Ò','Ô','Ö','Ú','Ù','Û','Ü','Ñ'],
+                     ['A','A','A','A','E','E','E','E','I','I','I','I','O','O','O','O','U','U','U','U','N'], $s);
+    return $s;
+}
 
-// ── FASE 1: Validación ────────────────────────────────────────────────
-if ($origen_canal === 'whatsapp_directo' && !$cedula) {
-    $posibleCedula = preg_replace('/\D/','',$mensaje);
-    $esCedula = strlen($posibleCedula)>=6 && strlen($posibleCedula)<=12;
-    if ($esCedula) {
-        $r = httpPost('https://tododrogas.online/validar-paciente.php',['cedula'=>$posibleCedula,'telefono'=>preg_replace('/\D/','',$telefono)]);
-        if ($r['code']===200 && ($r['body']['ok']??false)) {
-            $p=$r['body'];
-            sbPatch($SB_URL,$SB_KEY,'wa_sesiones',"telefono=eq.".urlencode($telefono),['cedula'=>$posibleCedula,'nombre'=>$p['nombre']??'','eps'=>$p['eps']??'','ciudad'=>$p['ciudad']??'','updated_at'=>date('c')]);
-            $cedula=$posibleCedula; $nombre=$p['nombre']??''; $eps=$p['eps']??''; $ciudad=$p['ciudad']??'';
-            $primerNombre=explode(' ',trim($nombre))[0];
-            $saludo=($p['vip']??false)
-                ?($p['saludo']??"¡Bienvenida, *$primerNombre*! Nova TD te reconoce. ¿En qué te puedo ayudar hoy?")
-                :"¡Hola, *$primerNombre*! Bienvenida a *Tododrogas*. Soy *Nova TD*. ¿En qué te puedo ayudar?\n\n1️⃣ Estado o entrega de medicamentos\n2️⃣ Puntos de dispensación\n3️⃣ Requisitos para reclamar\n4️⃣ Radicar PQRSFD\n5️⃣ Estado de mi radicado\n6️⃣ Horarios y canales\n7️⃣ Encuesta de satisfacción\n8️⃣ Pregunta libre a Nova TD";
-            echo json_encode(['respuesta'=>$saludo,'accion'=>'CONTINUAR','cedula'=>$cedula,'nombre'=>$nombre,'eps'=>$eps,'ciudad'=>$ciudad,'intentos'=>0]); exit;
-        } else {
-            echo json_encode(['respuesta'=>"No encontré su registro con ese documento. Por favor verifíquelo e intente nuevamente, o llame al *604 322 2432*.",'accion'=>'PEDIR_CEDULA','intentos'=>$intentos+1]); exit;
+function primerNombre(string $nombre): string {
+    $partes = explode(' ', ucwords(strtolower(trim($nombre))));
+    return $partes[0] ?? $nombre;
+}
+
+// ── Datos de sesión ───────────────────────────────────────────────────
+$cedula        = trim($sesion['cedula']          ?? '');
+$nombre        = trim($sesion['nombre']          ?? '');
+$eps           = trim($sesion['eps']             ?? '');
+$ciudad        = trim($sesion['ciudad']          ?? '');
+$fase          = trim($sesion['fase']            ?? 'politica');
+$intentos      = (int)($sesion['intentos_nova']  ?? 0);
+$noAcepCnt     = (int)($sesion['no_acepto_count']?? 0);
+$origenCanal   = trim($sesion['origen_canal']    ?? 'whatsapp_directo');
+$history       = is_array($sesion['history'])    ? $sesion['history'] : [];
+$vip           = (bool)($sesion['vip']           ?? false);
+
+$pn      = primerNombre($nombre);
+$msgUp   = ntdNorm($mensaje);
+$telEnc  = urlencode($telefono);
+
+// ── Historial para GPT ────────────────────────────────────────────────
+$histGPT = [];
+foreach ($history as $m) {
+    $role = $m['role'] ?? '';
+    if ($role === 'user')                          $histGPT[] = ['role'=>'user',      'content'=>$m['content']??''];
+    elseif (in_array($role, ['nova','assistant'])) $histGPT[] = ['role'=>'assistant', 'content'=>$m['content']??''];
+}
+$histGPT = array_slice($histGPT, -20);
+
+// ── Catálogo de sedes LOCAL (mismo que NTD_SEDES_LOCAL en nova.html) ──
+$NTD_SEDES_LOCAL = [
+  ["nombre"=>"DROGUERIA BIENESTAR CACERES - COOSALUD","municipio"=>"CACERES","direccion"=>"Calle 49 N 51-36 Barrio Centro","lat"=>7.5742,"lng"=>-75.3464,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL"]],
+  ["nombre"=>"Servicio Farmaceutico Tododrogas Girardota","municipio"=>"GIRARDOTA","direccion"=>"Calle 9 #14-62 Local Comercial Primer Piso Edificio Los Angeles","lat"=>6.3789,"lng"=>-75.4458,"eps"=>["SALUD TOTAL","NUEVA EPS"]],
+  ["nombre"=>"E.S.E. Hospital San Juan De Dios De Marinilla","municipio"=>"MARINILLA","direccion"=>"Carrera 36 # 28-85 Marinilla","lat"=>6.1775,"lng"=>-75.3336,"eps"=>["SALUD TOTAL","ANGIOSUR"]],
+  ["nombre"=>"DROGUERIA SAN RAFAEL ANORI","municipio"=>"ANORI","direccion"=>"Carrera 30 # 30-27 Nucleo Zonal 01","lat"=>7.0714,"lng"=>-75.1403,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS YARUMAL","municipio"=>"YARUMAL","direccion"=>"Carrera 21 # 17-17 Local 102 Mall Comercial Cubox","lat"=>7.0,"lng"=>-75.4194,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS CHIGORODO","municipio"=>"CHIGORODO","direccion"=>"Calle 95 # 97-04 Apto 202","lat"=>7.6728,"lng"=>-76.6836,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM"]],
+  ["nombre"=>"SERVICIO FARMACEUTICO TODO DROGAS SOPETRAN","municipio"=>"SOPETRAN","direccion"=>"Carrera 10 número 11-65 Primer Piso","lat"=>6.5036,"lng"=>-75.7403,"eps"=>["SAVIA"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS CAUCASIA","municipio"=>"CAUCASIA","direccion"=>"Carrera 20 # 3-76 CC Cauca Centro A1","lat"=>7.9839,"lng"=>-75.1953,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","NUEVA EPS","CEM"]],
+  ["nombre"=>"DROGUERIA COOPRIACHON ANGOSTURA","municipio"=>"ANGOSTURA","direccion"=>"CARRERA 10 # 9-20","lat"=>6.8722,"lng"=>-75.3406,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"Servicio Farmaceutico Tododrogas La Union","municipio"=>"LA UNION","direccion"=>"Calle 7 A # 4ª – 05 Lote 8 # 102","lat"=>5.9747,"lng"=>-75.3625,"eps"=>["NUEVA EPS"]],
+  ["nombre"=>"EMPRESA SOCIAL DEL ESTADO HOSPITAL SAN MIGUEL","municipio"=>"OLAYA - LLANADAS","direccion"=>"Carrera 10 #10-34 Corregimiento Llanadas","lat"=>6.6317,"lng"=>-75.8583,"eps"=>["SAVIA"]],
+  ["nombre"=>"EMPRESA SOCIAL DEL ESTADO SAN MARTIN DE PORRES","municipio"=>"ARMENIA","direccion"=>"CALLE 11 # 6-69","lat"=>5.7447,"lng"=>-75.6822,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"HOSPITAL OCTAVIO ALVAREZ","municipio"=>"PUERTO NARE","direccion"=>"CARRERA 5 # 45-103","lat"=>6.2064,"lng"=>-74.5906,"eps"=>["COOSALUD"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS SANTA BARBARA","municipio"=>"SANTA BARBARA","direccion"=>"Carrera 50 numero 48 – 17","lat"=>5.875,"lng"=>-75.5714,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM","ANGIOSUR"]],
+  ["nombre"=>"DROGUERIA FARMAVIDA","municipio"=>"AMALFI","direccion"=>"Calle 23 # 29-054 Local 101","lat"=>6.9122,"lng"=>-75.0758,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL"]],
+  ["nombre"=>"DROGUERIA LA AMISTAD","municipio"=>"SABANALARGA","direccion"=>"Calle 17# 18-06","lat"=>6.8856,"lng"=>-75.7128,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS CAREPA","municipio"=>"CAREPA","direccion"=>"Calle 81 con carrera 74-12/14 Apto 101","lat"=>7.7586,"lng"=>-76.6542,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","NUEVA EPS","CEM"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS TURBO","municipio"=>"TURBO","direccion"=>"Calle 101 con carrera 15 Barrio Baltazar","lat"=>8.0972,"lng"=>-76.7294,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM"]],
+  ["nombre"=>"DROGUERIA LA NUESTRA","municipio"=>"CONCORDIA","direccion"=>"Carrera 19 # 19 30/32","lat"=>6.0469,"lng"=>-75.9058,"eps"=>["SALUD TOTAL"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS APARTADO","municipio"=>"APARTADO","direccion"=>"Carrera 102 # 92-16/18 esquina","lat"=>7.88,"lng"=>-76.6258,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS YOLOMBO","municipio"=>"YOLOMBO","direccion"=>"Carrera 24 Calle 18-04 Local # 4 Edificio S Y S","lat"=>6.5975,"lng"=>-75.0153,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM","ANGIOSUR"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS CIUDAD BOLIVAR","municipio"=>"CIUDAD BOLIVAR","direccion"=>"Calle 49 # 50-57 local # 104","lat"=>5.8597,"lng"=>-76.0186,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM","ANGIOSUR"]],
+  ["nombre"=>"Servicio Farmaceutico Tododrogas Sabaneta","municipio"=>"SABANETA","direccion"=>"Carrera 45 A Calle 79 SUR 146 Prados De Sabaneta","lat"=>6.1519,"lng"=>-75.6175,"eps"=>["NUEVA EPS"]],
+  ["nombre"=>"DROGUERIA FRONTIFARMA","municipio"=>"FRONTINO","direccion"=>"Calle 28 # 30-50","lat"=>6.7747,"lng"=>-76.1344,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL"]],
+  ["nombre"=>"EMPRESA SOCIAL DEL ESTADO HOSPITAL SAN ISIDRO","municipio"=>"GIRALDO","direccion"=>"CARRERA 10 # 11-05","lat"=>6.4747,"lng"=>-75.9164,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"DROGURIA SANTA TERESITA DE SAN JERONIMO","municipio"=>"SAN JERONIMO","direccion"=>"Carrera 11# 21-73 Sector La Carreterita","lat"=>6.4933,"lng"=>-75.7136,"eps"=>["SAVIA"]],
+  ["nombre"=>"DROGUERIA LA PILDORA","municipio"=>"NECOCLI","direccion"=>"Calle 51 # 48-38 Centro","lat"=>8.4281,"lng"=>-76.7833,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL"]],
+  ["nombre"=>"E.S.E HOSPITAL EL SAGRADO CORAZON","municipio"=>"BRICEÑO","direccion"=>"CALLE 11 # 8-31","lat"=>7.2861,"lng"=>-75.5233,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS PUERTO BERRIO","municipio"=>"PUERTO BERRIO","direccion"=>"Barrio el Hoyo Calle 48 con Carrera 5 # 4-56","lat"=>6.4914,"lng"=>-74.4083,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS TAMESIS","municipio"=>"TAMESIS","direccion"=>"Carrera 10 # 9-47 Primer Piso Local # 1 Edificio Embera","lat"=>5.67,"lng"=>-75.7133,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","NUEVA EPS","CEM","ANGIOSUR"]],
+  ["nombre"=>"E.S.E Hospital Guillermo Gaviria Correa","municipio"=>"CAICEDO","direccion"=>"Carrera 5 # 3-23","lat"=>6.3933,"lng"=>-76.0433,"eps"=>["SAVIA"]],
+  ["nombre"=>"DROGUERIA SAN GABRIEL","municipio"=>"LIBORINA","direccion"=>"Carrera 9 #8-4 Parque Principal","lat"=>6.6897,"lng"=>-75.8606,"eps"=>["SAVIA"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS AMAGA","municipio"=>"AMAGA","direccion"=>"Calle 52 con la 51 # 50","lat"=>6.0386,"lng"=>-75.7022,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM","ANGIOSUR"]],
+  ["nombre"=>"GALLEGO SMV S.A.S. (Drogueria Familiar S.G.)","municipio"=>"PUEBLORRICO","direccion"=>"Carrera 30 # 30-56 Local 101","lat"=>5.7944,"lng"=>-75.9483,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS NECHI","municipio"=>"NECHI","direccion"=>"Barrio San Nicolás manzana 24 lote 02 Calle 25 N° 31 A-16","lat"=>8.1017,"lng"=>-74.77,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"FARMACIA D'ANDREÉ","municipio"=>"PEQUE","direccion"=>"Carrera Bolivar 11-19","lat"=>6.9233,"lng"=>-76.0,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN (BIC PISO 6)","municipio"=>"MEDELLIN","direccion"=>"Carrera 48 # 49-57","lat"=>6.2518,"lng"=>-75.5636,"eps"=>["SALUD TOTAL","CEM","PREVENTIVA"]],
+  ["nombre"=>"DROGUERIA DONDE NATALIA","municipio"=>"DABEIBA","direccion"=>"Carrera 10 # 06-70","lat"=>7.005,"lng"=>-76.2644,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"DROGUERIA SAN ANTONIO","municipio"=>"JERICO","direccion"=>"CARRERA 5 #6-09","lat"=>5.7897,"lng"=>-75.7792,"eps"=>["COOSALUD"]],
+  ["nombre"=>"DROGUERIA SAN MARTIN 712","municipio"=>"ANZA","direccion"=>"Carrera 8 # 7-51","lat"=>6.3136,"lng"=>-75.9444,"eps"=>["SAVIA"]],
+  ["nombre"=>"DROGUERIA FAMIDROGAS","municipio"=>"BETULIA","direccion"=>"Calle 21 # 21-42","lat"=>6.1097,"lng"=>-75.9792,"eps"=>["SAVIA"]],
+  ["nombre"=>"DROGUERIA KIRIUS LA BOMBA TARAZA - COOSALUD","municipio"=>"TARAZA","direccion"=>"Carrera 28 #27-26","lat"=>7.5833,"lng"=>-75.4,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS SEGOVIA","municipio"=>"SEGOVIA","direccion"=>"Calle El Bolsillo O El Palo Primer piso","lat"=>7.0819,"lng"=>-74.7039,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"DROGUERIA MACEFARMA","municipio"=>"VALDIVIA","direccion"=>"Calle Libertador # 9-92","lat"=>7.1656,"lng"=>-75.4411,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"DROGUERIA BIOMEDIC","municipio"=>"HISPANIA","direccion"=>"CALLE 50 TOLEDO # 50-12","lat"=>5.8294,"lng"=>-75.9169,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS ANDES","municipio"=>"ANDES","direccion"=>"Carrera 50 # 49-68 Local 102 Edificio El Tesoro","lat"=>5.6558,"lng"=>-75.8786,"eps"=>["SAVIA","SALUD TOTAL","CEM","ANGIOSUR"]],
+  ["nombre"=>"DROGUERIA EL REGALO DE DIOS","municipio"=>"YALI","direccion"=>"Calle 20 # 19-71 Barrio La Plaza","lat"=>6.8914,"lng"=>-74.8672,"eps"=>["COOSALUD","SAVIA"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS SANTA FE ANTIOQUIA","municipio"=>"SANTA FE DE ANTIOQUIA","direccion"=>"Calle 10 # 7-49 Primer piso","lat"=>6.5558,"lng"=>-75.8258,"eps"=>["COOSALUD","SAVIA","NUEVA EPS","CEM"]],
+  ["nombre"=>"DROGUERIA MACRODESCUENTOS # 9","municipio"=>"JARDIN","direccion"=>"Calle 9 # 2-59","lat"=>5.5975,"lng"=>-75.8181,"eps"=>["SAVIA"]],
+  ["nombre"=>"FARMAX LA DROGUERIA S.A.S","municipio"=>"REMEDIOS","direccion"=>"CALLE 11 # 8-12 CALLE SAN ANTONIO","lat"=>7.0275,"lng"=>-74.6906,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS ZARAGOZA","municipio"=>"ZARAGOZA","direccion"=>"Calle 35 # 36-17 Barrio San Gregorio","lat"=>7.495,"lng"=>-74.8656,"eps"=>["COOSALUD","SAVIA","CEM"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS CEJA","municipio"=>"LA CEJA","direccion"=>"Carrera 24 # 19-40 sector Fátima","lat"=>6.0225,"lng"=>-75.4303,"eps"=>["NUEVA EPS"]],
+  ["nombre"=>"EMPRESA SOCIAL DEL ESTADO SAN JOSE SAMANÁ","municipio"=>"SAMANA","direccion"=>"Carrera 9 # 4-79 Calle De La Vida","lat"=>5.9008,"lng"=>-74.9956,"eps"=>["COOSALUD"]],
+  ["nombre"=>"Servicio Farmaceutico Tododrogas Barbosa","municipio"=>"BARBOSA","direccion"=>"Calle 17 N° 9-44 local 103","lat"=>6.1886,"lng"=>-75.3316,"eps"=>["NUEVA EPS"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS EL BAGRE","municipio"=>"EL BAGRE","direccion"=>"Calle 50 número 47 A 31 Barrio Bijao","lat"=>7.5917,"lng"=>-74.8097,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM","ANGIOSUR"]],
+  ["nombre"=>"DROGUERIA H. RAMIREZ","municipio"=>"URAMITA","direccion"=>"CARRERA 20 #20-67","lat"=>6.8669,"lng"=>-76.1747,"eps"=>["COOSALUD"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS RIONEGRO","municipio"=>"RIONEGRO","direccion"=>"Calle 52 #45-70 LC 2006 CC Rionegro Plaza","lat"=>6.155,"lng"=>-75.3736,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","NUEVA EPS","CEM","ANGIOSUR"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS ABEJORRAL","municipio"=>"ABEJORRAL","direccion"=>"Carrera 50 Nro. 48-71","lat"=>5.7917,"lng"=>-75.4328,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL","CEM"]],
+  ["nombre"=>"SERVICIO FARMACÉUTICO TODODROGAS MEDELLIN (PISO 1)","municipio"=>"MEDELLIN","direccion"=>"Carrera 48 # 49-57","lat"=>6.2518,"lng"=>-75.5636,"eps"=>["COOSALUD","SAVIA","ANGIOSUR","PREVENTIVA"]],
+  ["nombre"=>"DROGUERIA ALMA SALUD 1","municipio"=>"COPACABANA","direccion"=>"Calle 40 Carrera # 84-18","lat"=>6.3503,"lng"=>-75.5103,"eps"=>["SALUD TOTAL"]],
+  ["nombre"=>"DROGUERIA FAMILIAR EDDY","municipio"=>"MUTATA","direccion"=>"Carrera 10 # 10-41-43","lat"=>7.245,"lng"=>-76.435,"eps"=>["COOSALUD","SAVIA","SALUD TOTAL"]],
+];
+
+// ── URL política de privacidad ─────────────────────────────────────────
+$POL_URL = 'https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/POLITICAS%20TRATAMIENTO%20DE%20DATOS/PO_GL_07_Politica_Uso_Chat_V03.pdf';
+$FORM_URL = 'https://tododrogas.online/pqr_form.html';
+$ENC_URL  = 'https://tododrogas.online/pqr_encuesta.html';
+$MEDS_URL = 'https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb';
+
+// ── Actualizar sesión en Supabase ─────────────────────────────────────
+function actualizarSesion(string $telefono, array $data): void {
+    sbPatch('wa_sesiones', "telefono=eq.".urlencode($telefono), array_merge($data, ['updated_at'=>date('c')]));
+}
+
+// ── Escalar al agente ─────────────────────────────────────────────────
+function escalar(string $telefono, string $resumen = ''): void {
+    actualizarSesion($telefono, ['estado'=>'escalado','resumen_nova'=>$resumen,'fase'=>'escalado']);
+}
+
+// ── Generar resumen GPT ───────────────────────────────────────────────
+function generarResumen(array $hist, string $nombre, string $eps, string $openaiKey = ''): string {
+    $conv = implode("\n", array_map(fn($m) =>
+        ($m['role']==='user'?'Usuario':'Nova').': '.($m['content']??''),
+        array_slice($hist,-8)
+    ));
+    $r = httpPost('https://tododrogas.online/nova-proxy.php',
+        ['system'=>'Resumen de 2 líneas para el agente. Solo el resumen, sin preámbulos.',
+         'messages'=>[['role'=>'user','content'=>"Usuario: $nombre | EPS: $eps\n\n$conv\n\nResumen para agente:"]],'max_tokens'=>120],
+        ['X-Nova-Token: '.(defined('NOVA_TOKEN')?NOVA_TOKEN:'')]
+    );
+    return trim($r['body']['choices'][0]['message']['content'] ?? 'Sin resumen.');
+}
+
+// ── Llamar a nova-proxy.php (igual que nova.html) ─────────────────────
+function llamarProxy(string $system, array $messages, string $novaToken): string {
+    $r = httpPost('https://tododrogas.online/nova-proxy.php',
+        ['system'=>$system,'messages'=>$messages,'max_tokens'=>1500],
+        ["X-Nova-Token: $novaToken"]
+    );
+    if ($r['code']!==200) return '';
+    return trim($r['body']['choices'][0]['message']['content'] ?? '');
+}
+
+// ── Construir sistema de prompt (idéntico a ntdSys() en nova.html) ────
+function construirSistema(string $nombre, string $eps, string $ciudad, string $vip, array $sedes, array $reglas, string $msgUpper): string {
+    $hoy = (new DateTime())->format('l, d \d\e F \d\e Y');
+    $s  = "Eres Nova TD, asistente virtual de Tododrogas.\n";
+    $s .= "FECHA DE HOY: $hoy\n";
+    $s .= "USUARIO: $nombre | EPS: $eps (SAVIA SALUD = SAVIA, PREVENTIVA SALUD = PREVENTIVA)\n";
+    $s .= "VIP: $vip\n";
+    $s .= "TRATO: Siempre de USTED.\n";
+
+    // Cobertura dinámica desde catálogo
+    $mapa = [];
+    foreach ($sedes as $sede) {
+        $mun = strtoupper(trim($sede['municipio'] ?? ''));
+        if (!$mun) continue;
+        $epsArr = is_array($sede['eps']) ? $sede['eps'] : [$sede['eps']];
+        foreach ($epsArr as $e) {
+            $en = strtoupper(trim(str_replace(['SAVIA SALUD','PREVENTIVA SALUD'],['SAVIA','PREVENTIVA'], $e)));
+            if (!$en || $en==='TODAS') continue;
+            $mapa[$en][] = $mun;
         }
-    } else {
-        echo json_encode(['respuesta'=>count($history)<=1?"¡Hola! Bienvenido/a a *Tododrogas*. Soy *Nova TD*.\n\nPara brindarle atención personalizada, por favor indíqueme su *número de documento* (sin puntos ni espacios).":"Para continuar necesito verificar su identidad. Por favor indíqueme su *número de documento* (sin puntos ni espacios).",'accion'=>'PEDIR_CEDULA','intentos'=>$intentos]); exit;
     }
+    foreach ($mapa as $k => $v) $mapa[$k] = implode(', ', array_unique($v));
+
+    $s .= "COBERTURA:\n";
+    foreach ($mapa as $epsKey => $municipios) $s .= "  $epsKey: $municipios\n";
+    if ($eps && isset($mapa[$eps])) $s .= "EPS $eps cubre: {$mapa[$eps]}. Municipio fuera=sin cobertura.\n";
+
+    $s .= "HORARIOS SEDES: Propias: Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m. In House: Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am. TODAS abren sábados.\n";
+
+    // Catálogo completo de sedes
+    $s .= "CATÁLOGO DE SEDES:\n";
+    foreach ($sedes as $sede) {
+        $epsArr = is_array($sede['eps']) ? implode(', ', $sede['eps']) : ($sede['eps']??'');
+        $s .= "- {$sede['nombre']} | Municipio: {$sede['municipio']} | EPS: $epsArr\n";
+    }
+
+    $s .= "REGLA SEDES ESPECIALES MEDELLÍN: Hay DOS sedes en Medellín misma dirección. Consulta catálogo para saber qué EPS atiende cada una.\n";
+    $s .= "REGLA MEDICAMENTOS Y MEDICINA: Para cualquier pregunta sobre medicamentos, dosis, enfermedades — responde con conocimiento médico-farmacéutico. Si menciona medicamento malo/vencido/deteriorado → di SIEMPRE primero: 'No lo consuma. Por su seguridad NO utilice ese medicamento.' → PBX 604 322 2432 / WA 304 341 2431 → [SEDES:municipio].\n";
+    $s .= "PBX 604 322 2432|WA 304 341 2431|pqrsfd@tododrogas.com.co\n";
+    $s .= "Canal WhatsApp — usa *negritas* con asteriscos. Sin # encabezados. Máx 120 palabras. 1 emoji. NUNCA el menú completo, usa [MENU].\n";
+    $s .= "REGLA MEDICAMENTOS DEFECTUOSOS: medicamento vencido/malo/deteriorado → 'No lo consuma.' siempre primero.\n";
+    $s .= "REGLA SEDES — OBLIGATORIA:\n";
+    $s .= "  PASO 1: Si usuario menciona EPS explícita → usar ESA EPS. Si no → usar EPS del usuario.\n";
+    $s .= "  PASO 2: EPS mencionada ≠ EPS usuario → [SEDES:municipio:EPSMENCIONADA]. Igual → [SEDES:municipio].\n";
+    $s .= "  PASO 3: NUNCA omitir el tag.\n";
+    $s .= "  CASO ESPECIAL: '¿qué EPS atienden en X?' → [SEDES:X:TODAS]\n";
+    $s .= "  EJEMPLOS: 'NUEVA EPS en NECHI' → [SEDES:NECHI:NUEVA EPS]. 'puedo reclamar en RIONEGRO' (COOSALUD) → [SEDES:RIONEGRO]\n";
+    $s .= "REGLA CONSULTAR: Si usuario escribe solo número de radicado (TD-xxxxx) o correo → [CONSULTAR:valor].\n";
+    $s .= "REGLA MEDICAMENTOS VS REQUISITOS: QUÉ LLEVAR/DOCUMENTOS/REQUISITOS → [REQUISITOS]. ESTADO/DEMORA/CUÁNDO LLEGA → [MEDICAMENTOS].\n";
+    $s .= "REGLA RADICAR: Quiere radicar PQRSFD → [FORMULARIO].\n";
+    $s .= "REGLA ESCALAR: Pide asesor/agente/humano → [ESCALAR].\n";
+
+    // Reglas dinámicas
+    if (!empty($reglas)) {
+        $reglasMatch = array_filter($reglas, function($r) use ($msgUpper) {
+            $trigs = is_array($r['triggers']) ? $r['triggers'] : [];
+            foreach ($trigs as $t) {
+                if ($t && mb_strpos($msgUpper, strtoupper($t), 0, 'UTF-8') !== false) return true;
+            }
+            return false;
+        });
+        if (!empty($reglasMatch)) {
+            $s .= "INSTRUCCIONES ESPECÍFICAS (PRIORIDAD MÁXIMA):\n";
+            foreach ($reglasMatch as $r) $s .= "- {$r['instruccion']}\n";
+        }
+    }
+
+    $s .= "TAGS:[MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]";
+    return $s;
 }
 
-// ── FASE 2: Detección inmediata ───────────────────────────────────────
-$urgencia   = preg_match('/VENCIDO|DETERIORAD|REACCI[OÓ]N|GRAVE|EMERGENCIA|INTOXICACI[OÓ]N|DA[ÑN]ADO|MAL ESTADO/u',$msgUpper);
-$pideAsesor = preg_match('/ASESOR|AGENTE HUMANO|HUMANO|PERSONA REAL|HABLAR CON|QUIERO UN ASESOR|ME COMUNICA|OPERADOR|COMUNICA.*ASESOR/u',$msgUpper);
+// ── Buscar sedes en catálogo local ────────────────────────────────────
+function buscarSedes(string $municipio, string $epsFilter, array $sedes): string {
+    $munN = strtoupper(trim($municipio));
+    $epsN = strtoupper(trim(str_replace(['SAVIA SALUD','PREVENTIVA SALUD'],['SAVIA','PREVENTIVA'], $epsFilter)));
+    $todas = strtoupper($epsFilter) === 'TODAS';
 
-if ($urgencia||$pideAsesor) {
-    $resumen=generarResumen($histGPT,$nombre,$eps,$mensaje,$OPENAI_KEY);
-    escalarSesion($SB_URL,$SB_KEY,$telefono,$resumen);
-    echo json_encode(['respuesta'=>$urgencia?"⚠️ Entiendo que es urgente, *$primerNombre*. Lo conecto de inmediato con un asesor.":"Por supuesto, *$primerNombre*. Le conecto con un asesor. En un momento le atienden. 🙂",'accion'=>'ESCALADO','resumen'=>$resumen,'intentos'=>$intentos]); exit;
-}
+    $encontradas = array_filter($sedes, function($s) use ($munN, $epsN, $todas) {
+        $sM = strtoupper(trim($s['municipio']??''));
+        if (!str_contains($sM, $munN) && !str_contains($munN, $sM)) return false;
+        if ($todas) return true;
+        $epsArr = is_array($s['eps']) ? $s['eps'] : [$s['eps']];
+        foreach ($epsArr as $e) {
+            $en = strtoupper(str_replace(['SAVIA SALUD','PREVENTIVA SALUD'],['SAVIA','PREVENTIVA'], $e));
+            if (str_contains($en, $epsN) || str_contains($epsN, $en)) return true;
+        }
+        return false;
+    });
 
-// ── Reglas dinámicas Supabase ─────────────────────────────────────────
-$reglas = sbGet($SB_URL,$SB_KEY,'nova_reglas?activo=eq.true&select=triggers,instruccion,prioridad&order=prioridad.desc&limit=50');
-$reglasMatch=[];
-foreach($reglas as $r){
-    $trigs=is_array($r['triggers'])?$r['triggers']:[];
-    foreach($trigs as $t){if($t&&mb_strpos($msgUpper,mb_strtoupper($t,'UTF-8'),0,'UTF-8')!==false){$reglasMatch[]=$r['instruccion'];break;}}
-}
+    if (empty($encontradas)) {
+        return "📍 No encontré sedes en *$municipio*".($todas?'':' para su EPS').". Llame al *604 322 2432*.";
+    }
 
-// ── Sistema de prompt completo ────────────────────────────────────────
-$system = "Eres *Nova TD*, asistente virtual de *Tododrogas* por WhatsApp.\n";
-$system.= "Usuario: $nombre | Cédula: $cedula | EPS: $eps | Ciudad: $ciudad\n";
-$system.= "Canal WhatsApp — usa *negritas* con asteriscos. Sin # de encabezados. Máx 120 palabras. 1 emoji máximo.\n\n";
-$system.= "REGLAS:\n- Dirígete por el primer nombre: $primerNombre\n";
-$system.= "- PBX: 604 322 2432 | WA agentes: 304 341 2431 | Email: pqrsfd@tododrogas.com.co\n";
-$system.= "- Horario: Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m\n\n";
-$system.= "REGLA MEDICAMENTOS: Para preguntas sobre medicamentos/dosis/enfermedades responde con conocimiento médico-farmacéutico. Si mencionan medicamento vencido/malo/dañado → di SIEMPRE primero: 'No lo consuma. Por su seguridad NO utilice ese medicamento.' → contacto → [SEDES:municipio].\n\n";
-$system.= "REGLA SEDES: Si preguntan por sedes → [SEDES:municipio] o [SEDES:municipio:EPS]. Sin municipio → preguntar primero.\n\n";
-$system.= "REGLA SEDES — EPS MENCIONADA: Si menciona EPS diferente a la suya → [SEDES:municipio:EPSmencionada]. Si pregunta qué EPS atienden en X → [SEDES:X:TODAS].\n\n";
-$system.= "REGLA RADICAR: Quiere radicar PQRSFD → [FORMULARIO].\n";
-$system.= "REGLA CONSULTAR: Escribe número radicado (TD-xxxxx) → [CONSULTAR:valor].\n";
-$system.= "REGLA ENCUESTA: Quiere calificar → [ENCUESTA].\n";
-$system.= "REGLA ESCALAR: Pide asesor/agente/humano o no puedes resolver → [ESCALAR].\n";
-$system.= "REGLA MENU: No entiende o pide opciones → [MENU].\n\n";
-if(!empty($reglasMatch)){$system.="INSTRUCCIONES ESPECÍFICAS (PRIORIDAD MÁXIMA):\n";foreach($reglasMatch as $r)$system.="- $r\n";$system.="\n";}
-$system.="TAGS: [MENU][FORMULARIO][ESCALAR][ENCUESTA][CONSULTAR:valor][SEDES:municipio][MEDICAMENTOS][REQUISITOS]";
-
-$histGPT[]=['role'=>'user','content'=>$mensaje];
-$payload=['model'=>'gpt-4o-mini','max_tokens'=>600,'temperature'=>0.3,'messages'=>array_merge([['role'=>'system','content'=>$system]],$histGPT)];
-
-$ch=curl_init('https://api.openai.com/v1/chat/completions');
-curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($payload),CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>30,CURLOPT_HTTPHEADER=>["Authorization: Bearer $OPENAI_KEY",'Content-Type: application/json']]);
-$resp=curl_exec($ch); $code=curl_getinfo($ch,CURLINFO_HTTP_CODE); curl_close($ch);
-
-if($code!==200){echo json_encode(['respuesta'=>"Tuve un problema técnico. Llame al *604 322 2432*.",'accion'=>'ERROR','intentos'=>$intentos]);exit;}
-
-$data=json_decode($resp,true);
-$rawMsg=trim($data['choices'][0]['message']['content']??'');
-$accion='CONTINUAR'; $resumen='';
-
-if(preg_match('/\[ESCALAR\]/',$rawMsg)){
-    $accion='ESCALADO'; $resumen=generarResumen($histGPT,$nombre,$eps,$mensaje,$OPENAI_KEY);
-    escalarSesion($SB_URL,$SB_KEY,$telefono,$resumen);
-    $rawMsg=preg_replace('/\[ESCALAR\]/','i',$rawMsg);
-} elseif(preg_match('/\[FORMULARIO\]/',$rawMsg)){
-    $accion='FORMULARIO'; $rawMsg=preg_replace('/\[FORMULARIO\]/','i',$rawMsg);
-    $rawMsg=trim($rawMsg)."\n\n📋 Radique su PQRSFD en:\n🔗 https://tododrogas.online/pqr_form.html";
-} elseif(preg_match('/\[ENCUESTA\]/',$rawMsg)){
-    $accion='ENCUESTA'; $rawMsg=preg_replace('/\[ENCUESTA\]/','i',$rawMsg);
-    $rawMsg=trim($rawMsg)."\n\n⭐ Califique aquí:\n🔗 https://tododrogas.online/pqr_encuesta.html";
-} elseif(preg_match('/\[MENU\]/',$rawMsg)){
-    $accion='MENU'; $rawMsg=preg_replace('/\[MENU\]/','i',$rawMsg);
-    $rawMsg=trim($rawMsg)."\n\n1️⃣ Estado o entrega de medicamentos\n2️⃣ Puntos de dispensación\n3️⃣ Requisitos para reclamar\n4️⃣ Radicar PQRSFD\n5️⃣ Estado de mi radicado\n6️⃣ Horarios y canales\n7️⃣ Encuesta de satisfacción\n8️⃣ Pregunta libre a Nova TD";
-} elseif(preg_match('/\[SEDES:([^\]]+)\]/',$rawMsg,$m)){
-    $rawMsg=preg_replace('/\[SEDES:[^\]]+\]/','i',$rawMsg);
-    $partes=explode(':',$m[1]); $municipio=strtoupper(trim($partes[0])); $epsF=isset($partes[1])?strtoupper(trim($partes[1])):strtoupper($eps);
-    $rawMsg=trim($rawMsg)."\n\n".obtenerSedes($SB_URL,$SB_KEY,$municipio,$epsF);
-} elseif(preg_match('/\[CONSULTAR:([^\]]+)\]/',$rawMsg,$m)){
-    $rawMsg=preg_replace('/\[CONSULTAR:[^\]]+\]/','i',$rawMsg);
-    $rawMsg=trim($rawMsg)."\n\n".consultarRadicado($SB_URL,$SB_KEY,trim($m[1]));
-} elseif(preg_match('/\[MEDICAMENTOS\]/',$rawMsg)){
-    $rawMsg=preg_replace('/\[MEDICAMENTOS\]/','i',$rawMsg);
-    $rawMsg=trim($rawMsg)."\n\nConsulte estado de su medicamento:\n📞 *604 322 2432*\n💬 *304 341 2431*";
-}
-
-$rawMsg=preg_replace('/\[[A-Za-z_:0-9]+\]/','i',$rawMsg);
-$rawMsg=str_replace('i','',$rawMsg); // limpiar reemplazos vacíos
-$rawMsg=trim(preg_replace('/\s{3,}/u',"\n\n",$rawMsg));
-
-$limite=detectarLimite($histGPT);
-if($intentos>=$limite && $accion==='CONTINUAR'){
-    $accion='OFRECER_ASESOR';
-    $rawMsg.="\n\n¿Prefiere que le conecte con un asesor? Responda *Sí* o *No*.";
-}
-if(in_array(trim($msgUpper),['SI','SÍ','SI POR FAVOR','SÍ POR FAVOR','QUIERO','OK','CLARO'])&&$intentos>=$limite-1){
-    $accion='ESCALADO'; $resumen=generarResumen($histGPT,$nombre,$eps,$mensaje,$OPENAI_KEY);
-    escalarSesion($SB_URL,$SB_KEY,$telefono,$resumen);
-    $rawMsg="Perfecto, *$primerNombre*. Le conecto con un asesor. En breve le atienden. 🙂";
-}
-
-echo json_encode(['respuesta'=>trim($rawMsg),'accion'=>$accion,'resumen'=>$resumen,'intentos'=>$intentos+1]);
-
-function generarResumen(array $hist,string $nombre,string $eps,string $msg,string $key):string{
-    $conv=implode("\n",array_map(fn($m)=>($m['role']==='user'?'Usuario':'Nova').': '.($m['content']??''),array_slice($hist,-8)));
-    $pl=['model'=>'gpt-4o-mini','max_tokens'=>120,'temperature'=>0,'messages'=>[['role'=>'system','content'=>'Resumen de 2 líneas para el agente. Solo el resumen.'],['role'=>'user','content'=>"Usuario: $nombre | EPS: $eps\n\n$conv\n\nResumen:"]]];
-    $ch=curl_init('https://api.openai.com/v1/chat/completions');
-    curl_setopt_array($ch,[CURLOPT_POST=>true,CURLOPT_POSTFIELDS=>json_encode($pl),CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>15,CURLOPT_HTTPHEADER=>["Authorization: Bearer $key",'Content-Type: application/json']]);
-    $r=curl_exec($ch);curl_close($ch);
-    $d=json_decode($r,true);return trim($d['choices'][0]['message']['content']??'Sin resumen.');
-}
-
-function escalarSesion(string $su,string $sk,string $tel,string $res):void{
-    $ch=curl_init("$su/rest/v1/wa_sesiones?telefono=eq.".urlencode($tel));
-    curl_setopt_array($ch,[CURLOPT_CUSTOMREQUEST=>'PATCH',CURLOPT_POSTFIELDS=>json_encode(['estado'=>'escalado','resumen_nova'=>$res,'updated_at'=>date('c')]),CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>10,CURLOPT_SSL_VERIFYPEER=>false,CURLOPT_HTTPHEADER=>["apikey: $sk","Authorization: Bearer $sk",'Content-Type: application/json','Prefer: return=minimal']]);
-    curl_exec($ch);curl_close($ch);
-}
-
-function detectarLimite(array $hist):int{
-    $t=mb_strtoupper(implode(' ',array_column($hist,'content')),'UTF-8');
-    if(preg_match('/MEDICAMENTO|ENTREGA|DISPENSACI[OÓ]N/u',$t))return 1;
-    if(preg_match('/RADICADO|PQRS|QUEJA|RECLAMO/u',$t))return 3;
-    if(preg_match('/SEDE|HORARIO|DIRECCI[OÓ]N/u',$t))return 3;
-    return 2;
-}
-
-function obtenerSedes(string $su,string $sk,string $mun,string $eps):string{
-    $enc=urlencode(strtolower($mun));
-    $sedes=sbGet($su,$sk,"sedes?municipio_norm=ilike.*$enc*&activa=is.true&select=nombre,direccion,telefono,eps,horario&limit=5");
-    if(empty($sedes))return "📍 No encontré sedes en *$mun*. Llame al: *604 322 2432*";
-    if($eps&&$eps!=='TODAS'){$sedes=array_filter($sedes,function($s)use($eps){$ea=is_array($s['eps'])?$s['eps']:[$s['eps']];foreach($ea as $e){if(mb_strpos(mb_strtoupper($e??'','UTF-8'),mb_strtoupper($eps,'UTF-8'))!==false)return true;}return false;});}
-    if(empty($sedes))return "📍 No encontré sedes en *$mun* para su EPS. Llame al: *604 322 2432*";
-    $txt="📍 *Sedes en $mun:*\n\n";
-    foreach(array_slice(array_values($sedes),0,3) as $s){$txt.="• *{$s['nombre']}*\n";if($s['direccion'])$txt.="  📌 {$s['direccion']}\n";if($s['telefono'])$txt.="  📞 {$s['telefono']}\n";if($s['horario'])$txt.="  🕐 {$s['horario']}\n";$txt.="\n";}
+    $txt = "📍 *Sedes en $municipio:*\n\n";
+    foreach (array_slice(array_values($encontradas), 0, 3) as $s) {
+        $epsArr = is_array($s['eps']) ? implode(', ', $s['eps']) : ($s['eps']??'');
+        $txt .= "• *{$s['nombre']}*\n";
+        if ($s['direccion']) $txt .= "  📌 {$s['direccion']}\n";
+        $txt .= "  🏥 EPS: $epsArr\n\n";
+    }
     return trim($txt);
 }
 
-function consultarRadicado(string $su,string $sk,string $val):string{
-    $enc=urlencode($val);
-    $r=sbGet($su,$sk,"correos?ticket_id=eq.$enc&select=ticket_id,estado,created_at,fecha_resolucion,nombre_solicitud&limit=1");
-    if(empty($r))return "No encontré el radicado *$val*. Verifique o llame al *604 322 2432*.";
-    $c=$r[0];$ests=['pendiente'=>'Pendiente','gestion'=>'En gestión','gestionado'=>'Gestionado','solucionado'=>'Solucionado','pendiente_firma'=>'Pendiente de firma'];
-    $est=$ests[$c['estado']??'']??($c['estado']??'En proceso');
-    $txt="📋 *Radicado {$c['ticket_id']}*\nEstado: *$est*\n";
-    if($c['nombre_solicitud'])$txt.="Tipo: {$c['nombre_solicitud']}\n";
-    if($c['created_at'])$txt.="Radicado: ".date('d/m/Y',strtotime($c['created_at']));
-    if($c['fecha_resolucion'])$txt.="\nResuelto: ".date('d/m/Y',strtotime($c['fecha_resolucion']));
+// ── Consultar radicado via nova-consulta.php ──────────────────────────
+function consultarRadicado(string $valor, string $novaToken): string {
+    $esRadicado = preg_match('/^TD-[\d\-]+$/i', trim($valor));
+    $esCorreo   = filter_var(trim($valor), FILTER_VALIDATE_EMAIL);
+    $esCedula   = preg_match('/^\d{6,12}$/', preg_replace('/\D/','',$valor));
+
+    $payload = ['accion' => 'radicado'];
+    if ($esRadicado) $payload['ticket_id'] = trim($valor);
+    elseif ($esCorreo) $payload['correo'] = trim($valor);
+    elseif ($esCedula) { $payload['accion'] = 'radicados_cedula'; $payload['cedula'] = preg_replace('/\D/','',$valor); }
+
+    $r = httpPost('https://tododrogas.online/nova-consulta.php', $payload, ["X-Nova-Token: $novaToken"]);
+    if ($r['code']!==200 || empty($r['body'])) return "No pude consultar el radicado. Llame al *604 322 2432*.";
+
+    $d = $r['body'];
+    if (!($d['encontrado']??false)) return "No encontré radicados para *$valor*. Verifique el dato o llame al *604 322 2432*.";
+
+    $estados = ['pendiente'=>'Pendiente','gestion'=>'En gestión','gestionado'=>'Gestionado','solucionado'=>'Solucionado','pendiente_firma'=>'Pendiente de firma'];
+    $ticket = $d['ticket_id'] ?? $d['radicados'][0]['ticket_id'] ?? '—';
+    $estado = $estados[$d['estado']??''] ?? ($d['estado']??'En proceso');
+    $txt = "📋 *Radicado $ticket*\nEstado: *$estado*\n";
+    if (!empty($d['tipo'])) $txt .= "Tipo: {$d['tipo']}\n";
+    if (!empty($d['fecha'])) $txt .= "Fecha: ".date('d/m/Y', strtotime($d['fecha']));
     return $txt;
 }
+
+// ── Cargar reglas dinámicas ───────────────────────────────────────────
+$reglas = sbGet('nova_reglas?activo=eq.true&select=triggers,instruccion,prioridad&order=prioridad.desc&limit=50');
+
+// ════════════════════════════════════════════════════════════════════════
+// FASE POLÍTICA DE PRIVACIDAD
+// ════════════════════════════════════════════════════════════════════════
+if ($fase === 'politica' || (!$cedula && $origenCanal==='whatsapp_directo' && $fase!=='ident_ced' && $fase!=='libre')) {
+
+    $acepta = preg_match('/^(1|SI|SÍ|ACEPTO|ACEPTAR|ACEPTA|DE ACUERDO|OK|OKAY|CLARO|CORRECTO)$/', $msgUp);
+    $noAcepta = preg_match('/^(2|NO|NO ACEPTO|RECHAZO|RECHAZAR)$/', $msgUp);
+
+    // Primer mensaje — mostrar política
+    $esMensajeInicial = count($history) <= 1;
+    if ($esMensajeInicial && !$acepta && !$noAcepta) {
+        $resp = "¡Hola! Bienvenido/a a *Tododrogas*. Soy *Nova TD*, su asistente virtual.\n\n"
+              . "Antes de continuar, le informamos que sus datos personales serán tratados conforme a nuestra *Política de Tratamiento de Datos*:\n"
+              . "📄 $POL_URL\n\n"
+              . "Responda:\n*1* → ✅ Acepto\n*2* → ❌ No acepto";
+        actualizarSesion($telefono, ['fase'=>'politica','no_acepto_count'=>0]);
+        echo json_encode(['respuesta'=>$resp,'accion'=>'PEDIR_POLITICA','fase'=>'politica','intentos'=>0]);
+        exit;
+    }
+
+    if ($acepta) {
+        actualizarSesion($telefono, ['fase'=>'ident_ced','no_acepto_count'=>0]);
+        $resp = "✅ ¡Gracias por aceptar!\n\nPara brindarle una atención personalizada, por favor indíqueme su *número de documento de identidad* (sin puntos ni espacios).";
+        echo json_encode(['respuesta'=>$resp,'accion'=>'PEDIR_CEDULA','fase'=>'ident_ced','intentos'=>0]);
+        exit;
+    }
+
+    if ($noAcepta) {
+        $nuevoCnt = $noAcepCnt + 1;
+        if ($nuevoCnt >= 2) {
+            actualizarSesion($telefono, ['fase'=>'cerrado','estado'=>'cerrado']);
+            echo json_encode(['respuesta'=>"Entendido. Sin aceptar las políticas no es posible continuar. ¡Hasta pronto! 👋",'accion'=>'CERRAR','fase'=>'cerrado','intentos'=>0]);
+            exit;
+        }
+        actualizarSesion($telefono, ['no_acepto_count'=>$nuevoCnt]);
+        $resp = "Entendido. Sin embargo, para continuar es necesario aceptar nuestra política de privacidad.\n\n"
+              . "📄 $POL_URL\n\n"
+              . "Responda:\n*1* → ✅ Acepto\n*2* → ❌ No acepto";
+        echo json_encode(['respuesta'=>$resp,'accion'=>'PEDIR_POLITICA','fase'=>'politica','intentos'=>0,'no_acepto_count'=>$nuevoCnt]);
+        exit;
+    }
+
+    // Si escribe otra cosa en fase política — recordar
+    actualizarSesion($telefono, ['fase'=>'politica']);
+    $resp = "Por favor responda *1* para aceptar o *2* para rechazar la política de privacidad.\n📄 $POL_URL";
+    echo json_encode(['respuesta'=>$resp,'accion'=>'PEDIR_POLITICA','fase'=>'politica','intentos'=>0]);
+    exit;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// FASE IDENTIFICACIÓN — pedir y validar cédula
+// ════════════════════════════════════════════════════════════════════════
+if ($fase === 'ident_ced' || ($origenCanal==='whatsapp_directo' && !$cedula)) {
+
+    $posibleCedula = preg_replace('/\D/', '', $mensaje);
+    $esCedula = strlen($posibleCedula) >= 5 && strlen($posibleCedula) <= 12;
+
+    if (!$esCedula) {
+        actualizarSesion($telefono, ['fase'=>'ident_ced']);
+        echo json_encode(['respuesta'=>"Número de documento inválido. Por favor escríbalo sin puntos ni comas:",'accion'=>'PEDIR_CEDULA','fase'=>'ident_ced','intentos'=>$intentos]);
+        exit;
+    }
+
+    $r = httpPost("$BASE_URL/validar-paciente.php",['cedula'=>$posibleCedula,'telefono'=>preg_replace('/\D/','',$telefono)]);
+    if ($r['code']===200 && ($r['body']['ok']??false)) {
+        $p = $r['body'];
+        $nombre  = $p['nombre'] ?? '';
+        $eps     = str_replace(['SAVIA SALUD','PREVENTIVA SALUD'],['SAVIA','PREVENTIVA'], $p['eps']??'');
+        $eps     = trim(preg_replace('/\s*\([^)]*\)\s*/','', $eps));
+        $ciudad  = $p['ciudad'] ?? '';
+        $vip     = (bool)($p['vip']??false);
+        $pn      = primerNombre($nombre);
+
+        actualizarSesion($telefono, [
+            'cedula'=>$posibleCedula,'nombre'=>$nombre,'eps'=>$eps,
+            'ciudad'=>$ciudad,'fase'=>'libre','intentos_nova'=>0,
+        ]);
+
+        if ($vip && !empty($p['saludo'])) {
+            $saludo = $p['saludo']."\n\n¿En qué le puedo ayudar hoy, *$pn*?\n\n"
+                    . "1️⃣ Estado o entrega de medicamentos\n"
+                    . "2️⃣ Puntos de dispensación\n"
+                    . "3️⃣ Requisitos para reclamar\n"
+                    . "4️⃣ Radicar PQRSFD\n"
+                    . "5️⃣ Estado de mi radicado\n"
+                    . "6️⃣ Horarios y canales\n"
+                    . "7️⃣ Encuesta de satisfacción\n"
+                    . "8️⃣ 💬 Pregunta a Nova TD";
+        } else {
+            $saludo = "✅ *¡Bienvenido/a, $pn!*\n\n"
+                    . "Es un gusto atenderle. Soy *Nova TD*.\n\n"
+                    . "Identificamos que usted está afiliado/a a *$eps*.\n\n"
+                    . "⏱ Si hay más de 5 minutos de inactividad, la conversación se cerrará automáticamente.\n\n"
+                    . "¿En qué le puedo ayudar?\n\n"
+                    . "1️⃣ Estado o entrega de medicamentos\n"
+                    . "2️⃣ Puntos de dispensación\n"
+                    . "3️⃣ Requisitos para reclamar\n"
+                    . "4️⃣ Radicar PQRSFD\n"
+                    . "5️⃣ Estado de mi radicado\n"
+                    . "6️⃣ Horarios y canales\n"
+                    . "7️⃣ Encuesta de satisfacción\n"
+                    . "8️⃣ 💬 Pregunta a Nova TD";
+        }
+        echo json_encode(['respuesta'=>$saludo,'accion'=>'BIENVENIDA','cedula'=>$posibleCedula,'nombre'=>$nombre,'eps'=>$eps,'ciudad'=>$ciudad,'fase'=>'libre','intentos'=>0]);
+        exit;
+    }
+
+    // Cédula no encontrada
+    $nuevoIntentos = $intentos + 1;
+    actualizarSesion($telefono, ['intentos_nova'=>$nuevoIntentos,'fase'=>'ident_ced']);
+    $resp = "No encontramos su registro con ese número de documento. Verifíquelo e intente nuevamente, o comuníquese al *604 322 2432* o WhatsApp *304 341 2431*.";
+    if ($nuevoIntentos > 1) $resp .= "\n\nIntento de nuevo. Por favor ingrese su *número de documento*:";
+    echo json_encode(['respuesta'=>$resp,'accion'=>'PEDIR_CEDULA','fase'=>'ident_ced','intentos'=>$nuevoIntentos]);
+    exit;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// FASE LIBRE — usuario ya identificado
+// ════════════════════════════════════════════════════════════════════════
+
+// ── Detección urgencia/asesor inmediata ───────────────────────────────
+$urgencia   = preg_match('/VENCIDO|DETERIORAD|REACCI[OÓ]N|GRAVE|EMERGENCIA|INTOXICACI[OÓ]N|DA[ÑN]ADO|MAL ESTADO/u', $msgUp);
+$pideAsesor = preg_match('/ASESOR|AGENTE HUMANO|HABLAR CON|QUIERO UN ASESOR|ME COMUNICA|OPERADOR/u', $msgUp);
+
+if ($urgencia || $pideAsesor) {
+    $histGPT[] = ['role'=>'user','content'=>$mensaje];
+    $resumen = generarResumen($histGPT, $nombre, $eps);
+    escalar($telefono, $resumen);
+    $respMsg = $urgencia
+        ? "⚠️ Entiendo que es urgente, *$pn*. Le conecto de inmediato con un asesor especializado."
+        : "Por supuesto, *$pn*. Le conecto con un asesor. En un momento le atienden. 🙂";
+    echo json_encode(['respuesta'=>$respMsg,'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+    exit;
+}
+
+// ── Menú numérico — opciones hardcodeadas igual que nova.html ─────────
+$numOpc = trim(preg_replace('/\D/','',$mensaje));
+if (strlen($mensaje) <= 2 && $numOpc && in_array($numOpc,['1','2','3','4','5','6','7','8','9'])) {
+
+    $pn2 = $pn ?: 'estimado/a usuario/a';
+
+    switch($numOpc) {
+        case '1': // Medicamentos
+            $resp = "*$pn2*, para consultar el estado de sus medicamentos, entregas pendientes o historial de dispensación, ingrese a nuestra plataforma *App Solicitudes Web*:\n\n"
+                  . "🔗 $MEDS_URL\n\n"
+                  . "O escríbanos al *304 341 2431* para que un asesor verifique en el sistema.";
+            break;
+
+        case '2': // Sedes
+            if ($ciudad) {
+                $sedesRes = buscarSedes($ciudad, $eps, $NTD_SEDES_LOCAL);
+                $resp = "Le muestro las sedes disponibles en *$ciudad* para su EPS *$eps*:\n\n$sedesRes\n\n¿Necesita información de otra sede o municipio?";
+            } else {
+                $resp = "Con gusto le indico el punto de dispensación más cercano, *$pn2*. ¿En qué *municipio* está ubicado?";
+                actualizarSesion($telefono, ['fase'=>'municipio_sedes']);
+                echo json_encode(['respuesta'=>$resp,'accion'=>'PEDIR_MUNICIPIO','fase'=>'municipio_sedes','intentos'=>$intentos]);
+                exit;
+            }
+            break;
+
+        case '3': // Requisitos
+            $resp = "Con mucho gusto, *$pn2*. Para retirar sus medicamentos en nuestros puntos de dispensación necesita:\n\n"
+                  . "📋 Fórmula médica vigente\n"
+                  . "📁 Historia clínica\n"
+                  . "🪪 Documento de identidad *original*\n\n"
+                  . "*¿Va a recoger en nombre de alguien?*\n"
+                  . "📋 Fórmula médica + Historia clínica\n"
+                  . "🪪 Su documento original + documento original del usuario\n"
+                  . "📝 Carta de autorización firmada por el usuario\n\n"
+                  . "Puede consultar el estado de sus medicamentos en:\n🔗 $MEDS_URL";
+            break;
+
+        case '4': // Radicar PQRSFD
+            $resp = "*$pn2*, puede radicar su solicitud PQRSFD directamente en nuestro formulario:\n\n"
+                  . "📋 $FORM_URL\n\n"
+                  . "También puede escribirnos a *pqrsfd@tododrogas.com.co* o llamar al *604 322 2432*.";
+            break;
+
+        case '5': // Estado radicado
+            $resp = "Para consultar el estado de su solicitud PQRSFD, por favor *digita su número de cédula*:\n\n"
+                  . "También puede escribir directamente un número de radicado (ej: TD-20260401-1234) o su correo electrónico.";
+            actualizarSesion($telefono, ['fase'=>'consulta_cedula']);
+            echo json_encode(['respuesta'=>$resp,'accion'=>'PEDIR_RADICADO','fase'=>'consulta_cedula','intentos'=>$intentos]);
+            exit;
+
+        case '6': // Horarios
+            $resp = "📞 *Canales de contacto PQRSFD · Tododrogas:*\n\n"
+                  . "💬 WhatsApp: *304 341 2431*\n"
+                  . "📞 PBX: *604 322 2432* · Opción #2\n"
+                  . "📧 pqrsfd@tododrogas.com.co\n"
+                  . "🤖 Nova TD: 24/7\n\n"
+                  . "🕐 *Horario asesores:*\n"
+                  . "Lunes a viernes 7:00 a.m. – 5:30 p.m.\n"
+                  . "Sábados 8:00 a.m. – 12:00 m.";
+            break;
+
+        case '7': // Encuesta
+            $encUrl = $ENC_URL.'?origen=nova_wa&nombre='.urlencode($nombre).'&cedula='.urlencode($cedula).'&eps='.urlencode($eps);
+            $resp = "Su opinión es muy importante para nosotros. Puede realizar la *encuesta de satisfacción* aquí:\n\n"
+                  . "⭐ $encUrl";
+            break;
+
+        case '8': // Pregunta libre
+            $resp = "Con gusto, *$pn2*. ¿Cuál es su pregunta? Estoy aquí para ayudarle. 🙂";
+            break;
+
+        case '9': // Finalizar
+            actualizarSesion($telefono, ['fase'=>'cerrado','estado'=>'cerrado']);
+            $encUrl = $ENC_URL.'?origen=nova_wa&nombre='.urlencode($nombre).'&cedula='.urlencode($cedula).'&eps='.urlencode($eps);
+            $resp = "¡Hasta luego, *$pn2*! Ha sido un placer atenderle. 😊\n\n"
+                  . "Si desea dejarnos su calificación:\n⭐ $encUrl";
+            echo json_encode(['respuesta'=>$resp,'accion'=>'CERRAR','fase'=>'cerrado','intentos'=>0]);
+            exit;
+    }
+
+    actualizarSesion($telefono, ['fase'=>'libre']);
+    echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'libre','intentos'=>$intentos+1]);
+    exit;
+}
+
+// ── Fase municipio_sedes — usuario ingresó municipio ─────────────────
+if ($fase === 'municipio_sedes') {
+    $municipio = trim($mensaje);
+    $sedesRes = buscarSedes($municipio, $eps, $NTD_SEDES_LOCAL);
+    $resp = $sedesRes."\n\n¿Necesita algo más?";
+    actualizarSesion($telefono, ['fase'=>'libre']);
+    echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'libre','intentos'=>$intentos+1]);
+    exit;
+}
+
+// ── Fase consulta_cedula — consultar radicado ─────────────────────────
+if ($fase === 'consulta_cedula') {
+    $resp = consultarRadicado($mensaje, $NOVA_TOKEN);
+    actualizarSesion($telefono, ['fase'=>'libre']);
+    echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'libre','intentos'=>$intentos+1]);
+    exit;
+}
+
+// ── Detección inline de radicado o correo ─────────────────────────────
+if (preg_match('/^TD-[\d\-]+$/i', trim($mensaje)) || filter_var(trim($mensaje), FILTER_VALIDATE_EMAIL)) {
+    $resp = consultarRadicado($mensaje, $NOVA_TOKEN);
+    echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'libre','intentos'=>$intentos+1]);
+    exit;
+}
+
+// ── Pregunta libre — llamar a nova-proxy.php (igual que ntdFLibre) ────
+$histGPT[] = ['role'=>'user','content'=>$mensaje];
+$system = construirSistema($nombre, $eps, $ciudad, $vip?'SI':'No', $NTD_SEDES_LOCAL, $reglas, $msgUp);
+$rawMsg = llamarProxy($system, $histGPT, $NOVA_TOKEN);
+
+if (!$rawMsg) {
+    echo json_encode(['respuesta'=>"No pude conectarme. Llame al *604 322 2432* o WhatsApp *304 341 2431*.",'accion'=>'ERROR','fase'=>'libre','intentos'=>$intentos]);
+    exit;
+}
+
+// ── Parsear tags (igual que ntdParseAct) ─────────────────────────────
+$accion  = 'CONTINUAR';
+$faseSig = 'libre';
+$resumen = '';
+
+if (preg_match('/\[ESCALAR\]/', $rawMsg)) {
+    $accion  = 'ESCALADO'; $faseSig = 'escalado';
+    $histGPT[] = ['role'=>'assistant','content'=>$rawMsg];
+    $resumen = generarResumen($histGPT, $nombre, $eps);
+    escalar($telefono, $resumen);
+    $rawMsg = preg_replace('/\[ESCALAR\]/', '', $rawMsg);
+
+} elseif (preg_match('/\[FORMULARIO\]/', $rawMsg)) {
+    $rawMsg = preg_replace('/\[FORMULARIO\]/', '', $rawMsg);
+    $rawMsg = trim($rawMsg)."\n\n📋 Radique su PQRSFD en:\n🔗 $FORM_URL";
+
+} elseif (preg_match('/\[ENCUESTA\]/', $rawMsg)) {
+    $encUrl = $ENC_URL.'?origen=nova_wa&nombre='.urlencode($nombre).'&cedula='.urlencode($cedula).'&eps='.urlencode($eps);
+    $rawMsg = preg_replace('/\[ENCUESTA\]/', '', $rawMsg);
+    $rawMsg = trim($rawMsg)."\n\n⭐ $encUrl";
+
+} elseif (preg_match('/\[MENU\]/', $rawMsg)) {
+    $rawMsg = preg_replace('/\[MENU\]/', '', $rawMsg);
+    $rawMsg = trim($rawMsg)."\n\n1️⃣ Estado o entrega de medicamentos\n2️⃣ Puntos de dispensación\n3️⃣ Requisitos para reclamar\n4️⃣ Radicar PQRSFD\n5️⃣ Estado de mi radicado\n6️⃣ Horarios y canales\n7️⃣ Encuesta de satisfacción\n8️⃣ 💬 Pregunta a Nova TD";
+
+} elseif (preg_match('/\[SEDES:([^\]]+)\]/', $rawMsg, $m)) {
+    $rawMsg = preg_replace('/\[SEDES:[^\]]+\]/', '', $rawMsg);
+    $partes = explode(':', $m[1]);
+    $municipio = trim($partes[0]);
+    $epsFilter = isset($partes[1]) ? trim($partes[1]) : $eps;
+    if ($municipio) {
+        $sedesRes = buscarSedes($municipio, $epsFilter, $NTD_SEDES_LOCAL);
+        $rawMsg = trim($rawMsg)."\n\n".$sedesRes;
+    } else {
+        $rawMsg = trim($rawMsg)."\n\n¿En qué municipio se encuentra para indicarle la sede más cercana?";
+        $faseSig = 'municipio_sedes';
+    }
+
+} elseif (preg_match('/\[CONSULTAR:([^\]]+)\]/', $rawMsg, $m)) {
+    $rawMsg = preg_replace('/\[CONSULTAR:[^\]]+\]/', '', $rawMsg);
+    $consultaRes = consultarRadicado(trim($m[1]), $NOVA_TOKEN);
+    $rawMsg = trim($rawMsg)."\n\n".$consultaRes;
+
+} elseif (preg_match('/\[MEDICAMENTOS\]/', $rawMsg)) {
+    $rawMsg = preg_replace('/\[MEDICAMENTOS\]/', '', $rawMsg);
+    $rawMsg = trim($rawMsg)."\n\n🔗 $MEDS_URL\n📞 *604 322 2432* | 💬 *304 341 2431*";
+
+} elseif (preg_match('/\[REQUISITOS\]/', $rawMsg)) {
+    $rawMsg = preg_replace('/\[REQUISITOS\]/', '', $rawMsg);
+    $rawMsg = trim($rawMsg)."\n\n📋 Fórmula médica vigente\n📁 Historia clínica\n🪪 Documento de identidad *original*";
+
+} elseif (preg_match('/\[CAMBIAR_EPS\]/', $rawMsg)) {
+    $rawMsg = preg_replace('/\[CAMBIAR_EPS\]/', '', $rawMsg);
+    $rawMsg = trim($rawMsg)."\n\n¿Con cuál EPS desea consultar?\n1. COOSALUD\n2. SAVIA\n3. SALUD TOTAL\n4. NUEVA EPS\n5. PREVENTIVA\n6. CEM";
+}
+
+// Limpiar tags residuales
+$rawMsg = preg_replace('/\[[A-Za-z_:0-9]+\]/', '', $rawMsg);
+$rawMsg = trim(preg_replace('/\n{3,}/', "\n\n", $rawMsg));
+
+actualizarSesion($telefono, ['fase'=>$faseSig]);
+echo json_encode([
+    'respuesta' => $rawMsg,
+    'accion'    => $accion,
+    'resumen'   => $resumen,
+    'fase'      => $faseSig,
+    'intentos'  => $intentos + 1,
+]);
