@@ -616,7 +616,7 @@ if ($enojado) {
 }
 
 // Respuesta a ofrecimiento de asesor (sí/no)
-$respondeSiAsesor = preg_match('/^(1|SI|SÍ|SI POR FAVOR|SÍ POR FAVOR|QUIERO|CONECTAR|CONECTAME|ASESOR|OK|DALE)$/', $msgUp);
+$respondeSiAsesor = preg_match('/^(SI|SÍ|SI POR FAVOR|SÍ POR FAVOR|QUIERO|CONECTAR|CONECTAME|ASESOR|OK|DALE)$/', $msgUp);
 $respondeNoAsesor = preg_match('/^(2|NO|NO GRACIAS|CONTINUAR|NOVA|SIGUE)$/', $msgUp);
 $fasePrevOferAsesor = ($fase === 'libre' && isset($sesion['ofrece_asesor']) && $sesion['ofrece_asesor']);
 // Detectar si el mensaje anterior fue OFRECER_ASESOR revisando el último mensaje en history
@@ -643,8 +643,10 @@ if (strlen($mensaje) <= 2 && $numOpc && in_array($numOpc,['1','2','3','4','5','6
         case '1': // Medicamentos
             $resp = "*$pn2*, para consultar el estado de sus medicamentos, entregas pendientes o historial de dispensación, ingrese a nuestra plataforma *App Solicitudes Web*:\n\n"
                   . "🔗 $MEDS_URL\n\n"
-                  . "O escríbanos al *304 341 2431* para que un asesor verifique en el sistema.";
-            break;
+                  . "¿Desea que un asesor verifique el estado en el sistema?\n*1* → Sí\n*2* → No, continuar con Nova TD";
+            actualizarSesion($telefono, ['fase'=>'ofrece_asesor_meds']);
+            echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'ofrece_asesor_meds','intentos'=>$intentos]);
+            exit;
 
         case '2': // Sedes — SIEMPRE preguntar municipio
             $resp = "Con gusto le indico los puntos de dispensación disponibles, *$pn2*.\n\n¿En qué *municipio* desea consultar?\n_(puede ser diferente a su ciudad de registro)_";
@@ -729,16 +731,19 @@ if ($fase === 'municipio_sedes') {
     exit;
 }
 
-// ── Fase ofrece_asesor_horario — respuesta sí/no ─────────────────────
-if ($fase === 'ofrece_asesor_horario') {
-    $siAsesor = preg_match('/^(1|SI|SÍ|SI POR FAVOR|SÍ POR FAVOR|QUIERO|OK|DALE|CLARO)$/', $msgUp);
+// ── Fases de ofrecimiento de asesor ──────────────────────────────────
+$esOfreceAsesor = in_array($fase, ['ofrece_asesor_horario','ofrece_asesor_meds']);
+if ($esOfreceAsesor) {
+    $siAsesor = preg_match('/^(1|SI|SÍ|SI POR FAVOR|SÍ POR FAVOR|QUIERO|OK|DALE|CLARO|SÍ GRACIAS|SI GRACIAS)$/', $msgUp);
     if ($siAsesor) {
         $histGPT[] = ['role'=>'user','content'=>$mensaje];
         $resumen = generarResumen($histGPT, $nombre, $eps);
         escalar($telefono, $resumen);
+        cerrarNovaSesion($telefono, 'solicitud_asesor', $intentos+1);
         echo json_encode(['respuesta'=>"Perfecto, *$pn*. Le conecto con un asesor. En breve le atienden. 🙂",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
         exit;
     }
+    // Respondió No — volver al menú
     $limite = limiteIntentos($histGPT);
     $resp = "Entendido, *$pn*. Estoy aquí para ayudarle.".menuMini($intentos, $limite);
     actualizarSesion($telefono, ['fase'=>'libre']);
