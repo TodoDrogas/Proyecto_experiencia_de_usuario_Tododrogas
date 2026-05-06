@@ -207,6 +207,48 @@ function escalar(string $telefono, string $resumen = ''): void {
     actualizarSesion($telefono, ['estado'=>'escalado','resumen_nova'=>$resumen,'fase'=>'escalado']);
 }
 
+// ── Registrar sesión en nova_sesiones (métricas) ──────────────────────
+function registrarNovaSesion(string $telefono, string $cedula, string $nombre, string $eps, string $ciudad, bool $vip): void {
+    global $SB_URL, $SB_KEY;
+    // Verificar si ya existe sesión activa para este teléfono
+    $ch = curl_init("$SB_URL/rest/v1/nova_sesiones?sesion_id=eq.".urlencode("WA-$telefono")."&select=id&limit=1");
+    curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>8,CURLOPT_SSL_VERIFYPEER=>false,
+        CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY"]]);
+    $r = json_decode(curl_exec($ch),true)??[]; curl_close($ch);
+    if (!empty($r)) return; // Ya existe
+    sbInsert('nova_sesiones',[
+        'sesion_id'  => "WA-$telefono",
+        'cedula'     => $cedula,
+        'nombre'     => $nombre,
+        'eps'        => $eps,
+        'municipio'  => $ciudad,
+        'es_vip'     => $vip,
+        'origen'     => 'whatsapp',
+        'hora_inicio'=> date('c'),
+        'updated_at' => date('c'),
+    ]);
+}
+
+// ── Cerrar sesión en nova_sesiones ────────────────────────────────────
+function cerrarNovaSesion(string $telefono, string $motivo, int $consultas, string $calificacion = ''): void {
+    global $SB_URL, $SB_KEY;
+    $dur = 0; // Se calcula desde hora_inicio si existe
+    $ch = curl_init("$SB_URL/rest/v1/nova_sesiones?sesion_id=eq.".urlencode("WA-$telefono")."&select=hora_inicio&limit=1");
+    curl_setopt_array($ch,[CURLOPT_RETURNTRANSFER=>true,CURLOPT_TIMEOUT=>8,CURLOPT_SSL_VERIFYPEER=>false,
+        CURLOPT_HTTPHEADER=>["apikey: $SB_KEY","Authorization: Bearer $SB_KEY"]]);
+    $r = json_decode(curl_exec($ch),true)??[]; curl_close($ch);
+    if (!empty($r[0]['hora_inicio'])) {
+        $dur = max(0, (int)((time() - strtotime($r[0]['hora_inicio'])) ));
+    }
+    sbPatch('nova_sesiones',"sesion_id=eq.".urlencode("WA-$telefono"),[
+        'motivo_cierre'   => $motivo,
+        'calificacion'    => $calificacion,
+        'duracion_seg'    => $dur,
+        'consultas_count' => $consultas,
+        'updated_at'      => date('c'),
+    ]);
+}
+
 // ── Generar resumen GPT ───────────────────────────────────────────────
 function generarResumen(array $hist, string $nombre, string $eps, string $openaiKey = ''): string {
     $conv = implode("\n", array_map(fn($m) =>
@@ -302,15 +344,47 @@ function construirSistema(string $nombre, string $eps, string $ciudad, string $v
     return $s;
 }
 
+
+// ── Menú mini post-respuesta ──────────────────────────────────────────
+function menuMini(int $intentos, int $limite): string {
+    $base = "
+
+*¿En qué más le puedo ayudar?*
+1️⃣ 🏠 Menú principal
+2️⃣ 💬 Tengo otra pregunta";
+    if ($intentos >= $limite) {
+        $base .= "
+3️⃣ 📞 Hablar con un asesor";
+    }
+    return $base;
+}
+
+// ── Límite de intentos según contexto ────────────────────────────────
+function limiteIntentos(array $histGPT): int {
+    $txt = mb_strtoupper(implode(' ', array_column($histGPT, 'content')), 'UTF-8');
+    if (preg_match('/MEDICAMENTO|ENTREGA|DISPENSACI[OÓ]N/u', $txt)) return 1;
+    if (preg_match('/RADICADO|PQRS|QUEJA|RECLAMO/u', $txt)) return 3;
+    if (preg_match('/SEDE|HORARIO|DIRECCI[OÓ]N/u', $txt)) return 3;
+    return 2;
+}
+
 // ── Buscar sedes en catálogo local ────────────────────────────────────
+function ntdNormMun(string $s): string {
+    $s = mb_strtoupper(trim($s), 'UTF-8');
+    return strtr($s, ['Á'=>'A','À'=>'A','É'=>'E','È'=>'E','Í'=>'I','Ì'=>'I','Ó'=>'O','Ò'=>'O','Ú'=>'U','Ù'=>'U','Ñ'=>'N']);
+}
+
 function buscarSedes(string $municipio, string $epsFilter, array $sedes): string {
-    $munN = strtoupper(trim($municipio));
+    $munN = ntdNormMun($municipio);
     $epsN = strtoupper(trim(str_replace(['SAVIA SALUD','PREVENTIVA SALUD'],['SAVIA','PREVENTIVA'], $epsFilter)));
     $todas = strtoupper($epsFilter) === 'TODAS';
 
     $encontradas = array_filter($sedes, function($s) use ($munN, $epsN, $todas) {
-        $sM = strtoupper(trim($s['municipio']??''));
-        if (!str_contains($sM, $munN) && !str_contains($munN, $sM)) return false;
+        $sM = ntdNormMun($s['municipio']??'');
+        // Coincidencia exacta o contenida — evita falsos positivos
+        if ($sM !== $munN && !str_contains($sM, $munN) && !str_contains($munN, $sM)) return false;
+        // Si municipio tiene menos de 4 chars, exigir coincidencia exacta
+        if (strlen($munN) < 4 && $sM !== $munN) return false;
         if ($todas) return true;
         $epsArr = is_array($s['eps']) ? $s['eps'] : [$s['eps']];
         foreach ($epsArr as $e) {
@@ -321,15 +395,18 @@ function buscarSedes(string $municipio, string $epsFilter, array $sedes): string
     });
 
     if (empty($encontradas)) {
-        return "📍 No encontré sedes en *$municipio*".($todas?'':' para su EPS').". Llame al *604 322 2432*.";
+        return "📍 No encontré sedes en *$municipio*".($todas?'':' para su EPS *'.$epsFilter.'*').". Verifique el municipio o llame al *604 322 2432*.";
     }
 
-    $txt = "📍 *Sedes en $municipio:*\n\n";
-    foreach (array_slice(array_values($encontradas), 0, 3) as $s) {
+    $munDisplay = ucwords(strtolower($municipio));
+    $txt = "📍 *Sedes en $munDisplay:*\n\n";
+    $i = 1;
+    foreach (array_slice(array_values($encontradas), 0, 4) as $s) {
         $epsArr = is_array($s['eps']) ? implode(', ', $s['eps']) : ($s['eps']??'');
-        $txt .= "• *{$s['nombre']}*\n";
-        if ($s['direccion']) $txt .= "  📌 {$s['direccion']}\n";
-        $txt .= "  🏥 EPS: $epsArr\n\n";
+        $txt .= "$i. *{$s['nombre']}*\n";
+        if (!empty($s['direccion'])) $txt .= "   📌 {$s['direccion']}\n";
+        $txt .= "   🏥 EPS: $epsArr\n\n";
+        $i++;
     }
     return trim($txt);
 }
@@ -440,6 +517,8 @@ if ($fase === 'ident_ced' || ($origenCanal==='whatsapp_directo' && !$cedula)) {
             'cedula'=>$posibleCedula,'nombre'=>$nombre,'eps'=>$eps,
             'ciudad'=>$ciudad,'fase'=>'libre','intentos_nova'=>0,
         ]);
+        // Registrar en nova_sesiones para métricas
+        registrarNovaSesion($telefono, $posibleCedula, $nombre, $eps, $ciudad, $vip);
 
         if ($vip && !empty($p['saludo'])) {
             $saludo = $p['saludo']."\n\n¿En qué le puedo ayudar hoy, *$pn*?\n\n"
@@ -483,18 +562,74 @@ if ($fase === 'ident_ced' || ($origenCanal==='whatsapp_directo' && !$cedula)) {
 // FASE LIBRE — usuario ya identificado
 // ════════════════════════════════════════════════════════════════════════
 
-// ── Detección urgencia/asesor inmediata ───────────────────────────────
+// ── Detección urgencia/asesor/enojo inmediata ────────────────────────
 $urgencia   = preg_match('/VENCIDO|DETERIORAD|REACCI[OÓ]N|GRAVE|EMERGENCIA|INTOXICACI[OÓ]N|DA[ÑN]ADO|MAL ESTADO/u', $msgUp);
 $pideAsesor = preg_match('/ASESOR|AGENTE HUMANO|HABLAR CON|QUIERO UN ASESOR|ME COMUNICA|OPERADOR/u', $msgUp);
+$enojado    = preg_match('/RABIA|ENOJADO|FURIOSO|INDIGNADO|P[EÉ]SIMO|TERRIBLE|ASCO|MAL SERVICIO|INCOMPETENTE|NO SIRVE|HORRIBLE|DISGUSTAD|MOLESTOS?|INDIGNAD|QUÉ MALA|QUE MALA|MUY MAL|MALÍSIMO|INACEPTABLE|INCUMPLIMIENTO|INCUMPLE/u', $msgUp);
 
-if ($urgencia || $pideAsesor) {
+// Urgencia médica → escalar inmediato
+if ($urgencia) {
     $histGPT[] = ['role'=>'user','content'=>$mensaje];
     $resumen = generarResumen($histGPT, $nombre, $eps);
     escalar($telefono, $resumen);
-    $respMsg = $urgencia
-        ? "⚠️ Entiendo que es urgente, *$pn*. Le conecto de inmediato con un asesor especializado."
-        : "Por supuesto, *$pn*. Le conecto con un asesor. En un momento le atienden. 🙂";
-    echo json_encode(['respuesta'=>$respMsg,'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+    cerrarNovaSesion($telefono, 'urgencia_medica', $intentos+1);
+    echo json_encode(['respuesta'=>"⚠️ Entiendo que es urgente, *$pn*. Le conecto de inmediato con un asesor especializado.",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+    exit;
+}
+
+// Solicitud directa de asesor
+if ($pideAsesor) {
+    $histGPT[] = ['role'=>'user','content'=>$mensaje];
+    $resumen = generarResumen($histGPT, $nombre, $eps);
+    escalar($telefono, $resumen);
+    cerrarNovaSesion($telefono, 'solicitud_asesor', $intentos+1);
+    echo json_encode(['respuesta'=>"Por supuesto, *$pn*. Le conecto con un asesor. En un momento le atienden. 🙂",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+    exit;
+}
+
+// Usuario enojado — 3 niveles según intentos
+if ($enojado) {
+    $histGPT[] = ['role'=>'user','content'=>$mensaje];
+    if ($intentos >= 2) {
+        // Nivel 3 — escalar automáticamente
+        $resumen = generarResumen($histGPT, $nombre, $eps);
+        escalar($telefono, $resumen.'  [URGENTE: usuario molesto]');
+        echo json_encode(['respuesta'=>"*$pn*, lamentamos profundamente su experiencia. Le conecto de inmediato con un asesor especializado que podrá atenderle de forma personalizada. 🙏",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+        exit;
+    } elseif ($intentos >= 1) {
+        // Nivel 2 — ofrecer con énfasis
+        actualizarSesion($telefono, ['intentos_nova'=>$intentos+1]);
+        echo json_encode(['respuesta'=>"*$pn*, su caso es muy importante para nosotros y lamentamos no haber podido resolverlo a su satisfacción. Un asesor puede atenderle de forma más personalizada. ¿Le conecto ahora?
+
+*1* → Sí, conécteme con un asesor
+*2* → No, continúe con Nova TD",'accion'=>'OFRECER_ASESOR','fase'=>'libre','intentos'=>$intentos+1]);
+        exit;
+    } else {
+        // Nivel 1 — reconocer y ofrecer
+        actualizarSesion($telefono, ['intentos_nova'=>$intentos+1]);
+        echo json_encode(['respuesta'=>"Entiendo su situación, *$pn*, y lamentamos los inconvenientes. Permítame ayudarle de la mejor manera. ¿Desea que le conecte con uno de nuestros asesores especializados?
+
+*1* → Sí, hablar con un asesor
+*2* → No, continuar con Nova TD",'accion'=>'OFRECER_ASESOR','fase'=>'libre','intentos'=>$intentos+1]);
+        exit;
+    }
+}
+
+// Respuesta a ofrecimiento de asesor (sí/no)
+$respondeSiAsesor = preg_match('/^(1|SI|SÍ|SI POR FAVOR|SÍ POR FAVOR|QUIERO|CONECTAR|CONECTAME|ASESOR|OK|DALE)$/', $msgUp);
+$respondeNoAsesor = preg_match('/^(2|NO|NO GRACIAS|CONTINUAR|NOVA|SIGUE)$/', $msgUp);
+$fasePrevOferAsesor = ($fase === 'libre' && isset($sesion['ofrece_asesor']) && $sesion['ofrece_asesor']);
+// Detectar si el mensaje anterior fue OFRECER_ASESOR revisando el último mensaje en history
+$ultimaAccion = '';
+foreach (array_reverse($history) as $h) {
+    if (($h['role']??'') === 'nova') { break; }
+}
+// Si responde sí a un ofrecimiento anterior
+if ($respondeSiAsesor && $intentos >= 1) {
+    $histGPT[] = ['role'=>'user','content'=>$mensaje];
+    $resumen = generarResumen($histGPT, $nombre, $eps);
+    escalar($telefono, $resumen);
+    echo json_encode(['respuesta'=>"Perfecto, *$pn*. Le conecto con un asesor. En breve le atienden. 🙂",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
     exit;
 }
 
@@ -511,17 +646,11 @@ if (strlen($mensaje) <= 2 && $numOpc && in_array($numOpc,['1','2','3','4','5','6
                   . "O escríbanos al *304 341 2431* para que un asesor verifique en el sistema.";
             break;
 
-        case '2': // Sedes
-            if ($ciudad) {
-                $sedesRes = buscarSedes($ciudad, $eps, $NTD_SEDES_LOCAL);
-                $resp = "Le muestro las sedes disponibles en *$ciudad* para su EPS *$eps*:\n\n$sedesRes\n\n¿Necesita información de otra sede o municipio?";
-            } else {
-                $resp = "Con gusto le indico el punto de dispensación más cercano, *$pn2*. ¿En qué *municipio* está ubicado?";
-                actualizarSesion($telefono, ['fase'=>'municipio_sedes']);
-                echo json_encode(['respuesta'=>$resp,'accion'=>'PEDIR_MUNICIPIO','fase'=>'municipio_sedes','intentos'=>$intentos]);
-                exit;
-            }
-            break;
+        case '2': // Sedes — SIEMPRE preguntar municipio
+            $resp = "Con gusto le indico los puntos de dispensación disponibles, *$pn2*.\n\n¿En qué *municipio* desea consultar?\n_(puede ser diferente a su ciudad de registro)_";
+            actualizarSesion($telefono, ['fase'=>'municipio_sedes']);
+            echo json_encode(['respuesta'=>$resp,'accion'=>'PEDIR_MUNICIPIO','fase'=>'municipio_sedes','intentos'=>$intentos]);
+            exit;
 
         case '3': // Requisitos
             $resp = "Con mucho gusto, *$pn2*. Para retirar sus medicamentos en nuestros puntos de dispensación necesita:\n\n"
@@ -550,14 +679,16 @@ if (strlen($mensaje) <= 2 && $numOpc && in_array($numOpc,['1','2','3','4','5','6
 
         case '6': // Horarios
             $resp = "📞 *Canales de contacto PQRSFD · Tododrogas:*\n\n"
-                  . "💬 WhatsApp: *304 341 2431*\n"
                   . "📞 PBX: *604 322 2432* · Opción #2\n"
                   . "📧 pqrsfd@tododrogas.com.co\n"
                   . "🤖 Nova TD: 24/7\n\n"
                   . "🕐 *Horario asesores:*\n"
                   . "Lunes a viernes 7:00 a.m. – 5:30 p.m.\n"
-                  . "Sábados 8:00 a.m. – 12:00 m.";
-            break;
+                  . "Sábados 8:00 a.m. – 12:00 m.\n\n"
+                  . "¿Desea comunicarse con un asesor ahora?\n*1* → Sí\n*2* → No";
+            actualizarSesion($telefono, ['fase'=>'ofrece_asesor_horario']);
+            echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'ofrece_asesor_horario','intentos'=>$intentos]);
+            exit;
 
         case '7': // Encuesta
             $encUrl = $ENC_URL.'?origen=nova_wa&nombre='.urlencode($nombre).'&cedula='.urlencode($cedula).'&eps='.urlencode($eps);
@@ -570,14 +701,18 @@ if (strlen($mensaje) <= 2 && $numOpc && in_array($numOpc,['1','2','3','4','5','6
             break;
 
         case '9': // Finalizar
-            actualizarSesion($telefono, ['fase'=>'cerrado','estado'=>'cerrado']);
             $encUrl = $ENC_URL.'?origen=nova_wa&nombre='.urlencode($nombre).'&cedula='.urlencode($cedula).'&eps='.urlencode($eps);
-            $resp = "¡Hasta luego, *$pn2*! Ha sido un placer atenderle. 😊\n\n"
-                  . "Si desea dejarnos su calificación:\n⭐ $encUrl";
+            actualizarSesion($telefono, ['fase'=>'cerrado','estado'=>'cerrado','encuesta_enviada'=>true]);
+            cerrarNovaSesion($telefono, 'usuario', $intentos+1, '');
+            $resp = "¡Hasta luego, *$pn2*! Ha sido un placer atenderle. Espero haber resuelto su consulta. 😊\n\n"
+                  . "📊 *¿Cómo calificaría la atención de Nova TD hoy?*\n"
+                  . "Su opinión nos ayuda a mejorar:\n⭐ $encUrl";
             echo json_encode(['respuesta'=>$resp,'accion'=>'CERRAR','fase'=>'cerrado','intentos'=>0]);
             exit;
     }
 
+    $limiteSwitch = limiteIntentos($histGPT);
+    $resp .= menuMini($intentos, $limiteSwitch);
     actualizarSesion($telefono, ['fase'=>'libre']);
     echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'libre','intentos'=>$intentos+1]);
     exit;
@@ -587,7 +722,25 @@ if (strlen($mensaje) <= 2 && $numOpc && in_array($numOpc,['1','2','3','4','5','6
 if ($fase === 'municipio_sedes') {
     $municipio = trim($mensaje);
     $sedesRes = buscarSedes($municipio, $eps, $NTD_SEDES_LOCAL);
-    $resp = $sedesRes."\n\n¿Necesita algo más?";
+    $limite = limiteIntentos($histGPT);
+    $resp = $sedesRes.menuMini($intentos, $limite);
+    actualizarSesion($telefono, ['fase'=>'libre']);
+    echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'libre','intentos'=>$intentos+1]);
+    exit;
+}
+
+// ── Fase ofrece_asesor_horario — respuesta sí/no ─────────────────────
+if ($fase === 'ofrece_asesor_horario') {
+    $siAsesor = preg_match('/^(1|SI|SÍ|SI POR FAVOR|SÍ POR FAVOR|QUIERO|OK|DALE|CLARO)$/', $msgUp);
+    if ($siAsesor) {
+        $histGPT[] = ['role'=>'user','content'=>$mensaje];
+        $resumen = generarResumen($histGPT, $nombre, $eps);
+        escalar($telefono, $resumen);
+        echo json_encode(['respuesta'=>"Perfecto, *$pn*. Le conecto con un asesor. En breve le atienden. 🙂",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+        exit;
+    }
+    $limite = limiteIntentos($histGPT);
+    $resp = "Entendido, *$pn*. Estoy aquí para ayudarle.".menuMini($intentos, $limite);
     actualizarSesion($telefono, ['fase'=>'libre']);
     echo json_encode(['respuesta'=>$resp,'accion'=>'CONTINUAR','fase'=>'libre','intentos'=>$intentos+1]);
     exit;
@@ -678,7 +831,13 @@ if (preg_match('/\[ESCALAR\]/', $rawMsg)) {
 $rawMsg = preg_replace('/\[[A-Za-z_:0-9]+\]/', '', $rawMsg);
 $rawMsg = trim(preg_replace('/\n{3,}/', "\n\n", $rawMsg));
 
-actualizarSesion($telefono, ['fase'=>$faseSig]);
+// Agregar menú mini si no escaló
+if ($accion !== 'ESCALADO' && $accion !== 'CERRAR') {
+    $limiteFinal = limiteIntentos($histGPT);
+    $rawMsg .= menuMini($intentos, $limiteFinal);
+}
+
+actualizarSesion($telefono, ['fase'=>$faseSig,'intentos_nova'=>$intentos+1]);
 echo json_encode([
     'respuesta' => $rawMsg,
     'accion'    => $accion,
