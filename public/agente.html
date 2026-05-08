@@ -337,6 +337,12 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
       Urgentes
       <span class="folder-cnt" id="fc-urgente" style="background:var(--red-l);color:var(--red)">0</span>
     </div>
+
+    <div id="motivWidget" style="margin:10px 4px 4px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.18);border-radius:10px;padding:11px 12px">
+      <div id="motivSaludo" style="font-size:9px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--blue);margin-bottom:7px"></div>
+      <div id="motivFrase" style="font-size:11px;line-height:1.6;color:var(--ink2);font-style:italic"></div>
+      <div style="font-size:10px;color:var(--ink3);margin-top:7px">&mdash; Procesos Digitales</div>
+    </div>
   </div>
 
   <!-- Email list -->
@@ -1875,6 +1881,7 @@ async function confirmarFirma() {
     if(em) em.estado='solucionado';
     showToast('Ticket cerrado con firma ✅','success');
     closeModal('modalFirma');
+    setTimeout(function(){if(typeof showCelebracion==='function')showCelebracion();},400);
     updateFolderCounts();
     renderEmailList();
     await loadTicketTimeline(id);
@@ -6545,6 +6552,134 @@ async function enviarCorreoNuevoAg() {
 })();
 </script>
 <!-- ══════════════════════════════ FIN FLOTANTE WA ══ -->
+
+<!-- MOTIV_BLOCK -->
+<!-- MOTIV_BLOCK -->
+<style>
+#motivOverlay,#celOverlay{position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:100000;display:none;align-items:center;justify-content:center;padding:16px}
+.mcard,.ccard{background:#fff;border-radius:20px;width:100%;max-width:420px;overflow:hidden}
+.mcard-top,.ccard-top{background:#1d4ed8;padding:22px 24px 20px;display:flex;align-items:center;gap:14px}
+.mav,.cav{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0}
+.mcard-body,.ccard-body{padding:22px 24px 0}
+.mqblock,.cqblock{background:#eff6ff;border-radius:12px;padding:14px 16px;margin-bottom:18px;border-left:4px solid #1d4ed8;font-size:13px;line-height:1.7;color:#1e3a5f;font-style:italic}
+.mqauthor,.cqauthor{font-size:11px;font-weight:700;color:#3b82f6;margin-top:8px}
+.mslabel{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:12px}
+.mchecks{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+.mcheck{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:12px;border:1.5px solid #e2e8f0;cursor:pointer;transition:all .15s;user-select:none}
+.mcheck:hover{border-color:#93c5fd;background:#f8fafc}
+.mcheck.done{border-color:#16a34a;background:#f0fdf4}
+.mcheck.done .mcb{background:#16a34a;border-color:#16a34a}
+.mcb{width:22px;height:22px;border-radius:6px;border:2px solid #cbd5e1;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.mcb svg{opacity:0;transition:opacity .1s}
+.mcheck.done .mcb svg{opacity:1}
+.mcheck.done .mclabel{color:#15803d}
+.mclabel{font-size:13px;font-weight:500;color:#1e293b}
+.mprog{margin-bottom:20px}
+.mpbg{height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden}
+.mpfill{height:100%;background:#1d4ed8;border-radius:99px;transition:width .3s}
+.mptext{font-size:11px;color:#64748b;margin-top:6px;text-align:right}
+.mfooter{padding:16px 24px 24px}
+.mok_msg{display:none;text-align:center;padding:6px 0 4px;font-size:13px;color:#15803d;font-weight:600}
+.mbtn{width:100%;background:#1d4ed8;color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s}
+.mbtn:disabled{background:#e2e8f0;color:#94a3b8;cursor:not-allowed}
+.mbtn:not(:disabled):hover{background:#1e40af}
+.mhint{text-align:center;font-size:11px;color:#94a3b8;margin-top:10px;transition:opacity .3s}
+.mhint.hidden{opacity:0}
+#celOverlay canvas{position:absolute;inset:0;pointer-events:none}
+.ccard{position:relative;z-index:1}
+.ctrophy{text-align:center;margin-bottom:14px}
+.ctrophy span{font-size:52px;display:inline-block;line-height:1;transition:transform .35s cubic-bezier(.34,1.56,.64,1),opacity .2s}
+.ctrophy span.pop{transform:scale(1.4);opacity:.4}
+.cracha{background:#0f172a;border-radius:12px;padding:11px 14px;margin-bottom:16px;display:flex;align-items:center;gap:10px}
+.cracha-info .rl{font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#64748b}
+.cracha-info .rn{font-size:15px;font-weight:700;color:#fff;line-height:1.2}
+.cracha-info .rs{font-size:10px;color:#94a3b8;margin-top:1px}
+.rbadge{margin-left:auto;background:#facc15;color:#713f12;font-size:10px;font-weight:700;padding:3px 9px;border-radius:99px}
+.cstats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.cstat{background:#f8fafc;border-radius:12px;padding:11px;text-align:center;border:1.5px solid #e2e8f0}
+.csn{font-size:22px;font-weight:700;color:#0f172a}
+.csl{font-size:10px;color:#64748b;margin-top:2px}
+.cfooter{padding:0 24px 24px;display:flex;gap:8px}
+.cbmain{flex:1;background:#1d4ed8;color:#fff;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;transition:all .2s}
+.cbmain:hover{background:#1e40af}
+.cbsec{background:#fff;color:#64748b;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px 12px;font-size:12px;cursor:pointer}
+</style>
+<div id="motivOverlay">
+  <div class="mcard" id="motivCard">
+    <div class="mcard-top">
+      <div class="mav" id="motivAv">A</div>
+      <div>
+        <div style="font-size:17px;font-weight:700;color:#fff" id="motivGreeting">Hola</div>
+        <div style="font-size:12px;color:#93c5fd;margin-top:2px">Procesos Digitales &middot; recordatorio</div>
+        <div style="display:inline-block;background:rgba(255,255,255,.15);color:#bfdbfe;font-size:10px;font-weight:700;padding:2px 10px;border-radius:99px;margin-top:6px">Revision cada 30 minutos</div>
+      </div>
+    </div>
+    <div class="mcard-body">
+      <div class="mqblock"><p id="motivQuote"></p><div class="mqauthor">&mdash; Equipo Procesos Digitales</div></div>
+      <div class="mslabel">Por favor confirma que ya cerraste estos casos en Mantis:</div>
+      <div class="mchecks">
+        <div class="mcheck" onclick="motivToggle(0)"><div class="mcb" id="mcb0"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="2,6.5 5.5,10 11,3"/></svg></div><span class="mclabel">WhatsApp</span></div>
+        <div class="mcheck" onclick="motivToggle(1)"><div class="mcb" id="mcb1"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="2,6.5 5.5,10 11,3"/></svg></div><span class="mclabel">Llamada</span></div>
+        <div class="mcheck" onclick="motivToggle(2)"><div class="mcb" id="mcb2"><svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="#fff" stroke-width="2.5"><polyline points="2,6.5 5.5,10 11,3"/></svg></div><span class="mclabel">Correo</span></div>
+      </div>
+      <div class="mprog"><div class="mpbg"><div class="mpfill" id="motivPFill" style="width:0%"></div></div><div class="mptext" id="motivPText">0 de 3 confirmados</div></div>
+    </div>
+    <div class="mfooter">
+      <div class="mok_msg" id="motivConfetti">Perfecto! Todo en orden!</div>
+      <button class="mbtn" id="motivBtn" disabled onclick="motivConfirm()">Confirma todos los puntos para continuar</button>
+      <div class="mhint" id="motivHint">Marca todos los puntos para desbloquear</div>
+    </div>
+  </div>
+</div>
+<div id="celOverlay">
+  <canvas id="celCanvas"></canvas>
+  <div class="ccard">
+    <div class="ccard-top">
+      <div class="cav" id="celAv">A</div>
+      <div>
+        <div style="font-size:17px;font-weight:700;color:#fff" id="celGreeting">Excelente!</div>
+        <div style="font-size:12px;color:#93c5fd;margin-top:2px">Procesos Digitales &middot; reconocimiento</div>
+        <div style="display:inline-block;background:rgba(255,255,255,.15);color:#bfdbfe;font-size:10px;font-weight:700;padding:2px 10px;border-radius:99px;margin-top:6px">Caso cerrado</div>
+      </div>
+    </div>
+    <div class="ccard-body">
+      <div class="ctrophy"><span id="celEmoji">&#127942;</span></div>
+      <div class="cqblock">Cerrar este caso significa que alguien tiene su medicamento, su respuesta y su confianza en Tododrogas. Gracias por ser parte de eso.<div class="cqauthor">&mdash; Equipo Procesos Digitales</div></div>
+      <div class="cracha"><span style="font-size:16px">&#9889;</span><div class="cracha-info"><div class="rl">Racha activa</div><div class="rn" id="celRachaNum">1 cierre</div><div class="rs">consecutivos hoy</div></div><div class="rbadge">En racha</div></div>
+      <div class="cstats"><div class="cstat"><div class="csn" id="celHoy">1</div><div class="csl">Cierres hoy</div></div><div class="cstat"><div class="csn" id="celMes">&mdash;</div><div class="csl">Este mes</div></div></div>
+    </div>
+    <div class="cfooter">
+      <button class="cbsec" id="celBtnC">Cerrar</button>
+      <button class="cbmain" id="celBtnS">Siguiente caso</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+var FD=['Cada gestion que haces hoy alivia la carga de alguien manana.','Tu trabajo conecta personas con su salud. Eso es extraordinario.','El registro en Mantis es la unica evidencia del impacto que generas.','Detras de cada ticket hay una persona esperando. Tu eres quien la ayuda.','Sin tu registro, tu gestion es invisible. Gracias por hacerla visible.','No gestionas casos, gestionas la confianza de personas en Tododrogas.','Tu constancia hoy construye la reputacion de todos nosotros manana.','Cada correo que respondes es una promesa que Tododrogas cumple.','El detalle que registras hoy puede resolver el problema de alguien manana.','Tu atencion convierte una queja en confianza. Eso vale muchisimo.','Cada caso bien cerrado es un paciente que puede dormir tranquilo.','Tu nombre esta detras de cada solucion. Eso nos enorgullece.','La consistencia de tu trabajo es lo que diferencia a Tododrogas.','Gracias por llegar hoy. Tu presencia hace la diferencia.'];
+var FT=['La tarde esta avanzada pero tu impacto de hoy ya esta registrado.','Cada gestion de la tarde cierra el dia con una persona bien atendida.','La calidad de tu atencion esta tarde refleja el compromiso de Tododrogas.','Estas en la recta final del dia, cada cierre que hagas cuenta.','La tarde es el momento en que mas se valora tu presencia. Gracias.','Tu trabajo de hoy en la tarde sostiene la confianza de nuestros pacientes.','Cerrar bien los casos de la tarde es la mejor manera de terminar el turno.','Cada ticket que gestionas esta tarde es un compromiso que Tododrogas mantiene.','La tarde avanza y tu con ella, constante, comprometida, valiosa.','Tu gestion de la tarde deja a alguien con su respuesta antes de dormir.'];
+var FN=['El turno de noche exige lo mejor de cada persona. Tu lo das.','Trabajar en la noche es un acto de compromiso real. Tododrogas lo reconoce.','Mientras otros descansan, tu aseguras que nadie quede sin respuesta.','La noche no detiene tu dedicacion. Eso es excepcional.','Tu turno nocturno garantiza que Tododrogas nunca deja a alguien esperando.','Gracias por estar aqui esta noche. Tu trabajo tiene un valor que no se mide.','El esfuerzo nocturno es el que menos se ve pero el que mas se siente.','Esta noche, tu gestion es la unica red de apoyo que tiene alguien.'];
+var QR=['Detras de cada caso cerrado hay una persona que recupero su medicamento, su tranquilidad y su confianza en nosotros. Tu gestion tiene ese poder.','El cierre en Mantis no es un tramite, es la unica evidencia del impacto que generas.','Tu trabajo hoy conecta personas con su salud. Cada registro que haces tiene nombre y apellido al otro lado.','Sin tu gestion registrada, tu esfuerzo es invisible. Con ella, construyes la reputacion de todo Tododrogas.'];
+var EM=['&#127942;','&#129351;','&#127775;','&#127919;','&#128640;','&#128170;','&#128588;','&#10024;','&#127881;','&#11088;','&#128293;','&#128081;'];
+var CC=['#1d4ed8','#facc15','#16a34a','#e11d48','#7c3aed','#0891b2','#ea580c','#ffffff','#f472b6','#34d399'];
+function bank(){var h=new Date().getHours();if(h>=5&&h<12)return{b:FD,k:'mfd',lbl:'Buenos dias'};if(h>=12&&h<19)return{b:FT,k:'mft',lbl:'Buenas tardes'};return{b:FN,k:'mfn',lbl:'Buenas noches'};}
+function week(){var d=new Date(),j=new Date(d.getFullYear(),0,1);return d.getFullYear()+'W'+Math.ceil(((d-j)/864e5+j.getDay()+1)/7);}
+function pick(){var inf=bank(),b=inf.b,k=inf.k,used=[];try{var r=JSON.parse(localStorage.getItem(k)||'{}');if(r.w===week())used=r.u||[];}catch(e){}if(used.length>=b.length)used=[];var av=b.map(function(_,i){return i;}).filter(function(i){return used.indexOf(i)<0;});var idx=av[Math.floor(Math.random()*av.length)];used.push(idx);try{localStorage.setItem(k,JSON.stringify({w:week(),u:used}));}catch(e){}return b[idx];}
+function initW(){var inf=bank(),nm=(window.AGENT_NAME||'').split(' ')[0]||'Agente';var s=document.getElementById('motivSaludo'),f=document.getElementById('motivFrase');if(s)s.textContent=inf.lbl+', '+nm;if(f)f.textContent=pick();}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initW);else initW();
+var rs=[false,false,false];
+function showRec(){var nm=(window.AGENT_NAME||'Agente').split(' ')[0],ini=(window.AGENT_NAME||'A').charAt(0).toUpperCase();document.getElementById('motivAv').textContent=ini;document.getElementById('motivGreeting').textContent='Hola, '+nm;document.getElementById('motivQuote').textContent=QR[Math.floor(Math.random()*QR.length)];rs=[false,false,false];[0,1,2].forEach(function(i){document.querySelectorAll('.mcheck')[i].classList.remove('done');var cb=document.getElementById('mcb'+i);if(cb){var sv=cb.querySelector('svg');if(sv)sv.style.opacity='0';}});document.getElementById('motivPFill').style.width='0%';document.getElementById('motivPFill').style.background='#1d4ed8';document.getElementById('motivPText').textContent='0 de 3 confirmados';document.getElementById('motivBtn').disabled=true;document.getElementById('motivBtn').textContent='Confirma todos los puntos para continuar';document.getElementById('motivHint').classList.remove('hidden');document.getElementById('motivConfetti').style.display='none';document.getElementById('motivOverlay').style.display='flex';}
+window.motivToggle=function(i){rs[i]=!rs[i];document.querySelectorAll('.mcheck')[i].classList.toggle('done',rs[i]);var done=rs.filter(Boolean).length,all=done===3;document.getElementById('motivPFill').style.width=Math.round(done/3*100)+'%';document.getElementById('motivPText').textContent=done+' de 3 confirmados';document.getElementById('motivBtn').disabled=!all;document.getElementById('motivBtn').textContent=all?'Todo en orden, continuar!':'Confirma todos los puntos para continuar';document.getElementById('motivHint').classList.toggle('hidden',all);document.getElementById('motivConfetti').style.display=all?'block':'none';document.getElementById('motivPFill').style.background=all?'#16a34a':'#1d4ed8';};
+window.motivConfirm=function(){var c=document.getElementById('motivCard');c.style.transition='all .3s';c.style.opacity='.4';c.style.transform='scale(.97)';setTimeout(function(){document.getElementById('motivOverlay').style.display='none';c.style.opacity='1';c.style.transform='scale(1)';},350);};
+setTimeout(showRec,30*60*1000);setInterval(showRec,30*60*1000);
+var cL=0,cN=0;
+window.showCelebracion=function(){cN++;var nm=(window.AGENT_NAME||'Agente').split(' ')[0],ini=(window.AGENT_NAME||'A').charAt(0).toUpperCase();document.getElementById('celAv').textContent=ini;document.getElementById('celGreeting').textContent='Excelente, '+nm+'!';var idx;do{idx=Math.floor(Math.random()*EM.length);}while(idx===cL&&EM.length>1);cL=idx;var el=document.getElementById('celEmoji');el.classList.add('pop');setTimeout(function(){el.innerHTML=EM[idx];el.classList.remove('pop');},200);document.getElementById('celRachaNum').textContent=cN+' cierre'+(cN>1?'s':'');document.getElementById('celHoy').textContent=cN;document.getElementById('celOverlay').style.display='flex';conf();};
+function conf(){var ov=document.getElementById('celOverlay'),cv=document.getElementById('celCanvas');cv.width=ov.offsetWidth||420;cv.height=ov.offsetHeight||600;var ctx=cv.getContext('2d'),ps=[],aid;for(var i=0;i<180;i++)ps.push(mp(cv,false));for(var j=0;j<80;j++)ps.push(mp(cv,true));function dr(){ctx.clearRect(0,0,cv.width,cv.height);var al=false;for(var k=0;k<ps.length;k++){var p=ps[k];p.x+=p.vx;p.y+=p.vy;p.rot+=p.vr;p.vy+=0.055;p.vx*=0.995;if(p.y>cv.height*.75)p.alpha-=0.018;if(p.alpha<=0)continue;al=true;ctx.save();ctx.globalAlpha=Math.max(0,p.alpha);ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;if(p.sh==='c'){ctx.beginPath();ctx.arc(0,0,p.w/2,0,Math.PI*2);ctx.fill();}else if(p.rb){ctx.fillRect(-p.w/2,-p.h/6,p.w,p.h/3);ctx.fillRect(-p.w/6,-p.h/2,p.w/3,p.h);}else{ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);}ctx.restore();}if(al)aid=requestAnimationFrame(dr);else ctx.clearRect(0,0,cv.width,cv.height);}dr();}
+function mp(cv,b){var x=b?cv.width/2+(Math.random()-.5)*120:Math.random()*cv.width,y=b?cv.height*.25+(Math.random()-.5)*60:-20-Math.random()*100,a=b?Math.random()*Math.PI*2:0,sp=b?4+Math.random()*7:0;return{x:x,y:y,w:6+Math.random()*9,h:b?(6+Math.random()*9):(3+Math.random()*5),color:CC[Math.floor(Math.random()*CC.length)],rot:Math.random()*Math.PI*2,vx:b?Math.cos(a)*sp:(Math.random()-.5)*3.5,vy:b?Math.sin(a)*sp:2+Math.random()*3,vr:(Math.random()-.5)*.2,alpha:1,sh:Math.random()>.4?'r':'c',rb:Math.random()>.7};}
+document.getElementById('celBtnC').onclick=function(){document.getElementById('celOverlay').style.display='none';};
+document.getElementById('celBtnS').onclick=function(){document.getElementById('celOverlay').style.display='none';};
+})();
+</script>
 
 </body>
 </html>
