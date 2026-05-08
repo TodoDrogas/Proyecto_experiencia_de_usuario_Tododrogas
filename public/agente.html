@@ -6357,12 +6357,26 @@ async function cargarMetricasAgente() {
   var hasta = document.getElementById('agMHasta').value;
   document.getElementById('agMetSub').textContent = AGENT_NAME + ' · ' + desde + ' → ' + hasta;
 
-  // PASO 1: Traer eventos filtrados por fecha de GESTIÓN (no de llegada del correo)
-  // Solo cuentan como gestión real: correo respondido y gestión registrada
-  var _SOLO_GESTION = new Set(['correo_respondido','Gestión registrada','gestion_registrada']);
+  // ── PASO 1: Correos del período (received_at) — base de todas las cards ──
   var _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
     'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
     'pendiente_firma','firma_confirmada']);
+  var correosPeriodo = [];
+  try {
+    correosPeriodo = await sb('correos?agente_id=eq.' + AGENT_ID +
+      '&received_at=gte.' + desde + 'T00:00:00-05:00' +
+      '&received_at=lte.' + hasta + 'T23:59:59-05:00' +
+      '&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.informacion&estado=neq.borrador&is_draft=is.false' +
+      '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,'+
+        'estado,num_gestiones,received_at,fecha_resolucion,eps_id,ciudad_paciente,'+
+        'tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto,origen,prioridad,horas_sla' +
+      '&order=received_at.desc&limit=2000') || [];
+  } catch(e) { correosPeriodo = []; }
+
+  // IDs de los correos del período — para cruzar con eventos
+  var _idsPeriodo = new Set(correosPeriodo.map(function(x){return x.id;}));
+
+  // ── PASO 2: Eventos del período ──
   var eventos = [];
   try {
     eventos = await sb('historial_eventos?agente_id=eq.' + AGENT_ID +
@@ -6372,15 +6386,16 @@ async function cargarMetricasAgente() {
       '&order=created_at.desc&limit=5000') || [];
   } catch(e) { eventos = []; }
 
-  // Gestiones reales = correo_respondido + Gestión registrada (cualquier variante)
+  // Gestiones reales = correo_respondido + Gestión registrada, SOLO de tickets del período
   var eventosGestion = eventos.filter(function(h){
     var ev = (h.evento||'').toLowerCase();
-    return ev === 'correo_respondido' || ev === 'gestión registrada' || ev === 'gestion_registrada' || ev === 'gestión #1 registrada' || (ev.startsWith('gestión #') && ev.includes('registrada'));
+    var esGestion = ev === 'correo_respondido' || ev === 'gestión registrada' || ev === 'gestion_registrada' || ev === 'gestión #1 registrada' || (ev.startsWith('gestión #') && ev.includes('registrada'));
+    return esGestion && _idsPeriodo.has(h.correo_id);
   });
-  var correoIdsSet   = new Set(eventosGestion.map(function(h){ return h.correo_id; }).filter(Boolean));
-  var correoIds      = Array.from(correoIdsSet);
+  var correoIdsSet = new Set(eventosGestion.map(function(h){return h.correo_id;}).filter(Boolean));
+  var correoIds    = Array.from(correoIdsSet);
 
-  // PASO 2: Datos de los tickets gestionados en ese período
+  // ── PASO 3: Datos completos de los tickets con gestión ──
   var correos = [];
   if(correoIds.length > 0) {
     try {
@@ -6396,24 +6411,9 @@ async function cargarMetricasAgente() {
   var epsMap = {};
   epsCat.forEach(function(e){ epsMap[e.id] = e.nombre; });
   if(window._agMetricasPeriodo) window._agMetricasPeriodo.epsCat = epsCat;
-  // También guardar en state.epsCatalogo para uso en Excel
   if(epsCat.length && (!state.epsCatalogo || !state.epsCatalogo.length)) state.epsCatalogo = epsCat;
 
-  // ── PASO 2b: Correos por received_at para las 6 cards de estado ──
-  var correosPeriodo = [];
-  try {
-    correosPeriodo = await sb('correos?agente_id=eq.' + AGENT_ID +
-      '&received_at=gte.' + desde + 'T00:00:00-05:00' +
-      '&received_at=lte.' + hasta + 'T23:59:59-05:00' +
-      '&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.informacion&estado=neq.borrador&is_draft=is.false' +
-      '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,'+
-        'estado,num_gestiones,received_at,fecha_resolucion,eps_id,ciudad_paciente,'+
-        'tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto,origen,prioridad,horas_sla' +
-      '&order=received_at.desc&limit=2000') || [];
-  } catch(e) { correosPeriodo = []; }
-
-  // Calcular Con/Sin Respuesta sobre los ids del período
-  var _idsPeriodo = new Set(correosPeriodo.map(function(x){return x.id;}));
+  // Con/Sin Respuesta — usar _idsPeriodo ya calculado arriba
   var _idsConRespP = new Set(eventos.filter(function(h){
     return h.evento==='correo_respondido' && _idsPeriodo.has(h.correo_id);
   }).map(function(h){return h.correo_id;}));
