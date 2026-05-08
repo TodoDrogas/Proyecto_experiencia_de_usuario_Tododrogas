@@ -6247,23 +6247,24 @@ function exportarMisMetricas() {
   correosFull.forEach(function(x){ correoMap[x.id]=x; });
 
   var h2 = CP.map(function(x){
-    var full = correoMap[x.id] || x;
-    var eps  = epsMap2[full.eps_id||x.eps_id] || '';
+    var mem  = correoMap[x.id] || {};  // datos en memoria (si están)
+    // Prioridad: campo directo de correosPeriodo (viene de BD) > memoria
+    var eps  = epsMap2[x.eps_id||mem.eps_id||mem.raw?.eps_id] || '';
     var conResp = idsConResp.has(x.id) ? 'SÍ' : (idsConGest.has(x.id)?'NO':'—');
     return {
-      Ticket:             full.ticket_id||'',
-      Asunto:             full.subject||full.asunto||'',
-      Cedula_Paciente:    full.cedula||full.cedula_paciente||'',
-      Nombre_Paciente:    full.nombre||full.from_name||'',
+      Ticket:             x.ticket_id||mem.ticket_id||mem.raw?.ticket_id||'',
+      Asunto:             x.subject||mem.asunto||mem.raw?.subject||'',
+      Cedula_Paciente:    x.cedula_paciente||mem.raw?.cedula_paciente||mem.raw?.cedula||'',
+      Nombre_Paciente:    x.nombre||mem.remitente_nombre||mem.raw?.from_name||'',
       EPS:                eps,
-      Ciudad:             full.ciudad_paciente||'',
-      Tiene_Tutela:       full.tiene_tutela===true?'SÍ':full.tiene_tutela===false?'NO':'',
+      Ciudad:             x.ciudad_paciente||mem.raw?.ciudad_paciente||'',
+      Tiene_Tutela:       x.tiene_tutela===true?'SÍ':x.tiene_tutela===false?'NO':(mem.raw?.tiene_tutela===true?'SÍ':mem.raw?.tiene_tutela===false?'NO':''),
       Estado:             x.estado||'',
-      Num_Gestiones:      x.num_gestiones||full.num_gestiones||0,
+      Num_Gestiones:      x.num_gestiones||0,
       Con_Respuesta:      conResp,
-      Categoria:          full.categoria_sigi||'',
-      Tipo_PQR:           full.tipo_pqr||'',
-      Canal:              full.canal_contacto||full.origen||'',
+      Categoria:          x.categoria_sigi||mem.raw?.categoria_sigi||'',
+      Tipo_PQR:           x.tipo_pqr||mem.tipo_pqr||mem.raw?.tipo_pqr||'',
+      Canal:              x.canal_contacto||x.origen||mem.raw?.canal_contacto||mem.origen||'',
       Recibido:           x.received_at?new Date(x.received_at).toLocaleString('es-CO'):'',
       Fecha_Cierre:       x.fecha_resolucion?new Date(x.fecha_resolucion).toLocaleString('es-CO'):'',
       Horas_Resolucion:   (x.fecha_resolucion&&x.received_at)?((new Date(x.fecha_resolucion)-new Date(x.received_at))/3600000).toFixed(1):'',
@@ -6356,7 +6357,9 @@ async function cargarMetricasAgente() {
       '&received_at=gte.' + desde + 'T00:00:00-05:00' +
       '&received_at=lte.' + hasta + 'T23:59:59-05:00' +
       '&origen=neq.saliente&estado=neq.enviado&is_draft=is.false' +
-      '&select=id,estado,num_gestiones,received_at,fecha_resolucion' +
+      '&select=id,ticket_id,subject,estado,num_gestiones,received_at,fecha_resolucion,'+
+        'cedula_paciente,nombre,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,'+
+        'tipo_pqr,canal_contacto,origen,from_name,from_email' +
       '&order=received_at.desc&limit=2000') || [];
   } catch(e) { correosPeriodo = []; }
 
