@@ -9199,6 +9199,15 @@ function renderAgentes(){
   const sedeFiltro = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
   const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!sedeFiltro||esc(a.sede||'')=== sedeFiltro||a.sede===sedeFiltro));
 
+  // ── SET UNIFICADO — única fuente de verdad (usada también en renderAgTimeline y exportAgentesExcel) ──
+  // correo_respondido: SÍ cuenta como gestión (cada envío)
+  // firma_confirmada:  NO cuenta (cambio de estado, no acción de gestión)
+  const EXCL_EVENTOS_SISTEMA = new Set([
+    'sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+    'nova_td_generado','asignado_manual','asignado_automatico',
+    'reabierto','informacion','pendiente_firma','firma_confirmada'
+  ]);
+
   // ── KPIs GLOBALES ──
   const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
   const total   = E.filter(e=>_pqr(e)&&e.estado!=='informacion').length;
@@ -9208,10 +9217,8 @@ function renderAgentes(){
   const avgH    = resol.length>0
     ? (resol.reduce((a,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return a+(h>0?h:0);},0)/resol.length).toFixed(1)+'h'
     : '—';
-  const _EXCL_GEST = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
-    'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
-    'pendiente_firma','firma_confirmada']);
-  const gestCount = H.filter(h=>h.agente_id&&!_EXCL_GEST.has(h.evento)).length;
+  // gestCount usa el set unificado — correo_respondido SÍ cuenta
+  const gestCount = H.filter(h=>h.agente_id&&!EXCL_EVENTOS_SISTEMA.has(h.evento)).length;
 
   const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   setV('agKpiTotal',   total);
@@ -9222,12 +9229,11 @@ function renderAgentes(){
   const autoCerrados = E.filter(e=>e.estado==='solucionado').length;
   setV('agKpiAutoCerrado', autoCerrados);
 
-  // ── KPIs globales Con/Sin Respuesta ──
-  const _EXCL_KPI = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
-    'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
-    'pendiente_firma','firma_confirmada']);
-  const _idsConGest   = new Set(H.filter(h=>h.correo_id && !_EXCL_KPI.has(h.evento)).map(h=>h.correo_id));
-  const _idsConResp   = new Set(H.filter(h=>h.correo_id && h.evento==='correo_respondido').map(h=>h.correo_id));
+  // ── KPIs Con/Sin Respuesta — etiqueta BINARIA (¿hubo al menos 1 correo enviado?) ──
+  // _idsConGest = tickets con alguna gestión real del asesor
+  // _idsConResp = tickets donde se envió al menos 1 correo (binario, no cuántos)
+  const _idsConGest   = new Set(H.filter(h=>h.correo_id&&!EXCL_EVENTOS_SISTEMA.has(h.evento)).map(h=>h.correo_id));
+  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.evento==='correo_respondido').map(h=>h.correo_id));
   const _globalConResp = _idsConResp.size;
   const _globalSinResp = [..._idsConGest].filter(tid=>!_idsConResp.has(tid)).length;
   setV('agKpiConResp',  _globalConResp);
@@ -9284,7 +9290,7 @@ function renderAgentes(){
     data:{
       labels: act.map(a=>(a.nombre||'').split(' ')[0]),
       datasets:[{
-        data: act.map(a=>H.filter(h=>h.agente_id===a.id&&!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length),
+        data: act.map(a=>H.filter(h=>h.agente_id===a.id&&!EXCL_EVENTOS_SISTEMA.has(h.evento)).length),
         backgroundColor:'#e0f2fe',borderColor:'#0891b2',borderWidth:2,borderRadius:4
       }]
     },
@@ -9313,26 +9319,21 @@ function renderAgentes(){
     const tColor  = tRes==='—'?'var(--ink3)':tResNum>48?'var(--red)':tResNum>24?'#ca8a04':'var(--green)';
     const resp    = myH.filter(h=>h.evento==='correo_respondido').length;
     const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
-    // Gestiones reales = solo lo que viene del botón "Añadir Gestión" + respuestas enviadas
-    const _SOLO_GESTION = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
-      'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
-      'pendiente_firma','firma_confirmada']);
-    const gestReg = myH.filter(h=>!_SOLO_GESTION.has(h.evento)).length;
-    // ── Etiquetas Con/Sin Respuesta por agente ──
-    const _EXCL_EV = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
-      'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
-      'pendiente_firma','firma_confirmada']);
-    const _ticketsConGest = new Set(myH.filter(h=>!_EXCL_EV.has(h.evento)).map(h=>h.correo_id));
+    // gestReg usa el set unificado — correo_respondido SÍ cuenta, firma_confirmada NO
+    const gestReg = myH.filter(h=>!EXCL_EVENTOS_SISTEMA.has(h.evento)).length;
+    // Con/Sin Respuesta — etiqueta binaria por asesor (¿hubo al menos 1 correo enviado?)
+    const _ticketsConGest = new Set(myH.filter(h=>!EXCL_EVENTOS_SISTEMA.has(h.evento)).map(h=>h.correo_id));
     const _ticketsResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
     const conRespCount = _ticketsResp.size;
     const sinRespCount = [..._ticketsConGest].filter(tid=>!_ticketsResp.has(tid)).length;
     const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
-    const carga   = pend+gest;
     const color   = COLS[i%COLS.length];
     const pfirma = myE.filter(e=>e.estado==='pendiente_firma').length;
     const qCount = myE.filter(e=>e.tipo_pqr==='queja').length;
     const pCount = myE.filter(e=>e.tipo_pqr==='peticion').length;
     const rCount = myE.filter(e=>e.tipo_pqr==='reclamo').length;
+    // casos_activos DINÁMICO — contado del período filtrado, no campo estático de agentes
+    const casosActivos = myE.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px">
         <div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">${(a.nombre||'?').charAt(0).toUpperCase()}</div>
@@ -9359,7 +9360,7 @@ function renderAgentes(){
       <td style="text-align:center;font-size:11px">${pCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${rCount||'—'}</td>
       <td style="text-align:center"><span style="font-weight:700;color:${alta>0?'var(--red)':'var(--ink3)'}">${alta}</span></td>
-      <td style="text-align:center;font-family:'DM Mono',monospace;font-weight:700;color:${(a.casos_activos||0)>10?'var(--red)':(a.casos_activos||0)>5?'#ca8a04':'var(--green)'}">${a.casos_activos||0}</td>
+      <td style="text-align:center;font-family:'DM Mono',monospace;font-weight:700;color:${casosActivos>10?'var(--red)':casosActivos>5?'#ca8a04':'var(--green)'}">${casosActivos}</td>
     </tr>`;
   }).join('')||'<tr><td colspan="22" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
 
@@ -9383,6 +9384,13 @@ function renderAgTimeline(){
   const { eventos:H, correos:E, agentes } = _agDatos;
   const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
   const cMap={}; E.forEach(c=>cMap[c.id]=c);
+
+  // ── SET UNIFICADO — misma lista que renderAgentes ───────────────────
+  const EXCL_EVENTOS_SISTEMA = new Set([
+    'sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+    'nova_td_generado','asignado_manual','asignado_automatico',
+    'reabierto','informacion','pendiente_firma','firma_confirmada'
+  ]);
 
   const filtroAg = document.getElementById('agFiltroAsesor')?.value||'';
   const filtroEv = document.getElementById('agFiltroEvento')?.value||'';
@@ -9413,11 +9421,15 @@ function renderAgTimeline(){
     if(c.received_at&&h.created_at){
       const hrs=Math.round((new Date(h.created_at)-new Date(c.received_at))/3600000);
       tiempoD = hrs<1?'<1h':hrs<24?hrs+'h':Math.floor(hrs/24)+'d '+(hrs%24)+'h';
-      const hNum=parseInt(tiempoD);
     }
     const tColor = tiempoD==='—'?'var(--ink3)':tiempoD.includes('d')?'var(--red)':parseInt(tiempoD)>24?'#ca8a04':'var(--green)';
     const evL = evLabel[h.evento]||('⚡ '+h.evento);
-    return `<tr style="border-bottom:1px solid var(--border)">
+    // Filas de eventos de sistema se atenúan para diferenciarlas visualmente
+    const esGestionReal = !EXCL_EVENTOS_SISTEMA.has(h.evento);
+    const rowStyle = esGestionReal
+      ? 'border-bottom:1px solid var(--border)'
+      : 'border-bottom:1px solid var(--border);background:var(--bg2);opacity:.65';
+    return `<tr style="${rowStyle}">
       <td style="font-size:11px;font-family:'DM Mono',monospace;color:var(--ink3);white-space:nowrap">${fecha}</td>
       <td style="font-size:12px;font-weight:600">${esc(agNom)}</td>
       <td style="font-size:11px;font-family:'DM Mono',monospace;color:var(--blue)">${esc(ticket)}</td>
@@ -9436,71 +9448,136 @@ function exportAgentesExcel(){
   const cMap={}; E.forEach(c=>cMap[c.id]=c);
   const act  = agentes.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
 
-  // Hoja 1: Resumen por asesor
+  // ── SET UNIFICADO — misma lista que renderAgentes ───────────────────
+  const EXCL_EVENTOS_SISTEMA = new Set([
+    'sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+    'nova_td_generado','asignado_manual','asignado_automatico',
+    'reabierto','informacion','pendiente_firma','firma_confirmada'
+  ]);
+
+  // EPS catálogo: cruzar eps_id → nombre (usa mapa global si ya fue cargado)
+  const _epsMap = {};
+  if(state?.epsCatalogo?.length){
+    state.epsCatalogo.forEach(e=>{ if(e.id) _epsMap[e.id]=e.nombre; });
+  }
+
+  // ── Hoja 1: Resumen por asesor ──────────────────────────────────────
   const h1 = act.map(a=>{
     const myE = E.filter(e=>e.agente_id===a.id);
     const myH = H.filter(h=>h.agente_id===a.id);
     const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
     const sol = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
+    // gestReg sincronizado con pantalla (correo_respondido SÍ cuenta)
+    const gestReg = myH.filter(h=>!EXCL_EVENTOS_SISTEMA.has(h.evento)).length;
+    // casos_activos DINÁMICO — no leer campo estático de agentes
+    const casosActivos = myE.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
+    // Con/Sin Respuesta — binario
+    const _tConGest = new Set(myH.filter(h=>!EXCL_EVENTOS_SISTEMA.has(h.evento)).map(h=>h.correo_id));
+    const _tResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
     return {
-      Asesor:                a.nombre||'',
-      Email:                 a.email||'',
-      Rol:                   a.rol||'',
-      Sede:                  a.sede||'',
-      Cedula:                a.cedula||'',
-      Telefono:              a.telefono||'',
-      Casos_Activos:         a.casos_activos||0,
-      Total_Asignados:       myE.length,
-      Pendientes:            myE.filter(e=>e.estado==='pendiente').length,
-      En_Gestion:            myE.filter(e=>e.estado==='gestion').length,
-      Pendiente_Firma:       myE.filter(e=>e.estado==='pendiente_firma').length,
-      Resueltos:             sol,
-      Pct_Resolucion:        myE.length>0?Math.round(sol/myE.length*100)+'%':'0%',
-      T_Prom_Resolucion_h:   avgH,
-      Gestiones_Registradas: myH.filter(h=>!['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado'].includes(h.evento)).length,
-      Respuestas_Enviadas:   myH.filter(h=>h.evento==='correo_respondido').length,
-      Firmas_Confirmadas:    myH.filter(h=>h.evento==='firma_confirmada').length,
-      Quejas:                myE.filter(e=>e.tipo_pqr==='queja').length,
-      Peticiones:            myE.filter(e=>e.tipo_pqr==='peticion').length,
-      Reclamos:              myE.filter(e=>e.tipo_pqr==='reclamo').length,
-      Alta_Sin_Resolver:     myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
+      Asesor:                  a.nombre||'',
+      Email:                   a.email||'',
+      Rol:                     a.rol||'',
+      Sede:                    a.sede||'',
+      Cedula:                  a.cedula||'',
+      Telefono:                a.telefono||'',
+      Casos_Activos:           casosActivos,
+      Total_Asignados:         myE.length,
+      Pendientes:              myE.filter(e=>e.estado==='pendiente').length,
+      En_Gestion:              myE.filter(e=>e.estado==='gestion').length,
+      Pendiente_Firma:         myE.filter(e=>e.estado==='pendiente_firma').length,
+      Resueltos:               sol,
+      Pct_Resolucion:          myE.length>0?Math.round(sol/myE.length*100)+'%':'0%',
+      T_Prom_Resolucion_h:     avgH,
+      Gestiones_Registradas:   gestReg,
+      Respuestas_Enviadas:     myH.filter(h=>h.evento==='correo_respondido').length,
+      Firmas_Confirmadas:      myH.filter(h=>h.evento==='firma_confirmada').length,
+      Tickets_Con_Respuesta:   _tResp.size,
+      Tickets_Sin_Respuesta:   [..._tConGest].filter(id=>!_tResp.has(id)).length,
+      Quejas:                  myE.filter(e=>e.tipo_pqr==='queja').length,
+      Peticiones:              myE.filter(e=>e.tipo_pqr==='peticion').length,
+      Reclamos:                myE.filter(e=>e.tipo_pqr==='reclamo').length,
+      Alta_Sin_Resolver:       myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
     };
   });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'Sin asesores'}]), 'Resumen Asesores');
+  const ws1 = XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'Sin asesores'}]);
+  ws1['!cols']=[{wch:26},{wch:30},{wch:12},{wch:16},{wch:12},{wch:13},{wch:13},{wch:16},{wch:11},{wch:11},{wch:14},{wch:10},{wch:14},{wch:16},{wch:20},{wch:18},{wch:15},{wch:22},{wch:22},{wch:8},{wch:10},{wch:10},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen Asesores');
 
-  // Hoja 2: Tickets con tiempos
-  const h2 = E.filter(c=>c.agente_id).map(c=>({
-    Ticket:              c.ticket_id||'',
-    Asunto:              c.subject||'',
-    Remitente:           c.nombre||c.from_email||'',
-    Asesor:              agMap[c.agente_id]||agMap[c.asignado_a]||'',
-    Estado:              c.estado||'',
-    Prioridad:           c.prioridad||'',
-    Sentimiento:         c.sentimiento||'',
-    Tipo_PQR:            c.tipo_pqr||'',
-    Recibido:            c.received_at?new Date(c.received_at).toLocaleString('es-CO'):'',
-    Resuelto:            c.fecha_resolucion?new Date(c.fecha_resolucion).toLocaleString('es-CO'):'',
-    T_Resolucion_h:      (c.fecha_resolucion&&c.received_at)?((new Date(c.fecha_resolucion)-new Date(c.received_at))/3600000).toFixed(1):'',
-    SLA_horas:           c.horas_sla||'',
-  }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'Sin tickets'}]), 'Tickets Detallado');
+  // ── Hoja 2: Tickets con tiempos + datos completos del paciente ──────
+  const h2 = E.filter(c=>c.agente_id).map(c=>{
+    const epsNombre = c.eps_id ? (_epsMap[c.eps_id]||c.eps_id) : '';
+    return {
+      Ticket:              c.ticket_id||'',
+      Asunto:              c.subject||'',
+      Remitente_Email:     c.from_email||'',
+      Remitente_Nombre:    c.from_name||'',
+      Cedula_Paciente:     c.cedula||c.cedula_paciente||'',
+      Nombre_Paciente:     c.nombre||'',
+      EPS:                 epsNombre,
+      Ciudad:              c.ciudad_paciente||'',
+      Tiene_Tutela:        c.tiene_tutela===true?'SÍ':c.tiene_tutela===false?'NO':'',
+      Asesor:              agMap[c.agente_id]||agMap[c.asignado_a]||'',
+      Estado:              c.estado||'',
+      Prioridad:           c.prioridad||'',
+      Sentimiento:         c.sentimiento||'',
+      Tipo_PQR:            c.tipo_pqr||'',
+      Num_Gestiones:       c.num_gestiones||0,
+      Canal:               c.canal_contacto||c.origen||'',
+      Recibido:            c.received_at?new Date(c.received_at).toLocaleString('es-CO'):'',
+      Resuelto:            c.fecha_resolucion?new Date(c.fecha_resolucion).toLocaleString('es-CO'):'',
+      T_Resolucion_h:      (c.fecha_resolucion&&c.received_at)?((new Date(c.fecha_resolucion)-new Date(c.received_at))/3600000).toFixed(1):'',
+      SLA_horas:           c.horas_sla||'',
+    };
+  });
+  const ws2 = XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'Sin tickets'}]);
+  ws2['!cols']=[{wch:16},{wch:40},{wch:28},{wch:22},{wch:13},{wch:26},{wch:20},{wch:16},{wch:12},{wch:22},{wch:13},{wch:10},{wch:11},{wch:11},{wch:13},{wch:12},{wch:18},{wch:18},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Tickets Detallado');
 
-  // Hoja 3: Timeline gestiones
-  const h3 = H.filter(h=>h.agente_id).map(h=>{
+  // ── Hoja 3: Gestiones Reales (solo eventos que cuentan como gestión) ─
+  // Una fila por gestión real — excluye eventos de sistema
+  const h3 = H.filter(h=>h.agente_id&&!EXCL_EVENTOS_SISTEMA.has(h.evento)).map(h=>{
     const c=cMap[h.correo_id]||{};
+    const epsNombre = c.eps_id ? (_epsMap[c.eps_id]||c.eps_id) : '';
     return {
       Fecha:                  h.created_at?new Date(h.created_at).toLocaleString('es-CO'):'',
       Asesor:                 agMap[h.agente_id]||'',
       Ticket:                 c.ticket_id||h.correo_id?.slice(0,8)||'',
       Evento:                 h.evento||'',
       Descripcion:            h.descripcion||'',
+      Cedula_Paciente:        c.cedula||c.cedula_paciente||'',
+      Nombre_Paciente:        c.nombre||'',
+      EPS:                    epsNombre,
+      Ciudad:                 c.ciudad_paciente||'',
+      Prioridad_Ticket:       c.prioridad||'',
+      Estado_Ticket:          c.estado||'',
+      Tipo_PQR:               c.tipo_pqr||'',
+      Horas_Desde_Recepcion:  (c.received_at&&h.created_at)?((new Date(h.created_at)-new Date(c.received_at))/3600000).toFixed(1):'',
+    };
+  });
+  const ws3 = XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin gestiones en el período'}]);
+  ws3['!cols']=[{wch:18},{wch:22},{wch:16},{wch:22},{wch:40},{wch:13},{wch:26},{wch:20},{wch:16},{wch:10},{wch:13},{wch:11},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Gestiones Reales');
+
+  // ── Hoja 4: Timeline Completo (todos los eventos, para auditoría) ───
+  const h4 = H.filter(h=>h.agente_id).map(h=>{
+    const c=cMap[h.correo_id]||{};
+    return {
+      Fecha:                  h.created_at?new Date(h.created_at).toLocaleString('es-CO'):'',
+      Asesor:                 agMap[h.agente_id]||'',
+      Ticket:                 c.ticket_id||h.correo_id?.slice(0,8)||'',
+      Evento:                 h.evento||'',
+      Es_Gestion_Real:        !EXCL_EVENTOS_SISTEMA.has(h.evento)?'SÍ':'NO',
+      Descripcion:            h.descripcion||'',
       Prioridad_Ticket:       c.prioridad||'',
       Estado_Ticket:          c.estado||'',
       Horas_Desde_Recepcion:  (c.received_at&&h.created_at)?((new Date(h.created_at)-new Date(c.received_at))/3600000).toFixed(1):'',
     };
   });
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin eventos'}]), 'Timeline Gestiones');
+  const ws4 = XLSX.utils.json_to_sheet(h4.length?h4:[{Sin_datos:'Sin eventos'}]);
+  ws4['!cols']=[{wch:18},{wch:22},{wch:16},{wch:22},{wch:14},{wch:40},{wch:10},{wch:13},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws4, 'Timeline Completo');
 
   XLSX.writeFile(wb, `Asesores_${desde||'inicio'}_${hasta||'hoy'}.xlsx`);
 }
