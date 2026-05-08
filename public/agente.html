@@ -6049,7 +6049,7 @@ html[data-theme="dark"] #panelRR [style*="border-bottom:1px solid #e2e8f0"]{bord
         <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #f59e0b">
           <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">En Gestión</div>
           <div style="font-size:26px;font-weight:900;color:#f59e0b;line-height:1" id="agCardGest">—</div>
-          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Estado actual</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Del período</div>
         </div>
         <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #16a34a">
           <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">Con Respuesta</div>
@@ -6079,7 +6079,7 @@ html[data-theme="dark"] #panelRR [style*="border-bottom:1px solid #e2e8f0"]{bord
           <div class="mk-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div>
           <div class="mk-label">Pendientes</div>
           <div class="mk-val" style="color:#f59e0b" id="agKpiCasos">—</div>
-          <div class="mk-sub">Sin resolver</div>
+          <div class="mk-sub">Del período</div>
         </div>
         <div class="mk">
           <div class="mk-accent" style="background:linear-gradient(90deg,#2563eb,#60a5fa)"></div>
@@ -6240,9 +6240,7 @@ async function exportarMisMetricas() {
     Cerrados:             sol,
     Pct_Resolucion:       CP.length>0?Math.round(sol/CP.length*100)+'%':'0%',
     T_Prom_Resolucion_h:  avgH,
-    Pendientes:           (state&&state.emails?state.emails.filter(function(e){
-      return ['pendiente','gestion','pendiente_firma'].indexOf(e.estado)>=0;
-    }).length:0),
+    Pendientes:           correosPeriodo.filter(function(x){return x.estado==='pendiente';}).length,
     Gestiones_Registradas:gestReg,
   }];
   var ws1 = XLSX.utils.json_to_sheet(h1);
@@ -6397,7 +6395,7 @@ async function cargarMetricasAgente() {
     correosPeriodo = await sb('correos?agente_id=eq.' + AGENT_ID +
       '&received_at=gte.' + desde + 'T00:00:00-05:00' +
       '&received_at=lte.' + hasta + 'T23:59:59-05:00' +
-      '&origen=neq.saliente&estado=neq.enviado&is_draft=is.false' +
+      '&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.informacion&estado=neq.borrador&is_draft=is.false' +
       '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,'+
         'estado,num_gestiones,received_at,fecha_resolucion,eps_id,ciudad_paciente,'+
         'tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto,origen,prioridad,horas_sla' +
@@ -6446,8 +6444,10 @@ async function cargarMetricasAgente() {
   var conTutela = correos.filter(function(c){ return c.tiene_tutela===true; }).length;
 
   // Pendientes = correos del agente actualmente en estado pendiente o gestion
-  var pendientes = (state.emails||[]).filter(function(e){
-    return ['pendiente','gestion','pendiente_firma'].indexOf(e.estado) >= 0;
+  // Pendientes del período (misma fuente que las cards superiores)
+  // Pendientes = solo estado 'pendiente' (igual que sidebar)
+  var pendientes = correosPeriodo.filter(function(x){
+    return x.estado === 'pendiente';
   }).length;
   document.getElementById('agKpiCasos').textContent    = pendientes;
   document.getElementById('agKpiGest').textContent     = totalG;
