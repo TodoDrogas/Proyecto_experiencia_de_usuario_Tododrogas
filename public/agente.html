@@ -6031,12 +6031,47 @@ html[data-theme="dark"] #panelRR [style*="border-bottom:1px solid #e2e8f0"]{bord
         <span style="color:#444c56;font-size:12px">→</span>
         <input type="date" id="agMHasta" style="background:#161b22;border:1px solid #30363d;color:#c9d1d9;padding:7px 10px;border-radius:8px;font-size:11px;font-family:'Poppins',sans-serif;outline:none;color-scheme:dark">
         <button onclick="cargarMetricasAgente()" style="background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:none;padding:7px 18px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;box-shadow:0 2px 8px rgba(37,99,235,.4);transition:opacity .15s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">Filtrar</button>
+        <button onclick="exportarMisMetricas()" style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;box-shadow:0 2px 8px rgba(22,163,74,.4);transition:opacity .15s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">⬇ Excel</button>
         <button onclick="document.getElementById('modalMetricasAg').style.display='none'" style="background:#21262d;border:1px solid #30363d;cursor:pointer;color:#8b949e;font-size:16px;width:36px;height:36px;border-radius:8px;transition:all .15s" onmouseover="this.style.background='#30363d'" onmouseout="this.style.background='#21262d'">✕</button>
       </div>
     </div>
 
     <!-- Body -->
     <div style="padding:24px 28px;background:#f8fafc">
+
+      <!-- Cards de estado por received_at -->
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px">
+        <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #2563eb">
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">Asignados</div>
+          <div style="font-size:26px;font-weight:900;color:#2563eb;line-height:1" id="agCardAsig">—</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Llegaron en el período</div>
+        </div>
+        <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #f59e0b">
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">En Gestión</div>
+          <div style="font-size:26px;font-weight:900;color:#f59e0b;line-height:1" id="agCardGest">—</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Estado actual</div>
+        </div>
+        <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #16a34a">
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">Con Respuesta</div>
+          <div style="font-size:26px;font-weight:900;color:#16a34a;line-height:1" id="agCardConResp">—</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Correo enviado</div>
+        </div>
+        <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #ca8a04">
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">Sin Respuesta</div>
+          <div style="font-size:26px;font-weight:900;color:#ca8a04;line-height:1" id="agCardSinResp">—</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Sin correo enviado</div>
+        </div>
+        <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #7c3aed">
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">Pte. Firma</div>
+          <div style="font-size:26px;font-weight:900;color:#7c3aed;line-height:1" id="agCardFirma">—</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Estado actual</div>
+        </div>
+        <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #0891b2">
+          <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">Cerrados</div>
+          <div style="font-size:26px;font-weight:900;color:#0891b2;line-height:1" id="agCardCerrados">—</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Solucionados</div>
+        </div>
+      </div>
 
       <!-- KPIs -->
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
@@ -6165,6 +6200,104 @@ function setTema(t) {
 }
 
 // ══ MÉTRICAS ══
+function exportarMisMetricas() {
+  var d = window._agMetricasPeriodo;
+  if(!d || !d.correosPeriodo) { showToast('Primero filtra el período para generar el Excel','error'); return; }
+
+  var wb = XLSX.utils.book_new();
+  var desde = d.desde, hasta = d.hasta;
+  var CP = d.correosPeriodo;
+  var EV = d.eventos;
+  var idsConResp = d.idsConRespP;
+  var idsConGest = d.idsConGestP;
+  var _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+    'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+    'pendiente_firma','firma_confirmada']);
+  var epsMap2 = {};
+  (d.epsCat||[]).forEach(function(e){ epsMap2[e.id]=e.nombre; });
+
+  // ── Hoja 1: Mi Resumen ──
+  var sol    = CP.filter(function(x){return x.estado==='solucionado'||x.estado==='gestionado';}).length;
+  var resol  = CP.filter(function(x){return x.fecha_resolucion&&x.received_at;});
+  var avgH   = resol.length>0?(resol.reduce(function(s,x){var h=(new Date(x.fecha_resolucion)-new Date(x.received_at))/3600000;return s+(h>0?h:0);},0)/resol.length).toFixed(1):'—';
+  var gestReg= EV.filter(function(h){return !_EXCL.has(h.evento);}).length;
+  var h1 = [{
+    Asesor:               AGENT_NAME||'',
+    Periodo_Desde:        desde,
+    Periodo_Hasta:        hasta,
+    Total_Asignados:      CP.length,
+    En_Gestion:           CP.filter(function(x){return x.estado==='gestion';}).length,
+    Con_Respuesta:        idsConResp.size,
+    Sin_Respuesta:        [...idsConGest].filter(function(id){return !idsConResp.has(id);}).length,
+    Pendiente_Firma:      CP.filter(function(x){return x.estado==='pendiente_firma';}).length,
+    Cerrados:             sol,
+    Pct_Resolucion:       CP.length>0?Math.round(sol/CP.length*100)+'%':'0%',
+    T_Prom_Resolucion_h:  avgH,
+    Gestiones_Registradas:gestReg,
+  }];
+  var ws1 = XLSX.utils.json_to_sheet(h1);
+  ws1['!cols']=[{wch:26},{wch:13},{wch:13},{wch:16},{wch:11},{wch:15},{wch:15},{wch:14},{wch:10},{wch:14},{wch:18},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws1, 'Mi Resumen');
+
+  // ── Hoja 2: Mis Tickets ──
+  // Necesitamos datos completos — cruzar con correos en memoria si están disponibles
+  var correosFull = state && state.emails ? state.emails : [];
+  var correoMap = {};
+  correosFull.forEach(function(x){ correoMap[x.id]=x; });
+
+  var h2 = CP.map(function(x){
+    var full = correoMap[x.id] || x;
+    var eps  = epsMap2[full.eps_id||x.eps_id] || '';
+    var conResp = idsConResp.has(x.id) ? 'SÍ' : (idsConGest.has(x.id)?'NO':'—');
+    return {
+      Ticket:             full.ticket_id||'',
+      Asunto:             full.subject||full.asunto||'',
+      Cedula_Paciente:    full.cedula||full.cedula_paciente||'',
+      Nombre_Paciente:    full.nombre||full.from_name||'',
+      EPS:                eps,
+      Ciudad:             full.ciudad_paciente||'',
+      Tiene_Tutela:       full.tiene_tutela===true?'SÍ':full.tiene_tutela===false?'NO':'',
+      Estado:             x.estado||'',
+      Num_Gestiones:      x.num_gestiones||full.num_gestiones||0,
+      Con_Respuesta:      conResp,
+      Categoria:          full.categoria_sigi||'',
+      Tipo_PQR:           full.tipo_pqr||'',
+      Canal:              full.canal_contacto||full.origen||'',
+      Recibido:           x.received_at?new Date(x.received_at).toLocaleString('es-CO'):'',
+      Fecha_Cierre:       x.fecha_resolucion?new Date(x.fecha_resolucion).toLocaleString('es-CO'):'',
+      Horas_Resolucion:   (x.fecha_resolucion&&x.received_at)?((new Date(x.fecha_resolucion)-new Date(x.received_at))/3600000).toFixed(1):'',
+    };
+  });
+  var ws2 = XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'Sin tickets en el período'}]);
+  ws2['!cols']=[{wch:16},{wch:40},{wch:13},{wch:26},{wch:20},{wch:16},{wch:12},{wch:13},{wch:13},{wch:14},{wch:16},{wch:11},{wch:12},{wch:18},{wch:18},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Mis Tickets');
+
+  // ── Hoja 3: Mis Gestiones ──
+  var h3 = EV.filter(function(h){return !_EXCL.has(h.evento);}).map(function(h){
+    var full = correoMap[h.correo_id] || {};
+    var eps  = epsMap2[full.eps_id] || '';
+    return {
+      Fecha:           h.created_at?new Date(h.created_at).toLocaleString('es-CO'):'',
+      Ticket:          full.ticket_id||h.correo_id&&h.correo_id.slice(0,8)||'',
+      Evento:          h.evento||'',
+      Descripcion:     h.descripcion||'',
+      Cedula_Paciente: full.cedula||full.cedula_paciente||'',
+      Nombre_Paciente: full.nombre||'',
+      EPS:             eps,
+      Ciudad:          full.ciudad_paciente||'',
+      Estado_Ticket:   full.estado||'',
+      Tipo_PQR:        full.tipo_pqr||'',
+      Horas_Desde_Recepcion: (full.received_at&&h.created_at)?((new Date(h.created_at)-new Date(full.received_at))/3600000).toFixed(1):'',
+    };
+  });
+  var ws3 = XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin gestiones en el período'}]);
+  ws3['!cols']=[{wch:18},{wch:16},{wch:22},{wch:40},{wch:13},{wch:26},{wch:20},{wch:16},{wch:13},{wch:11},{wch:20}];
+  XLSX.utils.book_append_sheet(wb, ws3, 'Mis Gestiones');
+
+  XLSX.writeFile(wb, 'MisMetricas_' + (AGENT_NAME||'Agente').replace(/ /g,'_') + '_' + desde + '_' + hasta + '.xlsx');
+  showToast('Excel generado correctamente','success');
+}
+
 var _agCharts = {};
 function abrirMetricasAgente() {
   var m = document.getElementById('modalMetricasAg');
@@ -6213,6 +6346,53 @@ async function cargarMetricasAgente() {
   try { epsCat = await sb('eps_catalogo?select=id,nombre&order=nombre.asc') || []; } catch(e) {}
   var epsMap = {};
   epsCat.forEach(function(e){ epsMap[e.id] = e.nombre; });
+  if(window._agMetricasPeriodo) window._agMetricasPeriodo.epsCat = epsCat;
+
+  // ── PASO 2b: Correos por received_at para las 6 cards de estado ──
+  var correosPeriodo = [];
+  try {
+    correosPeriodo = await sb('correos?agente_id=eq.' + AGENT_ID +
+      '&received_at=gte.' + desde + 'T00:00:00-05:00' +
+      '&received_at=lte.' + hasta + 'T23:59:59-05:00' +
+      '&origen=neq.saliente&estado=neq.enviado&is_draft=is.false' +
+      '&select=id,estado,num_gestiones,received_at,fecha_resolucion' +
+      '&order=received_at.desc&limit=2000') || [];
+  } catch(e) { correosPeriodo = []; }
+
+  // Calcular Con/Sin Respuesta sobre los ids del período
+  var _idsPeriodo = new Set(correosPeriodo.map(function(x){return x.id;}));
+  var _idsConRespP = new Set(eventos.filter(function(h){
+    return h.evento==='correo_respondido' && _idsPeriodo.has(h.correo_id);
+  }).map(function(h){return h.correo_id;}));
+  var _idsConGestP = new Set(eventos.filter(function(h){
+    return !_EXCL.has(h.evento) && _idsPeriodo.has(h.correo_id);
+  }).map(function(h){return h.correo_id;}));
+
+  var _cardAsig     = correosPeriodo.length;
+  var _cardGest     = correosPeriodo.filter(function(x){return x.estado==='gestion';}).length;
+  var _cardConResp  = _idsConRespP.size;
+  var _cardSinResp  = [..._idsConGestP].filter(function(id){return !_idsConRespP.has(id);}).length;
+  var _cardFirma    = correosPeriodo.filter(function(x){return x.estado==='pendiente_firma';}).length;
+  var _cardCerrados = correosPeriodo.filter(function(x){return x.estado==='solucionado'||x.estado==='gestionado';}).length;
+
+  var _sv = function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
+  _sv('agCardAsig',    _cardAsig);
+  _sv('agCardGest',    _cardGest);
+  _sv('agCardConResp', _cardConResp);
+  _sv('agCardSinResp', _cardSinResp);
+  _sv('agCardFirma',   _cardFirma);
+  _sv('agCardCerrados',_cardCerrados);
+
+  // Guardar para Excel
+  window._agMetricasPeriodo = {
+    correosPeriodo: correosPeriodo,
+    eventos:        eventos,
+    idsConRespP:    _idsConRespP,
+    idsConGestP:    _idsConGestP,
+    epsCat:         [],
+    desde:          desde,
+    hasta:          hasta
+  };
 
   // KPIs reales del período
   var total    = correoIds.length;
