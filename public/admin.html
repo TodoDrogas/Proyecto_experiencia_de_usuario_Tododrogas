@@ -1330,8 +1330,14 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </div>
             <div class="mfiltros-group">
               <span class="mfiltros-label">SEDE</span>
-              <input type="text" id="agFiltroSedeKpi" list="agFiltroSedeList" class="mfiltros-input" placeholder="Buscar sede..." oninput="renderAgentes()" style="min-width:180px">
+              <input type="text" id="agFiltroSedeKpi" list="agFiltroSedeList" class="mfiltros-input" placeholder="Buscar sede..." oninput="renderAgentes()" style="min-width:160px">
               <datalist id="agFiltroSedeList"></datalist>
+            </div>
+            <div class="mfiltros-group">
+              <span class="mfiltros-label">ASESOR</span>
+              <select id="agFiltroAsesorKpi" class="mfiltros-select" onchange="renderAgentes()" style="min-width:180px">
+                <option value="">Todos los asesores</option>
+              </select>
             </div>
             <button onclick="loadAgentesMetrics()" class="mfiltros-btn-primary">🔍 Filtrar</button>
             <button onclick="exportAsesoresExcel()" class="mfiltros-btn-export">⬇ Excel Asesores</button>
@@ -1339,65 +1345,98 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
 
           <!-- KPIs Asesores -->
-          <div class="mkpi-strip mkpi-strip-5">
+          <!-- Fila 1: 6 cards estado (igual que agente individual) -->
+          <div class="mkpi-strip" style="grid-template-columns:repeat(6,1fr);margin-bottom:12px">
             <div class="mkpi-card mkpi-blue">
               <div class="mkpi-icon">📋</div>
               <div class="mkpi-body">
-                <div class="mkpi-val" id="agKpiTotal">—</div>
-                <div class="mkpi-label">Total asignados</div>
-                <div class="mkpi-sub">Casos en el período</div>
+                <div class="mkpi-val" id="agCardAsig">—</div>
+                <div class="mkpi-label">Asignados</div>
+                <div class="mkpi-sub">Llegaron en el período</div>
+              </div>
+            </div>
+            <div class="mkpi-card mkpi-amber">
+              <div class="mkpi-icon">✏️</div>
+              <div class="mkpi-body">
+                <div class="mkpi-val warn" id="agCardGest">—</div>
+                <div class="mkpi-label">En Gestión</div>
+                <div class="mkpi-sub">Estado actual</div>
               </div>
             </div>
             <div class="mkpi-card mkpi-green">
-              <div class="mkpi-icon">✅</div>
+              <div class="mkpi-icon">✉️</div>
               <div class="mkpi-body">
-                <div class="mkpi-val ok" id="agKpiSol">—</div>
-                <div class="mkpi-label">Resueltos</div>
-                <div class="mkpi-sub">Solucionados / gestionados</div>
+                <div class="mkpi-val ok" id="agCardConResp">—</div>
+                <div class="mkpi-label">Con Respuesta</div>
+                <div class="mkpi-sub">Correo enviado</div>
               </div>
             </div>
             <div class="mkpi-card mkpi-amber">
               <div class="mkpi-icon">⏳</div>
               <div class="mkpi-body">
-                <div class="mkpi-val warn" id="agKpiBacklog">—</div>
-                <div class="mkpi-label">Backlog activo</div>
-                <div class="mkpi-sub">Sin resolver</div>
+                <div class="mkpi-val warn" id="agCardSinResp">—</div>
+                <div class="mkpi-label">Sin Respuesta</div>
+                <div class="mkpi-sub">Sin correo enviado</div>
               </div>
             </div>
             <div class="mkpi-card mkpi-violet">
-              <div class="mkpi-icon">⏱️</div>
+              <div class="mkpi-icon">🔐</div>
               <div class="mkpi-body">
-                <div class="mkpi-val" id="agKpiTResol">—</div>
-                <div class="mkpi-label">T. prom. resolución</div>
-                <div class="mkpi-sub">Horas promedio equipo</div>
+                <div class="mkpi-val" id="agCardFirma">—</div>
+                <div class="mkpi-label">Pte. Firma</div>
+                <div class="mkpi-sub">Estado actual</div>
+              </div>
+            </div>
+            <div class="mkpi-card mkpi-teal">
+              <div class="mkpi-icon">✅</div>
+              <div class="mkpi-body">
+                <div class="mkpi-val ok" id="agCardCerrados">—</div>
+                <div class="mkpi-label">Cerrados</div>
+                <div class="mkpi-sub">Solucionados</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fila 2: 5 KPIs (igual que agente individual) -->
+          <div class="mkpi-strip mkpi-strip-5" style="margin-bottom:14px">
+            <div class="mkpi-card mkpi-amber">
+              <div class="mkpi-icon">⏳</div>
+              <div class="mkpi-body">
+                <div class="mkpi-val warn" id="agKpiPend">—</div>
+                <div class="mkpi-label">Pendientes</div>
+                <div class="mkpi-sub">Del período</div>
               </div>
             </div>
             <div class="mkpi-card mkpi-teal">
               <div class="mkpi-icon">🔧</div>
               <div class="mkpi-body">
                 <div class="mkpi-val" id="agKpiGest">—</div>
-                <div class="mkpi-label">Gestiones reg.</div>
-                <div class="mkpi-sub">Acciones del equipo</div>
+                <div class="mkpi-label">Gestiones</div>
+                <div class="mkpi-sub">Total equipo</div>
               </div>
             </div>
-          </div>
-
-          <!-- KPIs Etiquetas Con/Sin Respuesta -->
-          <div class="mkpi-strip" style="grid-template-columns:1fr 1fr;margin-bottom:14px">
-            <div class="mkpi-card" style="border-left:3px solid #16a34a">
-              <div class="mkpi-icon">✉️</div>
+            <div class="mkpi-card mkpi-violet">
+              <div class="mkpi-icon">📊</div>
               <div class="mkpi-body">
-                <div class="mkpi-val ok" id="agKpiConResp">—</div>
-                <div class="mkpi-label">Con Respuesta</div>
-                <div class="mkpi-sub">Tickets con correo enviado</div>
+                <div class="mkpi-val" id="agKpiProm">—</div>
+                <div class="mkpi-label">Promedio</div>
+                <div class="mkpi-sub">Gest./caso</div>
               </div>
             </div>
-            <div class="mkpi-card" style="border-left:3px solid #ca8a04">
-              <div class="mkpi-icon">⏳</div>
+            <div class="mkpi-card mkpi-red">
+              <div class="mkpi-icon">⚖️</div>
               <div class="mkpi-body">
-                <div class="mkpi-val warn" id="agKpiSinResp">—</div>
-                <div class="mkpi-label">Sin Respuesta</div>
-                <div class="mkpi-sub">Con gestión pero sin correo</div>
+                <div class="mkpi-val danger" id="agKpiTutela">—</div>
+                <div class="mkpi-label">Tutelas</div>
+                <div class="mkpi-sub">Con tutela</div>
+              </div>
+            </div>
+            <div class="mkpi-card mkpi-green">
+              <div class="mkpi-icon">🏆</div>
+              <div class="mkpi-body">
+                <div class="mkpi-val ok" id="agKpiCerrados">—</div>
+                <div class="mkpi-label">Cerrados</div>
+                <div class="mkpi-sub">Solucionados</div>
               </div>
             </div>
           </div>
@@ -9178,7 +9217,7 @@ async function loadAgentesMetrics(){
   };
 
   const [correos, eventos, agentes] = await Promise.all([
-    sb(qC('correos?origen=neq.saliente&origen=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
+    sb(qC('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
     sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=20000','created_at')).catch(()=>[]),
     sb('agentes?select=id,nombre,email,activo,sede&order=nombre.asc').catch(()=>[]),
   ]);
@@ -9195,9 +9234,13 @@ async function loadAgentesMetrics(){
 }
 
 function renderAgentes(){
-  const { correos:E, eventos:H, agentes } = _agDatos;
-  const sedeFiltro = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
-  const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!sedeFiltro||esc(a.sede||'')=== sedeFiltro||a.sede===sedeFiltro));
+  const { correos:E_all, eventos:H_all, agentes } = _agDatos;
+  const sedeFiltro   = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
+  const asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
+  const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!sedeFiltro||esc(a.sede||'')=== sedeFiltro||a.sede===sedeFiltro)&&(!asesorFiltro||a.id===asesorFiltro));
+  // Aplicar filtro de asesor a correos y eventos
+  const E = asesorFiltro ? E_all.filter(e=>e.agente_id===asesorFiltro) : E_all;
+  const H = asesorFiltro ? H_all.filter(h=>h.agente_id===asesorFiltro) : H_all;
 
   // ── SET UNIFICADO — única fuente de verdad (usada también en renderAgTimeline y exportAgentesExcel) ──
   // correo_respondido: SÍ cuenta como gestión (cada envío)
@@ -9208,38 +9251,48 @@ function renderAgentes(){
     'reabierto','informacion','pendiente_firma','firma_confirmada'
   ]);
 
-  // ── KPIs GLOBALES ──
-  const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
-  const total   = E.filter(e=>_pqr(e)&&e.estado!=='informacion').length;
-  const solv    = E.filter(e=>_pqr(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
-  const backlog = E.filter(e=>_pqr(e)&&['pendiente','sin_asignar','gestion','pendiente_firma'].includes(e.estado)).length;
-  const resol   = E.filter(e=>_pqr(e)&&e.fecha_resolucion&&e.received_at);
-  const avgH    = resol.length>0
-    ? (resol.reduce((a,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return a+(h>0?h:0);},0)/resol.length).toFixed(1)+'h'
-    : '—';
-  // gestCount usa el set unificado — correo_respondido SÍ cuenta
-  const gestCount = H.filter(h=>h.agente_id&&!EXCL_EVENTOS_SISTEMA.has(h.evento)).length;
+  // ── MISMA lógica que agente individual, pero consolidado (todo el equipo) ──
+  const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='informacion';
+  const _idsPeriodo = new Set(E.filter(_pqr).map(e=>e.id));
+
+  // Gestiones reales = correo_respondido + Gestión registrada (mismo criterio agente)
+  const _esGR = h => {
+    const ev=(h.evento||'').toLowerCase();
+    return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada'));
+  };
+
+  // ── FILA 1: 6 cards de estado (fuente: E filtrado por período) ──
+  const _cardAsig     = E.filter(_pqr).length;
+  // En Gestión y Pte.Firma = estado actual de todos los correos (sin filtro fecha, igual que sidebar agente)
+  const _cardGest     = E.filter(e=>e.estado==='gestion').length;
+  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.evento==='correo_respondido'&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
+  const _idsConGest   = new Set(H.filter(h=>h.correo_id&&_esGR(h)&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
+  const _cardConResp  = _idsConResp.size;
+  const _cardSinResp  = [..._idsConGest].filter(id=>!_idsConResp.has(id)).length;
+  const _cardFirma    = E.filter(e=>e.estado==='pendiente_firma').length;
+  const _cardCerrados = E.filter(e=>_pqr(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
+
+  // ── FILA 2: 5 KPIs (fuente: E período) ──
+  const _kpiPend    = E.filter(e=>_pqr(e)&&e.estado==='pendiente').length;
+  const _kpiGest    = H.filter(h=>h.agente_id&&_esGR(h)&&_idsPeriodo.has(h.correo_id)).length;
+  const _kpiProm    = _cardAsig>0?(_kpiGest/_cardAsig).toFixed(1):'0';
+  const _kpiTutela  = E.filter(e=>_pqr(e)&&e.tiene_tutela===true).length;
+  const _kpiCerr    = _cardCerrados;
 
   const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  setV('agKpiTotal',   total);
-  setV('agKpiSol',     solv);
-  setV('agKpiBacklog', backlog);
-  setV('agKpiTResol',  avgH);
-  setV('agKpiGest',    gestCount);
-  const autoCerrados = E.filter(e=>e.estado==='solucionado').length;
-  setV('agKpiAutoCerrado', autoCerrados);
+  setV('agCardAsig',    _cardAsig);
+  setV('agCardGest',    _cardGest);
+  setV('agCardConResp', _cardConResp);
+  setV('agCardSinResp', _cardSinResp);
+  setV('agCardFirma',   _cardFirma);
+  setV('agCardCerrados',_cardCerrados);
+  setV('agKpiPend',     _kpiPend);
+  setV('agKpiGest',     _kpiGest);
+  setV('agKpiProm',     _kpiProm);
+  setV('agKpiTutela',   _kpiTutela);
+  setV('agKpiCerrados', _kpiCerr);
 
-  // ── KPIs Con/Sin Respuesta — etiqueta BINARIA (¿hubo al menos 1 correo enviado?) ──
-  // _idsConGest = tickets con alguna gestión real del asesor
-  // _idsConResp = tickets donde se envió al menos 1 correo (binario, no cuántos)
-  const _idsConGest   = new Set(H.filter(h=>h.correo_id&&!EXCL_EVENTOS_SISTEMA.has(h.evento)).map(h=>h.correo_id));
-  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.evento==='correo_respondido').map(h=>h.correo_id));
-  const _globalConResp = _idsConResp.size;
-  const _globalSinResp = [..._idsConGest].filter(tid=>!_idsConResp.has(tid)).length;
-  setV('agKpiConResp',  _globalConResp);
-  setV('agKpiSinResp',  _globalSinResp);
-
-  setV('agTableInfo',  `${act.length} asesores activos · ${total} tickets en el período`);
+  setV('agTableInfo', `${act.length} asesores activos · ${_cardAsig} tickets en el período`);
 
   // ── CHART RESUELTOS VS PENDIENTES ──
   if(chartAgSol) chartAgSol.destroy();
@@ -9290,7 +9343,7 @@ function renderAgentes(){
     data:{
       labels: act.map(a=>(a.nombre||'').split(' ')[0]),
       datasets:[{
-        data: act.map(a=>H.filter(h=>h.agente_id===a.id&&!EXCL_EVENTOS_SISTEMA.has(h.evento)).length),
+        data: act.map(a=>H.filter(h=>h.agente_id===a.id&&_esGR(h)&&_idsPeriodo.has(h.correo_id)).length),
         backgroundColor:'#e0f2fe',borderColor:'#0891b2',borderWidth:2,borderRadius:4
       }]
     },
@@ -9320,7 +9373,7 @@ function renderAgentes(){
     const resp    = myH.filter(h=>h.evento==='correo_respondido').length;
     const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
     // gestReg usa el set unificado — correo_respondido SÍ cuenta, firma_confirmada NO
-    const gestReg = myH.filter(h=>!EXCL_EVENTOS_SISTEMA.has(h.evento)).length;
+    const gestReg = myH.filter(h=>_esGR(h)&&_idsPeriodo.has(h.correo_id)).length;
     // Con/Sin Respuesta — etiqueta binaria por asesor (¿hubo al menos 1 correo enviado?)
     const _ticketsConGest = new Set(myH.filter(h=>!EXCL_EVENTOS_SISTEMA.has(h.evento)).map(h=>h.correo_id));
     const _ticketsResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
@@ -9364,12 +9417,13 @@ function renderAgentes(){
     </tr>`;
   }).join('')||'<tr><td colspan="22" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
 
-  // Poblar selector de asesores en timeline
+  // Poblar selector de asesores en timeline Y en barra KPI
   const sel=document.getElementById('agFiltroAsesor');
-  if(sel){
-    sel.innerHTML='<option value="">Todos los asesores</option>'+
-      act.map(a=>`<option value="${a.id}">${esc(a.nombre||'')}</option>`).join('');
-  }
+  const selKpi=document.getElementById('agFiltroAsesorKpi');
+  const _allActivos = agentes.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
+  const _asesorOpts = '<option value="">Todos los asesores</option>'+_allActivos.map(a=>`<option value="${a.id}">${esc(a.nombre||'')}</option>`).join('');
+  if(sel) sel.innerHTML=_asesorOpts;
+  if(selKpi && selKpi.children.length<=1) selKpi.innerHTML=_asesorOpts;
   // Poblar datalist de sedes en filtro Asesores
   const agSedeList=document.getElementById('agFiltroSedeList');
   if(agSedeList&&agSedeList.children.length===0){
@@ -9382,8 +9436,10 @@ function renderAgentes(){
 
 function renderAgTimeline(){
   const { eventos:H, correos:E, agentes } = _agDatos;
+  // Respetar filtro de asesor del KPI bar si está activo
+  const _agFiltKpi = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
   const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
-  const cMap={}; E.forEach(c=>cMap[c.id]=c);
+  const cMap={}; (_asesorKpi?_Efil:E).forEach(c=>cMap[c.id]=c);
 
   // ── SET UNIFICADO — misma lista que renderAgentes ───────────────────
   const EXCL_EVENTOS_SISTEMA = new Set([
@@ -9446,7 +9502,11 @@ function exportAgentesExcel(){
   const wb   = XLSX.utils.book_new();
   const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
   const cMap={}; E.forEach(c=>cMap[c.id]=c);
-  const act  = agentes.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
+  const _asesorKpi = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
+  const act  = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!_asesorKpi||a.id===_asesorKpi));
+  // Si hay filtro de asesor, filtrar también E y H
+  const _Efil = _asesorKpi ? E.filter(e=>e.agente_id===_asesorKpi) : E;
+  const _Hfil = _asesorKpi ? H.filter(h=>h.agente_id===_asesorKpi) : H;
 
   // ── SET UNIFICADO — misma lista que renderAgentes ───────────────────
   const EXCL_EVENTOS_SISTEMA = new Set([
@@ -9454,6 +9514,11 @@ function exportAgentesExcel(){
     'nova_td_generado','asignado_manual','asignado_automatico',
     'reabierto','informacion','pendiente_firma','firma_confirmada'
   ]);
+  // Gestiones reales: mismo criterio que agente individual
+  const _esGR = h => {
+    const ev=(h.evento||'').toLowerCase();
+    return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada'));
+  };
 
   // EPS catálogo: cruzar eps_id → nombre (usa mapa global si ya fue cargado)
   const _epsMap = {};
@@ -9469,7 +9534,8 @@ function exportAgentesExcel(){
     const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
     const sol = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
     // gestReg sincronizado con pantalla (correo_respondido SÍ cuenta)
-    const gestReg = myH.filter(h=>!EXCL_EVENTOS_SISTEMA.has(h.evento)).length;
+    const cidsAsesor = new Set(myE.map(e=>e.id));
+    const gestReg = myH.filter(h=>_esGR(h)&&cidsAsesor.has(h.correo_id)).length;
     // casos_activos DINÁMICO — no leer campo estático de agentes
     const casosActivos = myE.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
     // Con/Sin Respuesta — binario
@@ -9498,6 +9564,7 @@ function exportAgentesExcel(){
       Quejas:                  myE.filter(e=>e.tipo_pqr==='queja').length,
       Peticiones:              myE.filter(e=>e.tipo_pqr==='peticion').length,
       Reclamos:                myE.filter(e=>e.tipo_pqr==='reclamo').length,
+      Tutelas:                 myE.filter(e=>e.tiene_tutela===true).length,
       Alta_Sin_Resolver:       myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
     };
   });
