@@ -6049,7 +6049,7 @@ html[data-theme="dark"] #panelRR [style*="border-bottom:1px solid #e2e8f0"]{bord
         <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #f59e0b">
           <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">En Gestión</div>
           <div style="font-size:26px;font-weight:900;color:#f59e0b;line-height:1" id="agCardGest">—</div>
-          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Del período</div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:3px">Estado actual</div>
         </div>
         <div style="background:#fff;border:1.5px solid #e2e8f0;border-radius:12px;padding:13px 14px;border-top:3px solid #16a34a">
           <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">Con Respuesta</div>
@@ -6214,6 +6214,10 @@ async function exportarMisMetricas() {
   var _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
     'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
     'pendiente_firma','firma_confirmada']);
+  var _esGestionReal = function(h){
+    var ev=(h.evento||'').toLowerCase();
+    return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada'));
+  };
   // Cargar EPS desde catálogo global si está disponible, o desde el período
   var epsMap2 = {};
   var _epsSrc = (state && state.epsCatalogo && state.epsCatalogo.length) ? state.epsCatalogo : (d.epsCat||[]);
@@ -6227,7 +6231,7 @@ async function exportarMisMetricas() {
   var sol    = CP.filter(function(x){return x.estado==='solucionado'||x.estado==='gestionado';}).length;
   var resol  = CP.filter(function(x){return x.fecha_resolucion&&x.received_at;});
   var avgH   = resol.length>0?(resol.reduce(function(s,x){var h=(new Date(x.fecha_resolucion)-new Date(x.received_at))/3600000;return s+(h>0?h:0);},0)/resol.length).toFixed(1):'—';
-  var gestReg= EV.filter(function(h){return !_EXCL.has(h.evento);}).length;
+  var gestReg= EV.filter(_esGestionReal).length;
   var h1 = [{
     Asesor:               AGENT_NAME||'',
     Periodo_Desde:        desde,
@@ -6240,7 +6244,7 @@ async function exportarMisMetricas() {
     Cerrados:             sol,
     Pct_Resolucion:       CP.length>0?Math.round(sol/CP.length*100)+'%':'0%',
     T_Prom_Resolucion_h:  avgH,
-    Pendientes:           correosPeriodo.filter(function(x){return x.estado==='pendiente';}).length,
+    Pendientes:           CP.filter(function(x){return x.estado==='pendiente';}).length,
     Gestiones_Registradas:gestReg,
   }];
   var ws1 = XLSX.utils.json_to_sheet(h1);
@@ -6311,7 +6315,7 @@ async function exportarMisMetricas() {
   XLSX.utils.book_append_sheet(wb, ws2, 'Mis Tickets');
 
   // ── Hoja 3: Mis Gestiones ──
-  var h3 = EV.filter(function(h){return !_EXCL.has(h.evento);}).map(function(h){
+  var h3 = EV.filter(_esGestionReal).map(function(h){
     var co = correoMap[h.correo_id] || {};
     var eps = epsMap2[co.eps_id] || '';
     var cedula = co.cedula_paciente||co.cedula||'';
@@ -6354,6 +6358,8 @@ async function cargarMetricasAgente() {
   document.getElementById('agMetSub').textContent = AGENT_NAME + ' · ' + desde + ' → ' + hasta;
 
   // PASO 1: Traer eventos filtrados por fecha de GESTIÓN (no de llegada del correo)
+  // Solo cuentan como gestión real: correo respondido y gestión registrada
+  var _SOLO_GESTION = new Set(['correo_respondido','Gestión registrada','gestion_registrada']);
   var _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
     'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
     'pendiente_firma','firma_confirmada']);
@@ -6366,7 +6372,11 @@ async function cargarMetricasAgente() {
       '&order=created_at.desc&limit=5000') || [];
   } catch(e) { eventos = []; }
 
-  var eventosGestion = eventos.filter(function(h){ return !_EXCL.has(h.evento); });
+  // Gestiones reales = correo_respondido + Gestión registrada (cualquier variante)
+  var eventosGestion = eventos.filter(function(h){
+    var ev = (h.evento||'').toLowerCase();
+    return ev === 'correo_respondido' || ev === 'gestión registrada' || ev === 'gestion_registrada' || ev === 'gestión #1 registrada' || (ev.startsWith('gestión #') && ev.includes('registrada'));
+  });
   var correoIdsSet   = new Set(eventosGestion.map(function(h){ return h.correo_id; }).filter(Boolean));
   var correoIds      = Array.from(correoIdsSet);
 
@@ -6412,10 +6422,12 @@ async function cargarMetricasAgente() {
   }).map(function(h){return h.correo_id;}));
 
   var _cardAsig     = correosPeriodo.length;
-  var _cardGest     = correosPeriodo.filter(function(x){return x.estado==='gestion';}).length;
+  // En Gestión = estado actual del agente (igual que sidebar, sin filtro de fecha)
+  var _cardGest = (state.emails||[]).filter(function(e){return e.estado==='gestion';}).length;
   var _cardConResp  = _idsConRespP.size;
   var _cardSinResp  = [..._idsConGestP].filter(function(id){return !_idsConRespP.has(id);}).length;
-  var _cardFirma    = correosPeriodo.filter(function(x){return x.estado==='pendiente_firma';}).length;
+  // Pte. Firma = estado actual del agente (igual que sidebar)
+  var _cardFirma = (state.emails||[]).filter(function(e){return e.estado==='pendiente_firma';}).length;
   var _cardCerrados = correosPeriodo.filter(function(x){return x.estado==='solucionado'||x.estado==='gestionado';}).length;
 
   var _sv = function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
