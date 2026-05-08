@@ -6076,10 +6076,10 @@ html[data-theme="dark"] #panelRR [style*="border-bottom:1px solid #e2e8f0"]{bord
       <!-- KPIs -->
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
         <div class="mk">
-          <div class="mk-accent" style="background:linear-gradient(90deg,#16a34a,#22c55e)"></div>
-          <div class="mk-label">Mis casos</div>
-          <div class="mk-val" style="color:#16a34a" id="agKpiCasos">—</div>
-          <div class="mk-sub">Con gestión</div>
+          <div class="mk-accent" style="background:linear-gradient(90deg,#f59e0b,#fbbf24)"></div>
+          <div class="mk-label">Pendientes</div>
+          <div class="mk-val" style="color:#f59e0b" id="agKpiCasos">—</div>
+          <div class="mk-sub">Sin resolver</div>
         </div>
         <div class="mk">
           <div class="mk-accent" style="background:linear-gradient(90deg,#2563eb,#60a5fa)"></div>
@@ -6201,7 +6201,7 @@ function setTema(t) {
 }
 
 // ══ MÉTRICAS ══
-function exportarMisMetricas() {
+async async function exportarMisMetricas() {
   var d = window._agMetricasPeriodo;
   if(!d || !d.correosPeriodo) { showToast('Primero filtra el período para generar el Excel','error'); return; }
 
@@ -6214,8 +6214,14 @@ function exportarMisMetricas() {
   var _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
     'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
     'pendiente_firma','firma_confirmada']);
+  // Cargar EPS desde catálogo global si está disponible, o desde el período
   var epsMap2 = {};
-  (d.epsCat||[]).forEach(function(e){ epsMap2[e.id]=e.nombre; });
+  var _epsSrc = (state && state.epsCatalogo && state.epsCatalogo.length) ? state.epsCatalogo : (d.epsCat||[]);
+  _epsSrc.forEach(function(e){ if(e.id) epsMap2[e.id]=e.nombre; });
+  // Si aún está vacío, intentar cargar de forma síncrona (ya cargado en cargarMetricasAgente)
+  if(!Object.keys(epsMap2).length && d.epsCat && d.epsCat.length) {
+    d.epsCat.forEach(function(e){ if(e.id) epsMap2[e.id]=e.nombre; });
+  }
 
   // ── Hoja 1: Mi Resumen ──
   var sol    = CP.filter(function(x){return x.estado==='solucionado'||x.estado==='gestionado';}).length;
@@ -6234,6 +6240,9 @@ function exportarMisMetricas() {
     Cerrados:             sol,
     Pct_Resolucion:       CP.length>0?Math.round(sol/CP.length*100)+'%':'0%',
     T_Prom_Resolucion_h:  avgH,
+    Pendientes:           (state&&state.emails?state.emails.filter(function(e){
+      return ['pendiente','gestion','pendiente_firma'].indexOf(e.estado)>=0;
+    }).length:0),
     Gestiones_Registradas:gestReg,
   }];
   var ws1 = XLSX.utils.json_to_sheet(h1);
@@ -6241,27 +6250,37 @@ function exportarMisMetricas() {
   XLSX.utils.book_append_sheet(wb, ws1, 'Mi Resumen');
 
   // ── Hoja 2: Mis Tickets ──
-  // Mapa id→correo: primero desde correosPeriodo (BD, más completo), luego memoria
+  // Mapa id→correo completo para cruzar con eventos
   var correoMap = {};
-  // 1. Poblar desde correosPeriodo (tiene todos los campos de BD)
+  // 1. Poblar desde correosPeriodo (BD con todos los campos)
   CP.forEach(function(x){ correoMap[x.id] = x; });
-  // 2. Enriquecer con state.emails (puede tener campos adicionales en .raw)
+  // 2. Enriquecer con state.emails
   var correosFull = state && state.emails ? state.emails : [];
   correosFull.forEach(function(x){
-    if(!correoMap[x.id]) correoMap[x.id] = x;
-    else {
-      // Merge: solo llenar campos vacíos
-      var m = correoMap[x.id];
-      if(!m.ticket_id && (x.ticket_id||x.raw?.ticket_id)) m.ticket_id = x.ticket_id||x.raw?.ticket_id;
-      if(!m.cedula_paciente && (x.raw?.cedula_paciente||x.raw?.cedula)) m.cedula_paciente = x.raw?.cedula_paciente||x.raw?.cedula;
-      if(!m.nombre && x.raw?.nombre) m.nombre = x.raw.nombre;
-      if(!m.eps_id && x.raw?.eps_id) m.eps_id = x.raw.eps_id;
-      if(!m.ciudad_paciente && x.raw?.ciudad_paciente) m.ciudad_paciente = x.raw.ciudad_paciente;
-      if(m.tiene_tutela===undefined||m.tiene_tutela===null) m.tiene_tutela = x.raw?.tiene_tutela;
-      if(!m.categoria_sigi && x.raw?.categoria_sigi) m.categoria_sigi = x.raw.categoria_sigi;
-      if(!m.tipo_pqr && x.tipo_pqr) m.tipo_pqr = x.tipo_pqr;
-    }
+    var raw = x.raw || x;
+    var m = correoMap[x.id];
+    if(!m) { correoMap[x.id] = raw; return; }
+    if(!m.ticket_id) m.ticket_id = raw.ticket_id||'';
+    if(!m.cedula_paciente) m.cedula_paciente = raw.cedula_paciente||raw.cedula||'';
+    if(!m.nombre) m.nombre = raw.nombre||raw.from_name||'';
+    if(!m.eps_id) m.eps_id = raw.eps_id||'';
+    if(!m.ciudad_paciente) m.ciudad_paciente = raw.ciudad_paciente||'';
+    if(m.tiene_tutela===undefined||m.tiene_tutela===null) m.tiene_tutela = raw.tiene_tutela;
+    if(!m.categoria_sigi) m.categoria_sigi = raw.categoria_sigi||'';
+    if(!m.tipo_pqr) m.tipo_pqr = raw.tipo_pqr||'';
+    if(!m.received_at) m.received_at = raw.received_at||'';
   });
+  // 3. Agregar correos de eventos que no están en correosPeriodo (ej: tickets de otros meses)
+  var _idsEnEventos = new Set(EV.map(function(h){return h.correo_id;}).filter(Boolean));
+  var _idsFaltantes = [..._idsEnEventos].filter(function(id){return !correoMap[id];});
+  if(_idsFaltantes.length > 0) {
+    try {
+      var _extraRows = await sb('correos?id=in.(' + _idsFaltantes.slice(0,400).join(',') + ')' +
+        '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,' +
+        'estado,received_at,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto') || [];
+      _extraRows.forEach(function(x){ correoMap[x.id] = x; });
+    } catch(e) { console.warn('[exportar extras]', e.message); }
+  }
 
   var h2 = CP.map(function(x){
     // x viene de correosPeriodo (BD con todos los campos)
@@ -6369,6 +6388,8 @@ async function cargarMetricasAgente() {
   var epsMap = {};
   epsCat.forEach(function(e){ epsMap[e.id] = e.nombre; });
   if(window._agMetricasPeriodo) window._agMetricasPeriodo.epsCat = epsCat;
+  // También guardar en state.epsCatalogo para uso en Excel
+  if(epsCat.length && (!state.epsCatalogo || !state.epsCatalogo.length)) state.epsCatalogo = epsCat;
 
   // ── PASO 2b: Correos por received_at para las 6 cards de estado ──
   var correosPeriodo = [];
@@ -6424,7 +6445,11 @@ async function cargarMetricasAgente() {
   var cerrados = correos.filter(function(c){ return c.estado==='solucionado'||c.estado==='gestionado'; }).length;
   var conTutela = correos.filter(function(c){ return c.tiene_tutela===true; }).length;
 
-  document.getElementById('agKpiCasos').textContent    = total;
+  // Pendientes = correos del agente actualmente en estado pendiente o gestion
+  var pendientes = (state.emails||[]).filter(function(e){
+    return ['pendiente','gestion','pendiente_firma'].indexOf(e.estado) >= 0;
+  }).length;
+  document.getElementById('agKpiCasos').textContent    = pendientes;
   document.getElementById('agKpiGest').textContent     = totalG;
   document.getElementById('agKpiProm').textContent     = total ? (totalG/total).toFixed(1) : '0';
   document.getElementById('agKpiTutela').textContent   = conTutela;
