@@ -6437,23 +6437,24 @@ async function cargarMetricasAgente() {
     hasta:          hasta
   };
 
-  // KPIs reales del período
-  var total    = correoIds.length;
-  var totalG   = eventosGestion.length;
-  var cerrados = correos.filter(function(c){ return c.estado==='solucionado'||c.estado==='gestionado'; }).length;
-  var conTutela = correos.filter(function(c){ return c.tiene_tutela===true; }).length;
+  // ── KPIs segunda fila — todos desde correosPeriodo (misma base que cards superiores) ──
+  var totalG    = eventosGestion.length;  // gestiones reales del período (por fecha evento)
+  var _cpTotal  = correosPeriodo.length;  // total asignados en el período
 
-  // Pendientes = correos del agente actualmente en estado pendiente o gestion
-  // Pendientes del período (misma fuente que las cards superiores)
-  // Pendientes = solo estado 'pendiente' (igual que sidebar)
-  var pendientes = correosPeriodo.filter(function(x){
-    return x.estado === 'pendiente';
-  }).length;
+  // Pendientes del período
+  var pendientes = correosPeriodo.filter(function(x){ return x.estado==='pendiente'; }).length;
+  // Cerrados del período (misma fuente que card CERRADOS de arriba)
+  var cerradosPer = correosPeriodo.filter(function(x){ return x.estado==='solucionado'||x.estado==='gestionado'; }).length;
+  // Tutelas del período
+  var conTutela = correosPeriodo.filter(function(x){ return x.tiene_tutela===true; }).length;
+  // Promedio gestiones por caso del período
+  var promedio = _cpTotal ? (totalG/_cpTotal).toFixed(1) : '0';
+
   document.getElementById('agKpiCasos').textContent    = pendientes;
   document.getElementById('agKpiGest').textContent     = totalG;
-  document.getElementById('agKpiProm').textContent     = total ? (totalG/total).toFixed(1) : '0';
+  document.getElementById('agKpiProm').textContent     = promedio;
   document.getElementById('agKpiTutela').textContent   = conTutela;
-  document.getElementById('agKpiCerrados').textContent = cerrados;
+  document.getElementById('agKpiCerrados').textContent = cerradosPer;
 
   var PAL = ['#60a5fa','#4ade80','#a78bfa','#fb923c','#f472b6','#38bdf8','#facc15','#94a3b8'];
   function contar(arr,k){return arr.reduce(function(a,c){var v=c[k]||'Sin dato';a[v]=(a[v]||0)+1;return a;},{});}
