@@ -95,8 +95,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .ei-badges{display:flex;gap:4px}
 .badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:1px 7px;border-radius:99px}
 .badge.pendiente{background:var(--yellow-l);color:var(--yellow)}
-.badge.gestión{background:var(--blue-l);color:var(--blue)}
-.badge.gestiónado{background:var(--orange-l);color:var(--orange)}
+.badge.gestion{background:var(--blue-l);color:var(--blue)}
+.badge.gestionado{background:var(--orange-l);color:var(--orange)}
 .badge.solucionado{background:var(--green-l);color:var(--green)}
 .badge.pendiente_firma{background:var(--purple-l);color:var(--purple)}
 .badge.sin_asignar{background:#f1f5f9;color:#64748b}
@@ -321,7 +321,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
     <div class="folder-item" onclick="setFolder('gestion',this)">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
       En Gestión
-      <span class="folder-cnt" id="fc-gestión">0</span>
+      <span class="folder-cnt" id="fc-gestion">0</span>
     </div>
     <div class="folder-item" onclick="setFolder('solucionado',this)">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -357,7 +357,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
   <div class="email-detail-outer">
     <div class="no-selection" id="noSelection">
       <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-      <p>Selecciona un correo para gestiónarlo</p>
+      <p>Selecciona un correo para gestionarlo</p>
     </div>
     <div class="email-view" id="emailView" style="display:none"></div>
     <div class="mgmt-right" id="mgmtRight" style="display:none">
@@ -466,17 +466,17 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 
           <div class="gm-field">
             <label class="gm-label">Evidencia <span style="font-weight:400;color:var(--ink3)">(opcional)</span></label>
-            <div id="gestiónEvidenciaZone" style="border:1.5px dashed var(--border);border-radius:var(--r2);padding:9px 12px;background:var(--bg);cursor:pointer;transition:background .15s"
+            <div id="gestionEvidenciaZone" style="border:1.5px dashed var(--border);border-radius:var(--r2);padding:9px 12px;background:var(--bg);cursor:pointer;transition:background .15s"
                  ondragover="event.preventDefault();this.style.background='#EFF6FF';this.style.borderColor='var(--blue)'"
                  ondragleave="this.style.background='var(--bg)';this.style.borderColor='var(--border)'"
-                 ondrop="event.preventDefault();this.style.background='var(--bg)';this.style.borderColor='var(--border)';gestiónEvidenciaAdd(event.dataTransfer.files[0])"
+                 ondrop="event.preventDefault();this.style.background='var(--bg)';this.style.borderColor='var(--border)';gestionEvidenciaAdd(event.dataTransfer.files[0])"
                  onclick="document.getElementById('gestionFiles').click()">
               <div id="gestionEvidenciaPreview" style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink3)">
                 <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                 Clic aquí o arrastra un archivo
               </div>
             </div>
-            <input type="file" id="gestionFiles" style="display:none" accept="*/*" onchange="gestiónEvidenciaAdd(this.files[0]);this.value=''">
+            <input type="file" id="gestionFiles" style="display:none" accept="*/*" onchange="gestionEvidenciaAdd(this.files[0]);this.value=''">
           </div>
         </div>
       </div>
@@ -1463,7 +1463,7 @@ async function loadTicketTimeline(correoId) {
                         emailActual?.origen==='borrador'||emailActual?.estado==='borrador'||emailActual?.is_draft;
     let idBuscar = correoId;
     if (esSaliente && emailActual?.raw?.conversation_id) {
-      // Buscar correo original del hilo (el que tiene gestiónes)
+      // Buscar correo original del hilo (el que tiene gestiones)
       const corrOrig = state.emails.find(e=>
         e.raw?.conversation_id === emailActual.raw.conversation_id &&
         e.origen !== 'saliente' && e.origen !== 'borrador' &&
@@ -1486,8 +1486,8 @@ async function loadTicketTimeline(correoId) {
 }
 
 function renderTimeline(events, container) {
-  if(!events.length) { container.innerHTML='<div class="empty-state"><p>Sin gestiónes registradas</p></div>'; return; }
-  const colorMap={pendiente:'grey',recibido:'grey',asignado:'blue',asignado_manual:'blue',gestión:'yellow',en_gestión:'yellow',observacion:'orange',solucionado:'green',cerrado:'green',cerrado_automatico:'green',reabierto:'red',pendiente_firma:'purple',firma_confirmada:'purple',respondido:'purple',correo_respondido:'purple'};
+  if(!events.length) { container.innerHTML='<div class="empty-state"><p>Sin gestiones registradas</p></div>'; return; }
+  const colorMap={pendiente:'grey',recibido:'grey',asignado:'blue',asignado_manual:'blue',gestion:'yellow',en_gestion:'yellow',observacion:'orange',solucionado:'green',cerrado:'green',cerrado_automatico:'green',reabierto:'red',pendiente_firma:'purple',firma_confirmada:'purple',respondido:'purple',correo_respondido:'purple'};
   const getColor=(ev)=>{
     const k=(ev.evento||ev.accion||'').toLowerCase();
     for(const key of Object.keys(colorMap)) if(k.includes(key)) return colorMap[key];
@@ -1546,7 +1546,7 @@ async function openTlDetail(idx) {
   // ── Fallback para registros antiguos: si no hay datos en meta, buscar en correos ──
   const _esGestion = (ev.evento||ev.accion||'').toLowerCase().includes('gestión') ||
                      (ev.evento||ev.accion||'') === 'Gestión registrada' ||
-                     (ev.num_gestión||meta.num_gestión) === 1;
+                     (ev.num_gestion||meta.num_gestion) === 1;
   const _tieneExtra = meta.eps_nombre||meta.nombre_solicitud||meta.cedula_paciente||meta.eps_id;
 
   let correoData = null;
@@ -1892,7 +1892,7 @@ async function confirmarFirma() {
 // Archivo de evidencia seleccionado para la gestión actual
 let _gestionEvidenciaFile = null;
 
-function gestiónEvidenciaAdd(file) {
+function gestionEvidenciaAdd(file) {
   if(!file) return;
   if(file.size > 50*1024*1024) { showToast('El archivo supera 50 MB','error'); return; }
   _gestionEvidenciaFile = file;
@@ -2432,7 +2432,7 @@ function gRecolectarMeds() {
   return meds;
 }
 
-function gestiónEvidenciaAdd(file) {
+function gestionEvidenciaAdd(file) {
   if(!file) return;
   if(file.size > 50*1024*1024) { showToast('El archivo supera 50 MB','error'); return; }
   _gestionEvidenciaFile = file;
@@ -2955,7 +2955,7 @@ async function saveGestion() {
       patchCorreo.estado = 'gestion';
     }
 
-    // ── Actualizar campos SIGI si el asesor los modificó (todas las gestiónes) ──
+    // ── Actualizar campos SIGI si el asesor los modificó (todas las gestiones) ──
     const _nombreSolUp = document.getElementById('gNombreSolVal')?.value||'';
     const _detalleUp   = document.getElementById('gDetalleVal')?.value||'';
     const _categoriaUp = document.getElementById('gCategoria')?.value||'';
@@ -3677,7 +3677,7 @@ async function syncAll() {
 // ──────────────────────────────────────────────
 // UTILS
 // ──────────────────────────────────────────────
-function estadoLabel(s){return {pendiente:'Pendiente',sin_asignar:'Sin asignar',gestión:'En gestión',gestiónado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;}
+function estadoLabel(s){return {pendiente:'Pendiente',sin_asignar:'Sin asignar',gestion:'En gestión',gestionado:'Gestionado',solucionado:'Solucionado',reabierto:'Reabierto',pendiente_firma:'Pte. por firma'}[s]||s;}
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 
 function _arr(v){if(!v)return[];if(Array.isArray(v))return v;try{const p=JSON.parse(v);return Array.isArray(p)?p:[];}catch(e){return[];}}
@@ -4100,7 +4100,7 @@ async function _mpLoadTimeline(correoId) {
     try{ evs=await sb(`historial_eventos?correo_id=eq.${correoId}&order=created_at.asc`)||[]; }
     catch{ try{ evs=await sb(`historial?correo_id=eq.${correoId}&order=fecha.asc`)||[]; }catch{} }
     if(!evs.length){el.innerHTML='<div class="empty-state"><p>Sin eventos aún</p></div>';return;}
-    const colorMap={pendiente:'grey',recibido:'grey',asignado:'blue',asignado_manual:'blue',gestión:'yellow',en_gestión:'yellow',observacion:'orange',solucionado:'green',cerrado:'green',cerrado_automatico:'green',reabierto:'red',pendiente_firma:'purple',firma_confirmada:'purple',respondido:'purple',correo_respondido:'purple'};
+    const colorMap={pendiente:'grey',recibido:'grey',asignado:'blue',asignado_manual:'blue',gestion:'yellow',en_gestion:'yellow',observacion:'orange',solucionado:'green',cerrado:'green',cerrado_automatico:'green',reabierto:'red',pendiente_firma:'purple',firma_confirmada:'purple',respondido:'purple',correo_respondido:'purple'};
     const getColor=ev=>{const k=(ev.evento||ev.accion||'').toLowerCase();for(const key of Object.keys(colorMap))if(k.includes(key))return colorMap[key];return 'grey';};
     el.innerHTML=evs.map((ev,i)=>{
       const color=getColor(ev);
@@ -4145,7 +4145,7 @@ async function mpOpenTlDetail(idx) {
   if(meta.evidencia_url) adjHTML+=`<div class="tl-detail-row"><div class="tl-detail-label">Evidencia</div><div class="tl-detail-val"><a href="${esc(meta.evidencia_url)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;color:var(--blue);font-weight:600;text-decoration:none;padding:4px 10px;border:1.5px solid var(--blue-l);border-radius:6px;font-size:11px;background:var(--blue-l)">${getFileIcon(meta.evidencia_nombre||'evidencia')} ${esc(meta.evidencia_nombre||'Ver evidencia')} <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a></div></div>`;
 
   // ── Fallback para registros antiguos ──
-  const _esG = (ev.evento||ev.accion||'').toLowerCase().includes('gestión')||(ev.num_gestión||meta.num_gestión)===1;
+  const _esG = (ev.evento||ev.accion||'').toLowerCase().includes('gestión')||(ev.num_gestion||meta.num_gestion)===1;
   const _hasExtra = meta.eps_nombre||meta.nombre_solicitud||meta.cedula_paciente;
   let cd = null;
   if(_esG && !_hasExtra && ev.correo_id) {
@@ -6152,7 +6152,7 @@ async function cargarMetricasAgente() {
   var correoIdsSet   = new Set(eventosGestion.map(function(h){ return h.correo_id; }).filter(Boolean));
   var correoIds      = Array.from(correoIdsSet);
 
-  // PASO 2: Datos de los tickets gestiónados en ese período
+  // PASO 2: Datos de los tickets gestionados en ese período
   var correos = [];
   if(correoIds.length > 0) {
     try {
@@ -6171,7 +6171,7 @@ async function cargarMetricasAgente() {
   // KPIs reales del período
   var total    = correoIds.length;
   var totalG   = eventosGestion.length;
-  var cerrados = correos.filter(function(c){ return c.estado==='solucionado'||c.estado==='gestiónado'; }).length;
+  var cerrados = correos.filter(function(c){ return c.estado==='solucionado'||c.estado==='gestionado'; }).length;
   var conTutela = correos.filter(function(c){ return c.tiene_tutela===true; }).length;
 
   document.getElementById('agKpiCasos').textContent    = total;
@@ -6195,7 +6195,7 @@ async function cargarMetricasAgente() {
   draw('agChartEps',   topN(epsObj,7), 'eps');
   draw('agChartDepto', topN(contar(correos,'departamento_paciente'),8), 'depto');
 
-  // Tendencia por día: gestiónes reales del historial
+  // Tendencia por día: gestiones reales del historial
   var porDia={};
   eventosGestion.forEach(function(h){
     var d=h.created_at&&h.created_at.split('T')[0];
@@ -6211,11 +6211,11 @@ async function cargarMetricasAgente() {
     },options:{plugins:{legend:{display:false}},scales:{x:{grid:{color:'#f1f5f9'},ticks:{color:'#94a3b8',font:{size:10}}},y:{beginAtZero:true,grid:{color:'#f1f5f9'},ticks:{color:'#94a3b8',font:{size:10}}}},responsive:true,maintainAspectRatio:false}});
   }
 
-  // Tabla: gestiónes del período por ticket (columna #Gest = gestiónes en el período, no total)
+  // Tabla: gestiones del período por ticket (columna #Gest = gestiones en el período, no total)
   var gestPorTicket={};
   eventosGestion.forEach(function(h){if(h.correo_id)gestPorTicket[h.correo_id]=(gestPorTicket[h.correo_id]||0)+1;});
   var tbody=document.getElementById('agTablaBody');
-  if(!correos.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:#94a3b8">Sin gestiónes en el período</td></tr>';return;}
+  if(!correos.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:20px;color:#94a3b8">Sin gestiones en el período</td></tr>';return;}
   tbody.innerHTML=correos.map(function(c){
     var eps=epsMap[c.eps_id]||'—';
     var bst=c.estado==='solucionado'?'background:#dcfce7;color:#16a34a':'background:#dbeafe;color:#2563eb';
@@ -6551,7 +6551,7 @@ async function enviarCorreoNuevoAg() {
 <!-- MOTIV_BLOCK -->
 <!-- MOTIV_BLOCK -->
 <style>
-#motivOverlay,#celOverlay{position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:100000;display:none;align-items:center;justify-content:center;padding:16px}
+#motivOverlay,#celOverlay{position:fixed;inset:0;background:rgba(15,23,42,.72);z-index:9999;display:none;align-items:center;justify-content:center;padding:16px}
 .mcard,.ccard{background:#fff;border-radius:20px;width:100%;max-width:420px;overflow:hidden}
 .mcard-top,.ccard-top{background:#1d4ed8;padding:22px 24px 20px;display:flex;align-items:center;gap:14px}
 .mav,.cav{width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#fff;flex-shrink:0}
@@ -6651,13 +6651,13 @@ async function enviarCorreoNuevoAg() {
 </div>
 <script>
 (function(){
-var FD=['Cada gestión que haces hoy alivia la carga de alguien mañana.','Tu trabajo conecta personas con su salud. Eso es extraordinario.','El registro en Mantis es la única evidencia del impacto que generas.','Detrás de cada ticket hay una persona esperando. Tú eres quien la ayuda.','Sin tu registro, tu gestión es invisible. Gracias por hacerla visible.','No gestionas casos, gestionas la confianza de personas en Tododrogas.','Tu constancia hoy construye la reputación de todos nosotros mañana.','Cada correo que respondes es una promesa que Tododrogas cumple.','El detalle que registras hoy puede resolver el problema de alguien mañana.','Tu atención convierte una queja en confianza. Eso vale muchísimo.','Cada caso bien cerrado es un paciente que puede dormir tranquilo.','Tu nombre está detrás de cada solución. Eso nos enorgullece.','La consistencia de tu trabajo es lo que diferencia a Tododrogas.','Gracias por llegar hoy. Tu presencia hace la diferencia.'];
-var FT=['La tarde está avanzada pero tu impacto de hoy ya está registrado.','Cada gestión de la tarde cierra el día con una persona bien atendida.','La calidad de tu atención esta tarde refleja el compromiso de Tododrogas.','Estás en la recta final del día, cada cierre que hagas cuenta.','La tarde es el momento en que más se valora tu presencia. Gracias.','Tu trabajo de hoy en la tarde sostiene la confianza de nuestros pacientes.','Cerrar bien los casos de la tarde es la mejor manera de terminar el turno.','Cada ticket que gestionas esta tarde es un compromiso que Tododrogas mantiene.','La tarde avanza y tú con ella, constante, comprometida, valiosa.','Tu gestión de la tarde deja a alguien con su respuesta antes de dormir.'];
-var FN=['El turno de noche exige lo mejor de cada persona. Tú lo das.','Trabajar en la noche es un acto de compromiso real. Tododrogas lo reconoce.','Mientras otros descansan, tú aseguras que nadie quede sin respuesta.','La noche no detiene tu dedicación. Eso es excepcional.','Tu turno nocturno garantiza que Tododrogas nunca deja a alguien esperando.','Gracias por estar aquí esta noche. Tu trabajo tiene un valor que no se mide.','El esfuerzo nocturno es el que menos se ve pero el que más se siente.','Esta noche, tu gestión es la única red de apoyo que tiene alguien.'];
-var QR=['Detrás de cada caso cerrado hay una persona que recuperó su medicamento, su tranquilidad y su confianza en nosotros. Tu gestión tiene ese poder.','El cierre en Mantis no es un trámite, es la única evidencia del impacto que generas.','Tu trabajo hoy conecta personas con su salud. Cada registro que haces tiene nombre y apellido al otro lado.','Sin tu gestión registrada, tu esfuerzo es invisible. Con ella, construyes la reputación de todo Tododrogas.'];
+var FD=['Cada gestion que haces hoy alivia la carga de alguien manana.','Tu trabajo conecta personas con su salud. Eso es extraordinario.','El registro en Mantis es la unica evidencia del impacto que generas.','Detras de cada ticket hay una persona esperando. Tu eres quien la ayuda.','Sin tu registro, tu gestion es invisible. Gracias por hacerla visible.','No gestionas casos, gestionas la confianza de personas en Tododrogas.','Tu constancia hoy construye la reputacion de todos nosotros manana.','Cada correo que respondes es una promesa que Tododrogas cumple.','El detalle que registras hoy puede resolver el problema de alguien manana.','Tu atencion convierte una queja en confianza. Eso vale muchisimo.','Cada caso bien cerrado es un paciente que puede dormir tranquilo.','Tu nombre esta detras de cada solucion. Eso nos enorgullece.','La consistencia de tu trabajo es lo que diferencia a Tododrogas.','Gracias por llegar hoy. Tu presencia hace la diferencia.'];
+var FT=['La tarde esta avanzada pero tu impacto de hoy ya esta registrado.','Cada gestion de la tarde cierra el dia con una persona bien atendida.','La calidad de tu atencion esta tarde refleja el compromiso de Tododrogas.','Estas en la recta final del dia, cada cierre que hagas cuenta.','La tarde es el momento en que mas se valora tu presencia. Gracias.','Tu trabajo de hoy en la tarde sostiene la confianza de nuestros pacientes.','Cerrar bien los casos de la tarde es la mejor manera de terminar el turno.','Cada ticket que gestionas esta tarde es un compromiso que Tododrogas mantiene.','La tarde avanza y tu con ella, constante, comprometida, valiosa.','Tu gestion de la tarde deja a alguien con su respuesta antes de dormir.'];
+var FN=['El turno de noche exige lo mejor de cada persona. Tu lo das.','Trabajar en la noche es un acto de compromiso real. Tododrogas lo reconoce.','Mientras otros descansan, tu aseguras que nadie quede sin respuesta.','La noche no detiene tu dedicacion. Eso es excepcional.','Tu turno nocturno garantiza que Tododrogas nunca deja a alguien esperando.','Gracias por estar aqui esta noche. Tu trabajo tiene un valor que no se mide.','El esfuerzo nocturno es el que menos se ve pero el que mas se siente.','Esta noche, tu gestion es la unica red de apoyo que tiene alguien.'];
+var QR=['Detras de cada caso cerrado hay una persona que recupero su medicamento, su tranquilidad y su confianza en nosotros. Tu gestion tiene ese poder.','El cierre en Mantis no es un tramite, es la unica evidencia del impacto que generas.','Tu trabajo hoy conecta personas con su salud. Cada registro que haces tiene nombre y apellido al otro lado.','Sin tu gestion registrada, tu esfuerzo es invisible. Con ella, construyes la reputacion de todo Tododrogas.'];
 var EM=['&#127942;','&#129351;','&#127775;','&#127919;','&#128640;','&#128170;','&#128588;','&#10024;','&#127881;','&#11088;','&#128293;','&#128081;'];
 var CC=['#1d4ed8','#facc15','#16a34a','#e11d48','#7c3aed','#0891b2','#ea580c','#ffffff','#f472b6','#34d399'];
-function bank(){var h=new Date().getHours();if(h>=5&&h<12)return{b:FD,k:'mfd',lbl:'☀️ Buenos días'};if(h>=12&&h<19)return{b:FT,k:'mft',lbl:'🌤️ Buenas tardes'};return{b:FN,k:'mfn',lbl:'🌙 Buenas noches'};}
+function bank(){var h=new Date().getHours();if(h>=5&&h<12)return{b:FD,k:'mfd',lbl:'Buenos dias'};if(h>=12&&h<19)return{b:FT,k:'mft',lbl:'Buenas tardes'};return{b:FN,k:'mfn',lbl:'Buenas noches'};}
 function week(){var d=new Date(),j=new Date(d.getFullYear(),0,1);return d.getFullYear()+'W'+Math.ceil(((d-j)/864e5+j.getDay()+1)/7);}
 function pick(){var inf=bank(),b=inf.b,k=inf.k,used=[];try{var r=JSON.parse(localStorage.getItem(k)||'{}');if(r.w===week())used=r.u||[];}catch(e){}if(used.length>=b.length)used=[];var av=b.map(function(_,i){return i;}).filter(function(i){return used.indexOf(i)<0;});var idx=av[Math.floor(Math.random()*av.length)];used.push(idx);try{localStorage.setItem(k,JSON.stringify({w:week(),u:used}));}catch(e){}return b[idx];}
 function initW(){var inf=bank(),nm=(window.AGENT_NAME||'').split(' ')[0]||'Agente';var s=document.getElementById('motivSaludo'),f=document.getElementById('motivFrase');if(s)s.textContent=inf.lbl+', '+nm;if(f)f.textContent=pick();}
