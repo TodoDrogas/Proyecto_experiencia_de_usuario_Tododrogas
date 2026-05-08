@@ -9214,7 +9214,20 @@ async function loadAgentesMetrics(){
     // correos del período (received_at) — base para Asignados/Cerrados/Pendientes
     sb(qC('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
     // eventos del período
-    sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=20000','created_at')).catch(()=>[]),
+    // Paginar eventos: hasta 50000 registros en dos páginas
+    (async()=>{
+      const PAGE=10000;
+      let evs=[], off=0;
+      while(true){
+        const page=await sb(qC(`historial_eventos?agente_id=not.is.null&select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=${PAGE}&offset=${off}`,'created_at')).catch(()=>[]);
+        if(!page||!page.length) break;
+        evs=evs.concat(page);
+        if(page.length<PAGE) break;
+        off+=PAGE;
+        if(off>=50000) break;
+      }
+      return evs;
+    })(),
     sb('agentes?select=id,nombre,email,activo,sede&order=nombre.asc').catch(()=>[]),
     // Si hay filtro de asesor: todos sus correos sin filtro fecha (para En Gestión, Pte.Firma, Con Respuesta)
     _asesorFiltro
@@ -9264,9 +9277,9 @@ function renderAgentes(){
   // ── FILA 1 ──
   const _cardAsig     = E.filter(_pqr).length;
   const _cardGest     = E_actual.filter(e=>e.estado==='gestion').length;
-  // Con/Sin Respuesta: sobre tickets gestionados en el período (no solo los que llegaron)
-  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.evento==='correo_respondido').map(h=>h.correo_id));
-  const _idsConGest   = new Set(H.filter(h=>h.correo_id&&_esGR(h)).map(h=>h.correo_id));
+  // Con/Sin Respuesta: solo eventos de asesores (h.agente_id) para excluir sync automáticos
+  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.agente_id&&h.evento==='correo_respondido').map(h=>h.correo_id));
+  const _idsConGest   = new Set(H.filter(h=>h.correo_id&&h.agente_id&&_esGR(h)).map(h=>h.correo_id));
   const _cardConResp  = _idsConResp.size;
   const _cardSinResp  = [..._idsConGest].filter(id=>!_idsConResp.has(id)).length;
   const _cardFirma    = E_actual.filter(e=>e.estado==='pendiente_firma').length;
@@ -9371,12 +9384,12 @@ function renderAgentes(){
       : '—';
     const tResNum = parseFloat(tRes);
     const tColor  = tRes==='—'?'var(--ink3)':tResNum>48?'var(--red)':tResNum>24?'#ca8a04':'var(--green)';
-    const resp    = myH.filter(h=>h.evento==='correo_respondido').length;
+    const resp    = myH.filter(h=>h.agente_id&&h.evento==='correo_respondido').length;
     const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
     // gestReg usa el set unificado — correo_respondido SÍ cuenta, firma_confirmada NO
     const gestReg = myH.filter(h=>_esGR(h)).length;  // todos los gestionados en el período
     // Con/Sin Respuesta — etiqueta binaria por asesor (¿hubo al menos 1 correo enviado?)
-    const _ticketsConGest = new Set(myH.filter(h=>_esGR(h)).map(h=>h.correo_id));
+    const _ticketsConGest = new Set(myH.filter(h=>h.agente_id&&_esGR(h)).map(h=>h.correo_id));
     const _ticketsResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
     const conRespCount = _ticketsResp.size;
     const sinRespCount = [..._ticketsConGest].filter(tid=>!_ticketsResp.has(tid)).length;
