@@ -6241,30 +6241,49 @@ function exportarMisMetricas() {
   XLSX.utils.book_append_sheet(wb, ws1, 'Mi Resumen');
 
   // ── Hoja 2: Mis Tickets ──
-  // Necesitamos datos completos — cruzar con correos en memoria si están disponibles
-  var correosFull = state && state.emails ? state.emails : [];
+  // Mapa id→correo: primero desde correosPeriodo (BD, más completo), luego memoria
   var correoMap = {};
-  correosFull.forEach(function(x){ correoMap[x.id]=x; });
+  // 1. Poblar desde correosPeriodo (tiene todos los campos de BD)
+  CP.forEach(function(x){ correoMap[x.id] = x; });
+  // 2. Enriquecer con state.emails (puede tener campos adicionales en .raw)
+  var correosFull = state && state.emails ? state.emails : [];
+  correosFull.forEach(function(x){
+    if(!correoMap[x.id]) correoMap[x.id] = x;
+    else {
+      // Merge: solo llenar campos vacíos
+      var m = correoMap[x.id];
+      if(!m.ticket_id && (x.ticket_id||x.raw?.ticket_id)) m.ticket_id = x.ticket_id||x.raw?.ticket_id;
+      if(!m.cedula_paciente && (x.raw?.cedula_paciente||x.raw?.cedula)) m.cedula_paciente = x.raw?.cedula_paciente||x.raw?.cedula;
+      if(!m.nombre && x.raw?.nombre) m.nombre = x.raw.nombre;
+      if(!m.eps_id && x.raw?.eps_id) m.eps_id = x.raw.eps_id;
+      if(!m.ciudad_paciente && x.raw?.ciudad_paciente) m.ciudad_paciente = x.raw.ciudad_paciente;
+      if(m.tiene_tutela===undefined||m.tiene_tutela===null) m.tiene_tutela = x.raw?.tiene_tutela;
+      if(!m.categoria_sigi && x.raw?.categoria_sigi) m.categoria_sigi = x.raw.categoria_sigi;
+      if(!m.tipo_pqr && x.tipo_pqr) m.tipo_pqr = x.tipo_pqr;
+    }
+  });
 
   var h2 = CP.map(function(x){
-    var mem  = correoMap[x.id] || {};  // datos en memoria (si están)
-    // Prioridad: campo directo de correosPeriodo (viene de BD) > memoria
-    var eps  = epsMap2[x.eps_id||mem.eps_id||mem.raw?.eps_id] || '';
+    // x viene de correosPeriodo (BD con todos los campos)
+    // correoMap[x.id] ya es x mismo (poblado arriba desde CP)
+    var eps = epsMap2[x.eps_id] || '';
     var conResp = idsConResp.has(x.id) ? 'SÍ' : (idsConGest.has(x.id)?'NO':'—');
+    var cedula = x.cedula_paciente||x.cedula||'';
+    var tutela = x.tiene_tutela===true?'SÍ':x.tiene_tutela===false?'NO':'';
     return {
-      Ticket:             x.ticket_id||mem.ticket_id||mem.raw?.ticket_id||'',
-      Asunto:             x.subject||mem.asunto||mem.raw?.subject||'',
-      Cedula_Paciente:    x.cedula_paciente||mem.raw?.cedula_paciente||mem.raw?.cedula||'',
-      Nombre_Paciente:    x.nombre||mem.remitente_nombre||mem.raw?.from_name||'',
+      Ticket:             x.ticket_id||'',
+      Asunto:             x.subject||'',
+      Cedula_Paciente:    cedula,
+      Nombre_Paciente:    x.nombre||x.from_name||'',
       EPS:                eps,
-      Ciudad:             x.ciudad_paciente||mem.raw?.ciudad_paciente||'',
-      Tiene_Tutela:       x.tiene_tutela===true?'SÍ':x.tiene_tutela===false?'NO':(mem.raw?.tiene_tutela===true?'SÍ':mem.raw?.tiene_tutela===false?'NO':''),
+      Ciudad:             x.ciudad_paciente||'',
+      Tiene_Tutela:       tutela,
       Estado:             x.estado||'',
       Num_Gestiones:      x.num_gestiones||0,
       Con_Respuesta:      conResp,
-      Categoria:          x.categoria_sigi||mem.raw?.categoria_sigi||'',
-      Tipo_PQR:           x.tipo_pqr||mem.tipo_pqr||mem.raw?.tipo_pqr||'',
-      Canal:              x.canal_contacto||x.origen||mem.raw?.canal_contacto||mem.origen||'',
+      Categoria:          x.categoria_sigi||'',
+      Tipo_PQR:           x.tipo_pqr||'',
+      Canal:              x.canal_contacto||x.origen||'',
       Recibido:           x.received_at?new Date(x.received_at).toLocaleString('es-CO'):'',
       Fecha_Cierre:       x.fecha_resolucion?new Date(x.fecha_resolucion).toLocaleString('es-CO'):'',
       Horas_Resolucion:   (x.fecha_resolucion&&x.received_at)?((new Date(x.fecha_resolucion)-new Date(x.received_at))/3600000).toFixed(1):'',
@@ -6276,20 +6295,21 @@ function exportarMisMetricas() {
 
   // ── Hoja 3: Mis Gestiones ──
   var h3 = EV.filter(function(h){return !_EXCL.has(h.evento);}).map(function(h){
-    var full = correoMap[h.correo_id] || {};
-    var eps  = epsMap2[full.eps_id] || '';
+    var co = correoMap[h.correo_id] || {};
+    var eps = epsMap2[co.eps_id] || '';
+    var cedula = co.cedula_paciente||co.cedula||'';
     return {
       Fecha:           h.created_at?new Date(h.created_at).toLocaleString('es-CO'):'',
-      Ticket:          full.ticket_id||h.correo_id&&h.correo_id.slice(0,8)||'',
+      Ticket:          co.ticket_id||(h.correo_id?h.correo_id.slice(0,8):''),
       Evento:          h.evento||'',
       Descripcion:     h.descripcion||'',
-      Cedula_Paciente: full.cedula||full.cedula_paciente||'',
-      Nombre_Paciente: full.nombre||'',
+      Cedula_Paciente: cedula,
+      Nombre_Paciente: co.nombre||co.from_name||'',
       EPS:             eps,
-      Ciudad:          full.ciudad_paciente||'',
-      Estado_Ticket:   full.estado||'',
-      Tipo_PQR:        full.tipo_pqr||'',
-      Horas_Desde_Recepcion: (full.received_at&&h.created_at)?((new Date(h.created_at)-new Date(full.received_at))/3600000).toFixed(1):'',
+      Ciudad:          co.ciudad_paciente||'',
+      Estado_Ticket:   co.estado||'',
+      Tipo_PQR:        co.tipo_pqr||'',
+      Horas_Desde_Recepcion: (co.received_at&&h.created_at)?((new Date(h.created_at)-new Date(co.received_at))/3600000).toFixed(1):'',
     };
   });
   var ws3 = XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin gestiones en el período'}]);
@@ -6357,9 +6377,9 @@ async function cargarMetricasAgente() {
       '&received_at=gte.' + desde + 'T00:00:00-05:00' +
       '&received_at=lte.' + hasta + 'T23:59:59-05:00' +
       '&origen=neq.saliente&estado=neq.enviado&is_draft=is.false' +
-      '&select=id,ticket_id,subject,estado,num_gestiones,received_at,fecha_resolucion,'+
-        'cedula_paciente,nombre,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,'+
-        'tipo_pqr,canal_contacto,origen,from_name,from_email' +
+      '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,'+
+        'estado,num_gestiones,received_at,fecha_resolucion,eps_id,ciudad_paciente,'+
+        'tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto,origen,prioridad,horas_sla' +
       '&order=received_at.desc&limit=2000') || [];
   } catch(e) { correosPeriodo = []; }
 
