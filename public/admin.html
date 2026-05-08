@@ -1397,8 +1397,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </div>
           </div>
 
-          <!-- Fila 2: 5 KPIs (igual que agente individual) -->
-          <div class="mkpi-strip mkpi-strip-5" style="margin-bottom:14px">
+          <!-- Fila 2: 4 KPIs sin Cerrados (ya está en fila 1) -->
+          <div class="mkpi-strip" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
             <div class="mkpi-card mkpi-amber">
               <div class="mkpi-icon">⏳</div>
               <div class="mkpi-body">
@@ -1429,14 +1429,6 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
                 <div class="mkpi-val danger" id="agKpiTutela">—</div>
                 <div class="mkpi-label">Tutelas</div>
                 <div class="mkpi-sub">Con tutela</div>
-              </div>
-            </div>
-            <div class="mkpi-card mkpi-green">
-              <div class="mkpi-icon">🏆</div>
-              <div class="mkpi-body">
-                <div class="mkpi-val ok" id="agKpiCerrados">—</div>
-                <div class="mkpi-label">Cerrados</div>
-                <div class="mkpi-sub">Solucionados</div>
               </div>
             </div>
           </div>
@@ -9297,7 +9289,7 @@ function renderAgentes(){
   setV('agKpiGest',     _kpiGest);
   setV('agKpiProm',     _kpiProm);
   setV('agKpiTutela',   _kpiTutela);
-  setV('agKpiCerrados', _kpiCerr);
+  // agKpiCerrados eliminado (Cerrados ya está en fila 1 como agCardCerrados)
 
   setV('agTableInfo', `${act.length} asesores activos · ${_cardAsig} tickets en el período`);
 
@@ -9382,7 +9374,7 @@ function renderAgentes(){
     // gestReg usa el set unificado — correo_respondido SÍ cuenta, firma_confirmada NO
     const gestReg = myH.filter(h=>_esGR(h)&&_idsPeriodo.has(h.correo_id)).length;
     // Con/Sin Respuesta — etiqueta binaria por asesor (¿hubo al menos 1 correo enviado?)
-    const _ticketsConGest = new Set(myH.filter(h=>!EXCL_EVENTOS_SISTEMA.has(h.evento)).map(h=>h.correo_id));
+    const _ticketsConGest = new Set(myH.filter(h=>_esGR(h)).map(h=>h.correo_id));
     const _ticketsResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
     const conRespCount = _ticketsResp.size;
     const sinRespCount = [..._ticketsConGest].filter(tid=>!_ticketsResp.has(tid)).length;
@@ -9442,14 +9434,13 @@ function renderAgentes(){
 }
 
 function renderAgTimeline(){
-  const { eventos:H, correos:E, agentes } = _agDatos;
-  // Respetar filtro de asesor del KPI bar si está activo
-  const _agFiltKpi = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
+  const { eventos:H_tl, correos:E_tl, agentes } = _agDatos;
+  // Respetar filtro de asesor del KPI bar
+  const _agFiltKpiTl = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
+  const H = _agFiltKpiTl ? H_tl.filter(h=>h.agente_id===_agFiltKpiTl) : H_tl;
+  const E = _agFiltKpiTl ? E_tl.filter(e=>e.agente_id===_agFiltKpiTl) : E_tl;
   const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
-  const cMap={}; (_asesorKpi?_Efil:E).forEach(c=>cMap[c.id]=c);
-
-  // ── SET UNIFICADO — misma lista que renderAgentes ───────────────────
-  const EXCL_EVENTOS_SISTEMA = new Set([
+  const cMap={}; E.forEach(co=>cMap[co.id]=co);  const EXCL_EVENTOS_SISTEMA = new Set([
     'sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
     'nova_td_generado','asignado_manual','asignado_automatico',
     'reabierto','informacion','pendiente_firma','firma_confirmada'
@@ -9546,7 +9537,7 @@ function exportAgentesExcel(){
     // casos_activos DINÁMICO — no leer campo estático de agentes
     const casosActivos = myE.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
     // Con/Sin Respuesta — binario
-    const _tConGest = new Set(myH.filter(h=>!EXCL_EVENTOS_SISTEMA.has(h.evento)).map(h=>h.correo_id));
+    const _tConGest = new Set(myH.filter(h=>_esGR(h)).map(h=>h.correo_id));
     const _tResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
     return {
       Asesor:                  a.nombre||'',
