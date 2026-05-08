@@ -9249,12 +9249,12 @@ function renderAgentes(){
 
   // ── MISMA lógica que agente individual, consolidado ──
   const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='informacion';
-  // _idsPeriodo: correos del período POR fecha llegada
-  // _idsEventosPeriodo: correos referenciados por eventos del período (incluye de otros meses)
-  const _idsPeriodo      = new Set(E.filter(_pqr).map(e=>e.id));
-  const _idsEventosPeriodo = new Set(H.filter(h=>h.correo_id).map(h=>h.correo_id));
-  // Para Con Respuesta y Gestiones: usar correos que llegaron en el período
-  // (igual que agente: gestiones solo de tickets del período)
+  // _idsPeriodo: correos que LLEGARON en el período (para Asignados, Cerrados, Pendientes, Tutelas)
+  const _idsPeriodo = new Set(E.filter(_pqr).map(e=>e.id));
+
+  // _idsGestionados: todos los correos referenciados en eventos del período (incluye llegados en meses anteriores)
+  // Esto es lo que usa el agente: gestiones del período sin importar cuándo llegó el correo
+  const _idsGestionados = new Set(H.filter(h=>h.correo_id&&h.agente_id).map(h=>h.correo_id));
 
   const _esGR = h => {
     const ev=(h.evento||'').toLowerCase();
@@ -9264,8 +9264,9 @@ function renderAgentes(){
   // ── FILA 1 ──
   const _cardAsig     = E.filter(_pqr).length;
   const _cardGest     = E_actual.filter(e=>e.estado==='gestion').length;
-  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.evento==='correo_respondido'&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
-  const _idsConGest   = new Set(H.filter(h=>h.correo_id&&_esGR(h)&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
+  // Con/Sin Respuesta: sobre tickets gestionados en el período (no solo los que llegaron)
+  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.evento==='correo_respondido').map(h=>h.correo_id));
+  const _idsConGest   = new Set(H.filter(h=>h.correo_id&&_esGR(h)).map(h=>h.correo_id));
   const _cardConResp  = _idsConResp.size;
   const _cardSinResp  = [..._idsConGest].filter(id=>!_idsConResp.has(id)).length;
   const _cardFirma    = E_actual.filter(e=>e.estado==='pendiente_firma').length;
@@ -9273,7 +9274,8 @@ function renderAgentes(){
 
   // ── FILA 2 ──
   const _kpiPend    = E.filter(e=>_pqr(e)&&e.estado==='pendiente').length;
-  const _kpiGest    = H.filter(h=>h.agente_id&&_esGR(h)&&_idsPeriodo.has(h.correo_id)).length;
+  // Gestiones: todos los eventos reales del período (igual que agente)
+  const _kpiGest    = H.filter(h=>h.agente_id&&_esGR(h)).length;
   const _kpiProm    = _cardAsig>0?(_kpiGest/_cardAsig).toFixed(1):'0';
   const _kpiTutela  = E.filter(e=>_pqr(e)&&e.tiene_tutela===true).length;
   const _kpiCerr    = _cardCerrados;
@@ -9342,7 +9344,7 @@ function renderAgentes(){
     data:{
       labels: act.map(a=>(a.nombre||'').split(' ')[0]),
       datasets:[{
-        data: act.map(a=>H.filter(h=>h.agente_id===a.id&&_esGR(h)&&_idsPeriodo.has(h.correo_id)).length),
+        data: act.map(a=>H.filter(h=>h.agente_id===a.id&&_esGR(h)).length),
         backgroundColor:'#e0f2fe',borderColor:'#0891b2',borderWidth:2,borderRadius:4
       }]
     },
@@ -9372,7 +9374,7 @@ function renderAgentes(){
     const resp    = myH.filter(h=>h.evento==='correo_respondido').length;
     const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
     // gestReg usa el set unificado — correo_respondido SÍ cuenta, firma_confirmada NO
-    const gestReg = myH.filter(h=>_esGR(h)&&_idsPeriodo.has(h.correo_id)).length;
+    const gestReg = myH.filter(h=>_esGR(h)).length;  // todos los gestionados en el período
     // Con/Sin Respuesta — etiqueta binaria por asesor (¿hubo al menos 1 correo enviado?)
     const _ticketsConGest = new Set(myH.filter(h=>_esGR(h)).map(h=>h.correo_id));
     const _ticketsResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
