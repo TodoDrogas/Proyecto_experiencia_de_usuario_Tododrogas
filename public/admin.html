@@ -9216,13 +9216,23 @@ async function loadAgentesMetrics(){
     return r;
   };
 
-  const [correos, eventos, agentes] = await Promise.all([
+  const _asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
+
+  const [correos, eventos, agentes, correosAsesorActual] = await Promise.all([
+    // correos del período (received_at) — base para Asignados/Cerrados/Pendientes
     sb(qC('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
+    // eventos del período
     sb(qC('historial_eventos?select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=20000','created_at')).catch(()=>[]),
     sb('agentes?select=id,nombre,email,activo,sede&order=nombre.asc').catch(()=>[]),
+    // Si hay filtro de asesor: todos sus correos sin filtro fecha (para En Gestión, Pte.Firma, Con Respuesta)
+    _asesorFiltro
+      ? sb(`correos?agente_id=eq.${_asesorFiltro}&origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,agente_id,estado,received_at&order=received_at.desc&limit=5000`).catch(()=>[])
+      : Promise.resolve(null),
   ]);
 
   _agDatos = {
+    correosAsesorActual: correosAsesorActual||null,
+    asesorFiltroActivo: _asesorFiltro||null,
     correos: correos||[],
     eventos: eventos||[],
     agentes: agentes||[],
@@ -9234,45 +9244,42 @@ async function loadAgentesMetrics(){
 }
 
 function renderAgentes(){
-  const { correos:E_all, eventos:H_all, agentes } = _agDatos;
+  const { correos:E_all, eventos:H_all, agentes, correosAsesorActual } = _agDatos;
   const sedeFiltro   = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
   const asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
   const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!sedeFiltro||esc(a.sede||'')=== sedeFiltro||a.sede===sedeFiltro)&&(!asesorFiltro||a.id===asesorFiltro));
-  // Aplicar filtro de asesor a correos y eventos
+
+  // E = correos del período filtrados; E_actual = TODOS los correos del asesor (sin filtro fecha)
   const E = asesorFiltro ? E_all.filter(e=>e.agente_id===asesorFiltro) : E_all;
   const H = asesorFiltro ? H_all.filter(h=>h.agente_id===asesorFiltro) : H_all;
+  // E_actual: para En Gestión y Pte.Firma (incluye correos de meses anteriores activos)
+  const E_actual = asesorFiltro ? (correosAsesorActual||E) : E_all;
 
-  // ── SET UNIFICADO — única fuente de verdad (usada también en renderAgTimeline y exportAgentesExcel) ──
-  // correo_respondido: SÍ cuenta como gestión (cada envío)
-  // firma_confirmada:  NO cuenta (cambio de estado, no acción de gestión)
-  const EXCL_EVENTOS_SISTEMA = new Set([
-    'sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
-    'nova_td_generado','asignado_manual','asignado_automatico',
-    'reabierto','informacion','pendiente_firma','firma_confirmada'
-  ]);
-
-  // ── MISMA lógica que agente individual, pero consolidado (todo el equipo) ──
+  // ── MISMA lógica que agente individual, consolidado ──
   const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='informacion';
-  const _idsPeriodo = new Set(E.filter(_pqr).map(e=>e.id));
+  // _idsPeriodo: correos del período POR fecha llegada
+  // _idsEventosPeriodo: correos referenciados por eventos del período (incluye de otros meses)
+  const _idsPeriodo      = new Set(E.filter(_pqr).map(e=>e.id));
+  const _idsEventosPeriodo = new Set(H.filter(h=>h.correo_id).map(h=>h.correo_id));
+  // Para Con Respuesta y Gestiones: usar correos que llegaron en el período
+  // (igual que agente: gestiones solo de tickets del período)
 
-  // Gestiones reales = correo_respondido + Gestión registrada (mismo criterio agente)
   const _esGR = h => {
     const ev=(h.evento||'').toLowerCase();
     return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada'));
   };
 
-  // ── FILA 1: 6 cards de estado (fuente: E filtrado por período) ──
+  // ── FILA 1 ──
   const _cardAsig     = E.filter(_pqr).length;
-  // En Gestión y Pte.Firma = estado actual de todos los correos (sin filtro fecha, igual que sidebar agente)
-  const _cardGest     = E.filter(e=>e.estado==='gestion').length;
+  const _cardGest     = E_actual.filter(e=>e.estado==='gestion').length;
   const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.evento==='correo_respondido'&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
   const _idsConGest   = new Set(H.filter(h=>h.correo_id&&_esGR(h)&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
   const _cardConResp  = _idsConResp.size;
   const _cardSinResp  = [..._idsConGest].filter(id=>!_idsConResp.has(id)).length;
-  const _cardFirma    = E.filter(e=>e.estado==='pendiente_firma').length;
+  const _cardFirma    = E_actual.filter(e=>e.estado==='pendiente_firma').length;
   const _cardCerrados = E.filter(e=>_pqr(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
 
-  // ── FILA 2: 5 KPIs (fuente: E período) ──
+  // ── FILA 2 ──
   const _kpiPend    = E.filter(e=>_pqr(e)&&e.estado==='pendiente').length;
   const _kpiGest    = H.filter(h=>h.agente_id&&_esGR(h)&&_idsPeriodo.has(h.correo_id)).length;
   const _kpiProm    = _cardAsig>0?(_kpiGest/_cardAsig).toFixed(1):'0';
