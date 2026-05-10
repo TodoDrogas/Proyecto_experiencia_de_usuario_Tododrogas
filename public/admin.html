@@ -1507,29 +1507,33 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </div>
           </div>
 
-          <!-- PENDIENTES POR FIRMA -->
+          <!-- LÍNEA DE TIEMPO -->
           <div class="mtable-card">
             <div class="mtable-header" style="flex-wrap:wrap;gap:8px">
-              <div class="mtable-title">🔐 Pendientes por firma</div>
+              <div class="mtable-title">🕐 Historial de gestiones del equipo</div>
               <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <select id="agFiltroAsesor" onchange="renderPteFirma()" class="mfiltros-select" style="font-size:11px">
+                <select id="agFiltroAsesor" onchange="renderAgTimeline()" class="mfiltros-select" style="font-size:11px">
                   <option value="">Todos los asesores</option>
                 </select>
-                <span id="agFirmaCount" style="font-size:10px;color:var(--ink3)"></span>
+                <select id="agFiltroEvento" onchange="renderAgTimeline()" class="mfiltros-select" style="font-size:11px">
+                  <option value="">Todos los eventos</option>
+                  <option value="asignado_manual">Asignación</option>
+                  <option value="correo_respondido">Respuesta enviada</option>
+                  <option value="pendiente_firma">Pendiente firma</option>
+                  <option value="firma_confirmada">Firma confirmada</option>
+                </select>
+                <span id="agTimelineCount" style="font-size:10px;color:var(--ink3)"></span>
               </div>
             </div>
             <div style="overflow-x:auto">
             <table class="m-tbl">
               <thead><tr>
-                <th>Asesor</th><th>Ticket</th><th>Paciente</th><th>EPS</th>
-                <th>Tipo PQR</th><th>Prioridad</th><th>Recibido</th><th>Días espera</th>
+                <th>Fecha / Hora</th><th>Asesor</th><th>Ticket</th><th>Evento</th>
+                <th>Prioridad</th><th>T. desde recepción</th><th>Observaciones</th>
               </tr></thead>
-              <tbody id="agFirmaBody">
-                <tr><td colspan="8" style="padding:20px;text-align:center;color:var(--ink3)">Filtra un período para cargar los datos</td></tr>
-              </tbody>
+              <tbody id="agTimelineBody"></tbody>
             </table>
             </div>
-            <div style="font-size:10px;color:var(--ink3);padding:8px 12px;font-style:italic">💡 Doble clic en una fila para abrir el correo</div>
           </div>
 
       </div><!-- /mtab-asesores -->
@@ -1558,13 +1562,12 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
 
           <!-- KPIs SIGI — Fila 1 -->
-          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:8px">
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:8px">
             <div class="kpi" style="border-left:3px solid #2563eb"><div class="kpi-label">Recibidos</div><div class="kpi-val" id="sigiKpiRecibidos">—</div><div class="kpi-sub">Llegaron en el período</div></div>
             <div class="kpi" style="border-left:3px solid #f59e0b"><div class="kpi-label">En Gestión</div><div class="kpi-val warn" id="sigiKpiEnGest">—</div><div class="kpi-sub">Del período</div></div>
             <div class="kpi" style="border-left:3px solid #7c3aed"><div class="kpi-label">Pte. Firma</div><div class="kpi-val" id="sigiKpiPteFirma">—</div><div class="kpi-sub">Del período</div></div>
             <div class="kpi" style="border-left:3px solid #0891b2"><div class="kpi-label">Cerrados</div><div class="kpi-val ok" id="sigiKpiCerrados">—</div><div class="kpi-sub">Solucionados</div></div>
             <div class="kpi" style="border-left:3px solid #16a34a"><div class="kpi-label">Con Respuesta</div><div class="kpi-val ok" id="sigiKpiConResp">—</div><div class="kpi-sub">Correo enviado</div></div>
-          <div class="kpi" style="border-left:3px solid #ca8a04"><div class="kpi-label">Sin Respuesta</div><div class="kpi-val warn" id="sigiKpiSinResp">—</div><div class="kpi-sub">Con gestión sin correo</div></div>
           </div>
           <!-- KPIs SIGI — Fila 2 -->
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
@@ -2384,8 +2387,7 @@ async function loadSigiMetrics() {
     const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
     // Con Respuesta: eventos del período cuyo correo llegó en el período
-    const _idsConResp = new Set(eventosResp.filter(h=>_recibidosIds.has(h.correo_id)).map(h=>h.correo_id));
-    const conResp   = _idsConResp.size;
+    const conResp   = new Set(eventosResp.filter(h=>_recibidosIds.has(h.correo_id)).map(h=>h.correo_id)).size;
 
     // ── KPIs Fila 2 ──
     const pendientes  = correosRecibidos.filter(x=>x.estado==='pendiente').length;
@@ -2397,8 +2399,7 @@ async function loadSigiMetrics() {
     const gPend  = correosGlobal.filter(x=>x.estado==='pendiente').length;
     const gFirma = correosGlobal.filter(x=>x.estado==='pendiente_firma').length;
     const gGest  = correosGlobal.filter(x=>x.estado==='gestion').length;
-    // Info global: usar state.emails que ya tiene todos los correos en memoria
-    const gInfo  = (state?.emails||[]).filter(e=>e.estado==='informacion').length || correosGlobal.filter(x=>x.estado==='informacion').length;
+    const gInfo  = correosGlobal.filter(x=>x.estado==='informacion').length;
 
     const sv = (id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
     sv('sigiKpiRecibidos', recibidos);
@@ -2406,10 +2407,6 @@ async function loadSigiMetrics() {
     sv('sigiKpiPteFirma',  pteFirma);
     sv('sigiKpiCerrados',  cerrados);
     sv('sigiKpiConResp',   conResp);
-    // Sin Respuesta: tienen num_gestiones>0 pero no tienen correo_respondido en el período
-    const _recibConGest = new Set(correos.filter(x=>x.num_gestiones>0).map(x=>x.id));
-    const sinResp = [..._recibConGest].filter(id=>!_idsConResp.has(id)).length;
-    sv('sigiKpiSinResp',   sinResp);
     sv('sigiKpiPend',      pendientes);
     sv('sigiKpiGest',      totalGest);
     sv('sigiKpiTutela',    conTutela);
@@ -2546,7 +2543,7 @@ async function exportarSIGI() {
     ) || [];
 
     // Cargar agentes FRESCOS directamente — no usar state.agents (puede estar desactualizado)
-    const agentesRaw = await sb('agentes?select=id,nombre,email,activo&order=nombre.asc') || [];
+    const agentesRaw = await sb('agentes?select=id,nombre,email,activo,cedula&order=nombre.asc') || [];
     // Indexar por id Y por nombre (para buscar por asignado_a que es texto)
     const agById   = {};
     const agByName = {};
@@ -2562,11 +2559,12 @@ async function exportarSIGI() {
     }
 
     const epsCat = state.epsCatalogo || await sb('eps_catalogo?order=nombre.asc') || [];
-    const correoIds = correos.map(c => c.id).filter(Boolean);
-    const correoIdsStr = correoIds.join(',');
     const meds = correoIdsStr
       ? await sb(`gestiones_medicamentos?correo_id=in.(${correoIdsStr.slice(0,2000)})&order=created_at.asc&limit=5000`) || []
       : [];
+
+    const correoIds = correos.map(c => c.id).filter(Boolean);
+    const correoIdsStr = correoIds.join(',');
     const hist = correoIdsStr
       ? await sb(`historial_eventos?correo_id=in.(${correoIdsStr})&order=created_at.asc&limit=10000`) || []
       : [];
@@ -9344,12 +9342,13 @@ async function loadAgentesMetrics(){
   const [correos, eventos, agentes, correosAsesorActual, correosGlobal] = await Promise.all([
     // correos del período (received_at) — base para Asignados/Cerrados/Pendientes
     sb(qC('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
-    // Eventos del período — con todos los campos para historial y Excel
+    // Eventos del período — solo correo_respondido para Con/Sin Respuesta
+    // (Gestiones se calculan desde num_gestiones en BD, no desde eventos)
     (async()=>{
       const PAGE=1000;
       let evs=[], off=0;
       while(true){
-        const page=await sb(qC(`historial_eventos?agente_id=not.is.null&select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=${PAGE}&offset=${off}`,'created_at')).catch(()=>[]);
+        const page=await sb(qC(`historial_eventos?evento=eq.correo_respondido&agente_id=not.is.null&select=correo_id,agente_id&order=created_at.desc&limit=${PAGE}&offset=${off}`,'created_at')).catch(()=>[]);
         if(!page||!page.length) break;
         evs=evs.concat(page);
         if(page.length<PAGE) break;
@@ -9358,7 +9357,7 @@ async function loadAgentesMetrics(){
       }
       return evs;
     })(),
-    sb('agentes?select=id,nombre,email,activo,sede,rol,telefono&order=nombre.asc').catch(()=>[]),
+    sb('agentes?select=id,nombre,email,activo,sede&order=nombre.asc').catch(()=>[]),
     // Si hay filtro de asesor: todos sus correos sin filtro fecha
     _asesorFiltro
       ? sb(`correos?agente_id=eq.${_asesorFiltro}&origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,agente_id,estado,received_at&order=received_at.desc&limit=5000`).catch(()=>[])
@@ -9412,11 +9411,12 @@ function renderAgentes(){
   // En Gestión: correos del período con ese estado actual
   const _cardGest     = E.filter(e=>_pqr(e)&&e.estado==='gestion').length;
   // Con/Sin Respuesta: solo eventos de asesores (h.agente_id) para excluir sync automáticos
-  // ConResp: tickets del período con al menos 1 correo_respondido por asesor
+  // ConResp: tickets del período que recibieron al menos 1 correo_respondido
+  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.agente_id&&h.evento==='correo_respondido').map(h=>h.correo_id));
+  // Cruzar solo con correos del período
   const _idsPeriodoSet = new Set(E.filter(_pqr).map(e=>e.id));
-  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.agente_id&&h.evento==='correo_respondido'&&_idsPeriodoSet.has(h.correo_id)).map(h=>h.correo_id));
-  const _cardConResp  = _idsConResp.size;
-  // SinResp: tienen num_gestiones>0 pero no tienen correo_respondido
+  const _cardConResp  = [..._idsConResp].filter(id=>_idsPeriodoSet.has(id)).length;
+  // SinResp: tienen gestión (num_gestiones>0) pero no tienen correo_respondido en el período
   const _idsConGest   = new Set(E.filter(e=>_pqr(e)&&(e.num_gestiones||0)>0).map(e=>e.id));
   const _cardSinResp  = [..._idsConGest].filter(id=>!_idsConResp.has(id)).length;
   // Pte. Firma: correos del período con ese estado actual
@@ -9456,8 +9456,6 @@ function renderAgentes(){
   setV('agGlobalGest',  _globalBase.filter(e=>e.estado==='gestion').length);
 
   setV('agTableInfo', `${act.length} asesores activos · ${_cardAsig} tickets en el período`);
-  // Renderizar tabla Pendientes por Firma
-  setTimeout(renderPteFirma, 50);
 
   // ── CHART RESUELTOS VS PENDIENTES ──
   if(chartAgSol) chartAgSol.destroy();
@@ -9589,7 +9587,6 @@ function renderAgentes(){
   const _asesorOpts = '<option value="">Todos los asesores</option>'+_allActivos.map(a=>`<option value="${a.id}">${esc(a.nombre||'')}</option>`).join('');
   if(sel) sel.innerHTML=_asesorOpts;
   if(selKpi && selKpi.children.length<=1) selKpi.innerHTML=_asesorOpts;
-  // FirmaBody select también
   // Poblar datalist de sedes en filtro Asesores
   const agSedeList=document.getElementById('agFiltroSedeList');
   if(agSedeList&&agSedeList.children.length===0){
@@ -9600,143 +9597,73 @@ function renderAgentes(){
   renderAgTimeline();
 }
 
-// ── Timeline de actividad por asesor (eventos por día) ──────────────────
-let _chartAgTimeline = null;
-
 function renderAgTimeline(){
-  if(!_agDatos) return;
-  const { eventos: H_all, agentes } = _agDatos;
-  const asesorFiltro = (document.getElementById('agFiltroAsesor')?.value || '').trim();
-  const ctx = document.getElementById('chartAgTimeline');
-  if(!ctx) return;
-
-  const H = asesorFiltro ? H_all.filter(h => h.agente_id === asesorFiltro) : H_all;
-  const activos = agentes.filter(a => a.activo === true || a.activo === 1 || a.activo === 'true');
-
-  const daySet = new Set(H.map(h => h.created_at?.slice(0,10)).filter(Boolean));
-  const days = [...daySet].sort();
-  if(!days.length) {
-    if(_chartAgTimeline){ _chartAgTimeline.destroy(); _chartAgTimeline = null; }
-    return;
-  }
-
-  let datasets = [];
-  const COLORS = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6'];
-
-  if(asesorFiltro) {
-    const ag = activos.find(a => a.id === asesorFiltro);
-    const data = days.map(d => H.filter(h => h.created_at?.slice(0,10) === d).length);
-    datasets = [{ label: ag?.nombre || 'Asesor', data, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', fill: true, tension: 0.3, pointRadius: 3 }];
-  } else {
-    const byAgent = {};
-    H.forEach(h => { if(h.agente_id) byAgent[h.agente_id] = (byAgent[h.agente_id] || 0) + 1; });
-    const top5 = Object.entries(byAgent).sort((a,b) => b[1]-a[1]).slice(0,5).map(([id]) => id);
-    datasets = top5.map((agId, i) => {
-      const ag = activos.find(a => a.id === agId);
-      const data = days.map(d => H.filter(h => h.agente_id === agId && h.created_at?.slice(0,10) === d).length);
-      return { label: (ag?.nombre || agId).split(' ')[0], data, borderColor: COLORS[i], backgroundColor: COLORS[i]+'22', fill: false, tension: 0.3, pointRadius: 2 };
-    });
-  }
-
-  if(_chartAgTimeline){ _chartAgTimeline.destroy(); }
-  _chartAgTimeline = new Chart(ctx.getContext('2d'), {
-    type: 'line',
-    data: { labels: days.map(d => { const [,m,dd] = d.split('-'); return `${dd}/${m}`; }), datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } } },
-      scales: {
-        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 9 } } },
-        x: { ticks: { font: { size: 9 }, maxRotation: 45 } }
-      }
-    }
-  });
-}
-
-function renderPteFirma(){
-  if(!_agDatos) return;
-  const { correos:E_all, agentes } = _agDatos;
+  const { eventos:H_tl, correos:E_tl, agentes } = _agDatos;
+  // Respetar filtro de asesor del KPI bar
+  const _agFiltKpiTl = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
+  const H = _agFiltKpiTl ? H_tl.filter(h=>h.agente_id===_agFiltKpiTl) : H_tl;
+  const E = _agFiltKpiTl ? E_tl.filter(e=>e.agente_id===_agFiltKpiTl) : E_tl;
   const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
-
-  const _epsMap = {};
-  if(state?.epsCatalogo) state.epsCatalogo.forEach(e=>{ if(e.id) _epsMap[e.id]=e.nombre; });
+  const cMap={}; E.forEach(co=>cMap[co.id]=co);  const EXCL_EVENTOS_SISTEMA = new Set([
+    'sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+    'nova_td_generado','asignado_manual','asignado_automatico',
+    'reabierto','informacion','pendiente_firma','firma_confirmada'
+  ]);
 
   const filtroAg = document.getElementById('agFiltroAsesor')?.value||'';
-  const asesorKpi = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
+  const filtroEv = document.getElementById('agFiltroEvento')?.value||'';
 
-  // Pendientes por firma: estado=pendiente_firma, de todos los correos activos
-  let rows = (E_all||[]).filter(e=>e.estado==='pendiente_firma');
-  if(filtroAg) rows = rows.filter(e=>e.agente_id===filtroAg);
-  else if(asesorKpi) rows = rows.filter(e=>e.agente_id===asesorKpi);
+  let rows = H.filter(h=>h.agente_id);
+  if(filtroAg) rows=rows.filter(h=>h.agente_id===filtroAg);
+  if(filtroEv) rows=rows.filter(h=>h.evento===filtroEv);
 
-  // Ordenar por más antiguos primero
-  rows.sort((a,b)=>new Date(a.received_at)-new Date(b.received_at));
+  const cnt=document.getElementById('agTimelineCount');
+  if(cnt) cnt.textContent=`${rows.length} registro${rows.length!==1?'s':''}`;
 
-  const cnt = document.getElementById('agFirmaCount');
-  if(cnt) cnt.textContent = `${rows.length} caso${rows.length!==1?'s':''} pendientes`;
+  const evLabel={
+    asignado_manual:   '📌 Asignado',
+    correo_respondido: '✉️ Respuesta enviada',
+    pendiente_firma:   '🖊️ Pendiente firma',
+    firma_confirmada:  '✅ Firma confirmada',
+  };
 
-  const tbody = document.getElementById('agFirmaBody');
-  if(!tbody) return;
-
-  if(!rows.length){
-    tbody.innerHTML='<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--ink3)">Sin casos pendientes por firma en el período</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = rows.slice(0,200).map(e=>{
-    const agNom   = agMap[e.agente_id]||'—';
-    const ticket  = e.ticket_id||e.id?.slice(0,8)||'—';
-    const eps     = _epsMap[e.eps_id]||'—';
-    const recibido = e.received_at ? new Date(e.received_at).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
-    const dias    = e.received_at ? Math.floor((Date.now()-new Date(e.received_at))/86400000) : 0;
-    const diasCol = dias>10?'color:#dc2626;font-weight:800':dias>5?'color:#ca8a04;font-weight:700':'color:var(--ink2)';
-    const prio    = e.prioridad||'';
+  document.getElementById('agTimelineBody').innerHTML = rows.slice(0,300).map(h=>{
+    const c       = cMap[h.correo_id]||{};
+    const agNom   = agMap[h.agente_id]||'—';
+    const fecha   = h.created_at?new Date(h.created_at).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}):'—';
+    const ticket  = c.ticket_id||h.correo_id?.slice(0,8)||'—';
+    const prio    = c.prioridad||'';
     const prioCol = prio==='alta'||prio==='critica'?'var(--red)':prio==='media'?'#ca8a04':'var(--ink3)';
-    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" 
-              ondblclick="abrirCorreoAdmin('${e.id}')"
-              title="Doble clic para abrir">
-      <td style="font-size:11px;font-weight:600">${esc(agNom)}</td>
-      <td style="font-size:11px;font-family:'DM Mono',monospace;color:var(--blue)">${esc(ticket)}</td>
-      <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(e.nombre||e.from_name||'—')}</td>
-      <td style="font-size:10px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(eps)}</td>
-      <td style="font-size:10px">${esc(e.tipo_pqr||'—')}</td>
-      <td style="font-size:10px;font-weight:700;color:${prioCol};text-transform:uppercase">${prio||'—'}</td>
-      <td style="font-size:10px;color:var(--ink3)">${recibido}</td>
-      <td style="font-size:11px;font-weight:700;${diasCol}">${dias}d</td>
-    </tr>`;
-  }).join('');
-}
-
-// Abrir correo desde admin — navega a la bandeja y abre el correo con su historial
-function abrirCorreoAdmin(correoId) {
-  if(!correoId) return;
-  // Navegar a la página de correos
-  const btnCorreos = document.querySelector('[onclick*="showPage(\'correos"]');
-  if(btnCorreos) btnCorreos.click();
-  // Esperar a que cargue y luego abrir el correo
-  setTimeout(async()=>{
-    if(typeof selectEmail === 'function') {
-      await selectEmail(correoId);
-    } else {
-      // Fallback: copiar ID
-      if(navigator.clipboard) navigator.clipboard.writeText(correoId);
-      const t = document.createElement('div');
-      t.textContent = '📋 ID copiado: ' + correoId.slice(0,8) + '...';
-      t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;z-index:9999';
-      document.body.appendChild(t); setTimeout(()=>t.remove(),2500);
+    const obs     = h.descripcion||'';
+    let tiempoD   = '—';
+    if(c.received_at&&h.created_at){
+      const hrs=Math.round((new Date(h.created_at)-new Date(c.received_at))/3600000);
+      tiempoD = hrs<1?'<1h':hrs<24?hrs+'h':Math.floor(hrs/24)+'d '+(hrs%24)+'h';
     }
-  }, 400);
+    const tColor = tiempoD==='—'?'var(--ink3)':tiempoD.includes('d')?'var(--red)':parseInt(tiempoD)>24?'#ca8a04':'var(--green)';
+    const evL = evLabel[h.evento]||('⚡ '+h.evento);
+    // Filas de eventos de sistema se atenúan para diferenciarlas visualmente
+    const esGestionReal = !EXCL_EVENTOS_SISTEMA.has(h.evento);
+    const rowStyle = esGestionReal
+      ? 'border-bottom:1px solid var(--border)'
+      : 'border-bottom:1px solid var(--border);background:var(--bg2);opacity:.65';
+    return `<tr style="${rowStyle}">
+      <td style="font-size:11px;font-family:'DM Mono',monospace;color:var(--ink3);white-space:nowrap">${fecha}</td>
+      <td style="font-size:12px;font-weight:600">${esc(agNom)}</td>
+      <td style="font-size:11px;font-family:'DM Mono',monospace;color:var(--blue)">${esc(ticket)}</td>
+      <td style="font-size:11px;font-weight:600">${evL}</td>
+      <td style="font-size:10px;font-weight:700;color:${prioCol};text-transform:uppercase">${prio||'—'}</td>
+      <td style="font-size:11px;font-family:'DM Mono',monospace;font-weight:600;color:${tColor}">${tiempoD}</td>
+      <td style="font-size:11px;color:var(--ink2);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(obs)}">${esc(obs.slice(0,80))||'—'}</td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--ink3)">Sin eventos en el período seleccionado</td></tr>';
 }
-
 
 function exportAgentesExcel(){
   const { correos:E, eventos:H, agentes, desde, hasta } = _agDatos;
   const wb   = XLSX.utils.book_new();
   const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
-  // cMap: incluir E + state.emails para tener datos de correos fuera del período
-  const cMap={};
-  if(state?.emails) state.emails.forEach(e=>{ if(e.id) cMap[e.id]=e.raw||e; });
-  E.forEach(e=>{ cMap[e.id]=e; }); // E prevalece sobre state.emails
+  const cMap={}; E.forEach(c=>cMap[c.id]=c);
   const _asesorKpi = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
   const act  = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!_asesorKpi||a.id===_asesorKpi));
   // Si hay filtro de asesor, filtrar también E y H
@@ -9783,7 +9710,7 @@ function exportAgentesExcel(){
       Rol:                     a.rol||'',
       Sede:                    a.sede||'',
       Cedula:                  a.cedula||'',
-      Telefono:                a.telefono||a.telefono_contacto||'',
+      Telefono:                a.telefono||'',
       Casos_Activos:           casosActivos,
       Total_Asignados:         myE.length,
       Pendientes:              myE.filter(e=>e.estado==='pendiente').length,
