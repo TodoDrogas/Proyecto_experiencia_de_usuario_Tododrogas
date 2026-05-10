@@ -9236,7 +9236,7 @@ async function loadAgentesMetrics(){
 
   const _asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
 
-  const [correos, eventos, agentes, correosAsesorActual] = await Promise.all([
+  const [correos, eventos, agentes, correosAsesorActual, correosGlobal] = await Promise.all([
     // correos del período (received_at) — base para Asignados/Cerrados/Pendientes
     sb(qC('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
     // eventos del período
@@ -9255,14 +9255,17 @@ async function loadAgentesMetrics(){
       return evs;
     })(),
     sb('agentes?select=id,nombre,email,activo,sede&order=nombre.asc').catch(()=>[]),
-    // Si hay filtro de asesor: todos sus correos sin filtro fecha (para En Gestión, Pte.Firma, Con Respuesta)
+    // Si hay filtro de asesor: todos sus correos sin filtro fecha
     _asesorFiltro
       ? sb(`correos?agente_id=eq.${_asesorFiltro}&origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,agente_id,estado,received_at&order=received_at.desc&limit=5000`).catch(()=>[])
       : Promise.resolve(null),
+    // Correos activos GLOBALES sin filtro de fecha — para el bloque Global Activo
+    sb('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&estado=neq.solucionado&estado=neq.gestionado&is_draft=is.false&select=id,agente_id,estado&order=received_at.desc&limit=10000').catch(()=>[]),
   ]);
 
   _agDatos = {
     correosAsesorActual: correosAsesorActual||null,
+    correosGlobal: correosGlobal||[],
     asesorFiltroActivo: _asesorFiltro||null,
     correos: correos||[],
     eventos: eventos||[],
@@ -9275,7 +9278,7 @@ async function loadAgentesMetrics(){
 }
 
 function renderAgentes(){
-  const { correos:E_all, eventos:H_all, agentes, correosAsesorActual } = _agDatos;
+  const { correos:E_all, eventos:H_all, agentes, correosAsesorActual, correosGlobal } = _agDatos;
   const sedeFiltro   = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
   const asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
   const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!sedeFiltro||esc(a.sede||'')=== sedeFiltro||a.sede===sedeFiltro)&&(!asesorFiltro||a.id===asesorFiltro));
@@ -9336,7 +9339,10 @@ function renderAgentes(){
   // ── Global Activo — backlog sin filtro de fecha ──
   // Si hay filtro de asesor: usar E_actual (todos sus correos)
   // Si no: usar E_all completo
-  const _globalBase = E_actual;
+  // Global: sin filtro asesor = todos activos sin fecha; con filtro = todos del asesor sin fecha
+  const _globalBase = asesorFiltro
+    ? (correosAsesorActual||E)
+    : (correosGlobal.length ? correosGlobal : E_all);
   setV('agGlobalPend',  _globalBase.filter(e=>e.estado==='pendiente').length);
   setV('agGlobalFirma', _globalBase.filter(e=>e.estado==='pendiente_firma').length);
   setV('agGlobalGest',  _globalBase.filter(e=>e.estado==='gestion').length);
@@ -9624,6 +9630,7 @@ function exportAgentesExcel(){
   const h2 = E.filter(c=>c.agente_id).map(c=>{
     const epsNombre = c.eps_id ? (_epsMap[c.eps_id]||c.eps_id) : '';
     return {
+      ID_Correo:           c.id||'',
       Ticket:              c.ticket_id||'',
       Asunto:              c.subject||'',
       Remitente_Email:     c.from_email||'',
@@ -9657,8 +9664,9 @@ function exportAgentesExcel(){
     const epsNombre = c.eps_id ? (_epsMap[c.eps_id]||c.eps_id) : '';
     return {
       Fecha:                  h.created_at?new Date(h.created_at).toLocaleString('es-CO'):'',
+      ID_Correo:              h.correo_id||'',
       Asesor:                 agMap[h.agente_id]||'',
-      Ticket:                 c.ticket_id||h.correo_id?.slice(0,8)||'',
+      Ticket:                 c.ticket_id||'',
       Evento:                 h.evento||'',
       Descripcion:            h.descripcion||'',
       Cedula_Paciente:        c.cedula||c.cedula_paciente||'',
@@ -9672,7 +9680,7 @@ function exportAgentesExcel(){
     };
   });
   const ws3 = XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin gestiones en el período'}]);
-  ws3['!cols']=[{wch:18},{wch:22},{wch:16},{wch:22},{wch:40},{wch:13},{wch:26},{wch:20},{wch:16},{wch:10},{wch:13},{wch:11},{wch:20}];
+  ws3['!cols']=[{wch:18},{wch:36},{wch:22},{wch:16},{wch:22},{wch:40},{wch:13},{wch:26},{wch:20},{wch:16},{wch:10},{wch:13},{wch:11},{wch:20}];
   XLSX.utils.book_append_sheet(wb, ws3, 'Gestiones Reales');
 
   // ── Hoja 4: Timeline Completo (todos los eventos, para auditoría) ───
@@ -9680,8 +9688,9 @@ function exportAgentesExcel(){
     const c=cMap[h.correo_id]||{};
     return {
       Fecha:                  h.created_at?new Date(h.created_at).toLocaleString('es-CO'):'',
+      ID_Correo:              h.correo_id||'',
       Asesor:                 agMap[h.agente_id]||'',
-      Ticket:                 c.ticket_id||h.correo_id?.slice(0,8)||'',
+      Ticket:                 c.ticket_id||'',
       Evento:                 h.evento||'',
       Es_Gestion_Real:        !EXCL_EVENTOS_SISTEMA.has(h.evento)?'SÍ':'NO',
       Descripcion:            h.descripcion||'',
@@ -9691,7 +9700,7 @@ function exportAgentesExcel(){
     };
   });
   const ws4 = XLSX.utils.json_to_sheet(h4.length?h4:[{Sin_datos:'Sin eventos'}]);
-  ws4['!cols']=[{wch:18},{wch:22},{wch:16},{wch:22},{wch:14},{wch:40},{wch:10},{wch:13},{wch:20}];
+  ws4['!cols']=[{wch:18},{wch:36},{wch:22},{wch:16},{wch:22},{wch:14},{wch:40},{wch:10},{wch:13},{wch:20}];
   XLSX.utils.book_append_sheet(wb, ws4, 'Timeline Completo');
 
   XLSX.writeFile(wb, `Asesores_${desde||'inicio'}_${hasta||'hoy'}.xlsx`);
