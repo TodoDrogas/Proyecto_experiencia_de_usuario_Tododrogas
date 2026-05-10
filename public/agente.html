@@ -6073,6 +6073,34 @@ html[data-theme="dark"] #panelRR [style*="border-bottom:1px solid #e2e8f0"]{bord
         </div>
       </div>
 
+      <!-- Bloque Global Activo -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:9px;font-weight:700;letter-spacing:1.4px;text-transform:uppercase;color:#f59e0b;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+          <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;box-shadow:0 0 6px #f59e0b"></span>
+          GLOBAL ACTIVO — sin filtro de fecha
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <div style="background:linear-gradient(135deg,#1c1917,#292524);border:1.5px solid #f59e0b33;border-radius:12px;padding:13px 14px;border-left:3px solid #f59e0b;position:relative;overflow:hidden">
+            <div style="position:absolute;top:0;right:0;width:40px;height:40px;background:#f59e0b11;border-radius:0 12px 0 100%"></div>
+            <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#a16207;margin-bottom:6px">Pendientes</div>
+            <div style="font-size:28px;font-weight:900;color:#f59e0b;line-height:1" id="agGlobalPend">—</div>
+            <div style="font-size:10px;color:#78716c;margin-top:3px">Todos los meses</div>
+          </div>
+          <div style="background:linear-gradient(135deg,#1c1917,#292524);border:1.5px solid #7c3aed33;border-radius:12px;padding:13px 14px;border-left:3px solid #7c3aed;position:relative;overflow:hidden">
+            <div style="position:absolute;top:0;right:0;width:40px;height:40px;background:#7c3aed11;border-radius:0 12px 0 100%"></div>
+            <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#6d28d9;margin-bottom:6px">Pte. Firma</div>
+            <div style="font-size:28px;font-weight:900;color:#7c3aed;line-height:1" id="agGlobalFirma">—</div>
+            <div style="font-size:10px;color:#78716c;margin-top:3px">Todos los meses</div>
+          </div>
+          <div style="background:linear-gradient(135deg,#1c1917,#292524);border:1.5px solid #0891b233;border-radius:12px;padding:13px 14px;border-left:3px solid #0891b2;position:relative;overflow:hidden">
+            <div style="position:absolute;top:0;right:0;width:40px;height:40px;background:#0891b211;border-radius:0 12px 0 100%"></div>
+            <div style="font-size:9px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#0e7490;margin-bottom:6px">En Gestión</div>
+            <div style="font-size:28px;font-weight:900;color:#0891b2;line-height:1" id="agGlobalGest">—</div>
+            <div style="font-size:10px;color:#78716c;margin-top:3px">Todos los meses</div>
+          </div>
+        </div>
+      </div>
+
       <!-- KPIs -->
       <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">
         <div class="mk">
@@ -6422,12 +6450,12 @@ async function cargarMetricasAgente() {
   }).map(function(h){return h.correo_id;}));
 
   var _cardAsig     = correosPeriodo.length;
-  // En Gestión = estado actual del agente (igual que sidebar, sin filtro de fecha)
-  var _cardGest = (state.emails||[]).filter(function(e){return e.estado==='gestion';}).length;
+  // En Gestión = correos del período con ese estado actual
+  var _cardGest = correosPeriodo.filter(function(x){return x.estado==='gestion';}).length;
   var _cardConResp  = _idsConRespP.size;
   var _cardSinResp  = [..._idsConGestP].filter(function(id){return !_idsConRespP.has(id);}).length;
-  // Pte. Firma = estado actual del agente (igual que sidebar)
-  var _cardFirma = (state.emails||[]).filter(function(e){return e.estado==='pendiente_firma';}).length;
+  // Pte. Firma = correos del período con ese estado actual
+  var _cardFirma = correosPeriodo.filter(function(x){return x.estado==='pendiente_firma';}).length;
   var _cardCerrados = correosPeriodo.filter(function(x){return x.estado==='solucionado'||x.estado==='gestionado';}).length;
 
   var _sv = function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
@@ -6437,6 +6465,15 @@ async function cargarMetricasAgente() {
   _sv('agCardSinResp', _cardSinResp);
   _sv('agCardFirma',   _cardFirma);
   _sv('agCardCerrados',_cardCerrados);
+
+  // ── Cards Global Activo (state.emails = todos los correos sin filtro de fecha) ──
+  var _emails = state.emails || [];
+  var _gPend  = _emails.filter(function(e){ return e.estado==='pendiente'; }).length;
+  var _gFirma = _emails.filter(function(e){ return e.estado==='pendiente_firma'; }).length;
+  var _gGest  = _emails.filter(function(e){ return e.estado==='gestion'; }).length;
+  _sv('agGlobalPend',  _gPend);
+  _sv('agGlobalFirma', _gFirma);
+  _sv('agGlobalGest',  _gGest);
 
   // Guardar para Excel
   window._agMetricasPeriodo = {
