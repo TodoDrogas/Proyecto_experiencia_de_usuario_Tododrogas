@@ -2337,18 +2337,42 @@ async function loadSigiMetrics() {
       sb(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false` +
          `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
          `&select=id,estado&limit=5000`).catch(()=>[]),
-      // Correos estado=informacion del período
-      sb(`correos?estado=eq.informacion&is_draft=is.false` +
-         `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
-         `&select=id&limit=5000`).catch(()=>[]),
-      // Global activo sin filtro de fecha
-      sb(`correos?origen=neq.saliente&origen=neq.borrador&is_draft=is.false` +
-         `&estado=in.(pendiente,gestion,pendiente_firma,informacion)` +
-         `&select=id,estado&limit=10000`).catch(()=>[]),
-      // Eventos correo_respondido del período para Con Respuesta
-      sb(`historial_eventos?evento=eq.correo_respondido&agente_id=not.is.null` +
-         `&created_at=gte.${desde}T00:00:00-05:00&created_at=lte.${hasta}T23:59:59-05:00` +
-         `&select=correo_id&limit=5000`).catch(()=>[]),
+      // Correos estado=informacion del período — paginado
+      (async()=>{
+        let all=[],off=0;
+        while(true){
+          const p=await sb(`correos?estado=eq.informacion&is_draft=is.false&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00&select=id&limit=1000&offset=${off}`).catch(()=>[]);
+          if(!p||!p.length) break;
+          all=all.concat(p);
+          if(p.length<1000) break;
+          off+=1000;
+          if(off>10000) break;
+        }
+        return all;
+      })(),
+      // Global activo — consultas separadas para evitar problema con in.()
+      (async()=>{
+        const [gP,gG,gF,gI] = await Promise.all([
+          sb('correos?estado=eq.pendiente&origen=neq.saliente&is_draft=is.false&select=id,estado&limit=5000').catch(()=>[]),
+          sb('correos?estado=eq.gestion&origen=neq.saliente&is_draft=is.false&select=id,estado&limit=5000').catch(()=>[]),
+          sb('correos?estado=eq.pendiente_firma&origen=neq.saliente&is_draft=is.false&select=id,estado&limit=5000').catch(()=>[]),
+          sb('correos?estado=eq.informacion&origen=neq.saliente&is_draft=is.false&select=id,estado&limit=5000').catch(()=>[]),
+        ]);
+        return [...gP,...gG,...gF,...gI];
+      })(),
+      // Eventos correo_respondido del período — paginado
+      (async()=>{
+        let all=[],off=0;
+        while(true){
+          const p=await sb(`historial_eventos?evento=eq.correo_respondido&agente_id=not.is.null&created_at=gte.${desde}T00:00:00-05:00&created_at=lte.${hasta}T23:59:59-05:00&select=correo_id&limit=1000&offset=${off}`).catch(()=>[]);
+          if(!p||!p.length) break;
+          all=all.concat(p);
+          if(p.length<1000) break;
+          off+=1000;
+          if(off>10000) break;
+        }
+        return all;
+      })(),
     ]);
 
     if(!state.epsCatalogo) {
@@ -2356,13 +2380,14 @@ async function loadSigiMetrics() {
     }
 
     // ── KPIs Fila 1 ──
-    const _pqrIds  = new Set(correos.map(x=>x.id));
-    const _respIds = new Set(eventosResp.map(h=>h.correo_id));
+    // IDs del período completo (todos los recibidos, no solo con gestión)
+    const _recibidosIds = new Set(correosRecibidos.map(x=>x.id));
     const recibidos = correosRecibidos.filter(x=>x.estado!=='informacion').length;
     const enGest    = correosRecibidos.filter(x=>x.estado==='gestion').length;
     const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
-    const conResp   = new Set(eventosResp.filter(h=>_pqrIds.has(h.correo_id)).map(h=>h.correo_id)).size;
+    // Con Respuesta: eventos del período cuyo correo llegó en el período
+    const conResp   = new Set(eventosResp.filter(h=>_recibidosIds.has(h.correo_id)).map(h=>h.correo_id)).size;
 
     // ── KPIs Fila 2 ──
     const pendientes  = correosRecibidos.filter(x=>x.estado==='pendiente').length;
