@@ -9342,18 +9342,18 @@ async function loadAgentesMetrics(){
   const [correos, eventos, agentes, correosAsesorActual, correosGlobal] = await Promise.all([
     // correos del período (received_at) — base para Asignados/Cerrados/Pendientes
     sb(qC('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
-    // eventos del período
-    // Paginar eventos: hasta 50000 registros en dos páginas
+    // Eventos del período — solo correo_respondido para Con/Sin Respuesta
+    // (Gestiones se calculan desde num_gestiones en BD, no desde eventos)
     (async()=>{
-      const PAGE=10000;
+      const PAGE=1000;
       let evs=[], off=0;
       while(true){
-        const page=await sb(qC(`historial_eventos?agente_id=not.is.null&select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=${PAGE}&offset=${off}`,'created_at')).catch(()=>[]);
+        const page=await sb(qC(`historial_eventos?evento=eq.correo_respondido&agente_id=not.is.null&select=correo_id,agente_id&order=created_at.desc&limit=${PAGE}&offset=${off}`,'created_at')).catch(()=>[]);
         if(!page||!page.length) break;
         evs=evs.concat(page);
         if(page.length<PAGE) break;
         off+=PAGE;
-        if(off>=50000) break;
+        if(off>=10000) break;
       }
       return evs;
     })(),
@@ -9406,20 +9406,18 @@ function renderAgentes(){
     return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada'));
   };
 
-  // Debug gestiones — log en consola para diagnóstico
-  const _evEventos = H.reduce((m,h)=>{ const k=h.evento||'(sin evento)'; m[k]=(m[k]||0)+1; return m; },{});
-  const _evTop = Object.entries(_evEventos).sort((a,b)=>b[1]-a[1]).slice(0,15);
-  console.log('[SIGI Debug] Total eventos H:', H.length, '| Top eventos:', _evTop);
-  console.log('[SIGI Debug] Pasan _esGR:', H.filter(_esGR).length, '| Con agente_id:', H.filter(h=>h.agente_id&&_esGR(h)).length);
-
   // ── FILA 1 ──
   const _cardAsig     = E.filter(_pqr).length;
   // En Gestión: correos del período con ese estado actual
   const _cardGest     = E.filter(e=>_pqr(e)&&e.estado==='gestion').length;
   // Con/Sin Respuesta: solo eventos de asesores (h.agente_id) para excluir sync automáticos
+  // ConResp: tickets del período que recibieron al menos 1 correo_respondido
   const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.agente_id&&h.evento==='correo_respondido').map(h=>h.correo_id));
-  const _idsConGest   = new Set(H.filter(h=>h.correo_id&&h.agente_id&&_esGR(h)).map(h=>h.correo_id));
-  const _cardConResp  = _idsConResp.size;
+  // Cruzar solo con correos del período
+  const _idsPeriodoSet = new Set(E.filter(_pqr).map(e=>e.id));
+  const _cardConResp  = [..._idsConResp].filter(id=>_idsPeriodoSet.has(id)).length;
+  // SinResp: tienen gestión (num_gestiones>0) pero no tienen correo_respondido en el período
+  const _idsConGest   = new Set(E.filter(e=>_pqr(e)&&(e.num_gestiones||0)>0).map(e=>e.id));
   const _cardSinResp  = [..._idsConGest].filter(id=>!_idsConResp.has(id)).length;
   // Pte. Firma: correos del período con ese estado actual
   const _cardFirma    = E.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
@@ -9427,8 +9425,9 @@ function renderAgentes(){
 
   // ── FILA 2 ──
   const _kpiPend    = E.filter(e=>_pqr(e)&&e.estado==='pendiente').length;
-  // Gestiones: todos los eventos reales del período (igual que agente)
-  const _kpiGest    = H.filter(h=>h.agente_id&&_esGR(h)).length;
+  // Gestiones: suma de num_gestiones del campo BD (correosPeriodo ya tiene este campo)
+  // Más confiable que contar eventos que tienen límite 1000 en Supabase
+  const _kpiGest    = E.filter(_pqr).reduce((s,e)=>s+(e.num_gestiones||0),0);
   const _kpiProm    = _cardAsig>0?(_kpiGest/_cardAsig).toFixed(1):'0';
   const _kpiTutela  = E.filter(e=>_pqr(e)&&e.tiene_tutela===true).length;
   const _kpiCerr    = _cardCerrados;
@@ -9507,7 +9506,7 @@ function renderAgentes(){
     data:{
       labels: act.map(a=>(a.nombre||'').split(' ')[0]),
       datasets:[{
-        data: act.map(a=>H.filter(h=>h.agente_id===a.id&&_esGR(h)).length),
+        data: act.map(a=>E.filter(e=>e.agente_id===a.id&&_pqr(e)).reduce((s,e)=>s+(e.num_gestiones||0),0)),
         backgroundColor:'#e0f2fe',borderColor:'#0891b2',borderWidth:2,borderRadius:4
       }]
     },
@@ -9698,7 +9697,8 @@ function exportAgentesExcel(){
     const sol = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
     // gestReg sincronizado con pantalla (correo_respondido SÍ cuenta)
     const cidsAsesor = new Set(myE.map(e=>e.id));
-    const gestReg = myH.filter(h=>_esGR(h)&&cidsAsesor.has(h.correo_id)).length;
+    // Gestiones: suma de num_gestiones (más preciso que contar eventos con límite Supabase)
+    const gestReg = myE.reduce((s,e)=>s+(e.num_gestiones||0),0);
     // casos_activos DINÁMICO — no leer campo estático de agentes
     const casosActivos = myE.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
     // Con/Sin Respuesta — binario
