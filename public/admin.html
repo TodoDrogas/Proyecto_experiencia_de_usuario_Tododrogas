@@ -1558,12 +1558,13 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
 
           <!-- KPIs SIGI — Fila 1 -->
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:8px">
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:8px">
             <div class="kpi" style="border-left:3px solid #2563eb"><div class="kpi-label">Recibidos</div><div class="kpi-val" id="sigiKpiRecibidos">—</div><div class="kpi-sub">Llegaron en el período</div></div>
             <div class="kpi" style="border-left:3px solid #f59e0b"><div class="kpi-label">En Gestión</div><div class="kpi-val warn" id="sigiKpiEnGest">—</div><div class="kpi-sub">Del período</div></div>
             <div class="kpi" style="border-left:3px solid #7c3aed"><div class="kpi-label">Pte. Firma</div><div class="kpi-val" id="sigiKpiPteFirma">—</div><div class="kpi-sub">Del período</div></div>
             <div class="kpi" style="border-left:3px solid #0891b2"><div class="kpi-label">Cerrados</div><div class="kpi-val ok" id="sigiKpiCerrados">—</div><div class="kpi-sub">Solucionados</div></div>
             <div class="kpi" style="border-left:3px solid #16a34a"><div class="kpi-label">Con Respuesta</div><div class="kpi-val ok" id="sigiKpiConResp">—</div><div class="kpi-sub">Correo enviado</div></div>
+          <div class="kpi" style="border-left:3px solid #ca8a04"><div class="kpi-label">Sin Respuesta</div><div class="kpi-val warn" id="sigiKpiSinResp">—</div><div class="kpi-sub">Con gestión sin correo</div></div>
           </div>
           <!-- KPIs SIGI — Fila 2 -->
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
@@ -2383,7 +2384,8 @@ async function loadSigiMetrics() {
     const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
     // Con Respuesta: eventos del período cuyo correo llegó en el período
-    const conResp   = new Set(eventosResp.filter(h=>_recibidosIds.has(h.correo_id)).map(h=>h.correo_id)).size;
+    const _idsConResp = new Set(eventosResp.filter(h=>_recibidosIds.has(h.correo_id)).map(h=>h.correo_id));
+    const conResp   = _idsConResp.size;
 
     // ── KPIs Fila 2 ──
     const pendientes  = correosRecibidos.filter(x=>x.estado==='pendiente').length;
@@ -2395,7 +2397,8 @@ async function loadSigiMetrics() {
     const gPend  = correosGlobal.filter(x=>x.estado==='pendiente').length;
     const gFirma = correosGlobal.filter(x=>x.estado==='pendiente_firma').length;
     const gGest  = correosGlobal.filter(x=>x.estado==='gestion').length;
-    const gInfo  = correosGlobal.filter(x=>x.estado==='informacion').length;
+    // Info global: usar state.emails que ya tiene todos los correos en memoria
+    const gInfo  = (state?.emails||[]).filter(e=>e.estado==='informacion').length || correosGlobal.filter(x=>x.estado==='informacion').length;
 
     const sv = (id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
     sv('sigiKpiRecibidos', recibidos);
@@ -2403,6 +2406,10 @@ async function loadSigiMetrics() {
     sv('sigiKpiPteFirma',  pteFirma);
     sv('sigiKpiCerrados',  cerrados);
     sv('sigiKpiConResp',   conResp);
+    // Sin Respuesta: tienen num_gestiones>0 pero no tienen correo_respondido en el período
+    const _recibConGest = new Set(correos.filter(x=>x.num_gestiones>0).map(x=>x.id));
+    const sinResp = [..._recibConGest].filter(id=>!_idsConResp.has(id)).length;
+    sv('sigiKpiSinResp',   sinResp);
     sv('sigiKpiPend',      pendientes);
     sv('sigiKpiGest',      totalGest);
     sv('sigiKpiTutela',    conTutela);
@@ -2555,12 +2562,11 @@ async function exportarSIGI() {
     }
 
     const epsCat = state.epsCatalogo || await sb('eps_catalogo?order=nombre.asc') || [];
+    const correoIds = correos.map(c => c.id).filter(Boolean);
+    const correoIdsStr = correoIds.join(',');
     const meds = correoIdsStr
       ? await sb(`gestiones_medicamentos?correo_id=in.(${correoIdsStr.slice(0,2000)})&order=created_at.asc&limit=5000`) || []
       : [];
-
-    const correoIds = correos.map(c => c.id).filter(Boolean);
-    const correoIdsStr = correoIds.join(',');
     const hist = correoIdsStr
       ? await sb(`historial_eventos?correo_id=in.(${correoIdsStr})&order=created_at.asc&limit=10000`) || []
       : [];
@@ -9352,7 +9358,7 @@ async function loadAgentesMetrics(){
       }
       return evs;
     })(),
-    sb('agentes?select=id,nombre,email,activo,sede,rol,cedula,telefono&order=nombre.asc').catch(()=>[]),
+    sb('agentes?select=id,nombre,email,activo,sede,rol,cedula,telefono,telefono_contacto&order=nombre.asc').catch(()=>[]),
     // Si hay filtro de asesor: todos sus correos sin filtro fecha
     _asesorFiltro
       ? sb(`correos?agente_id=eq.${_asesorFiltro}&origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,agente_id,estado,received_at&order=received_at.desc&limit=5000`).catch(()=>[])
@@ -9648,22 +9654,25 @@ function renderPteFirma(){
   }).join('');
 }
 
-// Abrir correo desde admin — navega al panel de correos con ese ID
+// Abrir correo desde admin — navega a la bandeja y abre el correo con su historial
 function abrirCorreoAdmin(correoId) {
   if(!correoId) return;
-  // Guardar el ID en sessionStorage y abrir gestión correo
-  sessionStorage.setItem('adminOpenCorreo', correoId);
-  // Si hay función de navegación al correo, usarla
-  if(typeof abrirCorreoPorId === 'function') { abrirCorreoPorId(correoId); return; }
-  // Fallback: copiar ID al portapapeles con aviso
-  if(navigator.clipboard) {
-    navigator.clipboard.writeText(correoId);
-    const t = document.createElement('div');
-    t.textContent = 'ID copiado: ' + correoId.slice(0,8) + '...';
-    t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;z-index:9999;font-family:monospace';
-    document.body.appendChild(t);
-    setTimeout(()=>t.remove(), 2500);
-  }
+  // Navegar a la página de correos
+  const btnCorreos = document.querySelector('[onclick*="showPage(\'correos"]');
+  if(btnCorreos) btnCorreos.click();
+  // Esperar a que cargue y luego abrir el correo
+  setTimeout(async()=>{
+    if(typeof selectEmail === 'function') {
+      await selectEmail(correoId);
+    } else {
+      // Fallback: copiar ID
+      if(navigator.clipboard) navigator.clipboard.writeText(correoId);
+      const t = document.createElement('div');
+      t.textContent = '📋 ID copiado: ' + correoId.slice(0,8) + '...';
+      t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#1e293b;color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;z-index:9999';
+      document.body.appendChild(t); setTimeout(()=>t.remove(),2500);
+    }
+  }, 400);
 }
 
 
@@ -9671,7 +9680,10 @@ function exportAgentesExcel(){
   const { correos:E, eventos:H, agentes, desde, hasta } = _agDatos;
   const wb   = XLSX.utils.book_new();
   const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
-  const cMap={}; E.forEach(c=>cMap[c.id]=c);
+  // cMap: incluir E + state.emails para tener datos de correos fuera del período
+  const cMap={};
+  if(state?.emails) state.emails.forEach(e=>{ if(e.id) cMap[e.id]=e.raw||e; });
+  E.forEach(e=>{ cMap[e.id]=e; }); // E prevalece sobre state.emails
   const _asesorKpi = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
   const act  = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!_asesorKpi||a.id===_asesorKpi));
   // Si hay filtro de asesor, filtrar también E y H
@@ -9718,7 +9730,7 @@ function exportAgentesExcel(){
       Rol:                     a.rol||'',
       Sede:                    a.sede||'',
       Cedula:                  a.cedula||'',
-      Telefono:                a.telefono||'',
+      Telefono:                a.telefono||a.telefono_contacto||'',
       Casos_Activos:           casosActivos,
       Total_Asignados:         myE.length,
       Pendientes:              myE.filter(e=>e.estado==='pendiente').length,
