@@ -2546,7 +2546,7 @@ async function exportarSIGI() {
     ) || [];
 
     // Cargar agentes FRESCOS directamente — no usar state.agents (puede estar desactualizado)
-    const agentesRaw = await sb('agentes?select=id,nombre,email,activo,cedula&order=nombre.asc') || [];
+    const agentesRaw = await sb('agentes?select=id,nombre,email,activo&order=nombre.asc') || [];
     // Indexar por id Y por nombre (para buscar por asignado_a que es texto)
     const agById   = {};
     const agByName = {};
@@ -9358,7 +9358,7 @@ async function loadAgentesMetrics(){
       }
       return evs;
     })(),
-    sb('agentes?select=id,nombre,email,activo,sede,rol,cedula,telefono,telefono_contacto&order=nombre.asc').catch(()=>[]),
+    sb('agentes?select=id,nombre,email,activo,sede,rol,telefono&order=nombre.asc').catch(()=>[]),
     // Si hay filtro de asesor: todos sus correos sin filtro fecha
     _asesorFiltro
       ? sb(`correos?agente_id=eq.${_asesorFiltro}&origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,agente_id,estado,received_at&order=received_at.desc&limit=5000`).catch(()=>[])
@@ -9598,6 +9598,59 @@ function renderAgentes(){
   }
 
   renderAgTimeline();
+}
+
+// ── Timeline de actividad por asesor (eventos por día) ──────────────────
+let _chartAgTimeline = null;
+
+function renderAgTimeline(){
+  if(!_agDatos) return;
+  const { eventos: H_all, agentes } = _agDatos;
+  const asesorFiltro = (document.getElementById('agFiltroAsesor')?.value || '').trim();
+  const ctx = document.getElementById('chartAgTimeline');
+  if(!ctx) return;
+
+  const H = asesorFiltro ? H_all.filter(h => h.agente_id === asesorFiltro) : H_all;
+  const activos = agentes.filter(a => a.activo === true || a.activo === 1 || a.activo === 'true');
+
+  const daySet = new Set(H.map(h => h.created_at?.slice(0,10)).filter(Boolean));
+  const days = [...daySet].sort();
+  if(!days.length) {
+    if(_chartAgTimeline){ _chartAgTimeline.destroy(); _chartAgTimeline = null; }
+    return;
+  }
+
+  let datasets = [];
+  const COLORS = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6'];
+
+  if(asesorFiltro) {
+    const ag = activos.find(a => a.id === asesorFiltro);
+    const data = days.map(d => H.filter(h => h.created_at?.slice(0,10) === d).length);
+    datasets = [{ label: ag?.nombre || 'Asesor', data, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', fill: true, tension: 0.3, pointRadius: 3 }];
+  } else {
+    const byAgent = {};
+    H.forEach(h => { if(h.agente_id) byAgent[h.agente_id] = (byAgent[h.agente_id] || 0) + 1; });
+    const top5 = Object.entries(byAgent).sort((a,b) => b[1]-a[1]).slice(0,5).map(([id]) => id);
+    datasets = top5.map((agId, i) => {
+      const ag = activos.find(a => a.id === agId);
+      const data = days.map(d => H.filter(h => h.agente_id === agId && h.created_at?.slice(0,10) === d).length);
+      return { label: (ag?.nombre || agId).split(' ')[0], data, borderColor: COLORS[i], backgroundColor: COLORS[i]+'22', fill: false, tension: 0.3, pointRadius: 2 };
+    });
+  }
+
+  if(_chartAgTimeline){ _chartAgTimeline.destroy(); }
+  _chartAgTimeline = new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: { labels: days.map(d => { const [,m,dd] = d.split('-'); return `${dd}/${m}`; }), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12 } } },
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1, font: { size: 9 } } },
+        x: { ticks: { font: { size: 9 }, maxRotation: 45 } }
+      }
+    }
+  });
 }
 
 function renderPteFirma(){
