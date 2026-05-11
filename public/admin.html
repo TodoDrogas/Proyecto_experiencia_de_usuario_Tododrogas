@@ -2368,15 +2368,15 @@ async function loadSigiMetrics() {
     }
 
     // ── KPIs Fila 1 ──
-    // Universo base: solo con agente asignado — así Con Resp + Sin Resp = Asignados siempre
+    // Asignados = Total − Sin asignar → Con Respuesta + Sin Respuesta = Asignados siempre
     const _recibidosIds = new Set(correosRecibidos.map(x=>x.id));
-    const recibidos = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.agente_id).length;
+    const recibidos = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.estado!=='sin_asignar'&&x.agente_id).length;
     const enGest    = correosRecibidos.filter(x=>x.estado==='gestion').length;
     const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
     // Con/Sin Respuesta: mismo universo que Asignados
-    const conResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.agente_id&&x.tiene_respuesta===true).length;
-    const sinResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.agente_id&&!x.tiene_respuesta).length;
+    const conResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.estado!=='sin_asignar'&&x.agente_id&&x.tiene_respuesta===true).length;
+    const sinResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.estado!=='sin_asignar'&&x.agente_id&&!x.tiene_respuesta).length;
 
     // ── KPIs Fila 2 ──
     const pendientes  = correosRecibidos.filter(x=>x.estado==='pendiente').length;
@@ -9400,9 +9400,9 @@ function renderAgentes(){
   };
 
   // ── FILA 1 ──
-  // _pqrAsig: mismo universo para Asignados, Con Respuesta y Sin Respuesta
-  // Solo correos con agente asignado — así Con Resp + Sin Resp = Asignados siempre
-  const _pqrAsig = e => _pqr(e) && e.agente_id;
+  // _pqrAsig: Asignados = todos los del período excepto sin_asignar
+  // Regla: Asignados = Total − Sin asignar → Con Respuesta + Sin Respuesta = Asignados siempre
+  const _pqrAsig = e => _pqr(e) && e.estado !== 'sin_asignar' && e.agente_id;
   const _cardAsig     = E.filter(_pqrAsig).length;
   // En Gestión: correos del período con ese estado actual
   const _cardGest     = E.filter(e=>_pqr(e)&&e.estado==='gestion').length;
