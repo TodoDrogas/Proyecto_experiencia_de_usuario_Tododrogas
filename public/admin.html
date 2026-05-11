@@ -2324,7 +2324,7 @@ async function loadSigiMetrics() {
 
   try {
     // ── Consultas paralelas ──
-    const [correos, correosRecibidos, correosInfo, correosGlobal, eventosResp] = await Promise.all([
+    const [correos, correosRecibidos, correosInfo, correosGlobal] = await Promise.all([
       // Correos con gestiones en el período (para tabla, gráficas)
       sb(`correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false` +
          `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
@@ -2333,7 +2333,7 @@ async function loadSigiMetrics() {
       // Total recibidos en el período (incluye sin gestión)
       sb(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false` +
          `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
-         `&select=id,estado&limit=5000`).catch(()=>[]),
+         `&select=id,estado,tiene_respuesta&limit=5000`).catch(()=>[]),
       // Correos estado=informacion del período — paginado
       (async()=>{
         let all=[],off=0;
@@ -2357,8 +2357,6 @@ async function loadSigiMetrics() {
         ]);
         return [...gP,...gG,...gF,...gI];
       })(),
-      // Eventos correo_respondido — placeholder, se recalcula después de tener correosRecibidos
-      Promise.resolve([]),
     ]);
 
     if(!state.epsCatalogo) {
@@ -2372,24 +2370,9 @@ async function loadSigiMetrics() {
     const enGest    = correosRecibidos.filter(x=>x.estado==='gestion').length;
     const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
-    // Con/Sin Respuesta: consultar historial_eventos solo para los IDs del período
-    // Esto evita traer toda la tabla — se consulta en lotes de 100 IDs (IN clause)
-    const _recibidosIdsArr = [..._recibidosIds];
-    const _idsConRespSet = new Set();
-    const _chunkSize = 100;
-    for(let i=0; i<_recibidosIdsArr.length; i+=_chunkSize){
-      const chunk = _recibidosIdsArr.slice(i, i+_chunkSize);
-      try {
-        const rows = await sb(
-          `historial_eventos?evento=eq.correo_respondido&agente_id=not.is.null` +
-          `&correo_id=in.(${chunk.join(',')})&select=correo_id&limit=1000`
-        );
-        (rows||[]).forEach(h=>{ if(h.correo_id) _idsConRespSet.add(h.correo_id); });
-      } catch(e2) { /* ignorar chunk fallido */ }
-    }
-    const conResp   = _idsConRespSet.size;
-    // Sin Respuesta: recibidos del período (excl. informacion) sin ningún correo_respondido
-    const sinResp   = correosRecibidos.filter(x=>x.estado!=='informacion'&&!_idsConRespSet.has(x.id)).length;
+    // Con/Sin Respuesta: directo desde el campo tiene_respuesta de la tabla correos
+    const conResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.tiene_respuesta===true).length;
+    const sinResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&!x.tiene_respuesta).length;
 
     // ── KPIs Fila 2 ──
     const pendientes  = correosRecibidos.filter(x=>x.estado==='pendiente').length;
@@ -5764,6 +5747,8 @@ async function sendReply() {
       showToast('Respuesta enviada ✓'+adjInfo,'success');
       const todosLosArchivos=[...inlineFiles,...largeFiles];
       await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,100),correo_id_saliente:null});
+      // Marcar el correo original como respondido
+      try { await sb(`correos?id=eq.${id}`,'PATCH',{tiene_respuesta:true}); } catch(eR){console.warn('[tiene_respuesta]',eR.message);}
       // Guardar correo saliente capturando su ID para el timeline
       let _adminSalienteId = null;
       try {
@@ -7856,6 +7841,8 @@ async function crSendReply() {
         const fg=await sb(`correos?id=eq.${correoIdOrigen}&select=num_gestiones&limit=1`);
         await sb(`correos?id=eq.${correoIdOrigen}`,'PATCH',{num_gestiones:(fg?.[0]?.num_gestiones||0)+1});
       } catch(e4){console.warn('[crReply num_gestiones]',e4.message);}
+      // Marcar el correo original como respondido
+      try { await sb(`correos?id=eq.${correoIdOrigen}`,'PATCH',{tiene_respuesta:true}); } catch(eR){console.warn('[tiene_respuesta]',eR.message);}
     }
 
     window._crAttachFiles=new Map();
