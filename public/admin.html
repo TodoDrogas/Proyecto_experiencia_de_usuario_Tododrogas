@@ -2541,15 +2541,15 @@ async function exportarSIGI() {
     }
 
     const epsCat = state.epsCatalogo || await sb('eps_catalogo?order=nombre.asc') || [];
-    const correoIds = correos.map(c => c.id).filter(id => id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
-    const correoIdsStr = correoIds.slice(0,50).join(",");
-    const meds = correoIdsStr
-      ? await sb(`gestiones_medicamentos?correo_id=in.(${correoIdsStr})&order=created_at.asc&limit=5000`) || []
-      : [];
+    // Deduplicar correos por id — evita filas duplicadas en Excel
+    const correosSIGI = [...new Map(correos.map(c=>[c.id,c])).values()];
+    const correoIds = correosSIGI.map(c => c.id).filter(id => id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+    // Medicamentos por fecha del período — sin límite de IDs
+    const meds = await sb(`gestiones_medicamentos?created_at=gte.${desde}T00:00:00-05:00&created_at=lte.${hasta}T23:59:59-05:00&order=created_at.asc&limit=5000`).catch(()=>[]) || [];
 
-    const hist = correoIdsStr
-      ? await sb(`historial_eventos?correo_id=in.(${correoIdsStr})&order=created_at.asc&limit=10000`) || []
-      : [];
+
+    // Historial por fecha del período
+    const hist = await sb(`historial_eventos?created_at=gte.${desde}T00:00:00-05:00&created_at=lte.${hasta}T23:59:59-05:00&agente_id=not.is.null&order=created_at.asc&limit=10000`).catch(()=>[]) || [];
 
     // ── Cruzar tabla_usuarios por cédula ─────────────────────────────
     const cedulas = [...new Set(correos.map(c => c.cedula_paciente||c.cedula||'').filter(Boolean))];
@@ -2589,7 +2589,7 @@ async function exportarSIGI() {
     // Col Y  = Fecha PQRSFD Cerrada = fecha_resolucion
     // Col f  = Tiene Tutela: siempre SI / NO
     // ════════════════════════════════════════════════════════════════
-    const h1 = correos.map(c => {
+    const h1 = correosSIGI.map(c => {
       const eps  = epsCat.find(e => e.id === c.eps_id);
       const pac  = getPaciente(c);
       const ag   = getAgente(c);
@@ -2710,9 +2710,9 @@ async function exportarSIGI() {
     // Columnas: Código PQRSFD | Código Medicamento | Medicamento | PBS |
     //           Tipo solicitud | Nombre Usuario (agente) | Cédula (email) | Estado del ticket
     // ════════════════════════════════════════════════════════════════
-    const medsFiltrados = meds.filter(m => correos.some(c => c.id === m.correo_id));
+    const medsFiltrados = meds.filter(m => correosSIGI.some(c => c.id === m.correo_id));
     const h2 = medsFiltrados.map(m => {
-      const c  = correos.find(cc => cc.id === m.correo_id);
+      const c  = correosSIGI.find(cc => cc.id === m.correo_id);
       const ag = getAgente(c || {});
 
       // Reconstruir ticket_id igual que en H1
@@ -2752,7 +2752,7 @@ async function exportarSIGI() {
     // Backlog eliminado → Alta_Sin_Resolver + Pendientes + En_Gestion
     // ════════════════════════════════════════════════════════════════
     const h3 = agentesRaw.map(ag => {
-      const asig   = correos.filter(c => c.agente_id === ag.id || (c.asignado_a||'').trim().toLowerCase() === ag.nombre.trim().toLowerCase());
+      const asig   = correosSIGI.filter(c => c.agente_id === ag.id || (c.asignado_a||'').trim().toLowerCase() === ag.nombre.trim().toLowerCase());
       const sol    = asig.filter(c => c.estado==='solucionado' || c.estado==='gestionado').length;
       const infoCount = asig.filter(c => c.estado==='informacion').length;
       const pend   = asig.filter(c => c.estado==='pendiente').length;
@@ -2795,7 +2795,7 @@ async function exportarSIGI() {
     ];
 
     const epsConConteo = epsCat.map(e => {
-      const casosEps = correos.filter(c => c.eps_id === e.id);
+      const casosEps = correosSIGI.filter(c => c.eps_id === e.id);
       const fila = {
         'NIT':          e.nit || '',
         'Nombre EPS':   e.nombre || '',
