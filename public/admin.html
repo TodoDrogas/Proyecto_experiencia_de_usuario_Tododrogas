@@ -1345,9 +1345,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
 
           <!-- KPIs Asesores -->
-          <!-- Fila 1: 6 cards estado (igual que agente individual) -->
-          <!-- Fila 1: Asig · En Gest · Pte.Firma · Cerrados · Con Resp · Sin Resp -->
-          <div class="mkpi-strip" style="grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:10px">
+          <!-- Fila 1: Asig · En Gest · Pte.Firma · Firmados · Cerrados · Con Resp · Sin Resp -->
+          <div class="mkpi-strip" style="grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:10px">
             <div class="mkpi-card mkpi-blue">
               <div class="mkpi-icon">📋</div>
               <div class="mkpi-body">
@@ -1370,6 +1369,14 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
                 <div class="mkpi-val" id="agCardFirma">—</div>
                 <div class="mkpi-label">Pte. Firma</div>
                 <div class="mkpi-sub">Del período</div>
+              </div>
+            </div>
+            <div class="mkpi-card mkpi-violet">
+              <div class="mkpi-icon">✍️</div>
+              <div class="mkpi-body">
+                <div class="mkpi-val ok" id="agCardFirmados">—</div>
+                <div class="mkpi-label">Firmados</div>
+                <div class="mkpi-sub">Firma confirmada</div>
               </div>
             </div>
             <div class="mkpi-card mkpi-teal">
@@ -3200,7 +3207,7 @@ async function loadEmails(horasVentana = 0) {
     let offset = 0;
     const PAGE = 1000;
     while (true) {
-      const page = await sb(`correos?received_at=gte.${desde}&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&order=received_at.desc&limit=${PAGE}&offset=${offset}`);
+      const page = await sb(`correos?received_at=gte.${desde}&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&order=received_at.desc&limit=${PAGE}&offset=${offset}&select=*,tiene_respuesta`);
       if (!page || page.length === 0) break;
       data = data.concat(page);
       if (page.length < PAGE) break;
@@ -3234,6 +3241,7 @@ async function loadEmails(horasVentana = 0) {
       has_attachments: e.has_attachments || false,
       is_draft: e.is_draft || false,
       is_read: e.is_read || false,
+      tiene_respuesta: e.tiene_respuesta || false,
       to_recipients: _arr(e.to_recipients),
       cc_recipients: _arr(e.cc_recipients),
       sent_at: e.sent_at || e.received_at || e.created_at,
@@ -3387,7 +3395,8 @@ function renderFolderAgents() {
     const mis      = all.filter(e=>e.agente_id===a.id&&e.origen!=='saliente'&&e.origen!=='borrador');
     const total    = mis.length;
     const pendiente= mis.filter(e=>e.estado==='pendiente'||e.estado==='sin_asignar').length;
-    const sinResp  = mis.filter(e=>!idsConResp.has(e.id)&&e.estado!=='solucionado'&&e.estado!=='gestionado'&&e.estado!=='informacion').length;
+    // Sin responder: mismo universo que métricas — todos los del agente sin tiene_respuesta
+    const sinResp  = mis.filter(e=>e.estado!=='informacion'&&!e.tiene_respuesta).length;
     const ini      = (a.nombre||'?').charAt(0).toUpperCase();
     const color    = COLORS[i%COLORS.length];
     return `<div class="folder-item" onclick="setAgentFolder('${a.id}',this)" style="gap:5px;flex-direction:column;align-items:flex-start;padding:7px 10px">
@@ -9408,8 +9417,10 @@ function renderAgentes(){
   const _cardGest     = E.filter(e=>_pqr(e)&&e.estado==='gestion').length;
   const _cardConResp  = E.filter(e=>_pqrAsig(e)&&e.tiene_respuesta===true).length;
   const _cardSinResp  = E.filter(e=>_pqrAsig(e)&&!e.tiene_respuesta).length;
-  // Pte. Firma: correos del período con ese estado actual
+  // Pte. Firma y Firmados: al lado para ver el flujo completo
   const _cardFirma    = E.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
+  const _idsFirmados  = new Set(H.filter(h=>h.evento==='firma_confirmada'&&h.correo_id).map(h=>h.correo_id));
+  const _cardFirmados = E.filter(e=>_pqrAsig(e)&&_idsFirmados.has(e.id)).length;
   const _cardCerrados = E.filter(e=>_pqr(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
 
   // ── FILA 2 ──
@@ -9427,6 +9438,7 @@ function renderAgentes(){
   setV('agCardConResp', _cardConResp);
   setV('agCardSinResp', _cardSinResp);
   setV('agCardFirma',   _cardFirma);
+  setV('agCardFirmados',_cardFirmados);
   setV('agCardCerrados',_cardCerrados);
   setV('agKpiPend',     _kpiPend);
   setV('agKpiGest',     _kpiGest);
