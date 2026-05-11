@@ -2335,7 +2335,7 @@ async function loadSigiMetrics() {
         while(true){
           const p=await sb(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false` +
             `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
-            `&select=id,estado,agente_id,tiene_respuesta&limit=1000&offset=${off}`).catch(()=>[]);
+            `&select=id,estado,agente_id,tiene_respuesta,tiene_tutela&limit=1000&offset=${off}`).catch(()=>[]);
           if(!p||!p.length) break;
           all=all.concat(p);
           if(p.length<1000) break;
@@ -2368,7 +2368,7 @@ async function loadSigiMetrics() {
     // ── KPIs Fila 2 ──
     const pendientes  = correosRecibidos.filter(x=>_asig(x)&&x.estado==='pendiente').length;
     const totalGest   = correos.reduce((s,x)=>s+(x.num_gestiones||0),0);
-    const conTutela   = correos.filter(x=>x.tiene_tutela===true).length;
+    const conTutela   = correosRecibidos.filter(x=>_asig(x)&&x.tiene_tutela===true).length;
 
     // ── Global Activo — desde state.allEmails si está cargado, sino query liviana ──
     const _all = (state.allEmails||[]).length > 0 ? (state.allEmails||[]) : (
