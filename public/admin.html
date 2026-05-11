@@ -2371,8 +2371,10 @@ async function loadSigiMetrics() {
     const totalGest   = correos.reduce((s,x)=>s+(x.num_gestiones||0),0);
     const conTutela   = correos.filter(x=>x.tiene_tutela===true).length;
 
-    // ── Global Activo — desde state.allEmails (ya en memoria, cero queries) ──
-    const _all = state.allEmails || [];
+    // ── Global Activo — desde state.allEmails si está cargado, sino query liviana ──
+    const _all = (state.allEmails||[]).length > 0 ? (state.allEmails||[]) : (
+      await sb('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false&select=id,estado&limit=10000').catch(()=>[])
+    );
     const gPend  = _all.filter(x=>x.estado==='pendiente').length;
     const gFirma = _all.filter(x=>x.estado==='pendiente_firma').length;
     const gGest  = _all.filter(x=>x.estado==='gestion').length;
@@ -2538,7 +2540,7 @@ async function exportarSIGI() {
     }
 
     const epsCat = state.epsCatalogo || await sb('eps_catalogo?order=nombre.asc') || [];
-    const correoIds = correos.map(c => c.id).filter(Boolean);
+    const correoIds = correos.map(c => c.id).filter(id => id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
     const correoIdsStr = correoIds.join(',');
     const meds = correoIdsStr
       ? await sb(`gestiones_medicamentos?correo_id=in.(${correoIdsStr.slice(0,2000)})&order=created_at.asc&limit=5000`) || []
