@@ -1558,12 +1558,13 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
 
           <!-- KPIs SIGI — Fila 1 -->
-          <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:8px">
+          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:8px">
             <div class="kpi" style="border-left:3px solid #2563eb"><div class="kpi-label">Recibidos</div><div class="kpi-val" id="sigiKpiRecibidos">—</div><div class="kpi-sub">Llegaron en el período</div></div>
             <div class="kpi" style="border-left:3px solid #f59e0b"><div class="kpi-label">En Gestión</div><div class="kpi-val warn" id="sigiKpiEnGest">—</div><div class="kpi-sub">Del período</div></div>
             <div class="kpi" style="border-left:3px solid #7c3aed"><div class="kpi-label">Pte. Firma</div><div class="kpi-val" id="sigiKpiPteFirma">—</div><div class="kpi-sub">Del período</div></div>
             <div class="kpi" style="border-left:3px solid #0891b2"><div class="kpi-label">Cerrados</div><div class="kpi-val ok" id="sigiKpiCerrados">—</div><div class="kpi-sub">Solucionados</div></div>
             <div class="kpi" style="border-left:3px solid #16a34a"><div class="kpi-label">Con Respuesta</div><div class="kpi-val ok" id="sigiKpiConResp">—</div><div class="kpi-sub">Correo enviado</div></div>
+            <div class="kpi" style="border-left:3px solid #f59e0b"><div class="kpi-label">Sin Respuesta</div><div class="kpi-val warn" id="sigiKpiSinResp">—</div><div class="kpi-sub">Sin correo enviado</div></div>
           </div>
           <!-- KPIs SIGI — Fila 2 -->
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
@@ -2384,6 +2385,9 @@ async function loadSigiMetrics() {
     const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
     // Con Respuesta: eventos del período cuyo correo llegó en el período
     const conResp   = new Set(eventosResp.filter(h=>_recibidosIds.has(h.correo_id)).map(h=>h.correo_id)).size;
+    // Sin Respuesta: recibidos del período que NO tienen evento correo_respondido en el período
+    const _idsConRespSet = new Set(eventosResp.map(h=>h.correo_id));
+    const sinResp   = correosRecibidos.filter(x=>x.estado!=='informacion'&&!_idsConRespSet.has(x.id)).length;
 
     // ── KPIs Fila 2 ──
     const pendientes  = correosRecibidos.filter(x=>x.estado==='pendiente').length;
@@ -2403,6 +2407,7 @@ async function loadSigiMetrics() {
     sv('sigiKpiPteFirma',  pteFirma);
     sv('sigiKpiCerrados',  cerrados);
     sv('sigiKpiConResp',   conResp);
+    sv('sigiKpiSinResp',   sinResp);
     sv('sigiKpiPend',      pendientes);
     sv('sigiKpiGest',      totalGest);
     sv('sigiKpiTutela',    conTutela);
