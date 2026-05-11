@@ -2329,13 +2329,24 @@ async function loadSigiMetrics() {
          `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
          `&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente,received_at` +
          `&order=received_at.desc&limit=2000`).catch(()=>[]),
-      // Total recibidos en el período — incluye informacion
-      sb(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false` +
-         `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
-         `&select=id,estado,agente_id,tiene_respuesta&limit=5000`).catch(()=>[]),
-      // correosInfo — ya incluido en correosRecibidos, placeholder para no romper destructuring
+      // Total recibidos en el período — incluye informacion, paginado para no perder registros
+      (async()=>{
+        let all=[],off=0;
+        while(true){
+          const p=await sb(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false` +
+            `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
+            `&select=id,estado,agente_id,tiene_respuesta&limit=1000&offset=${off}`).catch(()=>[]);
+          if(!p||!p.length) break;
+          all=all.concat(p);
+          if(p.length<1000) break;
+          off+=1000;
+          if(off>10000) break;
+        }
+        return all;
+      })(),
+      // correosInfo — placeholder para no romper destructuring
       Promise.resolve([]),
-      // Global activo — usar state.allEmails (ya en memoria, sin queries adicionales)
+      // Global activo — desde state.allEmails (ya en memoria, cero queries)
       Promise.resolve(state.allEmails || []),
     ]);
 
