@@ -2357,11 +2357,13 @@ async function loadSigiMetrics() {
         ]);
         return [...gP,...gG,...gF,...gI];
       })(),
-      // Eventos correo_respondido del período — paginado
+      // Eventos correo_respondido — SIN filtro de fecha del evento,
+      // para capturar respuestas dadas en cualquier momento a correos del período.
+      // Se filtrará después cruzando con _recibidosIds.
       (async()=>{
         let all=[],off=0;
         while(true){
-          const p=await sb(`historial_eventos?evento=eq.correo_respondido&agente_id=not.is.null&created_at=gte.${desde}T00:00:00-05:00&created_at=lte.${hasta}T23:59:59-05:00&select=correo_id&limit=1000&offset=${off}`).catch(()=>[]);
+          const p=await sb(`historial_eventos?evento=eq.correo_respondido&agente_id=not.is.null&select=correo_id&limit=1000&offset=${off}`).catch(()=>[]);
           if(!p||!p.length) break;
           all=all.concat(p);
           if(p.length<1000) break;
@@ -2383,10 +2385,11 @@ async function loadSigiMetrics() {
     const enGest    = correosRecibidos.filter(x=>x.estado==='gestion').length;
     const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
-    // Con Respuesta: eventos del período cuyo correo llegó en el período
-    const conResp   = new Set(eventosResp.filter(h=>_recibidosIds.has(h.correo_id)).map(h=>h.correo_id)).size;
-    // Sin Respuesta: recibidos del período que NO tienen evento correo_respondido en el período
-    const _idsConRespSet = new Set(eventosResp.map(h=>h.correo_id));
+    // Con Respuesta: correos del período que tienen AL MENOS UN evento correo_respondido
+    // (sin importar cuándo fue respondido — cruce por ID del correo)
+    const _idsConRespSet = new Set(eventosResp.filter(h=>_recibidosIds.has(h.correo_id)).map(h=>h.correo_id));
+    const conResp   = _idsConRespSet.size;
+    // Sin Respuesta: recibidos del período (excl. informacion) que NO tienen ningún correo_respondido
     const sinResp   = correosRecibidos.filter(x=>x.estado!=='informacion'&&!_idsConRespSet.has(x.id)).length;
 
     // ── KPIs Fila 2 ──
