@@ -2328,7 +2328,7 @@ async function loadSigiMetrics() {
       sb(`correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false` +
          `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
          `&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente,received_at` +
-         `&order=received_at.desc&limit=2000`).catch(()=>[]),
+         `&order=received_at.desc&limit=5000`).catch(()=>[]),
       // Total recibidos en el período — incluye informacion, paginado para no perder registros
       (async()=>{
         let all=[],off=0;
@@ -2367,7 +2367,9 @@ async function loadSigiMetrics() {
 
     // ── KPIs Fila 2 ──
     const pendientes  = correosRecibidos.filter(x=>_asig(x)&&x.estado==='pendiente').length;
-    const totalGest   = correos.reduce((s,x)=>s+(x.num_gestiones||0),0);
+    // Gestiones: sumar num_gestiones solo de correos con agente asignado
+    const _asigIds = new Set(correosRecibidos.filter(_asig).map(x=>x.id));
+    const totalGest   = correos.filter(c=>_asigIds.has(c.id)).reduce((s,x)=>s+(x.num_gestiones||0),0);
     const conTutela   = correosRecibidos.filter(x=>_asig(x)&&x.tiene_tutela===true).length;
 
     // ── Global Activo — desde state.allEmails si está cargado, sino query liviana ──
@@ -9404,7 +9406,7 @@ function renderAgentes(){
   const _cardFirma    = E.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
   const _idsFirmados  = new Set(H.filter(h=>h.evento==='firma_confirmada'&&h.correo_id).map(h=>h.correo_id));
   const _cardFirmados = E.filter(e=>_pqrAsig(e)&&_idsFirmados.has(e.id)).length;
-  const _cardCerrados = E.filter(e=>_pqr(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
+  const _cardCerrados = E.filter(e=>_pqrAsig(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
 
   // ── FILA 2 ──
   const _kpiPend    = E.filter(e=>_pqr(e)&&e.estado==='pendiente').length;
