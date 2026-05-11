@@ -2513,16 +2513,26 @@ async function exportarSIGI() {
   const hasta = document.getElementById('sigiHasta').value;
 
   try {
-    // ── Cargar datos frescos (no depender de state para agentes/eps) ──
-    const correos = await sb(
-      `correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
-      `&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,tipo_documento,` +
-      `direccion_paciente,telefono_contacto,eps_id,origen,estado,prioridad,agente_id,asignado_a,` +
-      `fecha_resolucion,created_at,num_gestiones,tiene_tutela,categoria_sigi,categoria_ia,` +
-      `nombre_solicitud,detalle_solicitud,tipo_pqr,gestion_compra,usuario_gestion_compra,` +
-      `gestion_usuarios_integ,usuarios_integrales,departamento_paciente,ciudad_paciente,correo` +
-      `&order=created_at.asc&limit=5000`
-    ) || [];
+    // ── Cargar datos frescos paginados ──
+    let correos = [];
+    let _off = 0;
+    while(true) {
+      const page = await sb(
+        `correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false` +
+        `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
+        `&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,tipo_documento,` +
+        `direccion_paciente,telefono_contacto,eps_id,origen,estado,prioridad,agente_id,asignado_a,` +
+        `fecha_resolucion,created_at,num_gestiones,tiene_tutela,categoria_sigi,categoria_ia,` +
+        `nombre_solicitud,detalle_solicitud,tipo_pqr,gestion_compra,usuario_gestion_compra,` +
+        `gestion_usuarios_integ,usuarios_integrales,departamento_paciente,ciudad_paciente` +
+        `&order=created_at.asc&limit=1000&offset=${_off}`
+      ) || [];
+      if(!page.length) break;
+      correos = correos.concat(page);
+      if(page.length < 1000) break;
+      _off += 1000;
+      if(_off > 10000) break;
+    }
 
     // Cargar agentes FRESCOS directamente — no usar state.agents (puede estar desactualizado)
     const agentesRaw = await sb('agentes?select=id,nombre,email,activo,cedula&order=nombre.asc') || [];
@@ -2544,14 +2554,16 @@ async function exportarSIGI() {
     // Deduplicar correos por id — evita filas duplicadas en Excel
     const correosSIGI = [...new Map(correos.map(c=>[c.id,c])).values()];
     const correoIds = correosSIGI.map(c => c.id).filter(id => id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
-    // Medicamentos: traer por correo_id de los correos del período en lotes de 50
-    let meds = [];
-    const _medIds = correoIds; // ya son UUIDs válidos
-    for(let i=0; i<_medIds.length; i+=50){
-      const chunk = _medIds.slice(i,i+50).join(',');
-      const batch = await sb(`gestiones_medicamentos?correo_id=in.(${chunk})&order=created_at.asc&limit=1000`).catch(()=>[]);
-      if(batch?.length) meds = meds.concat(batch);
-    }
+    // Medicamentos: lotes en paralelo para garantizar que todos lleguen
+    const _medIds = correoIds;
+    const _medChunks = [];
+    for(let i=0; i<_medIds.length; i+=50) _medChunks.push(_medIds.slice(i,i+50));
+    const _medResults = await Promise.all(
+      _medChunks.map(chunk =>
+        sb(`gestiones_medicamentos?correo_id=in.(${chunk.join(',')})&order=created_at.asc&limit=1000`).catch(()=>[])
+      )
+    );
+    const meds = _medResults.flat().filter(Boolean);
 
 
     // Historial por fecha del período
