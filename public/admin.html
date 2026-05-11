@@ -9335,7 +9335,7 @@ async function loadAgentesMetrics(){
 
   const [correos, eventos, agentes, correosAsesorActual, correosGlobal] = await Promise.all([
     // correos del período (received_at) — base para Asignados/Cerrados/Pendientes
-    sb(qC('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
+    sb(qC('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones,tiene_respuesta&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
     // Eventos del período — con todos los campos para historial y Excel
     (async()=>{
       const PAGE=1000;
@@ -9403,14 +9403,10 @@ function renderAgentes(){
   const _cardAsig     = E.filter(_pqr).length;
   // En Gestión: correos del período con ese estado actual
   const _cardGest     = E.filter(e=>_pqr(e)&&e.estado==='gestion').length;
-  // Con/Sin Respuesta: solo eventos de asesores (h.agente_id) para excluir sync automáticos
-  // ConResp: tickets del período con al menos 1 correo_respondido por asesor
+  // Con/Sin Respuesta: directo desde el campo tiene_respuesta — sin cruce con historial
   const _idsPeriodoSet = new Set(E.filter(_pqr).map(e=>e.id));
-  const _idsConResp   = new Set(H.filter(h=>h.correo_id&&h.agente_id&&h.evento==='correo_respondido'&&_idsPeriodoSet.has(h.correo_id)).map(h=>h.correo_id));
-  const _cardConResp  = _idsConResp.size;
-  // SinResp: tienen num_gestiones>0 pero no tienen correo_respondido
-  const _idsConGest   = new Set(E.filter(e=>_pqr(e)&&(e.num_gestiones||0)>0).map(e=>e.id));
-  const _cardSinResp  = [..._idsConGest].filter(id=>!_idsConResp.has(id)).length;
+  const _cardConResp  = E.filter(e=>_pqr(e)&&e.tiene_respuesta===true).length;
+  const _cardSinResp  = E.filter(e=>_pqr(e)&&!e.tiene_respuesta).length;
   // Pte. Firma: correos del período con ese estado actual
   const _cardFirma    = E.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
   const _cardCerrados = E.filter(e=>_pqr(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
