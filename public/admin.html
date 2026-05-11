@@ -2544,8 +2544,14 @@ async function exportarSIGI() {
     // Deduplicar correos por id — evita filas duplicadas en Excel
     const correosSIGI = [...new Map(correos.map(c=>[c.id,c])).values()];
     const correoIds = correosSIGI.map(c => c.id).filter(id => id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
-    // Medicamentos por fecha del período — sin límite de IDs
-    const meds = await sb(`gestiones_medicamentos?created_at=gte.${desde}T00:00:00-05:00&created_at=lte.${hasta}T23:59:59-05:00&order=created_at.asc&limit=5000`).catch(()=>[]) || [];
+    // Medicamentos: traer por correo_id de los correos del período en lotes de 50
+    let meds = [];
+    const _medIds = correoIds; // ya son UUIDs válidos
+    for(let i=0; i<_medIds.length; i+=50){
+      const chunk = _medIds.slice(i,i+50).join(',');
+      const batch = await sb(`gestiones_medicamentos?correo_id=in.(${chunk})&order=created_at.asc&limit=1000`).catch(()=>[]);
+      if(batch?.length) meds = meds.concat(batch);
+    }
 
 
     // Historial por fecha del período
