@@ -656,11 +656,6 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         En Gestión
         <span class="folder-cnt" id="fc-gestion">0</span>
       </div>
-      <div class="folder-item" onclick="setFolder('gestionado',this)">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Gestionados
-        <span class="folder-cnt" id="fc-gestionado">0</span>
-      </div>
       <div class="folder-item" onclick="setFolder('solucionado',this)">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
         Solucionados
@@ -1557,8 +1552,10 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
 
           <!-- KPIs SIGI — Fila 1 -->
-          <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:8px">
-            <div class="kpi" style="border-left:3px solid #2563eb"><div class="kpi-label">Recibidos</div><div class="kpi-val" id="sigiKpiRecibidos">—</div><div class="kpi-sub">Llegaron en el período</div></div>
+          <div style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin-bottom:8px">
+            <div class="kpi" style="border-left:3px solid #2563eb"><div class="kpi-label">Total Recibidos</div><div class="kpi-val" id="sigiKpiTotal">—</div><div class="kpi-sub">Incl. información</div></div>
+            <div class="kpi" style="border-left:3px solid #64748b"><div class="kpi-label">Información</div><div class="kpi-val" id="sigiKpiInfo">—</div><div class="kpi-sub">Del período</div></div>
+            <div class="kpi" style="border-left:3px solid #0891b2"><div class="kpi-label">Asignados</div><div class="kpi-val" id="sigiKpiRecibidos">—</div><div class="kpi-sub">Con agente</div></div>
             <div class="kpi" style="border-left:3px solid #f59e0b"><div class="kpi-label">En Gestión</div><div class="kpi-val warn" id="sigiKpiEnGest">—</div><div class="kpi-sub">Del período</div></div>
             <div class="kpi" style="border-left:3px solid #7c3aed"><div class="kpi-label">Pte. Firma</div><div class="kpi-val" id="sigiKpiPteFirma">—</div><div class="kpi-sub">Del período</div></div>
             <div class="kpi" style="border-left:3px solid #0891b2"><div class="kpi-label">Cerrados</div><div class="kpi-val ok" id="sigiKpiCerrados">—</div><div class="kpi-sub">Solucionados</div></div>
@@ -1566,11 +1563,10 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <div class="kpi" style="border-left:3px solid #f59e0b"><div class="kpi-label">Sin Respuesta</div><div class="kpi-val warn" id="sigiKpiSinResp">—</div><div class="kpi-sub">Sin correo enviado</div></div>
           </div>
           <!-- KPIs SIGI — Fila 2 -->
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
             <div class="kpi" style="border-left:3px solid #f59e0b"><div class="kpi-label">Pendientes</div><div class="kpi-val warn" id="sigiKpiPend">—</div><div class="kpi-sub">Del período</div></div>
             <div class="kpi" style="border-left:3px solid #16a34a"><div class="kpi-label">Gestiones</div><div class="kpi-val" id="sigiKpiGest">—</div><div class="kpi-sub">Total acumulado</div></div>
             <div class="kpi" style="border-left:3px solid #dc2626"><div class="kpi-label">Tutelas</div><div class="kpi-val warn" id="sigiKpiTutela">—</div><div class="kpi-sub">Del período</div></div>
-            <div class="kpi" style="border-left:3px solid #64748b"><div class="kpi-label">Información</div><div class="kpi-val" id="sigiKpiInfo">—</div><div class="kpi-sub">Del período</div></div>
           </div>
 
           <!-- Global Activo SIGI -->
@@ -2333,33 +2329,14 @@ async function loadSigiMetrics() {
          `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
          `&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente,received_at` +
          `&order=received_at.desc&limit=2000`).catch(()=>[]),
-      // Total recibidos en el período (incluye sin gestión)
+      // Total recibidos en el período — incluye informacion
       sb(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false` +
          `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
          `&select=id,estado,agente_id,tiene_respuesta&limit=5000`).catch(()=>[]),
-      // Correos estado=informacion del período — paginado
-      (async()=>{
-        let all=[],off=0;
-        while(true){
-          const p=await sb(`correos?estado=eq.informacion&is_draft=is.false&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00&select=id&limit=1000&offset=${off}`).catch(()=>[]);
-          if(!p||!p.length) break;
-          all=all.concat(p);
-          if(p.length<1000) break;
-          off+=1000;
-          if(off>10000) break;
-        }
-        return all;
-      })(),
-      // Global activo — consultas separadas para evitar problema con in.()
-      (async()=>{
-        const [gP,gG,gF,gI] = await Promise.all([
-          sb('correos?estado=eq.pendiente&origen=neq.saliente&is_draft=is.false&select=id,estado&limit=5000').catch(()=>[]),
-          sb('correos?estado=eq.gestion&origen=neq.saliente&is_draft=is.false&select=id,estado&limit=5000').catch(()=>[]),
-          sb('correos?estado=eq.pendiente_firma&origen=neq.saliente&is_draft=is.false&select=id,estado&limit=5000').catch(()=>[]),
-          sb('correos?estado=eq.informacion&origen=neq.saliente&is_draft=is.false&select=id,estado&limit=5000').catch(()=>[]),
-        ]);
-        return [...gP,...gG,...gF,...gI];
-      })(),
+      // correosInfo — ya incluido en correosRecibidos, placeholder para no romper destructuring
+      Promise.resolve([]),
+      // Global activo — usar state.allEmails (ya en memoria, sin queries adicionales)
+      Promise.resolve(state.allEmails || []),
     ]);
 
     if(!state.epsCatalogo) {
@@ -2367,8 +2344,9 @@ async function loadSigiMetrics() {
     }
 
     // ── KPIs Fila 1 ──
-    // Asignados = Total − Sin asignar → Con Respuesta + Sin Respuesta = Asignados siempre
-    const _recibidosIds = new Set(correosRecibidos.map(x=>x.id));
+    const totalRecibidos = correosRecibidos.length;
+    const infoCount      = correosRecibidos.filter(x=>x.estado==='informacion').length;
+    // Asignados = con agente, sin informacion, sin sin_asignar
     const recibidos = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.estado!=='sin_asignar'&&x.agente_id).length;
     const enGest    = correosRecibidos.filter(x=>x.estado==='gestion').length;
     const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
@@ -2381,15 +2359,17 @@ async function loadSigiMetrics() {
     const pendientes  = correosRecibidos.filter(x=>x.estado==='pendiente').length;
     const totalGest   = correos.reduce((s,x)=>s+(x.num_gestiones||0),0);
     const conTutela   = correos.filter(x=>x.tiene_tutela===true).length;
-    const infoCount   = correosInfo.length;
 
-    // ── Global Activo ──
-    const gPend  = correosGlobal.filter(x=>x.estado==='pendiente').length;
-    const gFirma = correosGlobal.filter(x=>x.estado==='pendiente_firma').length;
-    const gGest  = correosGlobal.filter(x=>x.estado==='gestion').length;
-    const gInfo  = correosGlobal.filter(x=>x.estado==='informacion').length;
+    // ── Global Activo — desde state.allEmails (ya en memoria, cero queries) ──
+    const _all = state.allEmails || [];
+    const gPend  = _all.filter(x=>x.estado==='pendiente').length;
+    const gFirma = _all.filter(x=>x.estado==='pendiente_firma').length;
+    const gGest  = _all.filter(x=>x.estado==='gestion').length;
+    const gInfo  = _all.filter(x=>x.estado==='informacion').length;
 
     const sv = (id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+    sv('sigiKpiTotal',     totalRecibidos);
+    sv('sigiKpiInfo',      infoCount);
     sv('sigiKpiRecibidos', recibidos);
     sv('sigiKpiEnGest',    enGest);
     sv('sigiKpiPteFirma',  pteFirma);
@@ -2399,7 +2379,6 @@ async function loadSigiMetrics() {
     sv('sigiKpiPend',      pendientes);
     sv('sigiKpiGest',      totalGest);
     sv('sigiKpiTutela',    conTutela);
-    sv('sigiKpiInfo',      infoCount);
     sv('sigiGlobalPend',   gPend);
     sv('sigiGlobalFirma',  gFirma);
     sv('sigiGlobalGest',   gGest);
