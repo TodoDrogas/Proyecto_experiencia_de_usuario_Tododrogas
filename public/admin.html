@@ -1353,7 +1353,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
               <div class="mkpi-body">
                 <div class="mkpi-val" id="agCardAsig">—</div>
                 <div class="mkpi-label">Asignados</div>
-                <div class="mkpi-sub">Llegaron en el período</div>
+                <div class="mkpi-sub">Con agente asignado</div>
               </div>
             </div>
             <div class="mkpi-card mkpi-amber">
@@ -2368,13 +2368,13 @@ async function loadSigiMetrics() {
     }
 
     // ── KPIs Fila 1 ──
-    // IDs del período completo (todos los recibidos, no solo con gestión)
+    // Universo base: solo con agente asignado — así Con Resp + Sin Resp = Asignados siempre
     const _recibidosIds = new Set(correosRecibidos.map(x=>x.id));
-    const recibidos = correosRecibidos.filter(x=>x.estado!=='informacion').length;
+    const recibidos = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.agente_id).length;
     const enGest    = correosRecibidos.filter(x=>x.estado==='gestion').length;
     const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
-    // Con/Sin Respuesta: solo correos con agente asignado — 100 asignados = 100 deben tener respuesta
+    // Con/Sin Respuesta: mismo universo que Asignados
     const conResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.agente_id&&x.tiene_respuesta===true).length;
     const sinResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.agente_id&&!x.tiene_respuesta).length;
 
@@ -9400,11 +9400,12 @@ function renderAgentes(){
   };
 
   // ── FILA 1 ──
-  const _cardAsig     = E.filter(_pqr).length;
+  // _pqrAsig: mismo universo para Asignados, Con Respuesta y Sin Respuesta
+  // Solo correos con agente asignado — así Con Resp + Sin Resp = Asignados siempre
+  const _pqrAsig = e => _pqr(e) && e.agente_id;
+  const _cardAsig     = E.filter(_pqrAsig).length;
   // En Gestión: correos del período con ese estado actual
   const _cardGest     = E.filter(e=>_pqr(e)&&e.estado==='gestion').length;
-  // Con/Sin Respuesta: solo correos con agente asignado — 100 asignados = 100 deben tener respuesta
-  const _pqrAsig = e => _pqr(e) && e.agente_id;
   const _cardConResp  = E.filter(e=>_pqrAsig(e)&&e.tiene_respuesta===true).length;
   const _cardSinResp  = E.filter(e=>_pqrAsig(e)&&!e.tiene_respuesta).length;
   // Pte. Firma: correos del período con ese estado actual
