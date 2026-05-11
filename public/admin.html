@@ -2354,20 +2354,19 @@ async function loadSigiMetrics() {
       state.epsCatalogo = await sb('eps_catalogo?order=nombre.asc') || [];
     }
 
-    // ── KPIs Fila 1 ──
+    // ── KPIs Fila 1 — mismo universo que Asesores: con agente, sin informacion, sin sin_asignar ──
+    const _asig = x => x.agente_id && x.estado!=='informacion' && x.estado!=='sin_asignar';
     const totalRecibidos = correosRecibidos.length;
     const infoCount      = correosRecibidos.filter(x=>x.estado==='informacion').length;
-    // Asignados = con agente, sin informacion, sin sin_asignar
-    const recibidos = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.estado!=='sin_asignar'&&x.agente_id).length;
-    const enGest    = correosRecibidos.filter(x=>x.estado==='gestion').length;
-    const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
-    const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
-    // Con/Sin Respuesta: mismo universo que Asignados
-    const conResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.estado!=='sin_asignar'&&x.agente_id&&x.tiene_respuesta===true).length;
-    const sinResp = correosRecibidos.filter(x=>x.estado!=='informacion'&&x.estado!=='sin_asignar'&&x.agente_id&&!x.tiene_respuesta).length;
+    const recibidos = correosRecibidos.filter(_asig).length;
+    const enGest    = correosRecibidos.filter(x=>_asig(x)&&x.estado==='gestion').length;
+    const pteFirma  = correosRecibidos.filter(x=>_asig(x)&&x.estado==='pendiente_firma').length;
+    const cerrados  = correosRecibidos.filter(x=>_asig(x)&&(x.estado==='solucionado'||x.estado==='gestionado')).length;
+    const conResp   = correosRecibidos.filter(x=>_asig(x)&&x.tiene_respuesta===true).length;
+    const sinResp   = correosRecibidos.filter(x=>_asig(x)&&!x.tiene_respuesta).length;
 
     // ── KPIs Fila 2 ──
-    const pendientes  = correosRecibidos.filter(x=>x.estado==='pendiente').length;
+    const pendientes  = correosRecibidos.filter(x=>_asig(x)&&x.estado==='pendiente').length;
     const totalGest   = correos.reduce((s,x)=>s+(x.num_gestiones||0),0);
     const conTutela   = correos.filter(x=>x.tiene_tutela===true).length;
 
