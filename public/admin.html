@@ -2357,21 +2357,8 @@ async function loadSigiMetrics() {
         ]);
         return [...gP,...gG,...gF,...gI];
       })(),
-      // Eventos correo_respondido — SIN filtro de fecha del evento,
-      // para capturar respuestas dadas en cualquier momento a correos del período.
-      // Se filtrará después cruzando con _recibidosIds.
-      (async()=>{
-        let all=[],off=0;
-        while(true){
-          const p=await sb(`historial_eventos?evento=eq.correo_respondido&agente_id=not.is.null&select=correo_id&limit=1000&offset=${off}`).catch(()=>[]);
-          if(!p||!p.length) break;
-          all=all.concat(p);
-          if(p.length<1000) break;
-          off+=1000;
-          if(off>10000) break;
-        }
-        return all;
-      })(),
+      // Eventos correo_respondido — placeholder, se recalcula después de tener correosRecibidos
+      Promise.resolve([]),
     ]);
 
     if(!state.epsCatalogo) {
@@ -2385,11 +2372,23 @@ async function loadSigiMetrics() {
     const enGest    = correosRecibidos.filter(x=>x.estado==='gestion').length;
     const pteFirma  = correosRecibidos.filter(x=>x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>x.estado==='solucionado'||x.estado==='gestionado').length;
-    // Con Respuesta: correos del período que tienen AL MENOS UN evento correo_respondido
-    // (sin importar cuándo fue respondido — cruce por ID del correo)
-    const _idsConRespSet = new Set(eventosResp.filter(h=>_recibidosIds.has(h.correo_id)).map(h=>h.correo_id));
+    // Con/Sin Respuesta: consultar historial_eventos solo para los IDs del período
+    // Esto evita traer toda la tabla — se consulta en lotes de 100 IDs (IN clause)
+    const _recibidosIdsArr = [..._recibidosIds];
+    const _idsConRespSet = new Set();
+    const _chunkSize = 100;
+    for(let i=0; i<_recibidosIdsArr.length; i+=_chunkSize){
+      const chunk = _recibidosIdsArr.slice(i, i+_chunkSize);
+      try {
+        const rows = await sb(
+          `historial_eventos?evento=eq.correo_respondido&agente_id=not.is.null` +
+          `&correo_id=in.(${chunk.join(',')})&select=correo_id&limit=1000`
+        );
+        (rows||[]).forEach(h=>{ if(h.correo_id) _idsConRespSet.add(h.correo_id); });
+      } catch(e2) { /* ignorar chunk fallido */ }
+    }
     const conResp   = _idsConRespSet.size;
-    // Sin Respuesta: recibidos del período (excl. informacion) que NO tienen ningún correo_respondido
+    // Sin Respuesta: recibidos del período (excl. informacion) sin ningún correo_respondido
     const sinResp   = correosRecibidos.filter(x=>x.estado!=='informacion'&&!_idsConRespSet.has(x.id)).length;
 
     // ── KPIs Fila 2 ──
