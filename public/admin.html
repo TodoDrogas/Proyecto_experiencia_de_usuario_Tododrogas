@@ -9697,11 +9697,12 @@ function exportAgentesExcel(){
     return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada'));
   };
 
-  // EPS catálogo: cruzar eps_id → nombre (usa mapa global si ya fue cargado)
+  // EPS catálogo: cruzar eps_id → nombre — cargar frescos si no están en state
   const _epsMap = {};
-  if(state?.epsCatalogo?.length){
-    state.epsCatalogo.forEach(e=>{ if(e.id) _epsMap[e.id]=e.nombre; });
-  }
+  const _epsCat = state?.epsCatalogo?.length ? state.epsCatalogo : (await sb('eps_catalogo?select=id,nombre&order=nombre.asc').catch(()=>[]));
+  (_epsCat||[]).forEach(e=>{ if(e.id) _epsMap[e.id]=e.nombre; });
+  // Helper nombre EPS
+  const _epsNom = c => c.eps_id ? (_epsMap[c.eps_id]||'') : '';
 
   // ── Hoja 1: Resumen por asesor ──────────────────────────────────────
   const h1 = act.map(a=>{
@@ -9760,8 +9761,10 @@ function exportAgentesExcel(){
   };
 
   // ── Hoja 2: Tickets con tiempos + datos completos del paciente ──────
-  const h2 = E.filter(c=>c.agente_id).map(c=>{
-    const epsNombre = c.eps_id ? (_epsMap[c.eps_id]||c.eps_id) : '';
+  // Deduplicar por id — E puede tener correos repetidos por agrupamiento de hilos
+  const _E_uniq = [...new Map(E.filter(c=>c.agente_id).map(c=>[c.id,c])).values()];
+  const h2 = _E_uniq.map(c=>{
+    const epsNombre = _epsNom(c);
     // Ticket interno: usar ticket_id de BD o construir como EXT-YYYYMMDD-ID corto
     const ticketInterno = _buildTicket(c);
     // Timeline: extraer hitos del historial para este correo
@@ -9814,7 +9817,6 @@ function exportAgentesExcel(){
   // Una fila por gestión real — excluye eventos de sistema
   const h3 = H.filter(h=>h.agente_id&&!EXCL_EVENTOS_SISTEMA.has(h.evento)).map(h=>{
     const c=cMap[h.correo_id]||{};
-    const epsNombre = c.eps_id ? (_epsMap[c.eps_id]||c.eps_id) : '';
     return {
       Fecha:                  h.created_at?new Date(h.created_at).toLocaleString('es-CO'):'',
       ID_Correo:              h.correo_id||'',
@@ -9824,7 +9826,7 @@ function exportAgentesExcel(){
       Descripcion:            h.descripcion||'',
       Cedula_Paciente:        c.cedula||c.cedula_paciente||'',
       Nombre_Paciente:        c.nombre||'',
-      EPS:                    epsNombre,
+      EPS:                    _epsNom(c),
       Ciudad:                 c.ciudad_paciente||'',
       Prioridad_Ticket:       c.prioridad||'',
       Estado_Ticket:          c.estado||'',
@@ -9843,7 +9845,7 @@ function exportAgentesExcel(){
       Fecha:                  h.created_at?new Date(h.created_at).toLocaleString('es-CO'):'',
       ID_Correo:              h.correo_id||'',
       Asesor:                 agMap[h.agente_id]||'',
-      Ticket:                 c.ticket_id||'',
+      Ticket:                 _buildTicket(c),
       Evento:                 h.evento||'',
       Es_Gestion_Real:        !EXCL_EVENTOS_SISTEMA.has(h.evento)?'SÍ':'NO',
       Descripcion:            h.descripcion||'',
