@@ -2706,6 +2706,35 @@ async function exportarSIGI() {
       {wch:14},{wch:28},{wch:22},{wch:10},{wch:10},{wch:34},{wch:18},{wch:18},{wch:18},
       {wch:18},{wch:10},{wch:18},
     ];
+    ws1['!freeze'] = {xSplit:0, ySplit:1};
+
+    // ── Estilos header ──
+    const _hStyle = {
+      font:{bold:true, color:{rgb:'FFFFFF'}, name:'Arial', sz:10},
+      fill:{fgColor:{rgb:'1A5276'}},
+      alignment:{horizontal:'center', vertical:'center', wrapText:true},
+      border:{bottom:{style:'medium',color:{rgb:'FFFFFF'}}}
+    };
+    const _altStyle = {fill:{fgColor:{rgb:'EAF2FF'}}, font:{name:'Arial', sz:9}};
+    const _normStyle = {fill:{fgColor:{rgb:'FFFFFF'}}, font:{name:'Arial', sz:9}};
+
+    // Función aplicar estilos a hoja
+    function _styleSheet(ws, nCols) {
+      const range = XLSX.utils.decode_range(ws['!ref']||'A1');
+      for(let R=range.s.r; R<=range.e.r; R++) {
+        for(let C=range.s.c; C<=range.e.c; C++) {
+          const addr = XLSX.utils.encode_cell({r:R,c:C});
+          if(!ws[addr]) ws[addr] = {v:'', t:'s'};
+          if(R===0) {
+            ws[addr].s = _hStyle;
+          } else {
+            ws[addr].s = (R%2===0) ? _altStyle : _normStyle;
+          }
+        }
+      }
+      ws['!freeze'] = {xSplit:0, ySplit:1};
+    }
+    _styleSheet(ws1, h1[0] ? Object.keys(h1[0]).length : 1);
     XLSX.utils.book_append_sheet(wb, ws1, 'INFORME_SIGI');
 
     // ════════════════════════════════════════════════════════════════
@@ -2751,6 +2780,7 @@ async function exportarSIGI() {
       h2.length ? h2 : [{'Sin datos':'Sin medicamentos en el período — el agente debe añadir medicamentos al ticket para que aparezcan aquí'}]
     );
     ws2['!cols'] = [{wch:20},{wch:18},{wch:36},{wch:8},{wch:10},{wch:16},{wch:28},{wch:30},{wch:14}];
+    _styleSheet(ws2, 9);
     XLSX.utils.book_append_sheet(wb, ws2, 'MEDICAMENTOS');
 
     // ════════════════════════════════════════════════════════════════
@@ -2781,6 +2811,7 @@ async function exportarSIGI() {
     });
     const ws3 = XLSX.utils.json_to_sheet(h3.length ? h3 : [{'Sin datos':'Sin agentes'}]);
     ws3['!cols'] = [{wch:28},{wch:12},{wch:13},{wch:18},{wch:12},{wch:12},{wch:14},{wch:15},{wch:15},{wch:13}];
+    _styleSheet(ws3, 10);
     XLSX.utils.book_append_sheet(wb, ws3, 'RESUMEN_AGENTES');
 
     // ════════════════════════════════════════════════════════════════
@@ -2819,17 +2850,24 @@ async function exportarSIGI() {
       return fila;
     });
 
+    // EPS: reemplazar '' por 0 para celdas numéricas
+    epsConConteo.forEach(fila => {
+      [...TIPOS_EPS.map(t=>t.col),'Gestión','Pendiente de firma','Solucionadas'].forEach(col => {
+        if(fila[col]==='') fila[col] = 0;
+      });
+    });
     const ws4 = XLSX.utils.json_to_sheet(epsConConteo.length ? epsConConteo : [{'Sin datos':'Sin EPS'}]);
     ws4['!cols'] = [
       {wch:13},{wch:38},{wch:13},
       {wch:11},{wch:10},{wch:10},{wch:10},{wch:13},{wch:11},{wch:11},{wch:13},{wch:10},
       {wch:12},{wch:18},{wch:14},
     ];
+    _styleSheet(ws4, 15);
     XLSX.utils.book_append_sheet(wb, ws4, 'EPS_CATALOGO');
 
     // ── Descargar ─────────────────────────────────────────────────
     const fecha = `${desde}_${hasta}`.replace(/-/g,'');
-    XLSX.writeFile(wb, `SIGI_${fecha}.xlsx`);
+    XLSX.writeFile(wb, `SIGI_${fecha}.xlsx`, {bookType:'xlsx', cellStyles:true});
     showToast('SIGI exportado ✓','success');
 
   } catch(e) {
