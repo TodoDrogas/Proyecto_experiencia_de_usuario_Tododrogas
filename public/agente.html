@@ -940,6 +940,8 @@ let _gestionForSolucionado = false;
   document.getElementById('agentAv').textContent = (AGENT_NAME||'A').charAt(0).toUpperCase();
   await loadEmails();
   setInterval(()=>loadEmails(), 60000);
+  // Pre-cargar racha del día desde Supabase (para que deploy no pierda cierres de hoy)
+  _iniciarRachaHoy();
 })();
 
 // ──────────────────────────────────────────────
@@ -3023,8 +3025,10 @@ async function saveGestion() {
 
     // ── Toast ──
     const label = esPrimera ? 'Gestión #1 registrada ✓' : `Gestión #${numGest+1} registrada ✓`;
-    if(_gestionForSolucionado) showToast('Ticket solucionado ✓','success');
-    else showToast(`${label}${meds.length?' + '+meds.length+' med.':''}`, 'success');
+    if(_gestionForSolucionado){
+      showToast('Ticket solucionado ✓','success');
+      setTimeout(function(){if(typeof showCelebracion==='function')showCelebracion();},400);
+    } else showToast(`${label}${meds.length?' + '+meds.length+' med.':''}`, 'success');
 
   } catch(e) {
     showToast('Error al guardar: '+e.message.substring(0,60),'error');
@@ -3472,19 +3476,23 @@ async function sendReply() {
 
     const _bodyFull = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`;
 
-    // ── Resolver el message_id vigente en Graph antes de intentar /reply ──
-    // El message_id cambia si el correo fue movido (ej: ticket reabierto, archivado, etc.)
-    // Siempre intentar resolver via internetMessageId primero; si falla → sendMail directo.
-    let _internetMsgId = null; // se llenará solo si encontramos el mensaje en Graph
-    const _inetMsgId = email?.raw?.internet_message_id || email?.internet_message_id || null;
-    const _rawMsgId  = email?.raw?.message_id || email?.message_id || null;
+    // ── Resolver el message_id vigente en Graph ──────────────────────────
+    // Estrategia en orden de confiabilidad:
+    // 1. internetMessageId  → buscar en allItems (funciona aunque esté archivado/movido)
+    // 2. conversationId     → buscar en allItems el entrante más reciente del hilo
+    // 3. raw message_id     → usar directamente solo si el correo no fue movido
+    // Nunca usar sendMail directo — siempre reply al mismo hilo.
+    let _internetMsgId = null;
+    const _inetMsgId  = email?.raw?.internet_message_id || email?.internet_message_id || null;
+    const _convId     = email?.raw?.conversation_id || null;
+    const _rawMsgId   = email?.raw?.message_id || email?.message_id || null;
 
-    if(_inetMsgId) {
-      // Buscar el ID actual del mensaje por su internetMessageId (inmutable en Outlook)
+    // Estrategia 1: buscar por internetMessageId en TODAS las carpetas (allItems)
+    if(_inetMsgId && !_internetMsgId) {
       try {
         const _filterEnc = encodeURIComponent(`internetMessageId eq '${_inetMsgId}'`);
         const _findR = await fetch(
-          `https://graph.microsoft.com/v1.0/users/${userId}/messages?$filter=${_filterEnc}&$select=id&$top=1`,
+          `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/allItems/messages?$filter=${_filterEnc}&$select=id&$top=1`,
           {headers:{'Authorization':'Bearer '+token}}
         );
         if(_findR.ok) {
@@ -3492,22 +3500,37 @@ async function sendReply() {
           const _currentId = _findD?.value?.[0]?.id;
           if(_currentId) {
             _internetMsgId = _currentId;
-            console.log('[sendReply] message_id resuelto via internetMessageId');
+            console.log('[sendReply] message_id resuelto via internetMessageId en allItems');
           }
         }
-      } catch(_e) { console.warn('[sendReply] no se pudo resolver internetMessageId:', _e.message); }
+      } catch(_e) { console.warn('[sendReply] fallo internetMessageId allItems:', _e.message); }
     }
 
-    // Si no pudimos resolver via internetMessageId, intentar con el raw message_id
-    // pero solo si el ticket NO fue reabierto (estado reabierto = message_id viejo, no fiable)
+    // Estrategia 2: buscar por conversationId en allItems — el entrante más reciente del hilo
+    // Cubre tickets reabiertos donde el correo original puede estar en cualquier carpeta
+    if(!_internetMsgId && _convId) {
+      try {
+        const _convClean = _convId.replace(/'/g, "''");
+        const _convEnc   = encodeURIComponent(`conversationId eq '${_convClean}' and isDraft eq false`);
+        const _convR = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${userId}/mailFolders/allItems/messages?$filter=${_convEnc}&$select=id,receivedDateTime,isDraft&$orderby=receivedDateTime desc&$top=1`,
+          {headers:{'Authorization':'Bearer '+token}}
+        );
+        if(_convR.ok) {
+          const _convD = await _convR.json();
+          const _convMsgId = _convD?.value?.[0]?.id;
+          if(_convMsgId) {
+            _internetMsgId = _convMsgId;
+            console.log('[sendReply] message_id resuelto via conversationId en allItems');
+          }
+        }
+      } catch(_e) { console.warn('[sendReply] fallo conversationId allItems:', _e.message); }
+    }
+
+    // Estrategia 3: usar raw message_id directamente (último recurso)
     if(!_internetMsgId && _rawMsgId) {
-      const _esReabierto = email?.estado === 'reabierto' || email?.raw?.estado === 'reabierto';
-      if(!_esReabierto) {
-        _internetMsgId = _rawMsgId;
-        console.log('[sendReply] usando raw message_id (no reabierto)');
-      } else {
-        console.warn('[sendReply] ticket reabierto sin internetMessageId — usando sendMail directo');
-      }
+      _internetMsgId = _rawMsgId;
+      console.log('[sendReply] usando raw message_id como último recurso');
     }
 
     let r;
@@ -3559,22 +3582,10 @@ async function sendReply() {
         body: JSON.stringify(_replyPayload),
       });
 
-      // Si Graph devuelve ErrorItemNotFound (mensaje movido/eliminado), hacer fallback a sendMail directo
+      // Si Graph devuelve error, lanzar con el mensaje para que el agente lo vea
       if(!r.ok) {
-        let _errBody = '';
-        try { _errBody = await r.clone().text(); } catch(_){}
-        if(_errBody.includes('ErrorItemNotFound') || r.status === 404) {
-          console.warn('[sendReply] ErrorItemNotFound — usando fallback sendMail');
-          const _fbPayload = {
-            subject:     subject||('RE: '+email.asunto),
-            body:        {contentType:'HTML', content:_bodyFull},
-            toRecipients:[{emailAddress:{address:toInput, name:toInput}}],
-            importance:  window._replyImportant ? 'high' : 'normal',
-          };
-          if(ccInput) _fbPayload.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
-          if(attachments.length>0) _fbPayload.attachments = attachments;
-          r = await _sendMailDirect(token, userId, _fbPayload);
-        }
+        const _errText = await r.text();
+        throw new Error(_errText);
       }
     } else {
       // Fallback: sendMail directo (adjuntos grandes o sin message_id)
@@ -7065,8 +7076,63 @@ function showRec(){var nm=(window.AGENT_NAME||'Agente').split(' ')[0],ini=(windo
 window.motivToggle=function(i){rs[i]=!rs[i];document.querySelectorAll('.mcheck')[i].classList.toggle('done',rs[i]);var done=rs.filter(Boolean).length,all=done===3;document.getElementById('motivPFill').style.width=Math.round(done/3*100)+'%';document.getElementById('motivPText').textContent=done+' de 3 confirmados';document.getElementById('motivBtn').disabled=!all;document.getElementById('motivBtn').textContent=all?'Todo en orden, continuar!':'Confirma todos los puntos para continuar';document.getElementById('motivHint').classList.toggle('hidden',all);document.getElementById('motivConfetti').style.display=all?'block':'none';document.getElementById('motivPFill').style.background=all?'#16a34a':'#1d4ed8';};
 window.motivConfirm=function(){var c=document.getElementById('motivCard');c.style.transition='all .3s';c.style.opacity='.4';c.style.transform='scale(.97)';setTimeout(function(){document.getElementById('motivOverlay').style.display='none';c.style.opacity='1';c.style.transform='scale(1)';},350);};
 setTimeout(showRec,30*60*1000);setInterval(showRec,30*60*1000);
-var cL=0,cN=0;
-window.showCelebracion=function(){cN++;var nm=(window.AGENT_NAME||'Agente').split(' ')[0],ini=(window.AGENT_NAME||'A').charAt(0).toUpperCase();document.getElementById('celAv').textContent=ini;document.getElementById('celGreeting').textContent='Excelente, '+nm+'!';var idx;do{idx=Math.floor(Math.random()*EM.length);}while(idx===cL&&EM.length>1);cL=idx;var el=document.getElementById('celEmoji');el.classList.add('pop');setTimeout(function(){el.innerHTML=EM[idx];el.classList.remove('pop');},200);document.getElementById('celRachaNum').textContent=cN+' cierre'+(cN>1?'s':'');document.getElementById('celHoy').textContent=cN;document.getElementById('celOverlay').style.display='flex';conf();};
+var cL=0;
+
+// ── Racha persistente: cierres del día guardados en localStorage ──
+function _rachaKey(){return 'pqr_racha_'+(window.AGENT_ID||'x')+'_'+new Date().toISOString().slice(0,10);}
+function _rachaGet(){try{return parseInt(localStorage.getItem(_rachaKey())||'0',10);}catch(e){return 0;}}
+function _rachaSet(n){try{localStorage.setItem(_rachaKey(),n);}catch(e){}}
+
+// Al iniciar: si localStorage no tiene cierres de hoy, cargarlos desde Supabase
+async function _iniciarRachaHoy(){
+  try{
+    if(_rachaGet()>0) return; // ya tiene datos de hoy en localStorage, no pisar
+    var agId=window.AGENT_ID||'';
+    if(!agId) return;
+    var hoy=new Date().toISOString().slice(0,10); // "2026-05-12"
+    var desde=hoy+'T00:00:00-05:00';
+    var hasta=hoy+'T23:59:59-05:00';
+    var rows=await sb('correos?agente_id=eq.'+agId+'&estado=eq.solucionado&fecha_resolucion=gte.'+encodeURIComponent(desde)+'&fecha_resolucion=lte.'+encodeURIComponent(hasta)+'&select=id&limit=500');
+    var total=(rows||[]).length;
+    if(total>0) _rachaSet(total);
+  }catch(e){ console.warn('[racha-init]',e.message); }
+}
+// Llamar después de que AGENT_ID esté disponible (loadEmails ya cargó sesión)
+// _iniciarRachaHoy se llama desde el init después de loadEmails
+
+// Obtener cierres del mes desde Supabase
+async function _cierresMes(){
+  try{
+    var hoy=new Date(), y=hoy.getFullYear(), m=String(hoy.getMonth()+1).padStart(2,'0');
+    var desde=y+'-'+m+'-01T00:00:00-05:00';
+    var hasta=y+'-'+m+'-'+String(new Date(y,hoy.getMonth()+1,0).getDate()).padStart(2,'0')+'T23:59:59-05:00';
+    var agId=window.AGENT_ID||'';
+    if(!agId) return null;
+    var rows=await sb('correos?agente_id=eq.'+agId+'&estado=eq.solucionado&fecha_resolucion=gte.'+encodeURIComponent(desde)+'&fecha_resolucion=lte.'+encodeURIComponent(hasta)+'&select=id&limit=1000');
+    return (rows||[]).length;
+  }catch(e){return null;}
+}
+
+window.showCelebracion=function(){
+  var cN=_rachaGet()+1;
+  _rachaSet(cN);
+  var nm=(window.AGENT_NAME||'Agente').split(' ')[0],ini=(window.AGENT_NAME||'A').charAt(0).toUpperCase();
+  document.getElementById('celAv').textContent=ini;
+  document.getElementById('celGreeting').textContent='Excelente, '+nm+'!';
+  var idx;do{idx=Math.floor(Math.random()*EM.length);}while(idx===cL&&EM.length>1);cL=idx;
+  var el=document.getElementById('celEmoji');el.classList.add('pop');
+  setTimeout(function(){el.innerHTML=EM[idx];el.classList.remove('pop');},200);
+  document.getElementById('celRachaNum').textContent=cN+' cierre'+(cN>1?'s':'');
+  document.getElementById('celHoy').textContent=cN;
+  document.getElementById('celMes').textContent='…';
+  document.getElementById('celOverlay').style.display='flex';
+  conf();
+  // Cargar cierres del mes en background
+  _cierresMes().then(function(n){
+    var el2=document.getElementById('celMes');
+    if(el2) el2.textContent=n!==null?n:'—';
+  });
+};
 function conf(){var ov=document.getElementById('celOverlay'),cv=document.getElementById('celCanvas');cv.width=ov.offsetWidth||420;cv.height=ov.offsetHeight||600;var ctx=cv.getContext('2d'),ps=[],aid;for(var i=0;i<180;i++)ps.push(mp(cv,false));for(var j=0;j<80;j++)ps.push(mp(cv,true));function dr(){ctx.clearRect(0,0,cv.width,cv.height);var al=false;for(var k=0;k<ps.length;k++){var p=ps[k];p.x+=p.vx;p.y+=p.vy;p.rot+=p.vr;p.vy+=0.055;p.vx*=0.995;if(p.y>cv.height*.75)p.alpha-=0.018;if(p.alpha<=0)continue;al=true;ctx.save();ctx.globalAlpha=Math.max(0,p.alpha);ctx.translate(p.x,p.y);ctx.rotate(p.rot);ctx.fillStyle=p.color;if(p.sh==='c'){ctx.beginPath();ctx.arc(0,0,p.w/2,0,Math.PI*2);ctx.fill();}else if(p.rb){ctx.fillRect(-p.w/2,-p.h/6,p.w,p.h/3);ctx.fillRect(-p.w/6,-p.h/2,p.w/3,p.h);}else{ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h);}ctx.restore();}if(al)aid=requestAnimationFrame(dr);else ctx.clearRect(0,0,cv.width,cv.height);}dr();}
 function mp(cv,b){var x=b?cv.width/2+(Math.random()-.5)*120:Math.random()*cv.width,y=b?cv.height*.25+(Math.random()-.5)*60:-20-Math.random()*100,a=b?Math.random()*Math.PI*2:0,sp=b?4+Math.random()*7:0;return{x:x,y:y,w:6+Math.random()*9,h:b?(6+Math.random()*9):(3+Math.random()*5),color:CC[Math.floor(Math.random()*CC.length)],rot:Math.random()*Math.PI*2,vx:b?Math.cos(a)*sp:(Math.random()-.5)*3.5,vy:b?Math.sin(a)*sp:2+Math.random()*3,vr:(Math.random()-.5)*.2,alpha:1,sh:Math.random()>.4?'r':'c',rb:Math.random()>.7};}
 document.getElementById('celBtnC').onclick=function(){document.getElementById('celOverlay').style.display='none';};
