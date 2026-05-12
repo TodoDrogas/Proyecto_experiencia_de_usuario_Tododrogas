@@ -3465,13 +3465,14 @@ function renderFolderAgents() {
   el.innerHTML = activos.map((a,i)=>{
     const mis      = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))&&e.origen!=='saliente'&&e.origen!=='borrador');
     const total    = mis.length;
-    const pendiente= mis.filter(e=>e.estado==='pendiente'||e.estado==='sin_asignar').length;
-    // Sin responder: tickets activos del agente que NO tienen evento correo_respondido
-    // Excluir solucionados, informacion, borrador — igual que la vista del agente
+    // Pendientes = tickets activos sin resolver (pendiente + gestion + pendiente_firma)
+    const pendiente= mis.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
+    // Sin responder: tickets activos que NO tienen correo_respondido
+    // Excluir solucionados, informacion, borrador, pendiente_firma (ya tiene acción pendiente)
     const _idsResp = state._idsConResp || new Set();
     const sinResp  = mis.filter(e=>
       e.estado!=='informacion'&&e.estado!=='solucionado'&&e.estado!=='gestionado'&&
-      e.estado!=='borrador'&&e.origen!=='borrador'&&
+      e.estado!=='borrador'&&e.origen!=='borrador'&&e.estado!=='pendiente_firma'&&
       !_idsResp.has(e.id)
     ).length;
     const ini      = (a.nombre||'?').charAt(0).toUpperCase();
@@ -9520,16 +9521,18 @@ function renderAgentes(){
     const pCount  = myE.filter(e=>e.tipo_pqr==='peticion').length;
     const rCount  = myE.filter(e=>e.tipo_pqr==='reclamo').length;
 
-    // Con/Sin Respuesta — buscar por correo_id de los tickets del agente (no por agente_id del evento)
-    // Así captura también tickets asignados via asignado_a
-    const _ticketsResp = new Set(myH_byCorreo.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
+    // Con/Sin Respuesta — eventos donde el AGENTE es el autor (agente_id===a.id)
+    // cruzados con los correos del período (igual que cargarMetricasAgente del agente)
+    // myH = por agente_id → atribuye correctamente al agente que hizo el evento
+    const _ticketsResp = new Set(myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).map(h=>h.correo_id));
     const conRespCount = _ticketsResp.size;
-    // Sin Respuesta = todos los del período que NO tienen correo_respondido
+    // Sin Respuesta = todos los del período que NO tienen correo_respondido del agente
     const sinRespCount = myE.filter(e=>!_ticketsResp.has(e.id)).length;
 
-    const gestReg = myH_byCorreo.filter(h=>_esGR(h)).length;
-    const resp    = myH_byCorreo.filter(h=>h.evento==='correo_respondido').length;
-    const firmas  = myH_byCorreo.filter(h=>h.evento==='firma_confirmada').length;
+    // Gestiones = eventos del agente (agente_id) en tickets del período — igual que el agente
+    const gestReg = myH.filter(h=>_esGR(h)&&_myIds.has(h.correo_id)).length;
+    const resp    = myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).length;
+    const firmas  = myH.filter(h=>h.evento==='firma_confirmada'&&_myIds.has(h.correo_id)).length;
 
     const resRows = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const tResH   = resRows.length>0
@@ -9538,9 +9541,8 @@ function renderAgentes(){
     const tRes    = tResH!==null ? tResH.toFixed(1)+'h' : '—';
     const tColor  = tRes==='—'?'var(--ink3)':parseFloat(tRes)>48?'var(--red)':parseFloat(tRes)>24?'#ca8a04':'var(--green)';
     const pct     = tot>0?Math.round(sol/tot*100):0;
-    // Gestiones = eventos reales del período (igual que cargarMetricasAgente del agente)
-    // NO usar num_gestiones del campo (es acumulado total, incluye gestiones de otros meses)
-    const numGest = myH_byCorreo.filter(h=>_esGR(h)).length;
+    // Gestiones = eventos del agente en tickets del período (igual que cargarMetricasAgente)
+    const numGest = myH.filter(h=>_esGR(h)&&_myIds.has(h.correo_id)).length;
 
     return { a, tot, pend, gest, sol, pfirma, alta, casosActivos, qCount, pCount, rCount,
              conRespCount, sinRespCount, gestReg, resp, firmas, tRes, tColor, pct, numGest, myE };
