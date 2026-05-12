@@ -3399,6 +3399,53 @@ async function loadAgents() {
   renderMgmtAgentSelect();
 }
 
+// Carga TODOS los tickets (sin filtro de fecha) para panel izquierdo por agente
+// — igual que lo que carga el agente en su propio loadEmails
+async function loadTicketsActivosAgentes() {
+  try {
+    const _EXCL_BADGE = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+      'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+      'pendiente_firma','firma_confirmada']);
+    let all = [], offset = 0;
+    const PAGE = 1000;
+    while(true) {
+      const page = await sb(
+        'correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&is_draft=is.false' +
+        '&select=id,agente_id,asignado_a,estado,origen' +
+        '&order=received_at.desc&limit=' + PAGE + '&offset=' + offset
+      ) || [];
+      if(!page.length) break;
+      all = all.concat(page);
+      if(page.length < PAGE) break;
+      offset += PAGE;
+      if(offset >= 50000) break;
+    }
+    state._activosAgentes = all;
+
+    // IDs con respuesta y con gestión — sobre el total sin filtro fecha
+    const ids = all.map(e=>e.id).filter(Boolean);
+    state._activosConResp = new Set();
+    state._activosConGest = new Set();
+    if(ids.length > 0) {
+      const loteSize = 400;
+      for(let i = 0; i < ids.length; i += loteSize) {
+        const lote = ids.slice(i, i + loteSize);
+        const evSnap = await sb(
+          'historial_eventos?correo_id=in.(' + lote.join(',') + ')&select=correo_id,evento&limit=10000'
+        ) || [];
+        evSnap.forEach(h => {
+          if(!h.correo_id) return;
+          if(h.evento === 'correo_respondido') state._activosConResp.add(h.correo_id);
+          if(!_EXCL_BADGE.has(h.evento))       state._activosConGest.add(h.correo_id);
+        });
+      }
+    }
+    renderFolderAgents();
+  } catch(e) {
+    console.warn('[loadTicketsActivosAgentes]', e.message);
+  }
+}
+
 async function loadHistorial() {
   try {
     // Cargar en páginas para obtener todo el historial reciente
@@ -3460,19 +3507,24 @@ function renderFolderAgents() {
   if (!el) return;
   const activos = state.agents.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
   const COLORS = ['#2563eb','#16a34a','#ea580c','#7c3aed','#ca8a04','#dc2626'];
-  const all = state.allEmails || state.emails;
-  const idsConResp = state._idsConResp || new Set();
+  // Usar tickets sin filtro de fecha (igual que el agente) si ya cargaron, sino fallback a allEmails
+  const all = state._activosAgentes || state.allEmails || state.emails;
+  const _idsConResp = state._activosConResp || state._idsConResp || new Set();
+  const _idsConGest = state._activosConGest || state._idsConGest || new Set();
   el.innerHTML = activos.map((a,i)=>{
-    const mis      = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))&&e.origen!=='saliente'&&e.origen!=='borrador');
-    const total    = mis.length;
-    const pendiente= mis.filter(e=>e.estado==='pendiente'||e.estado==='sin_asignar').length;
-    // Sin responder: tickets activos del agente que NO tienen evento correo_respondido
-    // Excluir solucionados, informacion, borrador — igual que la vista del agente
-    const _idsResp = state._idsConResp || new Set();
-    const sinResp  = mis.filter(e=>
+    const mis   = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))&&e.origen!=='saliente'&&e.origen!=='borrador');
+    const total = mis.length;
+    // Pendientes = tickets sin ninguna gestión añadida aún (igual que fc-pendiente del agente)
+    const pendiente = mis.filter(e=>
+      e.estado!=='solucionado'&&e.estado!=='gestionado'&&e.estado!=='informacion'&&
+      e.estado!=='borrador'&&e.origen!=='borrador'&&
+      !_idsConGest.has(e.id)
+    ).length;
+    // Sin responder = tickets sin correo_respondido (igual que state.respondidosIds del agente)
+    const sinResp = mis.filter(e=>
       e.estado!=='informacion'&&e.estado!=='solucionado'&&e.estado!=='gestionado'&&
       e.estado!=='borrador'&&e.origen!=='borrador'&&
-      !_idsResp.has(e.id)
+      !_idsConResp.has(e.id)
     ).length;
     const ini      = (a.nombre||'?').charAt(0).toUpperCase();
     const color    = COLORS[i%COLORS.length];
@@ -6059,6 +6111,7 @@ async function syncAll() {
   btn.classList.add('loading');
   try {
     await Promise.all([loadEmails(horas), loadAgents(), loadHistorial(), loadEncuestas()]);
+    loadTicketsActivosAgentes();
     const label = horas === 0 ? 'Hoy' : `últimas ${horas}h`;
     document.getElementById('lastSync').textContent = `sync ${new Date().toLocaleTimeString('es-CO')} · ${label}`;
     showToast(`Datos actualizados (${label}) ✓`, 'success');
@@ -8156,10 +8209,11 @@ async function getGraphToken(){
     } catch(_) {}
   }
   await Promise.all([loadEmails(), loadAgents(), loadHistorial(), loadEncuestas()]);
+  loadTicketsActivosAgentes(); // panel izquierdo por agente sin filtro fecha
   loadTopbarLogo();
   document.getElementById('lastSync').textContent=`sync ${new Date().toLocaleTimeString('es-CO')}`;
   // Auto-refresh
-  setInterval(()=>{ loadEmails(); loadHistorial(); loadEncuestas(); }, 90000);
+  setInterval(()=>{ loadEmails(); loadHistorial(); loadEncuestas(); loadTicketsActivosAgentes(); }, 90000);
 })();
 
 // ── MULTIMEDIA FORMULARIO WEB — con URL firmada para buckets privados ──
@@ -9520,16 +9574,18 @@ function renderAgentes(){
     const pCount  = myE.filter(e=>e.tipo_pqr==='peticion').length;
     const rCount  = myE.filter(e=>e.tipo_pqr==='reclamo').length;
 
-    // Con/Sin Respuesta — buscar por correo_id de los tickets del agente (no por agente_id del evento)
-    // Así captura también tickets asignados via asignado_a
-    const _ticketsResp = new Set(myH_byCorreo.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
+    // Con/Sin Respuesta — eventos donde el AGENTE es el autor (agente_id===a.id)
+    // cruzados con los correos del período (igual que cargarMetricasAgente del agente)
+    // myH = por agente_id → atribuye correctamente al agente que hizo el evento
+    const _ticketsResp = new Set(myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).map(h=>h.correo_id));
     const conRespCount = _ticketsResp.size;
-    // Sin Respuesta = todos los del período que NO tienen correo_respondido
+    // Sin Respuesta = todos los del período que NO tienen correo_respondido del agente
     const sinRespCount = myE.filter(e=>!_ticketsResp.has(e.id)).length;
 
-    const gestReg = myH_byCorreo.filter(h=>_esGR(h)).length;
-    const resp    = myH_byCorreo.filter(h=>h.evento==='correo_respondido').length;
-    const firmas  = myH_byCorreo.filter(h=>h.evento==='firma_confirmada').length;
+    // Gestiones = eventos del agente (agente_id) en tickets del período — igual que el agente
+    const gestReg = myH.filter(h=>_esGR(h)&&_myIds.has(h.correo_id)).length;
+    const resp    = myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).length;
+    const firmas  = myH.filter(h=>h.evento==='firma_confirmada'&&_myIds.has(h.correo_id)).length;
 
     const resRows = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const tResH   = resRows.length>0
@@ -9538,9 +9594,8 @@ function renderAgentes(){
     const tRes    = tResH!==null ? tResH.toFixed(1)+'h' : '—';
     const tColor  = tRes==='—'?'var(--ink3)':parseFloat(tRes)>48?'var(--red)':parseFloat(tRes)>24?'#ca8a04':'var(--green)';
     const pct     = tot>0?Math.round(sol/tot*100):0;
-    // Gestiones = eventos reales del período (igual que cargarMetricasAgente del agente)
-    // NO usar num_gestiones del campo (es acumulado total, incluye gestiones de otros meses)
-    const numGest = myH_byCorreo.filter(h=>_esGR(h)).length;
+    // Gestiones = eventos del agente en tickets del período (igual que cargarMetricasAgente)
+    const numGest = myH.filter(h=>_esGR(h)&&_myIds.has(h.correo_id)).length;
 
     return { a, tot, pend, gest, sol, pfirma, alta, casosActivos, qCount, pCount, rCount,
              conRespCount, sinRespCount, gestReg, resp, firmas, tRes, tColor, pct, numGest, myE };
