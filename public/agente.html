@@ -966,14 +966,24 @@ async function loadEmails() {
     if(_ids.length > 0) {
       try {
         const _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']);
-        const _histSnap = await sb(
-          `historial_eventos?correo_id=in.(${_ids.slice(0,400).join(',')})&select=correo_id,evento&limit=3000`
-        ) || [];
-        _histSnap.forEach(h => {
-          if(!h.correo_id) return;
-          if(!_EXCL.has(h.evento)) state.conGestionIds.add(h.correo_id);
-          if(h.evento === 'correo_respondido') state.respondidosIds.add(h.correo_id);
-        });
+        // FIX: paginar en bloques de 200 IDs para cubrir todos los tickets sin cortar
+        const _BLOCK = 200;
+        for(let _bi = 0; _bi < _ids.length; _bi += _BLOCK) {
+          const _chunk = _ids.slice(_bi, _bi + _BLOCK);
+          let _off = 0;
+          while(true) {
+            const _histSnap = await sb(
+              `historial_eventos?correo_id=in.(${_chunk.join(',')})&select=correo_id,evento&limit=1000&offset=${_off}`
+            ) || [];
+            _histSnap.forEach(h => {
+              if(!h.correo_id) return;
+              if(!_EXCL.has(h.evento)) state.conGestionIds.add(h.correo_id);
+              if(h.evento === 'correo_respondido') state.respondidosIds.add(h.correo_id);
+            });
+            if(_histSnap.length < 1000) break;
+            _off += 1000;
+          }
+        }
       } catch(_eH) { console.warn('[etiquetas-carga]', _eH.message); }
     }
     state.emails = (data||[]).map(e=>({
@@ -6378,10 +6388,15 @@ async function exportarMisMetricas() {
   var _idsFaltantes = [..._idsEnEventos].filter(function(id){return !correoMap[id];});
   if(_idsFaltantes.length > 0) {
     try {
-      var _extraRows = await sb('correos?id=in.(' + _idsFaltantes.slice(0,400).join(',') + ')' +
-        '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,' +
-        'estado,received_at,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto') || [];
-      _extraRows.forEach(function(x){ correoMap[x.id] = x; });
+      // FIX: paginar en bloques de 200 IDs para no cortar con slice(400)
+      var _eBlock = 200;
+      for(var _ei = 0; _ei < _idsFaltantes.length; _ei += _eBlock) {
+        var _eChunk = _idsFaltantes.slice(_ei, _ei + _eBlock);
+        var _extraRows = await sb('correos?id=in.(' + _eChunk.join(',') + ')' +
+          '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,' +
+          'estado,received_at,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto&limit=200') || [];
+        _extraRows.forEach(function(x){ correoMap[x.id] = x; });
+      }
     } catch(e) { console.warn('[exportar extras]', e.message); }
   }
 
@@ -6490,14 +6505,21 @@ async function cargarMetricasAgente() {
   // IDs de los correos del período — para cruzar con eventos
   var _idsPeriodo = new Set(correosPeriodo.map(function(x){return x.id;}));
 
-  // ── PASO 2: Eventos del período ──
+  // ── PASO 2: Eventos del período — FIX: paginar para no cortar en 5000 ──
   var eventos = [];
   try {
-    eventos = await sb('historial_eventos?agente_id=eq.' + AGENT_ID +
-      '&created_at=gte.' + desde + 'T00:00:00-05:00' +
-      '&created_at=lte.' + hasta + 'T23:59:59-05:00' +
-      '&select=id,created_at,correo_id,evento,descripcion' +
-      '&order=created_at.desc&limit=5000') || [];
+    var _evOff = 0;
+    while(true) {
+      var _evPage = await sb('historial_eventos?agente_id=eq.' + AGENT_ID +
+        '&created_at=gte.' + desde + 'T00:00:00-05:00' +
+        '&created_at=lte.' + hasta + 'T23:59:59-05:00' +
+        '&select=id,created_at,correo_id,evento,descripcion' +
+        '&order=created_at.desc&limit=1000&offset=' + _evOff) || [];
+      eventos = eventos.concat(_evPage);
+      if(_evPage.length < 1000) break;
+      _evOff += 1000;
+      if(_evOff >= 50000) break;
+    }
   } catch(e) { eventos = []; }
 
   // Gestiones reales = correo_respondido + Gestión registrada, SOLO de tickets del período
@@ -6509,14 +6531,19 @@ async function cargarMetricasAgente() {
   var correoIdsSet = new Set(eventosGestion.map(function(h){return h.correo_id;}).filter(Boolean));
   var correoIds    = Array.from(correoIdsSet);
 
-  // ── PASO 3: Datos completos de los tickets con gestión ──
+  // ── PASO 3: Datos completos de los tickets con gestión ── FIX: paginar en bloques de 200 IDs
   var correos = [];
   if(correoIds.length > 0) {
     try {
-      correos = await sb('correos?id=in.(' + correoIds.slice(0,400).join(',') + ')' +
-        '&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,' +
-        'tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente' +
-        '&limit=500') || [];
+      var _cBlock = 200;
+      for(var _ci = 0; _ci < correoIds.length; _ci += _cBlock) {
+        var _cChunk = correoIds.slice(_ci, _ci + _cBlock);
+        var _cPage = await sb('correos?id=in.(' + _cChunk.join(',') + ')' +
+          '&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,' +
+          'tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente' +
+          '&limit=200') || [];
+        correos = correos.concat(_cPage);
+      }
     } catch(e) { correos = []; }
   }
 
