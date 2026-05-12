@@ -10062,16 +10062,48 @@ function abrirConfirmarFirmaEPS() {
 function cerrarConfirmarFirmaEPS() {
   document.getElementById('modalConfirmarFirmaEPS').classList.remove('show');
 }
-async function confirmarFirmaEPS() {
+function confirmarFirmaEPS() {
   cerrarConfirmarFirmaEPS();
+  // Limpiar campos del modal de observación y abrir
+  document.getElementById('obsDispensaObs').value = '';
+  document.getElementById('obsDispensaNums').value = '';
+  document.getElementById('obsDispensaNoAplica').checked = false;
+  document.getElementById('obsDispensaNums').disabled = false;
+  document.getElementById('obsDispensaNums').style.opacity = '1';
+  document.getElementById('modalObsDispensa').classList.add('show');
+}
+
+async function guardarObsDispensa() {
   const id = state.selectedId;
   if(!id) return;
-  const email = state.emails.find(e=>e.id===id);
-  await sb(`correos?id=eq.${id}`, 'PATCH', {estado:'pendiente_firma'});
-  await addHistorialEvent(id, email, 'pendiente_firma', {por:'admin', observaciones:'Ticket marcado como pendiente de firma de cierre'});
-  showToast('Ticket pendiente por firma ✍️','info');
-  await loadEmails();
-  selectEmail(id);
+  const obs = document.getElementById('obsDispensaObs').value.trim();
+  const noAplica = document.getElementById('obsDispensaNoAplica').checked;
+  const nums = noAplica ? 'No aplica' : document.getElementById('obsDispensaNums').value.trim();
+  const btn = document.getElementById('btnGuardarObsDispensa');
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+  try {
+    const email = state.emails.find(e=>e.id===id);
+    await sb(`correos?id=eq.${id}`, 'PATCH', {estado:'pendiente_firma'});
+    await addHistorialEvent(id, email, 'pendiente_firma', {
+      por:'admin',
+      observaciones: obs || 'Ticket marcado como pendiente de firma de cierre',
+      numeros_dispensa: nums || '(no indicado)',
+    });
+    showToast('Ticket pendiente por firma ✍️','info');
+    cerrarObsDispensa();
+    await loadEmails();
+    selectEmail(id);
+  } catch(e) {
+    showToast('Error al guardar: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar';
+  }
+}
+
+function cerrarObsDispensa() {
+  document.getElementById('modalObsDispensa').classList.remove('show');
 }
 
 </script>
@@ -10149,6 +10181,55 @@ async function confirmarFirmaEPS() {
     <div style="display:flex;gap:10px;justify-content:center">
       <button onclick="cerrarConfirmarFirmaEPS()" style="padding:9px 24px;border-radius:8px;border:1.5px solid #dde1eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#3a4258;font-family:'Poppins',sans-serif">Cancelar</button>
       <button onclick="confirmarFirmaEPS()" style="padding:9px 28px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:'Poppins',sans-serif">Confirmar</button>
+    </div>
+  </div>
+</div>
+<!-- ══ MODAL OBSERVACIÓN + NÚMEROS DE DISPENSA ══ -->
+<style>
+#modalObsDispensa.show{display:flex!important}
+#modalObsDispensa .obs-modal-box{background:#fff;border:2px solid #2563eb;border-radius:16px;padding:2rem 2.5rem;max-width:440px;width:92%;box-shadow:0 8px 32px rgba(10,14,26,.18);display:flex;flex-direction:column;gap:1.1rem}
+#modalObsDispensa .obs-label{font-size:12px;font-weight:700;color:#3a4258;margin-bottom:5px;display:block}
+#modalObsDispensa textarea, #modalObsDispensa input[type=text]{width:100%;border:1.5px solid #dde1eb;border-radius:8px;padding:9px 12px;font-size:13px;font-family:'Poppins',sans-serif;color:#0a0e1a;outline:none;transition:border-color .15s;resize:vertical}
+#modalObsDispensa textarea:focus, #modalObsDispensa input[type=text]:focus{border-color:#2563eb}
+#modalObsDispensa .no-aplica-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+#modalObsDispensa .no-aplica-row label{font-size:12px;color:#3a4258;cursor:pointer;font-weight:500}
+#modalObsDispensa .no-aplica-row input[type=checkbox]{width:15px;height:15px;accent-color:#2563eb;cursor:pointer}
+</style>
+<div id="modalObsDispensa" style="display:none;position:fixed;inset:0;z-index:2100;background:rgba(10,14,26,.45);align-items:center;justify-content:center" onmousedown="if(event.target===this)cerrarObsDispensa()">
+  <div class="obs-modal-box">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:.25rem">
+      <div style="width:40px;height:40px;border-radius:50%;background:#eff6ff;border:2px solid #2563eb;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="18" height="18" fill="none" stroke="#2563eb" stroke-width="2.5" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      </div>
+      <div>
+        <p style="font-size:15px;font-weight:700;color:#0a0e1a;margin:0 0 2px">Información adicional</p>
+        <p style="font-size:12px;color:#3a4258;margin:0">Complete los datos antes de guardar</p>
+      </div>
+    </div>
+
+    <div>
+      <label class="obs-label" for="obsDispensaObs">Observación</label>
+      <textarea id="obsDispensaObs" rows="3" placeholder="Escriba una observación (opcional)…"></textarea>
+    </div>
+
+    <div>
+      <label class="obs-label" for="obsDispensaNums">Números de dispensa <span style="color:#2563eb">(si aplica)</span></label>
+      <p style="font-size:11px;color:#8892a4;margin-bottom:6px">Por favor indique los números de dispensa (si aplica)</p>
+      <input type="text" id="obsDispensaNums" placeholder="Ej: 001, 002, 003…" />
+      <div class="no-aplica-row">
+        <input type="checkbox" id="obsDispensaNoAplica"
+          onchange="
+            const inp = document.getElementById('obsDispensaNums');
+            if(this.checked){ inp.value=''; inp.disabled=true; inp.style.opacity='.4'; inp.placeholder='No aplica'; }
+            else{ inp.disabled=false; inp.style.opacity='1'; inp.placeholder='Ej: 001, 002, 003…'; }
+          ">
+        <label for="obsDispensaNoAplica">No aplica</label>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:.25rem">
+      <button onclick="cerrarObsDispensa()" style="padding:9px 22px;border-radius:8px;border:1.5px solid #dde1eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#3a4258;font-family:'Poppins',sans-serif">Cancelar</button>
+      <button id="btnGuardarObsDispensa" onclick="guardarObsDispensa()" style="padding:9px 26px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif">Guardar</button>
     </div>
   </div>
 </div>
