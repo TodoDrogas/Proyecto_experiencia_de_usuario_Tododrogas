@@ -9456,61 +9456,79 @@ function renderAgentes(){
   const { correos:E_all, eventos:H_all, agentes, correosAsesorActual, correosGlobal } = _agDatos;
   const sedeFiltro   = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
   const asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
-  const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!sedeFiltro||esc(a.sede||'')=== sedeFiltro||a.sede===sedeFiltro)&&(!asesorFiltro||a.id===asesorFiltro));
+  const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')
+    &&(!sedeFiltro||a.sede===sedeFiltro)
+    &&(!asesorFiltro||a.id===asesorFiltro));
 
-  // E = correos del período filtrados; E_actual = TODOS los correos del asesor (sin filtro fecha)
   const E = asesorFiltro ? E_all.filter(e=>e.agente_id===asesorFiltro) : E_all;
   const H = asesorFiltro ? H_all.filter(h=>h.agente_id===asesorFiltro) : H_all;
-  // E_actual: para En Gestión y Pte.Firma (incluye correos de meses anteriores activos)
-  const E_actual = asesorFiltro ? (correosAsesorActual||E) : E_all;
 
-  // ── MISMA lógica que agente individual, consolidado ──
-  const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='informacion';
-  // _idsPeriodo: correos que LLEGARON en el período (para Asignados, Cerrados, Pendientes, Tutelas)
-  const _idsPeriodo = new Set(E.filter(_pqr).map(e=>e.id));
+  // ── Predicados base ── idénticos para tabla Y cards ──
+  const _pqr   = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='informacion';
+  const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
+  const _esGR  = h => { const ev=(h.evento||'').toLowerCase(); return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada')); };
+  const _EXCL  = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']);
 
-  // _idsGestionados: todos los correos referenciados en eventos del período (incluye llegados en meses anteriores)
-  // Esto es lo que usa el agente: gestiones del período sin importar cuándo llegó el correo
-  const _idsGestionados = new Set(H.filter(h=>h.correo_id&&h.agente_id).map(h=>h.correo_id));
+  // ── PASO 1: calcular métricas POR AGENTE ──────────────────────────────
+  // Todos los totales de las cards serán la SUMA exacta de estas filas.
+  const rowData = act.map(a => {
+    // Correos del período asignados al agente (por agente_id O por asignado_a nombre)
+    const myE = E.filter(e=>
+      (e.agente_id===a.id || (e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))
+      && _pqrAg(e)
+    );
+    // Eventos del período del agente
+    const myH = H.filter(h=>h.agente_id===a.id);
 
-  const _esGR = h => {
-    const ev=(h.evento||'').toLowerCase();
-    return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada'));
-  };
+    const _myIds = new Set(myE.map(e=>e.id));
 
-  // ── FILA 1 ──
-  // _pqrAsig: Asignados = todos los del período con agente asignado
-  const _pqrAsig = e => _pqr(e) && e.estado !== 'sin_asignar' && e.agente_id;
-  const _cardAsig     = E.filter(_pqrAsig).length;
-  // En Gestión: correos del período con ese estado actual
-  const _cardGest     = E.filter(e=>_pqr(e)&&e.estado==='gestion').length;
+    const tot     = myE.length;
+    const pend    = myE.filter(e=>e.estado==='pendiente').length;
+    const gest    = myE.filter(e=>_pqr(e)&&e.estado==='gestion').length;
+    const sol     = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
+    const pfirma  = myE.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
+    const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
+    const casosActivos = myE.filter(e=>_pqr(e)&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
+    const qCount  = myE.filter(e=>e.tipo_pqr==='queja').length;
+    const pCount  = myE.filter(e=>e.tipo_pqr==='peticion').length;
+    const rCount  = myE.filter(e=>e.tipo_pqr==='reclamo').length;
 
-  // Con/Sin Respuesta — usar historial de eventos igual que la vista del agente:
-  // Con Respuesta = tickets del período que tienen evento correo_respondido
-  // Sin Respuesta = tickets del período con cualquier gestión real pero sin correo_respondido
-  // (misma lógica que cargarMetricasAgente en el agente)
-  const _EXCL_CR = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
-    'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
-    'pendiente_firma','firma_confirmada']);
-  const _idsConRespP = new Set(H.filter(h=>h.evento==='correo_respondido'&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
-  const _idsConGestP = new Set(H.filter(h=>!_EXCL_CR.has(h.evento)&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
-  const _cardConResp  = _idsConRespP.size;
-  const _cardSinResp  = [..._idsConGestP].filter(id=>!_idsConRespP.has(id)).length;
+    // Con/Sin Respuesta — usando historial, filtrado por IDs del período de este agente
+    const _ticketsResp    = new Set(myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).map(h=>h.correo_id));
+    const _ticketsConGest = new Set(myH.filter(h=>!_EXCL.has(h.evento)&&_myIds.has(h.correo_id)).map(h=>h.correo_id));
+    const conRespCount = _ticketsResp.size;
+    const sinRespCount = [..._ticketsConGest].filter(id=>!_ticketsResp.has(id)).length;
 
-  // Pte. Firma y Firmados: al lado para ver el flujo completo
-  const _cardFirma    = E.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
-  const _idsFirmados  = new Set(H.filter(h=>h.evento==='firma_confirmada'&&h.correo_id).map(h=>h.correo_id));
-  const _cardFirmados = E.filter(e=>_pqrAsig(e)&&_idsFirmados.has(e.id)).length;
-  const _cardCerrados = E.filter(e=>_pqrAsig(e)&&(e.estado==='solucionado'||e.estado==='gestionado')).length;
+    const gestReg = myH.filter(h=>_esGR(h)).length;
+    const resp    = myH.filter(h=>h.evento==='correo_respondido').length;
+    const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
 
-  // ── FILA 2 ──
-  const _kpiPend    = E.filter(e=>_pqr(e)&&e.estado==='pendiente').length;
-  // Gestiones: suma de num_gestiones del campo BD (correosPeriodo ya tiene este campo)
-  // Más confiable que contar eventos que tienen límite 1000 en Supabase
-  const _kpiGest    = E.filter(_pqr).reduce((s,e)=>s+(e.num_gestiones||0),0);
-  const _kpiProm    = _cardAsig>0?(_kpiGest/_cardAsig).toFixed(1):'0';
-  const _kpiTutela  = E.filter(e=>_pqr(e)&&e.tiene_tutela===true).length;
-  const _kpiCerr    = _cardCerrados;
+    const resRows = myE.filter(e=>e.fecha_resolucion&&e.received_at);
+    const tResH   = resRows.length>0
+      ? (resRows.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/resRows.length)
+      : null;
+    const tRes    = tResH!==null ? tResH.toFixed(1)+'h' : '—';
+    const tColor  = tRes==='—'?'var(--ink3)':parseFloat(tRes)>48?'var(--red)':parseFloat(tRes)>24?'#ca8a04':'var(--green)';
+    const pct     = tot>0?Math.round(sol/tot*100):0;
+    const numGest = myE.filter(_pqr).reduce((s,e)=>s+(e.num_gestiones||0),0);
+
+    return { a, tot, pend, gest, sol, pfirma, alta, casosActivos, qCount, pCount, rCount,
+             conRespCount, sinRespCount, gestReg, resp, firmas, tRes, tColor, pct, numGest, myE };
+  });
+
+  // ── PASO 2: cards = SUMA exacta de rowData ────────────────────────────
+  const sum = (f) => rowData.reduce((s,r)=>s+f(r),0);
+
+  const _cardAsig     = sum(r=>r.tot);
+  const _cardGest     = sum(r=>r.gest);
+  const _cardConResp  = sum(r=>r.conRespCount);
+  const _cardSinResp  = sum(r=>r.sinRespCount);
+  const _cardFirma    = sum(r=>r.pfirma);
+  const _cardCerrados = sum(r=>r.sol);
+  const _kpiPend      = sum(r=>r.pend);
+  const _kpiGest      = sum(r=>r.numGest);
+  const _kpiProm      = _cardAsig>0?(_kpiGest/_cardAsig).toFixed(1):'0';
+  const _kpiTutela    = E.filter(e=>_pqr(e)&&e.tiene_tutela===true).length;
 
   const setV=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   setV('agCardAsig',    _cardAsig);
@@ -9518,7 +9536,6 @@ function renderAgentes(){
   setV('agCardConResp', _cardConResp);
   setV('agCardSinResp', _cardSinResp);
   setV('agCardFirma',   _cardFirma);
-  setV('agCardFirmados',_cardFirmados);
   setV('agCardCerrados',_cardCerrados);
   setV('agKpiPend',     _kpiPend);
   setV('agKpiGest',     _kpiGest);
@@ -9526,113 +9543,46 @@ function renderAgentes(){
   setV('agKpiTutela',   _kpiTutela);
 
   // ── Global Activo — backlog sin filtro de fecha ──
-  // Si hay filtro de asesor: usar E_actual (todos sus correos)
-  // Si no: usar E_all completo
-  // Global: sin filtro asesor = todos activos sin fecha; con filtro = todos del asesor sin fecha
-  const _globalBase = asesorFiltro
-    ? (correosAsesorActual||E)
-    : (correosGlobal.length ? correosGlobal : E_all);
-  setV('agGlobalPend',  _globalBase.filter(e=>e.estado==='pendiente').length);
-  setV('agGlobalFirma', _globalBase.filter(e=>e.estado==='pendiente_firma').length);
-  setV('agGlobalGest',  _globalBase.filter(e=>e.estado==='gestion').length);
+  const _E_actual = asesorFiltro ? (correosAsesorActual||E) : (correosGlobal.length?correosGlobal:E_all);
+  setV('agGlobalPend',  _E_actual.filter(e=>e.estado==='pendiente').length);
+  setV('agGlobalFirma', _E_actual.filter(e=>e.estado==='pendiente_firma').length);
+  setV('agGlobalGest',  _E_actual.filter(e=>e.estado==='gestion').length);
 
   setV('agTableInfo', `${act.length} asesores activos · ${_cardAsig} tickets en el período`);
-  // Renderizar tabla Pendientes por Firma
+
+  // ── Tabla por firma pendiente ──
   setTimeout(renderPteFirma, 50);
 
-  // ── CHART RESUELTOS VS PENDIENTES ──
+  // ── CHARTS ──
+  const PAL=['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
+  const labels = act.map(a=>(a.nombre||'').split(' ')[0]);
+
   if(chartAgSol) chartAgSol.destroy();
   const ctxS=document.getElementById('chartAgSol');
-  if(ctxS) chartAgSol=new Chart(ctxS.getContext('2d'),{
-    type:'bar',
-    data:{
-      labels: act.map(a=>(a.nombre||'').split(' ')[0]),
-      datasets:[
-        {label:'Resueltos', data:act.map(a=>E.filter(e=>e.agente_id===a.id&&(e.estado==='solucionado'||e.estado==='gestionado')).length),
-          backgroundColor:'#dcfce7',borderColor:'#16a34a',borderWidth:2,borderRadius:4},
-        {label:'Pendientes', data:act.map(a=>E.filter(e=>e.agente_id===a.id&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length),
-          backgroundColor:'#fef9c3',borderColor:'#ca8a04',borderWidth:2,borderRadius:4},
-      ]
-    },
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:12}}},
-      scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},x:{ticks:{font:{size:10}}}}}
-  });
+  if(ctxS) chartAgSol=new Chart(ctxS.getContext('2d'),{type:'bar',data:{labels,datasets:[
+    {label:'Resueltos',data:rowData.map(r=>r.sol),backgroundColor:'#dcfce7',borderColor:'#16a34a',borderWidth:2,borderRadius:4},
+    {label:'Pendientes',data:rowData.map(r=>r.pend+r.gest+r.pfirma),backgroundColor:'#fef9c3',borderColor:'#ca8a04',borderWidth:2,borderRadius:4},
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},boxWidth:12}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},x:{ticks:{font:{size:10}}}}}});
 
-  // ── CHART TIEMPO PROMEDIO RESOLUCIÓN ──
   if(chartAgTiempo) chartAgTiempo.destroy();
   const ctxT=document.getElementById('chartAgTiempo');
-  if(ctxT) chartAgTiempo=new Chart(ctxT.getContext('2d'),{
-    type:'bar',
-    data:{
-      labels: act.map(a=>(a.nombre||'').split(' ')[0]),
-      datasets:[{
-        label:'Horas promedio',
-        data: act.map(a=>{
-          const r=E.filter(e=>e.agente_id===a.id&&e.fecha_resolucion&&e.received_at);
-          if(!r.length) return 0;
-          return parseFloat((r.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/r.length).toFixed(1));
-        }),
-        backgroundColor:'#ede9fe',borderColor:'#7c3aed',borderWidth:2,borderRadius:4
-      }]
-    },
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{y:{beginAtZero:true,ticks:{font:{size:9}}},x:{ticks:{font:{size:10}}}}}
-  });
+  if(ctxT) chartAgTiempo=new Chart(ctxT.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:'Horas promedio',
+    data:rowData.map(r=>r.tRes==='—'?0:parseFloat(r.tRes)),
+    backgroundColor:'#ede9fe',borderColor:'#7c3aed',borderWidth:2,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{font:{size:9}}},x:{ticks:{font:{size:10}}}}}});
 
-  // ── CHART GESTIONES ──
   if(chartAgGest) chartAgGest.destroy();
   const ctxG=document.getElementById('chartAgGest');
-  if(ctxG) chartAgGest=new Chart(ctxG.getContext('2d'),{
-    type:'bar',
-    data:{
-      labels: act.map(a=>(a.nombre||'').split(' ')[0]),
-      datasets:[{
-        data: act.map(a=>E.filter(e=>e.agente_id===a.id&&_pqr(e)).reduce((s,e)=>s+(e.num_gestiones||0),0)),
-        backgroundColor:'#e0f2fe',borderColor:'#0891b2',borderWidth:2,borderRadius:4
-      }]
-    },
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},x:{ticks:{font:{size:10}}}}}
-  });
+  if(ctxG) chartAgGest=new Chart(ctxG.getContext('2d'),{type:'bar',data:{labels,datasets:[{
+    data:rowData.map(r=>r.numGest),
+    backgroundColor:'#e0f2fe',borderColor:'#0891b2',borderWidth:2,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,font:{size:9}}},x:{ticks:{font:{size:10}}}}}});
 
   // ── TABLA MAESTRA ──
   const COLS=['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
-  const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
-  const maxC=Math.max(...act.map(a=>E.filter(e=>e.agente_id===a.id&&_pqrAg(e)).length),1);
-  document.getElementById('agTableBody').innerHTML = act.map((a,i)=>{
-    const myE  = E.filter(e=>e.agente_id===a.id&&_pqrAg(e));
-    const myH  = H.filter(h=>h.agente_id===a.id);
-    const tot  = myE.length;
-    const pend = myE.filter(e=>e.estado==='pendiente').length;
-    const gest = myE.filter(e=>_pqr(e)&&e.estado==='gestion').length;
-    const sol  = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
-    const pct  = tot>0?Math.round(sol/tot*100):0;
-    const res  = myE.filter(e=>e.fecha_resolucion&&e.received_at);
-    const tRes = res.length>0
-      ? (res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1)+'h'
-      : '—';
-    const tResNum = parseFloat(tRes);
-    const tColor  = tRes==='—'?'var(--ink3)':tResNum>48?'var(--red)':tResNum>24?'#ca8a04':'var(--green)';
-    const resp    = myH.filter(h=>h.agente_id&&h.evento==='correo_respondido').length;
-    const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
-    // gestReg usa el set unificado — correo_respondido SÍ cuenta, firma_confirmada NO
-    const gestReg = myH.filter(h=>_esGR(h)).length;  // todos los gestionados en el período
-    // Con/Sin Respuesta — etiqueta binaria por asesor (¿hubo al menos 1 correo enviado?)
-    const _ticketsConGest = new Set(myH.filter(h=>h.agente_id&&_esGR(h)).map(h=>h.correo_id));
-    const _ticketsResp    = new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
-    const conRespCount = _ticketsResp.size;
-    const sinRespCount = [..._ticketsConGest].filter(tid=>!_ticketsResp.has(tid)).length;
-    const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
-    const color   = COLS[i%COLS.length];
-    const pfirma = myE.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
-    const qCount = myE.filter(e=>e.tipo_pqr==='queja').length;
-    const pCount = myE.filter(e=>e.tipo_pqr==='peticion').length;
-    const rCount = myE.filter(e=>e.tipo_pqr==='reclamo').length;
-    // casos_activos DINÁMICO — contado del período filtrado, no campo estático de agentes
-    const casosActivos = myE.filter(e=>_pqr(e)&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
+  const maxC = Math.max(...rowData.map(r=>r.tot),1);
+  document.getElementById('agTableBody').innerHTML = rowData.map(({a,tot,pend,gest,sol,pfirma,alta,casosActivos,qCount,pCount,rCount,conRespCount,sinRespCount,gestReg,resp,firmas,tRes,tColor,pct},i)=>{
+    const color = COLS[i%COLS.length];
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px">
         <div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">${(a.nombre||'?').charAt(0).toUpperCase()}</div>
@@ -9663,15 +9613,13 @@ function renderAgentes(){
     </tr>`;
   }).join('')||'<tr><td colspan="22" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
 
-  // Poblar selector de asesores en timeline Y en barra KPI
+  // Poblar selectores de asesores
   const sel=document.getElementById('agFiltroAsesor');
   const selKpi=document.getElementById('agFiltroAsesorKpi');
   const _allActivos = agentes.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
   const _asesorOpts = '<option value="">Todos los asesores</option>'+_allActivos.map(a=>`<option value="${a.id}">${esc(a.nombre||'')}</option>`).join('');
   if(sel) sel.innerHTML=_asesorOpts;
   if(selKpi && selKpi.children.length<=1) selKpi.innerHTML=_asesorOpts;
-  // FirmaBody select también
-  // Poblar datalist de sedes en filtro Asesores
   const agSedeList=document.getElementById('agFiltroSedeList');
   if(agSedeList&&agSedeList.children.length===0){
     const sedesAg=[...new Set(agentes.map(a=>a.sede).filter(Boolean))].sort();
@@ -9680,6 +9628,7 @@ function renderAgentes(){
 
   renderAgTimeline();
 }
+
 
 function renderPteFirma(){
   if(!_agDatos) return;
