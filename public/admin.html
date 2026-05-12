@@ -9501,10 +9501,13 @@ function renderAgentes(){
       (e.agente_id===a.id || (e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))
       && _pqrAg(e)
     );
-    // Eventos del período del agente
-    const myH = H.filter(h=>h.agente_id===a.id);
-
+    // Eventos del período del agente — filtrar por agente_id O por correo_id de sus tickets
     const _myIds = new Set(myE.map(e=>e.id));
+    // myH por agente_id (para gestReg, resp, firmas)
+    const myH = H.filter(h=>h.agente_id===a.id);
+    // myH_byCorreo: eventos de los correos del agente aunque el evento tenga otro agente_id
+    // Cubre tickets asignados via asignado_a donde el evento puede tener agente_id distinto
+    const myH_byCorreo = H.filter(h=>_myIds.has(h.correo_id));
 
     const tot     = myE.length;
     const pend    = myE.filter(e=>e.estado==='pendiente').length;
@@ -9517,15 +9520,16 @@ function renderAgentes(){
     const pCount  = myE.filter(e=>e.tipo_pqr==='peticion').length;
     const rCount  = myE.filter(e=>e.tipo_pqr==='reclamo').length;
 
-    // Con/Sin Respuesta — usando historial, filtrado por IDs del período de este agente
-    const _ticketsResp = new Set(myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).map(h=>h.correo_id));
+    // Con/Sin Respuesta — buscar por correo_id de los tickets del agente (no por agente_id del evento)
+    // Así captura también tickets asignados via asignado_a
+    const _ticketsResp = new Set(myH_byCorreo.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
     const conRespCount = _ticketsResp.size;
     // Sin Respuesta = todos los del período que NO tienen correo_respondido
     const sinRespCount = myE.filter(e=>!_ticketsResp.has(e.id)).length;
 
-    const gestReg = myH.filter(h=>_esGR(h)).length;
-    const resp    = myH.filter(h=>h.evento==='correo_respondido').length;
-    const firmas  = myH.filter(h=>h.evento==='firma_confirmada').length;
+    const gestReg = myH_byCorreo.filter(h=>_esGR(h)).length;
+    const resp    = myH_byCorreo.filter(h=>h.evento==='correo_respondido').length;
+    const firmas  = myH_byCorreo.filter(h=>h.evento==='firma_confirmada').length;
 
     const resRows = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const tResH   = resRows.length>0
@@ -9534,7 +9538,9 @@ function renderAgentes(){
     const tRes    = tResH!==null ? tResH.toFixed(1)+'h' : '—';
     const tColor  = tRes==='—'?'var(--ink3)':parseFloat(tRes)>48?'var(--red)':parseFloat(tRes)>24?'#ca8a04':'var(--green)';
     const pct     = tot>0?Math.round(sol/tot*100):0;
-    const numGest = myE.filter(_pqr).reduce((s,e)=>s+(e.num_gestiones||0),0);
+    // Gestiones = eventos reales del período (igual que cargarMetricasAgente del agente)
+    // NO usar num_gestiones del campo (es acumulado total, incluye gestiones de otros meses)
+    const numGest = myH_byCorreo.filter(h=>_esGR(h)).length;
 
     return { a, tot, pend, gest, sol, pfirma, alta, casosActivos, qCount, pCount, rCount,
              conRespCount, sinRespCount, gestReg, resp, firmas, tRes, tColor, pct, numGest, myE };
