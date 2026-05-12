@@ -3512,13 +3512,15 @@ function renderFolderAgents() {
   const _idsConResp = state._activosConResp || state._idsConResp || new Set();
   const _idsConGest = state._activosConGest || state._idsConGest || new Set();
   el.innerHTML = activos.map((a,i)=>{
-    const mis   = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
-    const total = mis.filter(e=>e.estado!=='informacion').length;
-    // Pendientes = estado exacto 'pendiente' (igual que fc-pendiente y métricas)
-    const pendiente = mis.filter(e=>e.estado==='pendiente').length;
-    // Sin respuesta = activos sin correo_respondido (igual que fc-sin_respuesta y métricas)
-    const sinResp = mis.filter(e=>
-      e.estado!=='informacion'&&e.estado!=='solucionado'&&e.estado!=='gestionado'&&
+    const mis = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())));
+    // Total — igual que fc-todos del agente
+    const total    = mis.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador').length;
+    // Pendientes — igual que fc-pendiente del agente
+    const pendiente = mis.filter(e=>e.estado==='pendiente'&&e.origen!=='saliente'&&e.origen!=='borrador').length;
+    // Sin Respuesta — igual que fc-sin_respuesta del agente
+    const sinResp  = mis.filter(e=>
+      e.origen!=='saliente'&&e.origen!=='borrador'&&
+      e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='solucionado'&&
       !_idsConResp.has(e.id)
     ).length;
     const ini      = (a.nombre||'?').charAt(0).toUpperCase();
