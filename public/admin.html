@@ -3512,18 +3512,13 @@ function renderFolderAgents() {
   const _idsConResp = state._activosConResp || state._idsConResp || new Set();
   const _idsConGest = state._activosConGest || state._idsConGest || new Set();
   el.innerHTML = activos.map((a,i)=>{
-    const mis   = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))&&e.origen!=='saliente'&&e.origen!=='borrador');
-    const total = mis.length;
-    // Pendientes = tickets sin ninguna gestión añadida aún (igual que fc-pendiente del agente)
-    const pendiente = mis.filter(e=>
-      e.estado!=='solucionado'&&e.estado!=='gestionado'&&e.estado!=='informacion'&&
-      e.estado!=='borrador'&&e.origen!=='borrador'&&
-      !_idsConGest.has(e.id)
-    ).length;
-    // Sin responder = tickets sin correo_respondido (igual que state.respondidosIds del agente)
+    const mis   = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
+    const total = mis.filter(e=>e.estado!=='informacion').length;
+    // Pendientes = estado exacto 'pendiente' (igual que fc-pendiente y métricas)
+    const pendiente = mis.filter(e=>e.estado==='pendiente').length;
+    // Sin respuesta = activos sin correo_respondido (igual que fc-sin_respuesta y métricas)
     const sinResp = mis.filter(e=>
       e.estado!=='informacion'&&e.estado!=='solucionado'&&e.estado!=='gestionado'&&
-      e.estado!=='borrador'&&e.origen!=='borrador'&&
       !_idsConResp.has(e.id)
     ).length;
     const ini      = (a.nombre||'?').charAt(0).toUpperCase();
@@ -3535,8 +3530,8 @@ function renderFolderAgents() {
         <span class="folder-cnt">${total}</span>
       </div>
       <div style="padding-left:29px;display:flex;gap:4px;flex-wrap:wrap">
-        ${pendiente>0 ? `<span style="background:var(--yellow-l);color:var(--yellow);font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">&#9203; ${pendiente} pend.</span>` : ''}
-        ${sinResp>0   ? `<span style="background:var(--red-l);color:var(--red);font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">&#9993; ${sinResp} sin responder</span>` : ''}
+        ${pendiente>0 ? `<span style="background:var(--yellow-l);color:var(--yellow);font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">⏳ ${pendiente} pend.</span>` : ''}
+        ${sinResp>0   ? `<span style="background:#fef9c3;color:#854d0e;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px">⏳ ${sinResp} sin resp.</span>` : ''}
         ${pendiente===0&&sinResp===0 ? `<span style="color:var(--ink3);font-size:9px">sin activos</span>` : ''}
       </div>
     </div>`;
