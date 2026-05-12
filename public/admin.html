@@ -3352,26 +3352,32 @@ async function loadEmails(horasVentana = 0) {
     // Lista agrupada = lo que muestra el panel izquierdo (igual que Outlook)
     state.emails = Array.from(hilos.values());
 
-    // ── Calcular IDs con respuesta (para badge CON/SIN RESPUESTA) ──
-    // IMPORTANTE: filtrar SOLO los correos realmente cargados para no contar
-    // respondidos de otros agentes o de fuera de la ventana.
+    // ── Calcular IDs con respuesta y con gestión (para badges CON/SIN RESPUESTA) ──
+    // Mismo EXCL que métricas — ambos sets deben coincidir exactamente con la vista del agente.
+    const _EXCL_BADGE = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+      'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+      'pendiente_firma','firma_confirmada']);
     try {
       const ids = allEmails.map(e=>e.id).filter(Boolean);
       state._idsConResp = new Set();
+      state._idsConGest = new Set();
       if(ids.length > 0) {
-        // Paginar en lotes de 400 para no exceder el límite de URL
         const loteSize = 400;
         for(let i = 0; i < ids.length; i += loteSize) {
           const lote = ids.slice(i, i + loteSize);
-          const evResp = await sb(
-            `historial_eventos?correo_id=in.(${lote.join(',')})&evento=eq.correo_respondido&select=correo_id&limit=2000`
+          const evSnap = await sb(
+            `historial_eventos?correo_id=in.(${lote.join(',')})&select=correo_id,evento&limit=5000`
           ) || [];
-          evResp.forEach(h => { if(h.correo_id) state._idsConResp.add(h.correo_id); });
+          evSnap.forEach(h => {
+            if(!h.correo_id) return;
+            if(h.evento === 'correo_respondido') state._idsConResp.add(h.correo_id);
+            if(!_EXCL_BADGE.has(h.evento)) state._idsConGest.add(h.correo_id);
+          });
         }
       }
     } catch(e2) {
-      // Fallback: usar sólo historial local
       state._idsConResp = new Set((state.historial||[]).filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
+      state._idsConGest = new Set();
     }
 
   } catch(err) {
@@ -3658,7 +3664,14 @@ function renderEmailItems(list, el, banner) {
         <span class="ei-time">${formatDate(new Date(e.fecha))}</span>
         <div class="ei-badges">
           ${agent?`<span style="font-size:10px;color:var(--ink3)">${esc(agent.nombre.split(' ')[0])}</span>`:''}
-          ${(()=>{const tieneResp=(state._idsConResp||new Set()).has(e.id);return e.origen!=='saliente'&&e.estado!=='enviado'&&e.origen!=='borrador'&&e.estado!=='borrador'&&e.estado!=='informacion'?`<span style="background:${tieneResp?'#dcfce7':'#fef9c3'};color:${tieneResp?'#16a34a':'#854d0e'};font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;border:1px solid ${tieneResp?'#bbf7d0':'#fde68a'}">&#9993; ${tieneResp?'Con respuesta':'Sin respuesta'}</span>`:'';})()}
+          ${(()=>{
+            const _tieneResp=(state._idsConResp||new Set()).has(e.id);
+            const _tieneGest=(state._idsConGest||new Set()).has(e.id);
+            if(e.origen==='saliente'||e.estado==='enviado'||e.origen==='borrador'||e.estado==='borrador'||e.estado==='informacion') return '';
+            if(_tieneResp) return '<span style="background:#dcfce7;color:#15803d;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;border:1px solid #bbf7d0">✉ Con respuesta</span>';
+            if(_tieneGest) return '<span style="background:#fef9c3;color:#854d0e;font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;border:1px solid #fde68a">⏳ Sin respuesta</span>';
+            return '';
+          })()}
           <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.estado==='sin_asignar'?'sin_asignar':(e.origen==='saliente'||e.estado==='enviado')?'enviado':e.estado==='sin_asignar'||(!e.agente_id&&e.estado==='pendiente')?'sin_asignar':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':e.estado==='sin_asignar'||(!e.agente_id&&e.estado==='pendiente')?'Sin asignar':estadoLabel(e.estado)}</span>
         </div>
       </div>
