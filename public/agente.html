@@ -963,7 +963,7 @@ async function loadEmails() {
     state.conGestionIds  = new Set();
     if(_ids.length > 0) {
       try {
-        const _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado']);
+        const _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']);
         const _histSnap = await sb(
           `historial_eventos?correo_id=in.(${_ids.slice(0,400).join(',')})&select=correo_id,evento&limit=3000`
         ) || [];
@@ -1094,12 +1094,10 @@ function renderEmailList() {
         <span class="badge ${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':e.estado}">${e.origen==='borrador'||e.estado==='borrador'?'borrador':e.origen==='saliente'||e.estado==='enviado'?'enviado':estadoLabel(e.estado)}</span>
       </div>
       ${(()=>{
+        if(e.estado==='informacion'||e.origen==='saliente'||e.origen==='borrador'||e.estado==='borrador'||e.estado==='enviado') return '';
         const _conResp = state.respondidosIds.has(e.id);
-        const _conGest = state.conGestionIds.has(e.id);
-        if(e.estado==='informacion'||e.origen==='saliente') return '';
         if(_conResp) return '<div style="margin-top:3px"><span style="background:#dcfce7;color:#15803d;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px;letter-spacing:.3px">✉ CON RESPUESTA</span></div>';
-        if(_conGest) return '<div style="margin-top:3px"><span style="background:#fef9c3;color:#854d0e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px;letter-spacing:.3px">⏳ SIN RESPUESTA</span></div>';
-        return '';
+        return '<div style="margin-top:3px"><span style="background:#fef9c3;color:#854d0e;font-size:9px;font-weight:700;padding:1px 7px;border-radius:99px;letter-spacing:.3px">⏳ SIN RESPUESTA</span></div>';
       })()}
     </div>`).join('');
 }
@@ -3474,14 +3472,15 @@ async function sendReply() {
 
     const _bodyFull = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`;
 
-    // ── Intentar usar /reply nativo de Graph si tenemos el message_id del correo entrante ──
-    // Esto preserva In-Reply-To, References y el hilo en Outlook automáticamente
-    let _internetMsgId = email?.raw?.message_id || email?.message_id || null;
-
-    // Si tenemos internet_message_id, resolver el message_id actual en Graph
-    // (el message_id cambia si el correo fue movido de carpeta)
+    // ── Resolver el message_id vigente en Graph antes de intentar /reply ──
+    // El message_id cambia si el correo fue movido (ej: ticket reabierto, archivado, etc.)
+    // Siempre intentar resolver via internetMessageId primero; si falla → sendMail directo.
+    let _internetMsgId = null; // se llenará solo si encontramos el mensaje en Graph
     const _inetMsgId = email?.raw?.internet_message_id || email?.internet_message_id || null;
-    if(_inetMsgId && _internetMsgId) {
+    const _rawMsgId  = email?.raw?.message_id || email?.message_id || null;
+
+    if(_inetMsgId) {
+      // Buscar el ID actual del mensaje por su internetMessageId (inmutable en Outlook)
       try {
         const _filterEnc = encodeURIComponent(`internetMessageId eq '${_inetMsgId}'`);
         const _findR = await fetch(
@@ -3492,11 +3491,23 @@ async function sendReply() {
           const _findD = await _findR.json();
           const _currentId = _findD?.value?.[0]?.id;
           if(_currentId) {
-            _internetMsgId = _currentId; // usar el id actual del mensaje
-            console.log('[sendReply] message_id actualizado via internetMessageId');
+            _internetMsgId = _currentId;
+            console.log('[sendReply] message_id resuelto via internetMessageId');
           }
         }
       } catch(_e) { console.warn('[sendReply] no se pudo resolver internetMessageId:', _e.message); }
+    }
+
+    // Si no pudimos resolver via internetMessageId, intentar con el raw message_id
+    // pero solo si el ticket NO fue reabierto (estado reabierto = message_id viejo, no fiable)
+    if(!_internetMsgId && _rawMsgId) {
+      const _esReabierto = email?.estado === 'reabierto' || email?.raw?.estado === 'reabierto';
+      if(!_esReabierto) {
+        _internetMsgId = _rawMsgId;
+        console.log('[sendReply] usando raw message_id (no reabierto)');
+      } else {
+        console.warn('[sendReply] ticket reabierto sin internetMessageId — usando sendMail directo');
+      }
     }
 
     let r;
@@ -3547,6 +3558,24 @@ async function sendReply() {
         headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
         body: JSON.stringify(_replyPayload),
       });
+
+      // Si Graph devuelve ErrorItemNotFound (mensaje movido/eliminado), hacer fallback a sendMail directo
+      if(!r.ok) {
+        let _errBody = '';
+        try { _errBody = await r.clone().text(); } catch(_){}
+        if(_errBody.includes('ErrorItemNotFound') || r.status === 404) {
+          console.warn('[sendReply] ErrorItemNotFound — usando fallback sendMail');
+          const _fbPayload = {
+            subject:     subject||('RE: '+email.asunto),
+            body:        {contentType:'HTML', content:_bodyFull},
+            toRecipients:[{emailAddress:{address:toInput, name:toInput}}],
+            importance:  window._replyImportant ? 'high' : 'normal',
+          };
+          if(ccInput) _fbPayload.ccRecipients = ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
+          if(attachments.length>0) _fbPayload.attachments = attachments;
+          r = await _sendMailDirect(token, userId, _fbPayload);
+        }
+      }
     } else {
       // Fallback: sendMail directo (adjuntos grandes o sin message_id)
       const messagePayload={
@@ -6489,7 +6518,8 @@ async function cargarMetricasAgente() {
   // En Gestión = correos del período con ese estado actual
   var _cardGest = correosPeriodo.filter(function(x){return x.estado==='gestion';}).length;
   var _cardConResp  = _idsConRespP.size;
-  var _cardSinResp  = [..._idsConGestP].filter(function(id){return !_idsConRespP.has(id);}).length;
+  // Sin Respuesta = todos los del período que NO tienen correo_respondido (sin importar estado ni gestión)
+  var _cardSinResp  = correosPeriodo.filter(function(x){return !_idsConRespP.has(x.id);}).length;
   // Pte. Firma = correos del período con ese estado actual
   var _cardFirma = correosPeriodo.filter(function(x){return x.estado==='pendiente_firma';}).length;
   var _cardCerrados = correosPeriodo.filter(function(x){return x.estado==='solucionado'||x.estado==='gestionado';}).length;
