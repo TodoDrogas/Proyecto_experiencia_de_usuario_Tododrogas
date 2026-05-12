@@ -671,6 +671,11 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         Pte. por firma
         <span class="folder-cnt" id="fc-pendiente_firma" style="background:var(--purple-l);color:var(--purple)">0</span>
       </div>
+      <div class="folder-item" onclick="setFolder('sin_respuesta',this)" style="color:#ca8a04">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Sin Respuesta
+        <span class="folder-cnt" id="fc-sin_respuesta" style="background:#fef9c3;color:#854d0e">0</span>
+      </div>
       <div class="folders-divider"></div>
       <div class="folders-title" style="margin-top:8px">Por agente</div>
       <div id="folderAgents"></div>
@@ -3506,6 +3511,12 @@ function updateFolderCounts() {
   });
   const urgEl = document.getElementById('fc-urgente');
   if(urgEl) urgEl.textContent = _all.filter(e=>_pqr(e)&&(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma'&&e.estado!=='informacion').length;
+  const _idsConRespFC = state._activosConResp || state._idsConResp || new Set();
+  const srEl = document.getElementById('fc-sin_respuesta');
+  if(srEl) srEl.textContent = _all.filter(e=>
+    e.origen!=='saliente'&&e.estado!=='enviado'&&e.estado!=='solucionado'&&
+    !_idsConRespFC.has(e.id)
+  ).length;
 }
 
 function renderFolderAgents() {
@@ -3556,7 +3567,7 @@ function setAgentFolder(agentId, el) {
 // ──────────────────────────────────────────────
 function renderEmailList() {
   // Carpetas que muestran correos individuales (sin colapsar hilos)
-  const CARPETAS_INDIVIDUALES = ['sin_asignar','pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion'];
+  const CARPETAS_INDIVIDUALES = ['sin_asignar','pendiente','gestion','gestionado','solucionado','pendiente_firma','informacion','sin_respuesta'];
   const usarIndividual = CARPETAS_INDIVIDUALES.includes(state.folder) || state.folder.startsWith('agent_');
   const search = document.getElementById('searchInput')?.value?.toLowerCase()||'';
 
@@ -3601,6 +3612,12 @@ function renderEmailList() {
     list = list.filter(e=>e.agente_id===agId||e.asignado_a===agId);
   } else if(state.folder === 'urgente') {
     list = list.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
+  } else if(state.folder === 'sin_respuesta') {
+    const _idsConRespSR = state._activosConResp || state._idsConResp || new Set();
+    list = list.filter(e=>
+      e.origen!=='saliente'&&e.estado!=='enviado'&&e.estado!=='solucionado'&&
+      !_idsConRespSR.has(e.id)
+    );
   } else if(state.folder === 'todos') {
     list = list.filter(e=>e.estado!=='informacion'&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
   } else if(state.folder === 'sin_asignar') {
