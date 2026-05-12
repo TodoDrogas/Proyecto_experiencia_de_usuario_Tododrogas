@@ -3371,14 +3371,20 @@ async function loadEmails(horasVentana = 0) {
         const loteSize = 400;
         for(let i = 0; i < ids.length; i += loteSize) {
           const lote = ids.slice(i, i + loteSize);
-          const evSnap = await sb(
-            `historial_eventos?correo_id=in.(${lote.join(',')})&select=correo_id,evento&limit=5000`
-          ) || [];
-          evSnap.forEach(h => {
-            if(!h.correo_id) return;
-            if(h.evento === 'correo_respondido') state._idsConResp.add(h.correo_id);
-            if(!_EXCL_BADGE.has(h.evento)) state._idsConGest.add(h.correo_id);
-          });
+          let _off = 0;
+          while(true) {
+            const evSnap = await sb(
+              `historial_eventos?correo_id=in.(${lote.join(',')})&select=correo_id,evento&limit=1000&offset=${_off}`
+            ) || [];
+            evSnap.forEach(h => {
+              if(!h.correo_id) return;
+              if(h.evento === 'correo_respondido') state._idsConResp.add(h.correo_id);
+              if(!_EXCL_BADGE.has(h.evento)) state._idsConGest.add(h.correo_id);
+            });
+            if(evSnap.length < 1000) break;
+            _off += 1000;
+            if(_off >= 50000) break;
+          }
         }
       }
     } catch(e2) {
@@ -3617,7 +3623,7 @@ function renderEmailList() {
   } else if(state.folder === 'urgente') {
     list = list.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
   } else if(state.folder === 'sin_respuesta') {
-    const _idsConRespSR = state._activosConResp || state._idsConResp || new Set();
+    const _idsConRespSR = state._idsConResp || state._activosConResp || new Set();
     list = list.filter(e=>
       e.estado!=='informacion' &&
       !_idsConRespSR.has(e.id)
