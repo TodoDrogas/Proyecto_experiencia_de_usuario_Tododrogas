@@ -338,6 +338,11 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
       Urgentes
       <span class="folder-cnt" id="fc-urgente" style="background:var(--red-l);color:var(--red)">0</span>
     </div>
+    <div class="folder-item" onclick="setFolder('sin_respuesta',this)" style="color:var(--yellow)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Sin Respuesta
+      <span class="folder-cnt" id="fc-sin_respuesta" style="background:var(--yellow-l);color:var(--yellow)">0</span>
+    </div>
   </div>
 
   <!-- Email list -->
@@ -1038,6 +1043,14 @@ function updateFolderCounts() {
   // Urgentes
   const urg = state.emails.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length;
   document.getElementById('fc-urgente').textContent=urg;
+  // Sin Respuesta
+  const sinResp = state.emails.filter(e=>
+    e.origen!=='saliente'&&e.origen!=='borrador'&&
+    e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='solucionado'&&
+    !state.respondidosIds.has(e.id)
+  ).length;
+  const elSR = document.getElementById('fc-sin_respuesta');
+  if(elSR) elSR.textContent=sinResp;
 }
 
 function setFolder(f, el) {
@@ -1072,6 +1085,12 @@ function renderEmailList() {
 
   if(state.folder==='urgente') {
     list = list.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma');
+  } else if(state.folder==='sin_respuesta') {
+    list = list.filter(e=>
+      e.origen!=='saliente'&&e.origen!=='borrador'&&
+      e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='solucionado'&&
+      !state.respondidosIds.has(e.id)
+    );
   } else if(state.folder==='todos') {
     list = list.filter(e=>e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
   } else {
