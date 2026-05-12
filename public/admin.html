@@ -2362,8 +2362,24 @@ async function loadSigiMetrics() {
     const enGest    = correosRecibidos.filter(x=>_asig(x)&&x.estado==='gestion').length;
     const pteFirma  = correosRecibidos.filter(x=>_asig(x)&&x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>_asig(x)&&(x.estado==='solucionado'||x.estado==='gestionado')).length;
-    const conResp   = correosRecibidos.filter(x=>_asig(x)&&x.tiene_respuesta===true).length;
-    const sinResp   = correosRecibidos.filter(x=>_asig(x)&&!x.tiene_respuesta).length;
+    // Con/Sin Respuesta — usar historial de eventos igual que la vista del agente
+    const _idsPeriodoSigi = new Set(correosRecibidos.filter(_asig).map(x=>x.id));
+    const _EXCL_SIGI = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+      'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+      'pendiente_firma','firma_confirmada']);
+    let _sigiHistorial = [];
+    try {
+      const _sigiIds = [..._idsPeriodoSigi].slice(0, 400);
+      if (_sigiIds.length > 0) {
+        _sigiHistorial = await sb(
+          `historial_eventos?correo_id=in.(${_sigiIds.join(',')})&select=correo_id,evento&limit=5000`
+        ) || [];
+      }
+    } catch(e) { _sigiHistorial = []; }
+    const _sigiConRespIds = new Set(_sigiHistorial.filter(h=>h.evento==='correo_respondido'&&_idsPeriodoSigi.has(h.correo_id)).map(h=>h.correo_id));
+    const _sigiConGestIds = new Set(_sigiHistorial.filter(h=>!_EXCL_SIGI.has(h.evento)&&_idsPeriodoSigi.has(h.correo_id)).map(h=>h.correo_id));
+    const conResp = _sigiConRespIds.size;
+    const sinResp = [..._sigiConGestIds].filter(id=>!_sigiConRespIds.has(id)).length;
 
     // ── KPIs Fila 2 ──
     const pendientes  = correosRecibidos.filter(x=>_asig(x)&&x.estado==='pendiente').length;
@@ -3337,15 +3353,22 @@ async function loadEmails(horasVentana = 0) {
     state.emails = Array.from(hilos.values());
 
     // ── Calcular IDs con respuesta (para badge CON/SIN RESPUESTA) ──
+    // IMPORTANTE: filtrar SOLO los correos realmente cargados para no contar
+    // respondidos de otros agentes o de fuera de la ventana.
     try {
-      const ids = allEmails.map(e=>e.id);
-      // Buscar en historial ya cargado primero (rápido)
-      const hLocal = state.historial || [];
-      const localConResp = new Set(hLocal.filter(h=>h.evento==='correo_respondido'&&h.correo_id).map(h=>h.correo_id));
-      // Complementar con los emails que ya tienen num_gestiones>0 en su raw y tenían respondido en historial local
-      // Además: query directa para correos respondidos en la ventana de carga
-      const evResp = await sb(`historial_eventos?evento=eq.correo_respondido&select=correo_id&limit=5000`);
-      state._idsConResp = new Set([...localConResp, ...(evResp||[]).map(h=>h.correo_id).filter(Boolean)]);
+      const ids = allEmails.map(e=>e.id).filter(Boolean);
+      state._idsConResp = new Set();
+      if(ids.length > 0) {
+        // Paginar en lotes de 400 para no exceder el límite de URL
+        const loteSize = 400;
+        for(let i = 0; i < ids.length; i += loteSize) {
+          const lote = ids.slice(i, i + loteSize);
+          const evResp = await sb(
+            `historial_eventos?correo_id=in.(${lote.join(',')})&evento=eq.correo_respondido&select=correo_id&limit=2000`
+          ) || [];
+          evResp.forEach(h => { if(h.correo_id) state._idsConResp.add(h.correo_id); });
+        }
+      }
     } catch(e2) {
       // Fallback: usar sólo historial local
       state._idsConResp = new Set((state.historial||[]).filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id));
@@ -3433,11 +3456,17 @@ function renderFolderAgents() {
   const all = state.allEmails || state.emails;
   const idsConResp = state._idsConResp || new Set();
   el.innerHTML = activos.map((a,i)=>{
-    const mis      = all.filter(e=>e.agente_id===a.id&&e.origen!=='saliente'&&e.origen!=='borrador');
+    const mis      = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))&&e.origen!=='saliente'&&e.origen!=='borrador');
     const total    = mis.length;
     const pendiente= mis.filter(e=>e.estado==='pendiente'||e.estado==='sin_asignar').length;
-    // Sin responder: mismo universo que métricas — todos los del agente sin tiene_respuesta
-    const sinResp  = mis.filter(e=>e.estado!=='informacion'&&!e.tiene_respuesta).length;
+    // Sin responder: tickets activos del agente que NO tienen evento correo_respondido
+    // Excluir solucionados, informacion, borrador — igual que la vista del agente
+    const _idsResp = state._idsConResp || new Set();
+    const sinResp  = mis.filter(e=>
+      e.estado!=='informacion'&&e.estado!=='solucionado'&&e.estado!=='gestionado'&&
+      e.estado!=='borrador'&&e.origen!=='borrador'&&
+      !_idsResp.has(e.id)
+    ).length;
     const ini      = (a.nombre||'?').charAt(0).toUpperCase();
     const color    = COLORS[i%COLORS.length];
     return `<div class="folder-item" onclick="setAgentFolder('${a.id}',this)" style="gap:5px;flex-direction:column;align-items:flex-start;padding:7px 10px">
@@ -9450,14 +9479,24 @@ function renderAgentes(){
   };
 
   // ── FILA 1 ──
-  // _pqrAsig: Asignados = todos los del período excepto sin_asignar
-  // Regla: Asignados = Total − Sin asignar → Con Respuesta + Sin Respuesta = Asignados siempre
+  // _pqrAsig: Asignados = todos los del período con agente asignado
   const _pqrAsig = e => _pqr(e) && e.estado !== 'sin_asignar' && e.agente_id;
   const _cardAsig     = E.filter(_pqrAsig).length;
   // En Gestión: correos del período con ese estado actual
   const _cardGest     = E.filter(e=>_pqr(e)&&e.estado==='gestion').length;
-  const _cardConResp  = E.filter(e=>_pqrAsig(e)&&e.tiene_respuesta===true).length;
-  const _cardSinResp  = E.filter(e=>_pqrAsig(e)&&!e.tiene_respuesta).length;
+
+  // Con/Sin Respuesta — usar historial de eventos igual que la vista del agente:
+  // Con Respuesta = tickets del período que tienen evento correo_respondido
+  // Sin Respuesta = tickets del período con cualquier gestión real pero sin correo_respondido
+  // (misma lógica que cargarMetricasAgente en el agente)
+  const _EXCL_CR = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
+    'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
+    'pendiente_firma','firma_confirmada']);
+  const _idsConRespP = new Set(H.filter(h=>h.evento==='correo_respondido'&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
+  const _idsConGestP = new Set(H.filter(h=>!_EXCL_CR.has(h.evento)&&_idsPeriodo.has(h.correo_id)).map(h=>h.correo_id));
+  const _cardConResp  = _idsConRespP.size;
+  const _cardSinResp  = [..._idsConGestP].filter(id=>!_idsConRespP.has(id)).length;
+
   // Pte. Firma y Firmados: al lado para ver el flujo completo
   const _cardFirma    = E.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
   const _idsFirmados  = new Set(H.filter(h=>h.evento==='firma_confirmada'&&h.correo_id).map(h=>h.correo_id));
@@ -9779,8 +9818,8 @@ async function exportAgentesExcel(){
       Gestiones_Registradas:   gestReg,
       Respuestas_Enviadas:     myH.filter(h=>h.evento==='correo_respondido').length,
       Firmas_Confirmadas:      myH.filter(h=>h.evento==='firma_confirmada').length,
-      Tickets_Con_Respuesta:   myE.filter(e=>e.tiene_respuesta===true).length,
-      Tickets_Sin_Respuesta:   myE.filter(e=>!e.tiene_respuesta).length,
+      Tickets_Con_Respuesta:   new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id)).size,
+      Tickets_Sin_Respuesta:   [...new Set(myH.filter(h=>!new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']).has(h.evento)).map(h=>h.correo_id))].filter(id=>!new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id)).has(id)).length,
       Quejas:                  myE.filter(e=>e.tipo_pqr==='queja').length,
       Peticiones:              myE.filter(e=>e.tipo_pqr==='peticion').length,
       Reclamos:                myE.filter(e=>e.tipo_pqr==='reclamo').length,
@@ -10078,17 +10117,19 @@ async function guardarObsDispensa() {
   if(!id) return;
   const obs = document.getElementById('obsDispensaObs').value.trim();
   const noAplica = document.getElementById('obsDispensaNoAplica').checked;
-  const nums = noAplica ? 'No aplica' : document.getElementById('obsDispensaNums').value.trim();
+  const nums = noAplica ? 'No aplica' : (document.getElementById('obsDispensaNums').value.trim() || '(no indicado)');
   const btn = document.getElementById('btnGuardarObsDispensa');
   btn.disabled = true;
   btn.textContent = 'Guardando…';
+  const baseObs = obs || 'Ticket marcado como pendiente de firma de cierre';
+  const obsConDispensa = baseObs + ' | Números de dispensa: ' + nums;
   try {
     const email = state.emails.find(e=>e.id===id);
     await sb(`correos?id=eq.${id}`, 'PATCH', {estado:'pendiente_firma'});
     await addHistorialEvent(id, email, 'pendiente_firma', {
       por:'admin',
-      observaciones: obs || 'Ticket marcado como pendiente de firma de cierre',
-      numeros_dispensa: nums || '(no indicado)',
+      observaciones: obsConDispensa,
+      numeros_dispensa: nums,
     });
     showToast('Ticket pendiente por firma ✍️','info');
     cerrarObsDispensa();
