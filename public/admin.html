@@ -3410,7 +3410,7 @@ async function loadTicketsActivosAgentes() {
     const PAGE = 1000;
     while(true) {
       const page = await sb(
-        'correos?origen=neq.saliente&estado=neq.enviado&is_draft=is.false' +
+        'correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&is_draft=is.false' +
         '&select=id,agente_id,asignado_a,estado,origen' +
         '&order=received_at.desc&limit=' + PAGE + '&offset=' + offset
       ) || [];
@@ -3430,14 +3430,20 @@ async function loadTicketsActivosAgentes() {
       const loteSize = 400;
       for(let i = 0; i < ids.length; i += loteSize) {
         const lote = ids.slice(i, i + loteSize);
-        const evSnap = await sb(
-          'historial_eventos?correo_id=in.(' + lote.join(',') + ')&select=correo_id,evento&limit=10000'
-        ) || [];
-        evSnap.forEach(h => {
-          if(!h.correo_id) return;
-          if(h.evento === 'correo_respondido') state._activosConResp.add(h.correo_id);
-          if(!_EXCL_BADGE.has(h.evento))       state._activosConGest.add(h.correo_id);
-        });
+        let _evOff = 0;
+        while(true) {
+          const evSnap = await sb(
+            'historial_eventos?correo_id=in.(' + lote.join(',') + ')&select=correo_id,evento&limit=1000&offset=' + _evOff
+          ) || [];
+          evSnap.forEach(h => {
+            if(!h.correo_id) return;
+            if(h.evento === 'correo_respondido') state._activosConResp.add(h.correo_id);
+            if(!_EXCL_BADGE.has(h.evento))       state._activosConGest.add(h.correo_id);
+          });
+          if(evSnap.length < 1000) break;
+          _evOff += 1000;
+          if(_evOff >= 50000) break;
+        }
       }
     }
     renderFolderAgents();
