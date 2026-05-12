@@ -5947,18 +5947,20 @@ async function guardarObsDispensa() {
   if(!id) return;
   const obs = document.getElementById('obsDispensaObs').value.trim();
   const noAplica = document.getElementById('obsDispensaNoAplica').checked;
-  const nums = noAplica ? 'No aplica' : document.getElementById('obsDispensaNums').value.trim();
+  const nums = noAplica ? 'No aplica' : (document.getElementById('obsDispensaNums').value.trim() || '(no indicado)');
   const btn = document.getElementById('btnGuardarObsDispensa');
   btn.disabled = true;
   btn.textContent = 'Guardando…';
+  const baseObs = obs || 'Ticket marcado como pendiente de firma de cierre';
+  const obsConDispensa = baseObs + ' | Números de dispensa: ' + nums;
   try {
     const email = state.emails.find(e=>e.id===id);
     await sb(`correos?id=eq.${id}`, 'PATCH', {estado:'pendiente_firma'});
     sb('historial_eventos','POST',{
       correo_id:id, agente_id:AGENT_ID, evento:'pendiente_firma',
       from_email:email?.remitente, subject:email?.asunto,
-      descripcion: obs || 'Ticket marcado como pendiente de firma de cierre',
-      datos_extra: JSON.stringify({agente_nombre:AGENT_NAME, por:'agente', numeros_dispensa: nums || '(no indicado)'})
+      descripcion: obsConDispensa,
+      datos_extra: JSON.stringify({agente_nombre:AGENT_NAME, por:'agente', numeros_dispensa: nums})
     }).catch(e=>console.error('[pendiente_firma]',e?.message));
     showToast('Ticket pendiente por firma ✍️','info');
     cerrarObsDispensa();
