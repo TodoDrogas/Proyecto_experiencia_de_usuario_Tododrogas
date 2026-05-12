@@ -9425,8 +9425,20 @@ async function loadAgentesMetrics(){
   const _asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
 
   const [correos, eventos, agentes, correosAsesorActual, correosGlobal] = await Promise.all([
-    // correos del período (received_at) — base para Asignados/Cerrados/Pendientes
-    sb(qC('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones,tiene_respuesta&order=received_at.desc&limit=3000','received_at')).catch(()=>[]),
+    // correos del período (received_at) — paginado sin límite fijo igual que el agente
+    (async()=>{
+      const PAGE=1000, _fields='id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones';
+      let all=[], off=0;
+      while(true){
+        const page=await sb(qC(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=${_fields}&order=received_at.desc&limit=${PAGE}&offset=${off}`,'received_at')).catch(()=>[]);
+        if(!page||!page.length) break;
+        all=all.concat(page);
+        if(page.length<PAGE) break;
+        off+=PAGE;
+        if(off>=20000) break; // techo de seguridad
+      }
+      return all;
+    })(),
     // Eventos del período — con todos los campos para historial y Excel
     (async()=>{
       const PAGE=1000;
