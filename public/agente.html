@@ -6467,14 +6467,24 @@ async function cargarMetricasAgente() {
     'pendiente_firma','firma_confirmada']);
   var correosPeriodo = [];
   try {
-    correosPeriodo = await sb('correos?agente_id=eq.' + AGENT_ID +
+    // Misma query que el panel: OR(agente_id, asignado_a) para no perder tickets asignados por nombre
+    var _agQ = 'correos?or=(agente_id.eq.'+AGENT_ID+',asignado_a.eq.'+encodeURIComponent(AGENT_NAME)+')' +
       '&received_at=gte.' + desde + 'T00:00:00-05:00' +
       '&received_at=lte.' + hasta + 'T23:59:59-05:00' +
       '&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.informacion&estado=neq.borrador&is_draft=is.false' +
       '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,'+
         'estado,num_gestiones,received_at,fecha_resolucion,eps_id,ciudad_paciente,'+
         'tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto,origen,prioridad,horas_sla' +
-      '&order=received_at.desc&limit=2000') || [];
+      '&order=received_at.desc&limit=500';
+    // Paginar para no cortar
+    var _agOff = 0;
+    while(true){
+      var _agPage = await sb(_agQ+'&offset='+_agOff) || [];
+      correosPeriodo = correosPeriodo.concat(_agPage);
+      if(_agPage.length < 500) break;
+      _agOff += 500;
+      if(_agOff >= 10000) break;
+    }
   } catch(e) { correosPeriodo = []; }
 
   // IDs de los correos del período — para cruzar con eventos
