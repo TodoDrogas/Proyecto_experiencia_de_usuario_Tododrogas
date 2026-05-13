@@ -421,9 +421,9 @@ if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
     $origen_label = $origen === 'nova_directo' ? '🤖 NOVA TD DIRECTO' : '🤖 NOVA TD';
     $subject = "[{$ticket_id}] {$origen_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } elseif ($origen === 'qr') {
-    $subject = "[{$ticket_id}] 📷 QR | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
+    $subject = "[{$ticket_id}] 📷 QR directo | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } elseif ($origen === 'web') {
-    $subject = "[{$ticket_id}] 💻 WEB | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
+    $subject = "[{$ticket_id}] 🖥️ Navegador (enlace) | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } else {
     $subject = "[{$ticket_id}] {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 }
@@ -511,9 +511,9 @@ if ($token) {
     $lbl_nova    = $origen === 'nova_directo' ? '🤖 NOVA TD DIRECTO' : '🤖 NOVA TD';
     $badge_canal = "<span style='background:#ede9fe;color:#5b21b6;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$lbl_nova}</span>";
 } elseif ($origen === 'qr') {
-    $badge_canal = "<span style='background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>📷 QR</span>";
+    $badge_canal = "<span style='background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>📷 QR directo</span>";
 } elseif ($origen === 'web') {
-    $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>💻 WEB</span>";
+    $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>🖥️ Navegador (enlace)</span>";
 } else {
     $badge_canal = "<span style='background:#dbeafe;color:#1e40af;padding:3px 10px;border-radius:12px;font-weight:700;font-size:12px'>{$emoji_canal} " . mb_strtoupper($canal, "UTF-8") . "</span>";
 }
