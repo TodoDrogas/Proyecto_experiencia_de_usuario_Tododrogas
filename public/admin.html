@@ -247,12 +247,12 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .mkpi-label{font-size:11px;font-weight:700;color:var(--ink);margin-bottom:2px}
 .mkpi-sub{font-size:10px;color:var(--ink3)}
 /* Color variants */
-.mkpi-blue{border-left:3px solid #2563eb!important}
-.mkpi-violet{border-left:3px solid #7c3aed!important}
-.mkpi-teal{border-left:3px solid #0891b2!important}
-.mkpi-green{border-left:3px solid #16a34a!important}
-.mkpi-amber{border-left:3px solid #f59e0b!important}
-.mkpi-orange{border-left:3px solid #ea580c!important}
+.mkpi-blue{border-left:4px solid #2563eb!important;background:rgba(37,99,235,.08)!important}
+.mkpi-violet{border-left:4px solid #7c3aed!important;background:rgba(124,58,237,.08)!important}
+.mkpi-teal{border-left:4px solid #0891b2!important;background:rgba(8,145,178,.08)!important}
+.mkpi-green{border-left:4px solid #16a34a!important;background:rgba(22,163,74,.08)!important}
+.mkpi-amber{border-left:4px solid #f59e0b!important;background:rgba(245,158,11,.08)!important}
+.mkpi-orange{border-left:4px solid #ea580c!important;background:rgba(234,88,12,.08)!important}
 
 /* Chart cards */
 .mcharts-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
@@ -785,7 +785,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         <div class="metrics-tabs">
           <button class="mtab active" onclick="showMTab('web',this)">🖥️ Navegador</button>
           <button class="mtab" onclick="showMTab('qr',this)">📷 QR directo</button>
-          <button class="mtab" onclick="showMTab('nova',this)">🤖 Nova (enlace)</button>
+          <button class="mtab" onclick="showMTab('nova',this)">🤖 Nova (Enlace y Directo)</button>
           <button class="mtab" onclick="showMTab('global',this)">🌐 Global</button>
           <button class="mtab" onclick="showMTab('asesores',this)">👥 Asesores</button>
           <button class="mtab" onclick="showMTab('sigi',this)" style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border-radius:6px;font-weight:800;letter-spacing:.3px">📋 SIGI</button>
@@ -8977,35 +8977,30 @@ function renderNovaMetrics(){
   _mDestroyChart('chartGlobalDonut');
   const cGD=document.getElementById('chartGlobalDonut');
   const _gTotales=_gRads.map((r,i)=>r+_gEncs[i]);
-  if(cGD){_mCharts.chartGlobalDonut=new Chart(cGD.getContext('2d'),{type:'doughnut',data:{
-    labels:['Navegador (enlace)','QR directo','Nova (enlace)','Nova directo'],
-    datasets:[{data:_gTotales,backgroundColor:['rgba(37,99,235,.7)','rgba(245,158,11,.7)','rgba(124,58,237,.7)','rgba(109,40,217,.7)'],borderColor:['#2563eb','#f59e0b','#7c3aed','#6d28d9'],borderWidth:2}]
-  },options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,.7)',font:{size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:function(ctx){const total=_gTotales.reduce((a,b)=>a+b,0);const pct=total?Math.round(ctx.parsed*100/total):0;return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;}}}}}},
-  {
-    plugins:[{
-      id:'donutLabels',
-      afterDatasetsDraw(chart){
-        const{ctx,data}=chart;
-        const total=data.datasets[0].data.reduce((a,b)=>a+b,0);
-        chart.getDatasetMeta(0).data.forEach((arc,i)=>{
-          const val=data.datasets[0].data[i];
-          if(!val) return;
-          const pct=Math.round(val*100/total);
-          const angle=(arc.startAngle+arc.endAngle)/2;
-          const r=(arc.outerRadius+arc.innerRadius)/2;
-          const x=arc.x+Math.cos(angle)*r;
-          const y=arc.y+Math.sin(angle)*r;
-          ctx.save();
-          ctx.fillStyle='#fff';
-          ctx.font='bold 10px Poppins,sans-serif';
-          ctx.textAlign='center';
-          ctx.textBaseline='middle';
-          ctx.fillText(`${val} (${pct}%)`,x,y);
-          ctx.restore();
-        });
-      }
-    }]
-  });}
+  if(cGD){
+    const _donutLabelPlugin={id:'donutLabels',afterDatasetsDraw(chart){
+      const{ctx,data}=chart;
+      const total=(data.datasets[0].data||[]).reduce((a,b)=>a+b,0);
+      if(!total)return;
+      chart.getDatasetMeta(0).data.forEach((arc,i)=>{
+        const val=data.datasets[0].data[i];if(!val)return;
+        const pct=Math.round(val*100/total);
+        const angle=(arc.startAngle+arc.endAngle)/2;
+        const r=(arc.outerRadius+arc.innerRadius)/2;
+        const x=arc.x+Math.cos(angle)*r;
+        const y=arc.y+Math.sin(angle)*r;
+        ctx.save();ctx.fillStyle='#fff';ctx.font='bold 10px sans-serif';
+        ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.shadowColor='rgba(0,0,0,.7)';ctx.shadowBlur=4;
+        ctx.fillText(`${val} (${pct}%)`,x,y);ctx.restore();
+      });
+    }};
+    Chart.register(_donutLabelPlugin);
+    _mCharts.chartGlobalDonut=new Chart(cGD.getContext('2d'),{type:'doughnut',data:{
+      labels:['Navegador (enlace)','QR directo','Nova (enlace)','Nova directo'],
+      datasets:[{data:_gTotales,backgroundColor:['rgba(37,99,235,.7)','rgba(245,158,11,.7)','rgba(124,58,237,.7)','rgba(109,40,217,.7)'],borderColor:['#2563eb','#f59e0b','#7c3aed','#6d28d9'],borderWidth:2}]
+    },options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{donutLabels:{},legend:{position:'bottom',labels:{color:'rgba(255,255,255,.7)',font:{size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:function(ctx){const t=_gTotales.reduce((a,b)=>a+b,0);const p=t?Math.round(ctx.parsed*100/t):0;return ` ${ctx.label}: ${ctx.parsed} (${p}%)`;}}}}}}});
+  }
   // Tipos global donut
   _mDestroyChart('chartGlobalTipos');
   const cGT2=document.getElementById('chartGlobalTipos'); const tGl=TIPOS.map(t=>allRads.filter(r=>(r.tipo_pqr||'')===t).length); const sGl=allRads.filter(r=>!r.tipo_pqr).length;
