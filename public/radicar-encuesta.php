@@ -513,7 +513,7 @@ if ($token) {
 </body></html>";
 
     $canal_enc_label = match($origen_enc) {
-    'nova_web'               => '🤖 NOVA (ENLACE)',
+    'nova_web', 'nova_td'    => '🤖 NOVA (ENLACE)',
     'nova_directo'           => '🤖 NOVA DIRECTO',
     'qr'                     => '📷 QR directo',
     'web', 'formulario_web'  => '🖥️ Navegador (enlace)',
