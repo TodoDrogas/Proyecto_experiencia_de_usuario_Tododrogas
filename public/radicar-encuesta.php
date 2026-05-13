@@ -515,8 +515,8 @@ if ($token) {
     $canal_enc_label = match($origen_enc) {
     'nova_web', 'nova_td'    => '🤖 NOVA (ENLACE)',
     'nova_directo'           => '🤖 NOVA DIRECTO',
-    'qr'                     => '📷 QR directo',
-    'web', 'formulario_web'  => '🖥️ Navegador (enlace)',
+    'qr'                     => '📷 QR DIRECTO',
+    'web', 'formulario_web'  => '🖥️ NAVEGADOR (ENLACE)',
     default                  => '📋'
 };
 $subject_interno = "[{$ticket_enc}] {$canal_enc_label} | ENCUESTA | {$calificacion}/3 | {$nivel_cal} | {$sede_nombre}";
