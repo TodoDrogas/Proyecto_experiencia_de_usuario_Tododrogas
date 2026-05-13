@@ -125,9 +125,9 @@ $nivel_cal = $calificacion >= 3 ? 'SATISFACTORIO' : ($calificacion >= 2 ? 'NEUTR
 // ── PASO 1: INSERTAR EN encuestas_satisfaccion ────────────────────────
 // Leer origen del canal (viene del frontend) y normalizar
 $origen_enc = trim($body['origen'] ?? $body['canal'] ?? 'web');
-// Normalizar nova_td → nova_directo para consistencia con admin
+// Normalizar orígenes para consistencia con admin
 $origen_enc = match($origen_enc) {
-    'nova_td'       => 'nova_directo',
+    'nova_td'       => 'nova_web',
     'nova'          => 'nova_web',
     'formulario_web'=> 'web',
     default         => $origen_enc,
