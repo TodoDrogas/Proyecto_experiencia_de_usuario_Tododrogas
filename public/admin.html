@@ -1259,17 +1259,17 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         <div class="mcharts-grid-2">
           <div class="mchart-card" style="background:#0f172a;border-color:#1e3a5f">
             <div class="mchart-header">
-              <div class="mchart-title" style="color:#fff">Radicados por canal</div>
-              <div class="mchart-sub" style="color:rgba(255,255,255,.4)">Distribución real del período</div>
+              <div class="mchart-title" style="color:#fff">Radicados y encuestas por canal</div>
+              <div class="mchart-sub" style="color:rgba(255,255,255,.4)">Barras agrupadas por canal · período seleccionado</div>
             </div>
-            <div class="mchart-body" style="height:200px"><canvas id="chartGlobalRad"></canvas></div>
+            <div class="mchart-body" style="height:220px"><canvas id="chartGlobalRad"></canvas></div>
           </div>
           <div class="mchart-card" style="background:#0f172a;border-color:#1e3a5f">
             <div class="mchart-header">
-              <div class="mchart-title" style="color:#fff">Tipos PQRSFD · todos los canales</div>
-              <div class="mchart-sub" style="color:rgba(255,255,255,.4)">Petición, Queja, Reclamo, Sugerencia, Felicitación, Denuncia</div>
+              <div class="mchart-title" style="color:#fff">Consolidado total por canal</div>
+              <div class="mchart-sub" style="color:rgba(255,255,255,.4)">Radicados + encuestas · todos los canales</div>
             </div>
-            <div class="mchart-body" style="height:200px"><canvas id="chartGlobalTipos"></canvas></div>
+            <div class="mchart-body" style="height:220px"><canvas id="chartGlobalDonut"></canvas></div>
           </div>
         </div>
 
@@ -8664,7 +8664,7 @@ function insertarTextoEnReply(texto){
 // ═══════════════════════════════════════════════════
 // NOVA TD — MÉTRICAS POR CANAL (3 + Global)
 // ═══════════════════════════════════════════════════
-let chartNovaTend=null, chartGlobalRad=null, chartGlobalEnc=null,
+let chartNovaTend=null, chartGlobalRad=null, chartGlobalDonut=null, chartGlobalEnc=null,
     chartWebDist=null, chartQrDist=null;
 let novaDatos={};
 let novaSedesMap={};
@@ -8731,16 +8731,16 @@ async function loadNovaMetrics(){
     sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
     sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
 
-    sb(qC('correos?origen=eq.nova_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
-    sb(qC('correos?or=(origen.eq.nova_directo,origen.eq.nova_td)&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
+    sb(qC('correos?or=(origen.eq.nova_web,origen.eq.nova_td)&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
+    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
     sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?origen=eq.nova_web&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?or=(origen.eq.nova_directo,origen.eq.nova_td)&select=id,created_at,calificacion')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?or=(origen.eq.nova_web,origen.eq.nova_td)&select=id,created_at,calificacion')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?origen=eq.qr&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(qS('nova_sesiones?or=(origen.eq.nova_web,origen.eq.web)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
-    sb(qS('nova_sesiones?or=(origen.eq.nova_directo,origen.eq.nova_td)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
+    sb(qS('nova_sesiones?or=(origen.eq.nova_web,origen.eq.web,origen.eq.nova_td)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
+    sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
     sb(qS('nova_sesiones?origen=eq.nova_bienvenida&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
     sb(qS('nova_sesiones?or=(origen.eq.nova_qr,origen.eq.qr)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
   ]);
@@ -8960,10 +8960,27 @@ function renderNovaMetrics(){
   const gRad=allRads.length, gEnc=(D.encWeb||[]).length+(D.encQr||[]).length+allEncNova;
   const domCh=[{n:'Navegador (enlace)',v:radWebF.length},{n:'QR directo',v:radQrF.length},{n:'Nova (enlace)',v:(D.radNovaWeb||[]).length},{n:'Nova Directo',v:(D.radNovaDir||[]).length}].sort((a,b)=>b.v-a.v)[0];
   set('gKpiRad',gRad); set('gKpiEnc',gEnc); set('gKpiDom',domCh&&domCh.v>0?domCh.n:'—'); set('gKpiDigital',(gRad>0?Math.round(allRadNova/gRad*100):0)+'%');
-  // Radicados por canal
+  // Radicados y encuestas por canal — barras agrupadas
   _mDestroyChart('chartGlobalRad');
   const cGR2=document.getElementById('chartGlobalRad');
-  if(cGR2){_mCharts.chartGlobalRad=new Chart(cGR2.getContext('2d'),{type:'bar',data:{labels:['🖥️ Navegador (enlace)','📷 QR directo','🤖 Nova (enlace)','🤖 Nova Dir.'],datasets:[{data:[radWebF.length,radQrF.length,(D.radNovaWeb||[]).length,(D.radNovaDir||[]).length],backgroundColor:['rgba(37,99,235,.7)','rgba(245,158,11,.7)','rgba(124,58,237,.7)','rgba(109,40,217,.7)'],borderColor:['#2563eb','#f59e0b','#7c3aed','#6d28d9'],borderWidth:2,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{color:'rgba(255,255,255,.5)',font:{size:9}}},y:{ticks:{color:'rgba(255,255,255,.7)',font:{size:10,weight:'600'}}}}}}); }
+  const _gLabels=['🖥️ Navegador (enlace)','📷 QR directo','🤖 Nova (enlace)','🤖 Nova directo'];
+  const _gRads=[radWebF.length, radQrF.length, (D.radNovaWeb||[]).length, (D.radNovaDir||[]).length];
+  const _gEncs=[(D.encWeb||[]).length, (D.encQr||[]).length, (D.encNovaWeb||[]).length, (D.encNovaDir||[]).length];
+  if(cGR2){_mCharts.chartGlobalRad=new Chart(cGR2.getContext('2d'),{type:'bar',data:{
+    labels:_gLabels,
+    datasets:[
+      {label:'Radicados',data:_gRads,backgroundColor:['rgba(37,99,235,.7)','rgba(245,158,11,.7)','rgba(124,58,237,.7)','rgba(109,40,217,.7)'],borderColor:['#2563eb','#f59e0b','#7c3aed','#6d28d9'],borderWidth:2,borderRadius:4},
+      {label:'Encuestas',data:_gEncs,backgroundColor:['rgba(37,99,235,.3)','rgba(245,158,11,.3)','rgba(124,58,237,.3)','rgba(109,40,217,.3)'],borderColor:['#2563eb','#f59e0b','#7c3aed','#6d28d9'],borderWidth:1,borderRadius:4}
+    ]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,.7)',font:{size:9},padding:8,boxWidth:10}}},scales:{x:{beginAtZero:true,ticks:{color:'rgba(255,255,255,.5)',font:{size:9}}},y:{ticks:{color:'rgba(255,255,255,.7)',font:{size:9,weight:'600'}}}}}}); }
+
+  // Donut consolidado radicados + encuestas por canal
+  _mDestroyChart('chartGlobalDonut');
+  const cGD=document.getElementById('chartGlobalDonut');
+  const _gTotales=_gRads.map((r,i)=>r+_gEncs[i]);
+  if(cGD){_mCharts.chartGlobalDonut=new Chart(cGD.getContext('2d'),{type:'doughnut',data:{
+    labels:['Navegador (enlace)','QR directo','Nova (enlace)','Nova directo'],
+    datasets:[{data:_gTotales,backgroundColor:['rgba(37,99,235,.7)','rgba(245,158,11,.7)','rgba(124,58,237,.7)','rgba(109,40,217,.7)'],borderColor:['#2563eb','#f59e0b','#7c3aed','#6d28d9'],borderWidth:2}]
+  },options:{responsive:true,maintainAspectRatio:false,cutout:'58%',plugins:{legend:{position:'bottom',labels:{color:'rgba(255,255,255,.7)',font:{size:9},padding:8,boxWidth:10}},tooltip:{callbacks:{label:function(ctx){const total=_gTotales.reduce((a,b)=>a+b,0);const pct=total?Math.round(ctx.parsed*100/total):0;return ` ${ctx.label}: ${ctx.parsed} (${pct}%)`;}}}}}});}
   // Tipos global donut
   _mDestroyChart('chartGlobalTipos');
   const cGT2=document.getElementById('chartGlobalTipos'); const tGl=TIPOS.map(t=>allRads.filter(r=>(r.tipo_pqr||'')===t).length); const sGl=allRads.filter(r=>!r.tipo_pqr).length;
