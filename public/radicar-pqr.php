@@ -418,7 +418,7 @@ $canal_label = mb_strtoupper($canal, 'UTF-8');
 // Asunto formateado — con indicador NOVA TD si aplica
 // Asunto según canal de origen
 if (in_array($origen, ['nova_web', 'nova_directo', 'nova_td'])) {
-    $origen_label = $origen === 'nova_directo' ? '🤖 NOVA TD DIRECTO' : '🤖 NOVA TD';
+    $origen_label = $origen === 'nova_web' ? '🤖 NOVA (ENLACE)' : '🤖 NOVA DIRECTO';
     $subject = "[{$ticket_id}] {$origen_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
 } elseif ($origen === 'qr') {
     $subject = "[{$ticket_id}] 📷 QR directo | {$emoji_canal} {$canal_label} | {$tipo_label} | {$emoji_sent} " . strtoupper($sentimiento) . " | {$emoji_prio} " . strtoupper($prioridad);
