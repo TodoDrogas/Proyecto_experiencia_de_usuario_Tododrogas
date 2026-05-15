@@ -9658,6 +9658,25 @@ async function loadAgentesMetrics(){
     })(),
   ]);
 
+  // Cargar historial por correo_id sin filtro de fecha —
+  // captura gestiones/cierres fuera del período filtrado
+  const eventos = [];
+  if(correos&&correos.length){
+    const _PAGE=1000, _LOTE=50;
+    const _ids = correos.map(c=>c.id).filter(Boolean);
+    for(let _i=0;_i<_ids.length;_i+=_LOTE){
+      const _lote=_ids.slice(_i,_i+_LOTE);
+      let _off=0;
+      while(true){
+        const _page=await sb(`historial_eventos?correo_id=in.(${_lote.join(',')})&select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.asc&limit=${_PAGE}&offset=${_off}`).catch(()=>[]);
+        if(!_page||!_page.length) break;
+        eventos.push(..._page);
+        if(_page.length<_PAGE) break;
+        _off+=_PAGE;
+      }
+    }
+  }
+
   _agDatos = {
     correosAsesorActual: correosAsesorActual||null,
     correosGlobal: correosGlobal||[],
