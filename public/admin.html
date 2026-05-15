@@ -1492,13 +1492,14 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <div style="overflow-x:auto">
             <table class="m-tbl">
               <thead><tr>
-                <th>Asesor</th><th>Rol</th><th>Sede</th><th>Cédula</th><th>Teléfono</th>
+                <th>Asesor</th><th>Rol</th><th>Cédula</th>
                 <th>Asignados</th><th>Pendientes</th>
                 <th>En gestión</th><th>P. Firma</th><th>Resueltos</th>
-                <th>% Resolución</th><th>T. prom. h</th>
-                <th>Gestiones</th><th>Respuestas</th><th>Firmas</th>
+                <th>% Resolución</th>
+                <th>Gestiones</th>
                 <th style="color:#15803d">✉ Con Resp.</th><th style="color:#854d0e">⏳ Sin Resp.</th>
-                <th>Quejas</th><th>Peticiones</th><th>Reclamos</th>
+                <th>Peticiones</th><th>Quejas</th><th>Reclamos</th>
+                <th>Sugerencias</th><th>Felicitaciones</th><th>Denuncias</th><th>Tutelas</th>
                 <th>Alta sin resolver</th><th>Casos Activos</th>
               </tr></thead>
               <tbody id="agTableBody"></tbody>
@@ -9678,6 +9679,7 @@ function renderAgentes(){
   const sedeFiltro   = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
   const asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
   const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')
+    &&(a.rol==='agente'||!a.rol)
     &&(!sedeFiltro||a.sede===sedeFiltro)
     &&(!asesorFiltro||a.id===asesorFiltro));
 
@@ -9713,9 +9715,14 @@ function renderAgentes(){
     const pfirma  = myE.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
     const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
     const casosActivos = myE.filter(e=>_pqr(e)&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
-    const qCount  = myE.filter(e=>e.tipo_pqr==='queja').length;
-    const pCount  = myE.filter(e=>e.tipo_pqr==='peticion').length;
-    const rCount  = myE.filter(e=>e.tipo_pqr==='reclamo').length;
+    const _nomSol = e => (e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const pCount  = myE.filter(e=>_nomSol(e)==='peticion').length;
+    const qCount  = myE.filter(e=>_nomSol(e)==='queja').length;
+    const rCount  = myE.filter(e=>_nomSol(e)==='reclamo').length;
+    const sCount  = myE.filter(e=>_nomSol(e)==='sugerencia').length;
+    const fCount  = myE.filter(e=>_nomSol(e)==='felicitacion').length;
+    const dCount  = myE.filter(e=>_nomSol(e)==='denuncia').length;
+    const tutCount= myE.filter(e=>e.tiene_tutela===true).length;
 
     // Con/Sin Respuesta — se usa _respSetGlobal (sin filtro de fecha) para determinar si el ticket
     // fue respondido en cualquier momento, no solo dentro del período filtrado.
@@ -9740,7 +9747,7 @@ function renderAgentes(){
     // Gestiones = eventos del agente en tickets del período (igual que cargarMetricasAgente)
     const numGest = myH.filter(h=>_esGR(h)&&_myIds.has(h.correo_id)).length;
 
-    return { a, tot, pend, gest, sol, pfirma, alta, casosActivos, qCount, pCount, rCount,
+    return { a, tot, pend, gest, sol, pfirma, alta, casosActivos, pCount, qCount, rCount, sCount, fCount, dCount, tutCount,
              conRespCount, sinRespCount, gestReg, resp, firmas, tRes, tColor, pct, numGest, myE };
   });
 
@@ -9809,7 +9816,7 @@ function renderAgentes(){
   // ── TABLA MAESTRA ──
   const COLS=['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
   const maxC = Math.max(...rowData.map(r=>r.tot),1);
-  document.getElementById('agTableBody').innerHTML = rowData.map(({a,tot,pend,gest,sol,pfirma,alta,casosActivos,qCount,pCount,rCount,conRespCount,sinRespCount,gestReg,resp,firmas,tRes,tColor,pct},i)=>{
+  document.getElementById('agTableBody').innerHTML = rowData.map(({a,tot,pend,gest,sol,pfirma,alta,casosActivos,pCount,qCount,rCount,sCount,fCount,dCount,tutCount,conRespCount,sinRespCount,gestReg,resp,firmas,tRes,tColor,pct},i)=>{
     const color = COLS[i%COLS.length];
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px">
@@ -9818,28 +9825,27 @@ function renderAgentes(){
         <div style="font-size:10px;color:var(--ink3)">${esc(a.email||'')}</div></div>
       </div></td>
       <td style="font-size:11px;text-align:center"><span style="background:var(--blue-l);color:var(--blue);padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700">${esc(a.rol||'—')}</span></td>
-      <td style="font-size:11px;color:var(--ink3)">${esc(a.sede||'—')}</td>
       <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--ink3);text-align:center">${esc(a.cedula||'—')}</td>
-      <td style="font-size:11px;color:var(--ink3);text-align:center">${esc(a.telefono||'—')}</td>
       <td style="font-family:'DM Mono',monospace;font-weight:700;text-align:center">${tot}</td>
       <td style="text-align:center"><span class="badge pendiente">${pend}</span></td>
       <td style="text-align:center"><span class="badge gestion">${gest}</span></td>
       <td style="text-align:center"><span class="badge pendiente_firma">${pfirma}</span></td>
       <td style="text-align:center"><span class="badge solucionado">${sol}</span></td>
       <td style="text-align:center"><span class="sla-pill ${pct>=70?'sla-ok':pct>=40?'sla-warn':'sla-danger'}">${pct}%</span></td>
-      <td style="font-family:'DM Mono',monospace;text-align:center;color:${tColor};font-weight:600">${tRes}</td>
       <td style="font-family:'DM Mono',monospace;text-align:center">${gestReg}</td>
-      <td style="font-family:'DM Mono',monospace;text-align:center">${resp}</td>
-      <td style="font-family:'DM Mono',monospace;text-align:center">${firmas}</td>
       <td style="text-align:center"><span style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px">${conRespCount}</span></td>
       <td style="text-align:center"><span style="background:#fef9c3;color:#854d0e;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px">${sinRespCount}</span></td>
-      <td style="text-align:center;font-size:11px">${qCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${pCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${qCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${rCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${sCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${fCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${dCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${tutCount||'—'}</td>
       <td style="text-align:center"><span style="font-weight:700;color:${alta>0?'var(--red)':'var(--ink3)'}">${alta}</span></td>
       <td style="text-align:center;font-family:'DM Mono',monospace;font-weight:700;color:${casosActivos>10?'var(--red)':casosActivos>5?'#ca8a04':'var(--green)'}">${casosActivos}</td>
     </tr>`;
-  }).join('')||'<tr><td colspan="22" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
+  }).join('')||'<tr><td colspan="17" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
 
   // Poblar selectores de asesores
   const sel=document.getElementById('agFiltroAsesor');
@@ -9932,12 +9938,12 @@ function abrirCorreoAdmin(correoId) {
 
 
 async function exportAgentesExcel(){
-  const { correos:E, eventos:H, agentes, desde, hasta } = _agDatos;
+  const { correos:E, eventos:H, agentes, desde, hasta, respSet:_respSetGlobal } = _agDatos;
   const wb   = XLSX.utils.book_new();
   const agMap={}; agentes.forEach(a=>agMap[a.id]=a.nombre);
   const cMap={}; E.forEach(c=>cMap[c.id]=c);
   const _asesorKpi = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
-  const act  = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(!_asesorKpi||a.id===_asesorKpi));
+  const act  = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')&&(a.rol==='agente'||!a.rol)&&(!_asesorKpi||a.id===_asesorKpi));
   // Si hay filtro de asesor, filtrar también E y H
   const _Efil = _asesorKpi ? E.filter(e=>e.agente_id===_asesorKpi) : E;
   const _Hfil = _asesorKpi ? H.filter(h=>h.agente_id===_asesorKpi) : H;
@@ -9981,9 +9987,7 @@ async function exportAgentesExcel(){
       Asesor:                  a.nombre||'',
       Email:                   a.email||'',
       Rol:                     a.rol||'',
-      Sede:                    a.sede||'',
       Cedula:                  a.cedula||'',
-      Telefono:                a.telefono||'',
       Casos_Activos:           casosActivos,
       Total_Asignados:         myE.length,
       Pendientes:              myE.filter(e=>e.estado==='pendiente').length,
@@ -9992,14 +9996,17 @@ async function exportAgentesExcel(){
       Resueltos:               sol,
       Pct_Resolucion:          myE.length>0?Math.round(sol/myE.length*100)+'%':'0%',
       T_Prom_Resolucion_h:     avgH,
-      Gestiones_Registradas:   gestReg,
+      Gestiones_Registradas:   myH.filter(h=>_esGR(h)&&cidsAsesor.has(h.correo_id)).length,
       Respuestas_Enviadas:     myH.filter(h=>h.evento==='correo_respondido').length,
       Firmas_Confirmadas:      myH.filter(h=>h.evento==='firma_confirmada').length,
-      Tickets_Con_Respuesta:   new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id)).size,
-      Tickets_Sin_Respuesta:   [...new Set(myH.filter(h=>!new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']).has(h.evento)).map(h=>h.correo_id))].filter(id=>!new Set(myH.filter(h=>h.evento==='correo_respondido').map(h=>h.correo_id)).has(id)).length,
-      Quejas:                  myE.filter(e=>e.tipo_pqr==='queja').length,
-      Peticiones:              myE.filter(e=>e.tipo_pqr==='peticion').length,
-      Reclamos:                myE.filter(e=>e.tipo_pqr==='reclamo').length,
+      Tickets_Con_Respuesta:   new Set([...cidsAsesor].filter(id=>(_respSetGlobal||new Set()).has(id))).size,
+      Tickets_Sin_Respuesta:   myE.filter(e=>!(_respSetGlobal||new Set()).has(e.id)).length,
+      Peticiones:              myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='peticion').length,
+      Quejas:                  myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='queja').length,
+      Reclamos:                myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='reclamo').length,
+      Sugerencias:             myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='sugerencia').length,
+      Felicitaciones:          myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='felicitacion').length,
+      Denuncias:               myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='denuncia').length,
       Tutelas:                 myE.filter(e=>e.tiene_tutela===true).length,
       Alta_Sin_Resolver:       myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
     };
