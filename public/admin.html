@@ -2374,11 +2374,20 @@ async function loadSigiMetrics() {
       'pendiente_firma','firma_confirmada']);
     let _sigiHistorial = [];
     try {
-      const _sigiIds = [..._idsPeriodoSigi].slice(0, 400);
-      if (_sigiIds.length > 0) {
-        _sigiHistorial = await sb(
-          `historial_eventos?correo_id=in.(${_sigiIds.join(',')})&select=correo_id,evento&limit=5000`
-        ) || [];
+      const _sigiIds = [..._idsPeriodoSigi];
+      const _LOTE_SIGI = 400;
+      for(let i=0; i<_sigiIds.length; i+=_LOTE_SIGI) {
+        const lote = _sigiIds.slice(i, i+_LOTE_SIGI);
+        let off=0;
+        while(true) {
+          const page = await sb(
+            `historial_eventos?correo_id=in.(${lote.join(',')})&select=correo_id,evento&limit=1000&offset=${off}`
+          ) || [];
+          page.forEach(h=>_sigiHistorial.push(h));
+          if(page.length<1000) break;
+          off+=1000;
+          if(off>=20000) break;
+        }
       }
     } catch(e) { _sigiHistorial = []; }
     const _sigiConRespIds = new Set(_sigiHistorial.filter(h=>h.evento==='correo_respondido'&&_idsPeriodoSigi.has(h.correo_id)).map(h=>h.correo_id));
@@ -9693,12 +9702,12 @@ function renderAgentes(){
     const pCount  = myE.filter(e=>e.tipo_pqr==='peticion').length;
     const rCount  = myE.filter(e=>e.tipo_pqr==='reclamo').length;
 
-    // Con/Sin Respuesta — eventos donde el AGENTE es el autor (agente_id===a.id)
-    // cruzados con los correos del período (igual que cargarMetricasAgente del agente)
-    // myH = por agente_id → atribuye correctamente al agente que hizo el evento
-    const _ticketsResp = new Set(myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).map(h=>h.correo_id));
+    // Con/Sin Respuesta — se busca correo_respondido en los eventos del correo (myH_byCorreo),
+    // no solo en los eventos del agente (myH). Así si el evento fue registrado por otro agente_id
+    // o en una fecha fuera del período filtrado, igual se contabiliza correctamente.
+    const _ticketsResp = new Set(myH_byCorreo.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).map(h=>h.correo_id));
     const conRespCount = _ticketsResp.size;
-    // Sin Respuesta = todos los del período que NO tienen correo_respondido del agente
+    // Sin Respuesta = todos los del período que NO tienen correo_respondido
     const sinRespCount = myE.filter(e=>!_ticketsResp.has(e.id)).length;
 
     // Gestiones = eventos del agente (agente_id) en tickets del período — igual que el agente
