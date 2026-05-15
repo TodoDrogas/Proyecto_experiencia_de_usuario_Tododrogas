@@ -6575,10 +6575,22 @@ async function cargarMetricasAgente() {
   if(window._agMetricasPeriodo) window._agMetricasPeriodo.epsCat = epsCat;
   if(epsCat.length && (!state.epsCatalogo || !state.epsCatalogo.length)) state.epsCatalogo = epsCat;
 
-  // Con/Sin Respuesta — usar _idsPeriodo ya calculado arriba
-  var _idsConRespP = new Set(eventos.filter(function(h){
-    return h.evento==='correo_respondido' && _idsPeriodo.has(h.correo_id);
-  }).map(function(h){return h.correo_id;}));
+  // Con/Sin Respuesta — consultar correo_respondido SIN filtro de fecha
+  // para que un ticket recibido en abril y respondido en mayo NO aparezca como "sin respuesta" al filtrar abril
+  var _respEvGlobal = [];
+  try {
+    var _respOff = 0;
+    while(true) {
+      var _respPage = await sb('historial_eventos?evento=eq.correo_respondido' +
+        '&correo_id=in.(' + Array.from(_idsPeriodo).join(',') + ')' +
+        '&select=correo_id&limit=1000&offset=' + _respOff) || [];
+      _respEvGlobal = _respEvGlobal.concat(_respPage);
+      if(_respPage.length < 1000) break;
+      _respOff += 1000;
+      if(_respOff >= 10000) break;
+    }
+  } catch(e) { _respEvGlobal = []; }
+  var _idsConRespP = new Set(_respEvGlobal.map(function(h){return h.correo_id;}).filter(Boolean));
   var _idsConGestP = new Set(eventos.filter(function(h){
     return !_EXCL.has(h.evento) && _idsPeriodo.has(h.correo_id);
   }).map(function(h){return h.correo_id;}));
