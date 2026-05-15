@@ -9668,7 +9668,7 @@ function renderAgentes(){
   // ── Predicados base ── idénticos para tabla Y cards ──
   const _pqr   = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='informacion';
   const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
-  const _esGR  = h => { const ev=(h.evento||'').toLowerCase(); return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada')); };
+  const _esGR  = h => { const ev=(h.evento||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); return ev==='correo_respondido'||ev==='gestion registrada'||ev==='gestion_registrada'||ev==='gestion #1 registrada'||(ev.startsWith('gestion #')&&ev.includes('registrada')); };
   const _EXCL  = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']);
 
   // ── PASO 1: calcular métricas POR AGENTE ──────────────────────────────
@@ -9951,8 +9951,8 @@ async function exportAgentesExcel(){
   ]);
   // Gestiones reales: mismo criterio que agente individual
   const _esGR = h => {
-    const ev=(h.evento||'').toLowerCase();
-    return ev==='correo_respondido'||ev==='gestión registrada'||ev==='gestion_registrada'||ev==='gestión #1 registrada'||(ev.startsWith('gestión #')&&ev.includes('registrada'));
+    const ev=(h.evento||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    return ev==='correo_respondido'||ev==='gestion registrada'||ev==='gestion_registrada'||ev==='gestion #1 registrada'||(ev.startsWith('gestion #')&&ev.includes('registrada'));
   };
 
   // EPS catálogo: cruzar eps_id → nombre — cargar frescos si no están en state
@@ -10046,7 +10046,7 @@ async function exportAgentesExcel(){
     // Hora pendiente firma: primer pendiente_firma
     const evFirma = evs.find(h=>h.evento==='pendiente_firma');
     // Hora cierre: primer solucionado o firma_confirmada
-    const evCierre= evs.find(h=>h.evento==='solucionado'||h.evento==='firma_confirmada'||h.evento==='cerrado_automatico');
+    const evCierre= evs.find(h=>h.evento==='solucionado'||h.evento==='firma_confirmada'||h.evento==='cerrado_automatico'||h.evento==='gestionado');
     return {
       Ticket:              ticketInterno,
       ID_Correo:           c.id||'',
@@ -10071,7 +10071,7 @@ async function exportAgentesExcel(){
       Hora_Primera_Gestion:fmt(evGest?.created_at),
       Hora_Primera_Respuesta: fmt(evResp?.created_at),
       Hora_Pte_Firma:      fmt(evFirma?.created_at),
-      Hora_Cierre:         fmt(evCierre?.created_at),
+      Hora_Cierre:         fmt(evCierre?.created_at || (c.fecha_resolucion ? c.fecha_resolucion : null)),
       T_Resolucion_h:      (c.fecha_resolucion&&c.received_at)?((new Date(c.fecha_resolucion)-new Date(c.received_at))/3600000).toFixed(1):'',
       SLA_horas:           c.horas_sla||'',
     };
