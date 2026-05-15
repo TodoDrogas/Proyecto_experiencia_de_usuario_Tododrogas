@@ -9606,7 +9606,7 @@ async function loadAgentesMetrics(){
 
   const _asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
 
-  const [correos, eventos, agentes, correosAsesorActual, correosGlobal] = await Promise.all([
+  const [correos, eventos, agentes, correosAsesorActual, correosGlobal, respEventosGlobal] = await Promise.all([
     // correos del período (received_at) — paginado sin límite fijo igual que el agente
     (async()=>{
       const PAGE=1000, _fields='id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones';
@@ -9642,6 +9642,20 @@ async function loadAgentesMetrics(){
       : Promise.resolve(null),
     // Correos activos GLOBALES sin filtro de fecha — para el bloque Global Activo
     sb('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&estado=neq.solucionado&estado=neq.gestionado&is_draft=is.false&select=id,agente_id,estado&order=received_at.desc&limit=10000').catch(()=>[]),
+    // IDs con correo_respondido SIN filtro de fecha — para saber si un ticket fue respondido
+    // aunque la respuesta haya caído fuera del período filtrado (ej: recibido en abril, respondido en mayo)
+    (async()=>{
+      const PAGE=1000; let evs=[], off=0;
+      while(true){
+        const page=await sb(`historial_eventos?evento=eq.correo_respondido&select=correo_id&limit=${PAGE}&offset=${off}`).catch(()=>[]);
+        if(!page||!page.length) break;
+        evs=evs.concat(page);
+        if(page.length<PAGE) break;
+        off+=PAGE;
+        if(off>=50000) break;
+      }
+      return new Set(evs.map(h=>h.correo_id).filter(Boolean));
+    })(),
   ]);
 
   _agDatos = {
@@ -9651,6 +9665,7 @@ async function loadAgentesMetrics(){
     correos: correos||[],
     eventos: eventos||[],
     agentes: agentes||[],
+    respSet: respEventosGlobal||new Set(),
     desde, hasta
   };
 
@@ -9659,7 +9674,7 @@ async function loadAgentesMetrics(){
 }
 
 function renderAgentes(){
-  const { correos:E_all, eventos:H_all, agentes, correosAsesorActual, correosGlobal } = _agDatos;
+  const { correos:E_all, eventos:H_all, agentes, correosAsesorActual, correosGlobal, respSet:_respSetGlobal } = _agDatos;
   const sedeFiltro   = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
   const asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
   const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')
@@ -9702,10 +9717,10 @@ function renderAgentes(){
     const pCount  = myE.filter(e=>e.tipo_pqr==='peticion').length;
     const rCount  = myE.filter(e=>e.tipo_pqr==='reclamo').length;
 
-    // Con/Sin Respuesta — se busca correo_respondido en los eventos del correo (myH_byCorreo),
-    // no solo en los eventos del agente (myH). Así si el evento fue registrado por otro agente_id
-    // o en una fecha fuera del período filtrado, igual se contabiliza correctamente.
-    const _ticketsResp = new Set(myH_byCorreo.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).map(h=>h.correo_id));
+    // Con/Sin Respuesta — se usa _respSetGlobal (sin filtro de fecha) para determinar si el ticket
+    // fue respondido en cualquier momento, no solo dentro del período filtrado.
+    // Así un ticket recibido en abril y respondido en mayo NO aparece como "sin respuesta" al filtrar abril.
+    const _ticketsResp = new Set([..._myIds].filter(id=>(_respSetGlobal||new Set()).has(id)));
     const conRespCount = _ticketsResp.size;
     // Sin Respuesta = todos los del período que NO tienen correo_respondido
     const sinRespCount = myE.filter(e=>!_ticketsResp.has(e.id)).length;
