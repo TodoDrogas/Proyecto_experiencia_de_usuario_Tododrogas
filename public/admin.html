@@ -9693,6 +9693,16 @@ function renderAgentes(){
   const _EXCL  = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']);
 
   // ── PASO 1: calcular métricas POR AGENTE ──────────────────────────────
+  // Mapa correo_id → nombre_solicitud desde historial (para tickets sin el campo en correos)
+  const _nomSolMap = {};
+  H_all.forEach(h => {
+    if(!h.correo_id || _nomSolMap[h.correo_id]) return;
+    try {
+      const ex = typeof h.datos_extra==='string' ? JSON.parse(h.datos_extra) : (h.datos_extra||{});
+      if(ex.nombre_solicitud) _nomSolMap[h.correo_id] = ex.nombre_solicitud;
+    } catch(_) {}
+  });
+
   // Todos los totales de las cards serán la SUMA exacta de estas filas.
   const rowData = act.map(a => {
     // Correos del período asignados al agente (por agente_id O por asignado_a nombre)
@@ -9715,7 +9725,7 @@ function renderAgentes(){
     const pfirma  = myE.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
     const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
     const casosActivos = myE.filter(e=>_pqr(e)&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
-    const _nomSol = e => (e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const _nomSol = e => ((e.nombre_solicitud||_nomSolMap[e.id]||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
     const pCount  = myE.filter(e=>_nomSol(e)==='peticion').length;
     const qCount  = myE.filter(e=>_nomSol(e)==='queja').length;
     const rCount  = myE.filter(e=>_nomSol(e)==='reclamo').length;
@@ -9968,6 +9978,17 @@ async function exportAgentesExcel(){
   const _epsNom = c => c.eps_id ? (_epsMap[c.eps_id]||'') : '';
 
   // ── Hoja 1: Resumen por asesor ──────────────────────────────────────
+  // Mapa correo_id → nombre_solicitud desde historial
+  const _nomSolMapX = {};
+  H.forEach(h => {
+    if(!h.correo_id || _nomSolMapX[h.correo_id]) return;
+    try {
+      const ex = typeof h.datos_extra==='string' ? JSON.parse(h.datos_extra) : (h.datos_extra||{});
+      if(ex.nombre_solicitud) _nomSolMapX[h.correo_id] = ex.nombre_solicitud;
+    } catch(_) {}
+  });
+  const _nomSolX = e => ((e.nombre_solicitud||_nomSolMapX[e.id]||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''));
+
   const h1 = act.map(a=>{
     const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
     const myE = E.filter(e=>
@@ -10003,12 +10024,12 @@ async function exportAgentesExcel(){
       Gestiones_Registradas:   myH.filter(h=>_esGR(h)&&cidsAsesor.has(h.correo_id)).length,
       Tickets_Con_Respuesta:   new Set([...cidsAsesor].filter(id=>(_respSetGlobal||new Set()).has(id))).size,
       Tickets_Sin_Respuesta:   myE.filter(e=>!(_respSetGlobal||new Set()).has(e.id)).length,
-      Peticiones:              myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='peticion').length,
-      Quejas:                  myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='queja').length,
-      Reclamos:                myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='reclamo').length,
-      Sugerencias:             myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='sugerencia').length,
-      Felicitaciones:          myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='felicitacion').length,
-      Denuncias:               myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='denuncia').length,
+      Peticiones:              myE.filter(e=>_nomSolX(e)==='peticion').length,
+      Quejas:                  myE.filter(e=>_nomSolX(e)==='queja').length,
+      Reclamos:                myE.filter(e=>_nomSolX(e)==='reclamo').length,
+      Sugerencias:             myE.filter(e=>_nomSolX(e)==='sugerencia').length,
+      Felicitaciones:          myE.filter(e=>_nomSolX(e)==='felicitacion').length,
+      Denuncias:               myE.filter(e=>_nomSolX(e)==='denuncia').length,
       Tutelas:                 myE.filter(e=>e.tiene_tutela===true).length,
       Alta_Sin_Resolver:       myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
     };
