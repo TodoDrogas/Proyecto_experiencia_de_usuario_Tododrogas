@@ -9705,10 +9705,12 @@ function renderAgentes(){
   // Todos los totales de las cards serán la SUMA exacta de estas filas.
   const rowData = act.map(a => {
     // Correos del período asignados al agente (por agente_id O por asignado_a nombre)
-    const myE = E.filter(e=>
+    const _myERaw = E.filter(e=>
       (e.agente_id===a.id || (e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))
       && _pqrAg(e)
     );
+    // Deduplicar por id (un ticket puede cumplir ambos criterios: agente_id y asignado_a)
+    const myE = [...new Map(_myERaw.map(e=>[e.id,e])).values()];
     // Eventos del período del agente — filtrar por agente_id O por correo_id de sus tickets
     const _myIds = new Set(myE.map(e=>e.id));
     // myH por agente_id (para gestReg, resp, firmas)
@@ -10003,10 +10005,11 @@ async function exportAgentesExcel(){
 
   const h1 = act.map(a=>{
     const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
-    const myE = E.filter(e=>
+    const _myERawX = E.filter(e=>
       (e.agente_id===a.id || (e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))
       && _pqrAg(e)
     );
+    const myE = [...new Map(_myERawX.map(e=>[e.id,e])).values()];
     const myH = H.filter(h=>h.agente_id===a.id);
     const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
