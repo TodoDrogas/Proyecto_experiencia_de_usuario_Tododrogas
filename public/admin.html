@@ -3519,8 +3519,8 @@ function updateFolderCounts() {
   if(urgEl) urgEl.textContent = _all.filter(e=>_pqr(e)&&(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma'&&e.estado!=='informacion').length;
   const _idsConRespFC = state._activosConResp || state._idsConResp || new Set();
   const srEl = document.getElementById('fc-sin_respuesta');
-  if(srEl) {
-    const _allActivos = state._activosAgentes || state.allEmails || state.emails;
+  if(srEl && state._activosAgentes) {
+    const _allActivos = state._activosAgentes;
     srEl.textContent = _allActivos.filter(e=>
       e.agente_id &&
       e.origen!=='saliente' && e.estado!=='enviado' && e.estado!=='informacion' &&
@@ -3534,8 +3534,9 @@ function renderFolderAgents() {
   if (!el) return;
   const activos = state.agents.filter(a=>a.activo===true||a.activo===1||a.activo==='true');
   const COLORS = ['#2563eb','#16a34a','#ea580c','#7c3aed','#ca8a04','#dc2626'];
-  // Usar tickets sin filtro de fecha (igual que el agente) si ya cargaron, sino fallback a allEmails
-  const all = state._activosAgentes || state.allEmails || state.emails;
+  // Solo renderizar cuando loadTicketsActivosAgentes haya cargado su propia data
+  if (!state._activosAgentes) return;
+  const all = state._activosAgentes;
   const _idsConResp = state._activosConResp || state._idsConResp || new Set();
   const _idsConGest = state._activosConGest || state._idsConGest || new Set();
   el.innerHTML = activos.map((a,i)=>{
@@ -8241,7 +8242,10 @@ async function getGraphToken(){
   loadTopbarLogo();
   document.getElementById('lastSync').textContent=`sync ${new Date().toLocaleTimeString('es-CO')}`;
   // Auto-refresh
-  setInterval(()=>{ loadEmails(); loadHistorial(); loadEncuestas(); loadTicketsActivosAgentes(); }, 90000);
+  setInterval(async ()=>{
+    await Promise.all([loadEmails(), loadHistorial(), loadEncuestas()]);
+    loadTicketsActivosAgentes();
+  }, 90000);
 })();
 
 // ── MULTIMEDIA FORMULARIO WEB — con URL firmada para buckets privados ──
