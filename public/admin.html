@@ -2761,44 +2761,35 @@ async function exportarSIGI() {
     const _normStyle = {fill:{fgColor:{rgb:'FFFFFF'}}, font:{name:'Arial', sz:9}, alignment:{vertical:'center'}};
 
     // Función aplicar estilos a hoja
-    function _addLogoRow(ws, nCols, titulo) {
-      // Insertar 2 filas al inicio: logo (como texto de marca) + fila vacía de separación
-      XLSX.utils.sheet_add_aoa(ws, [
-        ['NOVA TD  |  ' + titulo],
-        []
-      ], {origin: 'A1', sheetStubs: true});
-      // Estilo de la fila de marca
-      const logoStyle = {
-        font:{bold:true, color:{rgb:'1E293B'}, name:'Arial', sz:13},
-        fill:{fgColor:{rgb:'FFFFFF'}},
-        alignment:{horizontal:'left', vertical:'center'}
-      };
-      const addr = XLSX.utils.encode_cell({r:0,c:0});
-      if(!ws[addr]) ws[addr]={v:'',t:'s'};
-      ws[addr].s = logoStyle;
-      ws['!rows'] = ws['!rows']||[];
-      ws['!rows'][0] = {hpt:22};
-      ws['!rows'][1] = {hpt:6};
-      // Merge la fila del logo a través de todas las columnas
-      ws['!merges'] = ws['!merges']||[];
-      ws['!merges'].push({s:{r:0,c:0}, e:{r:0,c:nCols-1}});
-    }
-
     function _styleSheet(ws, nCols, titulo) {
-      _addLogoRow(ws, nCols, titulo||'Informe');
       const range = XLSX.utils.decode_range(ws['!ref']||'A1');
-      for(let R=range.s.r; R<=range.e.r; R++) {
-        for(let C=range.s.c; C<=range.e.c; C++) {
-          const addr = XLSX.utils.encode_cell({r:R,c:C});
-          if(!ws[addr]) ws[addr] = {v:'', t:'s'};
-          if(R===2) {
-            ws[addr].s = _hStyle;
-          } else if(R>2) {
-            ws[addr].s = _normStyle;
-          }
+      const lastR = range.e.r;
+      const lastC = range.e.c;
+      // Desplazar celdas existentes 2 filas abajo
+      for(let R=lastR; R>=0; R--){
+        for(let C=0; C<=lastC; C++){
+          const src=XLSX.utils.encode_cell({r:R,c:C});
+          const dst=XLSX.utils.encode_cell({r:R+2,c:C});
+          if(ws[src]){ws[dst]=ws[src];delete ws[src];}
         }
       }
-      ws['!freeze'] = {xSplit:0, ySplit:3};
+      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastR+2,c:lastC}});
+      // Fila 0: logo
+      ws[XLSX.utils.encode_cell({r:0,c:0})]={v:'NOVA TD  |  '+(titulo||'Informe'),t:'s',s:{font:{bold:true,color:{rgb:'1E293B'},name:'Arial',sz:13},fill:{fgColor:{rgb:'FFFFFF'}},alignment:{horizontal:'left',vertical:'center'}}};
+      ws[XLSX.utils.encode_cell({r:1,c:0})]={v:'',t:'s'};
+      ws['!merges']=ws['!merges']||[];
+      ws['!merges'].push({s:{r:0,c:0},e:{r:0,c:lastC}});
+      ws['!rows']=ws['!rows']||[];
+      ws['!rows'][0]={hpt:22};
+      ws['!rows'][1]={hpt:6};
+      for(let R=2; R<=lastR+2; R++){
+        for(let C=0; C<=lastC; C++){
+          const addr=XLSX.utils.encode_cell({r:R,c:C});
+          if(!ws[addr])ws[addr]={v:'',t:'s'};
+          ws[addr].s=(R===2)?_hStyle:_normStyle;
+        }
+      }
+      ws['!freeze']={xSplit:0,ySplit:3};
     }
     _styleSheet(ws1, h1[0] ? Object.keys(h1[0]).length : 1, 'Informe SIGI');
     XLSX.utils.book_append_sheet(wb, ws1, 'INFORME_SIGI');
@@ -10171,25 +10162,48 @@ async function exportAgentesExcel(){
 
   // ── Aplicar estilos + logo a las 4 hojas ────────────────────────────
   function _agStyle(ws, nCols, titulo) {
-    const hS = {font:{bold:true,color:{rgb:'F1F5F9'},name:'Arial',sz:10},fill:{fgColor:{rgb:'1E293B'}},alignment:{horizontal:'left',vertical:'center',wrapText:true}};
-    const rS = {fill:{fgColor:{rgb:'FFFFFF'}},font:{name:'Arial',sz:9},alignment:{vertical:'center'}};
+    const hS  = {font:{bold:true,color:{rgb:'F1F5F9'},name:'Arial',sz:10},fill:{fgColor:{rgb:'1E293B'}},alignment:{horizontal:'left',vertical:'center',wrapText:true}};
+    const rS  = {fill:{fgColor:{rgb:'FFFFFF'}},font:{name:'Arial',sz:9},alignment:{vertical:'center'}};
     const logoS = {font:{bold:true,color:{rgb:'1E293B'},name:'Arial',sz:13},fill:{fgColor:{rgb:'FFFFFF'}},alignment:{horizontal:'left',vertical:'center'}};
-    XLSX.utils.sheet_add_aoa(ws,[['NOVA TD  |  '+titulo],[]],{origin:'A1',sheetStubs:true});
-    const a0=XLSX.utils.encode_cell({r:0,c:0});
-    if(!ws[a0])ws[a0]={v:'',t:'s'};
-    ws[a0].s=logoS;
-    ws['!rows']=ws['!rows']||[];
-    ws['!rows'][0]={hpt:22};
-    ws['!rows'][1]={hpt:6};
-    ws['!merges']=ws['!merges']||[];
-    ws['!merges'].push({s:{r:0,c:0},e:{r:0,c:nCols-1}});
-    const range=XLSX.utils.decode_range(ws['!ref']||'A1');
-    for(let R=range.s.r;R<=range.e.r;R++){
-      for(let C=range.s.c;C<=range.e.c;C++){
+
+    // 1. Leer el rango actual (datos ya escritos en filas 0..N)
+    const range = XLSX.utils.decode_range(ws['!ref']||'A1');
+    const lastR = range.e.r;
+    const lastC = range.e.c;
+
+    // 2. Desplazar todas las celdas existentes 2 filas hacia abajo
+    for(let R=lastR; R>=0; R--){
+      for(let C=0; C<=lastC; C++){
+        const src = XLSX.utils.encode_cell({r:R,c:C});
+        const dst = XLSX.utils.encode_cell({r:R+2,c:C});
+        if(ws[src]){ ws[dst]=ws[src]; delete ws[src]; }
+      }
+    }
+    // Actualizar ref
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastR+2,c:lastC}});
+
+    // 3. Fila 0: logo
+    const a0 = XLSX.utils.encode_cell({r:0,c:0});
+    ws[a0] = {v:'NOVA TD  |  '+titulo, t:'s', s:logoS};
+    // Fila 1: vacía
+    const a1 = XLSX.utils.encode_cell({r:1,c:0});
+    ws[a1] = {v:'', t:'s'};
+
+    // 4. Merge logo a lo ancho
+    ws['!merges'] = ws['!merges']||[];
+    ws['!merges'].push({s:{r:0,c:0},e:{r:0,c:lastC}});
+
+    // 5. Alturas
+    ws['!rows'] = ws['!rows']||[];
+    ws['!rows'][0] = {hpt:22};
+    ws['!rows'][1] = {hpt:6};
+
+    // 6. Estilar fila de encabezados (ahora en fila 2) y datos
+    for(let R=2; R<=lastR+2; R++){
+      for(let C=0; C<=lastC; C++){
         const addr=XLSX.utils.encode_cell({r:R,c:C});
         if(!ws[addr])ws[addr]={v:'',t:'s'};
-        if(R===2)ws[addr].s=hS;
-        else if(R>2)ws[addr].s=rS;
+        ws[addr].s = (R===2) ? hS : rS;
       }
     }
     ws['!freeze']={xSplit:0,ySplit:3};
