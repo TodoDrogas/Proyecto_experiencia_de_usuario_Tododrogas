@@ -9692,15 +9692,6 @@ function renderAgentes(){
   const _EXCL  = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']);
 
   // ── PASO 1: calcular métricas POR AGENTE ──────────────────────────────
-  // Mapa correo_id → nombre_solicitud desde historial (para tickets sin el campo en correos)
-  const _nomSolMap = {};
-  H_all.forEach(h => {
-    if(!h.correo_id || _nomSolMap[h.correo_id]) return;
-    try {
-      const ex = typeof h.datos_extra==='string' ? JSON.parse(h.datos_extra) : (h.datos_extra||{});
-      if(ex.nombre_solicitud) _nomSolMap[h.correo_id] = ex.nombre_solicitud;
-    } catch(_) {}
-  });
 
   // Todos los totales de las cards serán la SUMA exacta de estas filas.
   const rowData = act.map(a => {
@@ -9726,7 +9717,7 @@ function renderAgentes(){
     const pfirma  = myE.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
     const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
     const casosActivos = myE.filter(e=>_pqr(e)&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
-    const _nomSol = e => ((e.nombre_solicitud||_nomSolMap[e.id]||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+    const _nomSol = e => ((e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
     const pCount   = myE.filter(e=>_nomSol(e)==='peticion').length;
     const qCount   = myE.filter(e=>_nomSol(e)==='queja').length;
     const rCount   = myE.filter(e=>_nomSol(e)==='reclamo').length;
@@ -9735,7 +9726,7 @@ function renderAgentes(){
     const dCount   = myE.filter(e=>_nomSol(e)==='denuncia').length;
     const solCount = myE.filter(e=>_nomSol(e)==='solicitud').length;
     const infCount = myE.filter(e=>_nomSol(e)==='informacion').length;
-    const tutCount = myE.filter(e=>_nomSol(e)==='tutela'||e.tiene_tutela===true).length;
+    const tutCount = myE.filter(e=>e.tiene_tutela===true).length;
     const falCount = myE.filter(e=>_nomSol(e)==='fallo/sentencia').length;
     const reqCount = myE.filter(e=>_nomSol(e)==='requerimiento previo').length;
     const incCount = myE.filter(e=>_nomSol(e)==='incidente desacato').length;
@@ -9992,16 +9983,7 @@ async function exportAgentesExcel(){
   const _epsNom = c => c.eps_id ? (_epsMap[c.eps_id]||'') : '';
 
   // ── Hoja 1: Resumen por asesor ──────────────────────────────────────
-  // Mapa correo_id → nombre_solicitud desde historial
-  const _nomSolMapX = {};
-  H.forEach(h => {
-    if(!h.correo_id || _nomSolMapX[h.correo_id]) return;
-    try {
-      const ex = typeof h.datos_extra==='string' ? JSON.parse(h.datos_extra) : (h.datos_extra||{});
-      if(ex.nombre_solicitud) _nomSolMapX[h.correo_id] = ex.nombre_solicitud;
-    } catch(_) {}
-  });
-  const _nomSolX = e => ((e.nombre_solicitud||_nomSolMapX[e.id]||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''));
+  const _nomSolX = e => ((e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''));
 
   const h1 = act.map(a=>{
     const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
@@ -10047,7 +10029,7 @@ async function exportAgentesExcel(){
       Denuncias:                   myE.filter(e=>_nomSolX(e)==='denuncia').length,
       Solicitudes:                 myE.filter(e=>_nomSolX(e)==='solicitud').length,
       Informacion:                 myE.filter(e=>_nomSolX(e)==='informacion').length,
-      Tutelas:                     myE.filter(e=>_nomSolX(e)==='tutela'||e.tiene_tutela===true).length,
+      Tutelas:                     myE.filter(e=>e.tiene_tutela===true).length,
       Fallo_Sentencia:             myE.filter(e=>_nomSolX(e)==='fallo/sentencia').length,
       Requerimiento_Previo:        myE.filter(e=>_nomSolX(e)==='requerimiento previo').length,
       Incidente_Desacato:          myE.filter(e=>_nomSolX(e)==='incidente desacato').length,
