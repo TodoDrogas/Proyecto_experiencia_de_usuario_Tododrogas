@@ -285,10 +285,10 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .mtable-title{font-size:12px;font-weight:700;color:var(--ink)}
 .mtable-count{font-size:11px;color:var(--ink3);background:var(--bg2);padding:3px 10px;border-radius:99px;font-family:'DM Mono',monospace}
 .m-tbl{width:100%;border-collapse:collapse}
-.m-tbl th{background:var(--bg2);padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--ink3);text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
-.m-tbl td{padding:9px 12px;font-size:11px;color:var(--ink2);border-bottom:1px solid var(--border)}
+.m-tbl th{background:#1e293b;padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:#f1f5f9;text-align:left;border-bottom:none;white-space:nowrap}
+.m-tbl td{padding:9px 12px;font-size:11px;color:var(--ink2);border-bottom:0.5px solid var(--border);background:#fff}
 .m-tbl tr:last-child td{border-bottom:none}
-.m-tbl tr:hover td{background:var(--bg)}
+.m-tbl tr:hover td{background:#f8fafc}
 .m-tbl-dark th{background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);border-color:rgba(255,255,255,.08)}
 .m-tbl-dark td{color:rgba(255,255,255,.7);border-color:rgba(255,255,255,.06)}
 .m-tbl-dark tr:hover td{background:rgba(255,255,255,.04)}
@@ -2753,31 +2753,54 @@ async function exportarSIGI() {
 
     // ── Estilos header ──
     const _hStyle = {
-      font:{bold:true, color:{rgb:'FFFFFF'}, name:'Arial', sz:10},
-      fill:{fgColor:{rgb:'1A5276'}},
-      alignment:{horizontal:'center', vertical:'center', wrapText:true},
-      border:{bottom:{style:'medium',color:{rgb:'FFFFFF'}}}
+      font:{bold:true, color:{rgb:'F1F5F9'}, name:'Arial', sz:10},
+      fill:{fgColor:{rgb:'1E293B'}},
+      alignment:{horizontal:'left', vertical:'center', wrapText:true}
     };
-    const _altStyle = {fill:{fgColor:{rgb:'EAF2FF'}}, font:{name:'Arial', sz:9}};
-    const _normStyle = {fill:{fgColor:{rgb:'FFFFFF'}}, font:{name:'Arial', sz:9}};
+    const _altStyle = {fill:{fgColor:{rgb:'FFFFFF'}}, font:{name:'Arial', sz:9}, alignment:{vertical:'center'}};
+    const _normStyle = {fill:{fgColor:{rgb:'FFFFFF'}}, font:{name:'Arial', sz:9}, alignment:{vertical:'center'}};
 
     // Función aplicar estilos a hoja
-    function _styleSheet(ws, nCols) {
+    function _addLogoRow(ws, nCols, titulo) {
+      // Insertar 2 filas al inicio: logo (como texto de marca) + fila vacía de separación
+      XLSX.utils.sheet_add_aoa(ws, [
+        ['NOVA TD  |  ' + titulo],
+        []
+      ], {origin: 'A1', sheetStubs: true});
+      // Estilo de la fila de marca
+      const logoStyle = {
+        font:{bold:true, color:{rgb:'1E293B'}, name:'Arial', sz:13},
+        fill:{fgColor:{rgb:'FFFFFF'}},
+        alignment:{horizontal:'left', vertical:'center'}
+      };
+      const addr = XLSX.utils.encode_cell({r:0,c:0});
+      if(!ws[addr]) ws[addr]={v:'',t:'s'};
+      ws[addr].s = logoStyle;
+      ws['!rows'] = ws['!rows']||[];
+      ws['!rows'][0] = {hpt:22};
+      ws['!rows'][1] = {hpt:6};
+      // Merge la fila del logo a través de todas las columnas
+      ws['!merges'] = ws['!merges']||[];
+      ws['!merges'].push({s:{r:0,c:0}, e:{r:0,c:nCols-1}});
+    }
+
+    function _styleSheet(ws, nCols, titulo) {
+      _addLogoRow(ws, nCols, titulo||'Informe');
       const range = XLSX.utils.decode_range(ws['!ref']||'A1');
       for(let R=range.s.r; R<=range.e.r; R++) {
         for(let C=range.s.c; C<=range.e.c; C++) {
           const addr = XLSX.utils.encode_cell({r:R,c:C});
           if(!ws[addr]) ws[addr] = {v:'', t:'s'};
-          if(R===0) {
+          if(R===2) {
             ws[addr].s = _hStyle;
-          } else {
-            ws[addr].s = (R%2===0) ? _altStyle : _normStyle;
+          } else if(R>2) {
+            ws[addr].s = _normStyle;
           }
         }
       }
-      ws['!freeze'] = {xSplit:0, ySplit:1};
+      ws['!freeze'] = {xSplit:0, ySplit:3};
     }
-    _styleSheet(ws1, h1[0] ? Object.keys(h1[0]).length : 1);
+    _styleSheet(ws1, h1[0] ? Object.keys(h1[0]).length : 1, 'Informe SIGI');
     XLSX.utils.book_append_sheet(wb, ws1, 'INFORME_SIGI');
 
     // ════════════════════════════════════════════════════════════════
@@ -2823,7 +2846,7 @@ async function exportarSIGI() {
       h2.length ? h2 : [{'Sin datos':'Sin medicamentos en el período — el agente debe añadir medicamentos al ticket para que aparezcan aquí'}]
     );
     ws2['!cols'] = [{wch:20},{wch:18},{wch:36},{wch:8},{wch:10},{wch:16},{wch:28},{wch:30},{wch:14}];
-    _styleSheet(ws2, 9);
+    _styleSheet(ws2, 9, 'Medicamentos');
     XLSX.utils.book_append_sheet(wb, ws2, 'MEDICAMENTOS');
 
     // ════════════════════════════════════════════════════════════════
@@ -2854,7 +2877,7 @@ async function exportarSIGI() {
     });
     const ws3 = XLSX.utils.json_to_sheet(h3.length ? h3 : [{'Sin datos':'Sin agentes'}]);
     ws3['!cols'] = [{wch:28},{wch:12},{wch:13},{wch:18},{wch:12},{wch:12},{wch:14},{wch:15},{wch:15},{wch:13}];
-    _styleSheet(ws3, 10);
+    _styleSheet(ws3, 10, 'Resumen Agentes');
     XLSX.utils.book_append_sheet(wb, ws3, 'RESUMEN_AGENTES');
 
     // ════════════════════════════════════════════════════════════════
@@ -2905,7 +2928,7 @@ async function exportarSIGI() {
       {wch:11},{wch:10},{wch:10},{wch:10},{wch:13},{wch:11},{wch:11},{wch:13},{wch:10},
       {wch:12},{wch:18},{wch:14},
     ];
-    _styleSheet(ws4, 15);
+    _styleSheet(ws4, 15, 'EPS Catálogo');
     XLSX.utils.book_append_sheet(wb, ws4, 'EPS_CATALOGO');
 
     // ── Descargar ─────────────────────────────────────────────────
@@ -10017,7 +10040,6 @@ async function exportAgentesExcel(){
       Pendiente_Firma:         myE.filter(e=>e.estado==='pendiente_firma').length,
       Resueltos:               sol,
       Pct_Resolucion:          myE.length>0?Math.round(sol/myE.length*100)+'%':'0%',
-      T_Prom_Resolucion_h:     avgH,
       Gestiones_Registradas:   myH.filter(h=>_esGR(h)&&cidsAsesor.has(h.correo_id)).length,
       Tickets_Con_Respuesta:   new Set([...cidsAsesor].filter(id=>(_respSetGlobal||new Set()).has(id))).size,
       Tickets_Sin_Respuesta:   myE.filter(e=>!(_respSetGlobal||new Set()).has(e.id)).length,
@@ -10034,7 +10056,6 @@ async function exportAgentesExcel(){
       Requerimiento_Previo:        myE.filter(e=>_nomSolX(e)==='requerimiento previo').length,
       Incidente_Desacato:          myE.filter(e=>_nomSolX(e)==='incidente desacato').length,
       Sancion_Incidente_Desacato:  myE.filter(e=>_nomSolX(e)==='sancion incidente desacato').length,
-      Alta_Sin_Resolver:       myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
     };
   });
   const ws1 = XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'Sin asesores'}]);
@@ -10147,6 +10168,40 @@ async function exportAgentesExcel(){
   const ws4 = XLSX.utils.json_to_sheet(h4.length?h4:[{Sin_datos:'Sin eventos'}]);
   ws4['!cols']=[{wch:18},{wch:36},{wch:22},{wch:16},{wch:22},{wch:14},{wch:40},{wch:10},{wch:13},{wch:20}];
   XLSX.utils.book_append_sheet(wb, ws4, 'Timeline Completo');
+
+  // ── Aplicar estilos + logo a las 4 hojas ────────────────────────────
+  function _agStyle(ws, nCols, titulo) {
+    const hS = {font:{bold:true,color:{rgb:'F1F5F9'},name:'Arial',sz:10},fill:{fgColor:{rgb:'1E293B'}},alignment:{horizontal:'left',vertical:'center',wrapText:true}};
+    const rS = {fill:{fgColor:{rgb:'FFFFFF'}},font:{name:'Arial',sz:9},alignment:{vertical:'center'}};
+    const logoS = {font:{bold:true,color:{rgb:'1E293B'},name:'Arial',sz:13},fill:{fgColor:{rgb:'FFFFFF'}},alignment:{horizontal:'left',vertical:'center'}};
+    XLSX.utils.sheet_add_aoa(ws,[['NOVA TD  |  '+titulo],[]],{origin:'A1',sheetStubs:true});
+    const a0=XLSX.utils.encode_cell({r:0,c:0});
+    if(!ws[a0])ws[a0]={v:'',t:'s'};
+    ws[a0].s=logoS;
+    ws['!rows']=ws['!rows']||[];
+    ws['!rows'][0]={hpt:22};
+    ws['!rows'][1]={hpt:6};
+    ws['!merges']=ws['!merges']||[];
+    ws['!merges'].push({s:{r:0,c:0},e:{r:0,c:nCols-1}});
+    const range=XLSX.utils.decode_range(ws['!ref']||'A1');
+    for(let R=range.s.r;R<=range.e.r;R++){
+      for(let C=range.s.c;C<=range.e.c;C++){
+        const addr=XLSX.utils.encode_cell({r:R,c:C});
+        if(!ws[addr])ws[addr]={v:'',t:'s'};
+        if(R===2)ws[addr].s=hS;
+        else if(R>2)ws[addr].s=rS;
+      }
+    }
+    ws['!freeze']={xSplit:0,ySplit:3};
+  }
+  const _nc1=h1[0]?Object.keys(h1[0]).length:1;
+  const _nc2=h2[0]?Object.keys(h2[0]).length:1;
+  const _nc3=h3[0]?Object.keys(h3[0]).length:1;
+  const _nc4=h4[0]?Object.keys(h4[0]).length:1;
+  _agStyle(ws1,_nc1,'Resumen Asesores');
+  _agStyle(ws2,_nc2,'Tickets Detallado');
+  _agStyle(ws3,_nc3,'Gestiones Reales');
+  _agStyle(ws4,_nc4,'Timeline Completo');
 
   XLSX.writeFile(wb, `Asesores_${desde||'inicio'}_${hasta||'hoy'}.xlsx`);
 }
