@@ -9610,7 +9610,7 @@ async function loadAgentesMetrics(){
   const [correos, eventos, agentes, correosAsesorActual, correosGlobal, respEventosGlobal] = await Promise.all([
     // correos del período (received_at) — paginado sin límite fijo igual que el agente
     (async()=>{
-      const PAGE=1000, _fields='id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones';
+      const PAGE=1000, _fields='id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones,nombre_solicitud';
       let all=[], off=0;
       while(true){
         const page=await sb(qC(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=${_fields}&order=received_at.desc&limit=${PAGE}&offset=${off}`,'received_at')).catch(()=>[]);
@@ -9969,7 +9969,11 @@ async function exportAgentesExcel(){
 
   // ── Hoja 1: Resumen por asesor ──────────────────────────────────────
   const h1 = act.map(a=>{
-    const myE = E.filter(e=>e.agente_id===a.id);
+    const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
+    const myE = E.filter(e=>
+      (e.agente_id===a.id || (e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))
+      && _pqrAg(e)
+    );
     const myH = H.filter(h=>h.agente_id===a.id);
     const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
@@ -9997,8 +10001,6 @@ async function exportAgentesExcel(){
       Pct_Resolucion:          myE.length>0?Math.round(sol/myE.length*100)+'%':'0%',
       T_Prom_Resolucion_h:     avgH,
       Gestiones_Registradas:   myH.filter(h=>_esGR(h)&&cidsAsesor.has(h.correo_id)).length,
-      Respuestas_Enviadas:     myH.filter(h=>h.evento==='correo_respondido').length,
-      Firmas_Confirmadas:      myH.filter(h=>h.evento==='firma_confirmada').length,
       Tickets_Con_Respuesta:   new Set([...cidsAsesor].filter(id=>(_respSetGlobal||new Set()).has(id))).size,
       Tickets_Sin_Respuesta:   myE.filter(e=>!(_respSetGlobal||new Set()).has(e.id)).length,
       Peticiones:              myE.filter(e=>(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')==='peticion').length,
