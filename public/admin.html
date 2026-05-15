@@ -1498,8 +1498,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
                 <th>% Resolución</th>
                 <th>Gestiones</th>
                 <th style="color:#15803d">✉ Con Resp.</th><th style="color:#854d0e">⏳ Sin Resp.</th>
-                <th>Peticiones</th><th>Quejas</th><th>Reclamos</th>
-                <th>Sugerencias</th><th>Felicitaciones</th><th>Denuncias</th><th>Tutelas</th>
+                <th>Peticiones</th><th>Quejas</th><th>Reclamos</th><th>Sugerencias</th><th>Felicitaciones</th><th>Denuncias</th><th>Solicitudes</th><th>Información</th><th>Tutela</th><th>Fallo/Sentencia</th><th>Req. Previo</th><th>Inc. Desacato</th><th>Sanc. Inc. Desacato</th>
                 <th>Alta sin resolver</th><th>Casos Activos</th>
               </tr></thead>
               <tbody id="agTableBody"></tbody>
@@ -9726,13 +9725,19 @@ function renderAgentes(){
     const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
     const casosActivos = myE.filter(e=>_pqr(e)&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
     const _nomSol = e => ((e.nombre_solicitud||_nomSolMap[e.id]||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
-    const pCount  = myE.filter(e=>_nomSol(e)==='peticion').length;
-    const qCount  = myE.filter(e=>_nomSol(e)==='queja').length;
-    const rCount  = myE.filter(e=>_nomSol(e)==='reclamo').length;
-    const sCount  = myE.filter(e=>_nomSol(e)==='sugerencia').length;
-    const fCount  = myE.filter(e=>_nomSol(e)==='felicitacion').length;
-    const dCount  = myE.filter(e=>_nomSol(e)==='denuncia').length;
-    const tutCount= myE.filter(e=>e.tiene_tutela===true).length;
+    const pCount   = myE.filter(e=>_nomSol(e)==='peticion').length;
+    const qCount   = myE.filter(e=>_nomSol(e)==='queja').length;
+    const rCount   = myE.filter(e=>_nomSol(e)==='reclamo').length;
+    const suCount  = myE.filter(e=>_nomSol(e)==='sugerencia').length;
+    const fCount   = myE.filter(e=>_nomSol(e)==='felicitacion').length;
+    const dCount   = myE.filter(e=>_nomSol(e)==='denuncia').length;
+    const solCount = myE.filter(e=>_nomSol(e)==='solicitud').length;
+    const infCount = myE.filter(e=>_nomSol(e)==='informacion').length;
+    const tutCount = myE.filter(e=>_nomSol(e)==='tutela'||e.tiene_tutela===true).length;
+    const falCount = myE.filter(e=>_nomSol(e)==='fallo/sentencia').length;
+    const reqCount = myE.filter(e=>_nomSol(e)==='requerimiento previo').length;
+    const incCount = myE.filter(e=>_nomSol(e)==='incidente desacato').length;
+    const sanCount = myE.filter(e=>_nomSol(e)==='sancion incidente desacato').length;
 
     // Con/Sin Respuesta — se usa _respSetGlobal (sin filtro de fecha) para determinar si el ticket
     // fue respondido en cualquier momento, no solo dentro del período filtrado.
@@ -9757,7 +9762,8 @@ function renderAgentes(){
     // Gestiones = eventos del agente en tickets del período (igual que cargarMetricasAgente)
     const numGest = myH.filter(h=>_esGR(h)&&_myIds.has(h.correo_id)).length;
 
-    return { a, tot, pend, gest, sol, pfirma, alta, casosActivos, pCount, qCount, rCount, sCount, fCount, dCount, tutCount,
+    return { a, tot, pend, gest, sol, pfirma, alta, casosActivos,
+             pCount, qCount, rCount, suCount, fCount, dCount, solCount, infCount, tutCount, falCount, reqCount, incCount, sanCount,
              conRespCount, sinRespCount, gestReg, resp, firmas, tRes, tColor, pct, numGest, myE };
   });
 
@@ -9826,7 +9832,7 @@ function renderAgentes(){
   // ── TABLA MAESTRA ──
   const COLS=['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
   const maxC = Math.max(...rowData.map(r=>r.tot),1);
-  document.getElementById('agTableBody').innerHTML = rowData.map(({a,tot,pend,gest,sol,pfirma,alta,casosActivos,pCount,qCount,rCount,sCount,fCount,dCount,tutCount,conRespCount,sinRespCount,gestReg,resp,firmas,tRes,tColor,pct},i)=>{
+  document.getElementById('agTableBody').innerHTML = rowData.map(({a,tot,pend,gest,sol,pfirma,alta,casosActivos,pCount,qCount,rCount,suCount,fCount,dCount,solCount,infCount,tutCount,falCount,reqCount,incCount,sanCount,conRespCount,sinRespCount,gestReg,resp,firmas,tRes,tColor,pct},i)=>{
     const color = COLS[i%COLS.length];
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px">
@@ -9848,10 +9854,16 @@ function renderAgentes(){
       <td style="text-align:center;font-size:11px">${pCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${qCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${rCount||'—'}</td>
-      <td style="text-align:center;font-size:11px">${sCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${suCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${fCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${dCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${solCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${infCount||'—'}</td>
       <td style="text-align:center;font-size:11px">${tutCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${falCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${reqCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${incCount||'—'}</td>
+      <td style="text-align:center;font-size:11px">${sanCount||'—'}</td>
       <td style="text-align:center"><span style="font-weight:700;color:${alta>0?'var(--red)':'var(--ink3)'}">${alta}</span></td>
       <td style="text-align:center;font-family:'DM Mono',monospace;font-weight:700;color:${casosActivos>10?'var(--red)':casosActivos>5?'#ca8a04':'var(--green)'}">${casosActivos}</td>
     </tr>`;
@@ -10024,13 +10036,19 @@ async function exportAgentesExcel(){
       Gestiones_Registradas:   myH.filter(h=>_esGR(h)&&cidsAsesor.has(h.correo_id)).length,
       Tickets_Con_Respuesta:   new Set([...cidsAsesor].filter(id=>(_respSetGlobal||new Set()).has(id))).size,
       Tickets_Sin_Respuesta:   myE.filter(e=>!(_respSetGlobal||new Set()).has(e.id)).length,
-      Peticiones:              myE.filter(e=>_nomSolX(e)==='peticion').length,
-      Quejas:                  myE.filter(e=>_nomSolX(e)==='queja').length,
-      Reclamos:                myE.filter(e=>_nomSolX(e)==='reclamo').length,
-      Sugerencias:             myE.filter(e=>_nomSolX(e)==='sugerencia').length,
-      Felicitaciones:          myE.filter(e=>_nomSolX(e)==='felicitacion').length,
-      Denuncias:               myE.filter(e=>_nomSolX(e)==='denuncia').length,
-      Tutelas:                 myE.filter(e=>e.tiene_tutela===true).length,
+      Peticiones:                  myE.filter(e=>_nomSolX(e)==='peticion').length,
+      Quejas:                      myE.filter(e=>_nomSolX(e)==='queja').length,
+      Reclamos:                    myE.filter(e=>_nomSolX(e)==='reclamo').length,
+      Sugerencias:                 myE.filter(e=>_nomSolX(e)==='sugerencia').length,
+      Felicitaciones:              myE.filter(e=>_nomSolX(e)==='felicitacion').length,
+      Denuncias:                   myE.filter(e=>_nomSolX(e)==='denuncia').length,
+      Solicitudes:                 myE.filter(e=>_nomSolX(e)==='solicitud').length,
+      Informacion:                 myE.filter(e=>_nomSolX(e)==='informacion').length,
+      Tutelas:                     myE.filter(e=>_nomSolX(e)==='tutela'||e.tiene_tutela===true).length,
+      Fallo_Sentencia:             myE.filter(e=>_nomSolX(e)==='fallo/sentencia').length,
+      Requerimiento_Previo:        myE.filter(e=>_nomSolX(e)==='requerimiento previo').length,
+      Incidente_Desacato:          myE.filter(e=>_nomSolX(e)==='incidente desacato').length,
+      Sancion_Incidente_Desacato:  myE.filter(e=>_nomSolX(e)==='sancion incidente desacato').length,
       Alta_Sin_Resolver:       myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length,
     };
   });
