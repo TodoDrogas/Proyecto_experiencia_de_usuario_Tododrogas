@@ -9693,7 +9693,9 @@ async function loadAgentesMetrics(){
 }
 
 function renderAgentes(){
-  const { correos:E_all, eventos:H_all, agentes, correosAsesorActual, correosGlobal, respSet:_respSetGlobal } = _agDatos;
+  const { correos:E_all, eventos:H_all, agentes, correosAsesorActual, correosGlobal, respSet:_respSetGlobal, desde:_agDesde, hasta:_agHasta } = _agDatos;
+  const _dISO = _agDesde ? _agDesde+'T00:00:00-05:00' : '';
+  const _hISO = _agHasta ? _agHasta+'T23:59:59-05:00' : '';
   const sedeFiltro   = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
   const asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
   const act = agentes.filter(a=>(a.activo===true||a.activo===1||a.activo==='true')
@@ -9724,10 +9726,10 @@ function renderAgentes(){
     // Eventos del período del agente — filtrar por agente_id O por correo_id de sus tickets
     const _myIds = new Set(myE.map(e=>e.id));
     // myH por agente_id (para gestReg, resp, firmas)
-    const myH = H.filter(h=>h.agente_id===a.id);
+    const myH = H.filter(h=>h.agente_id===a.id&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
     // myH_byCorreo: eventos de los correos del agente aunque el evento tenga otro agente_id
     // Cubre tickets asignados via asignado_a donde el evento puede tener agente_id distinto
-    const myH_byCorreo = H.filter(h=>_myIds.has(h.correo_id));
+    const myH_byCorreo = H.filter(h=>_myIds.has(h.correo_id)&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
 
     const tot     = myE.length;
     const pend    = myE.filter(e=>e.estado==='pendiente').length;
@@ -10011,7 +10013,7 @@ async function exportAgentesExcel(){
       && _pqrAg(e)
     );
     const myE = [...new Map(_myERawX.map(e=>[e.id,e])).values()];
-    const myH = H.filter(h=>h.agente_id===a.id);
+    const myH = H.filter(h=>h.agente_id===a.id&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
     const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
     const sol = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
@@ -10117,8 +10119,6 @@ async function exportAgentesExcel(){
       Hora_Primera_Respuesta: fmt(evResp?.created_at),
       Hora_Pte_Firma:      fmt(evFirma?.created_at),
       Hora_Cierre:         fmt(evCierre?.created_at || (c.fecha_resolucion ? c.fecha_resolucion : null)),
-      T_Resolucion_h:      (c.fecha_resolucion&&c.received_at)?((new Date(c.fecha_resolucion)-new Date(c.received_at))/3600000).toFixed(1):'',
-      SLA_horas:           c.horas_sla||'',
     };
   });
   const ws2 = _makeSheet(h2,[{wch:22},{wch:16},{wch:14},{wch:26},{wch:40},{wch:28},{wch:22},{wch:20},{wch:16},{wch:12},{wch:22},{wch:13},{wch:10},{wch:11},{wch:11},{wch:13},{wch:12},{wch:18},{wch:18},{wch:20},{wch:20},{wch:20},{wch:18},{wch:14},{wch:10}]);
