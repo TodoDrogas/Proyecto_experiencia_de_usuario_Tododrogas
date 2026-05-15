@@ -2741,57 +2741,29 @@ async function exportarSIGI() {
       };
     });
 
-    const ws1 = XLSX.utils.json_to_sheet(h1.length ? h1 : [{'Sin datos':'No hay casos con gestiones en el período'}]);
-    ws1['!cols'] = [
-      {wch:10},{wch:20},{wch:18},{wch:14},{wch:28},{wch:22},{wch:30},{wch:14},{wch:13},
-      {wch:32},{wch:20},{wch:13},{wch:14},{wch:20},{wch:20},{wch:34},{wch:14},{wch:14},
-      {wch:14},{wch:30},{wch:28},{wch:14},{wch:14},{wch:34},{wch:14},{wch:16},{wch:16},
-      {wch:14},{wch:28},{wch:22},{wch:10},{wch:10},{wch:34},{wch:18},{wch:18},{wch:18},
-      {wch:18},{wch:10},{wch:18},
-    ];
-    ws1['!freeze'] = {xSplit:0, ySplit:1};
-
     // ── Estilos header ──
     const _hStyle = {
       font:{bold:true, color:{rgb:'F1F5F9'}, name:'Arial', sz:10},
       fill:{fgColor:{rgb:'1E293B'}},
       alignment:{horizontal:'left', vertical:'center', wrapText:true}
     };
-    const _altStyle = {fill:{fgColor:{rgb:'FFFFFF'}}, font:{name:'Arial', sz:9}, alignment:{vertical:'center'}};
     const _normStyle = {fill:{fgColor:{rgb:'FFFFFF'}}, font:{name:'Arial', sz:9}, alignment:{vertical:'center'}};
 
     // Función aplicar estilos a hoja
-    function _styleSheet(ws, nCols, titulo) {
+    function _styleSheet(ws, nCols) {
       const range = XLSX.utils.decode_range(ws['!ref']||'A1');
-      const lastR = range.e.r;
-      const lastC = range.e.c;
-      // Desplazar celdas existentes 2 filas abajo
-      for(let R=lastR; R>=0; R--){
-        for(let C=0; C<=lastC; C++){
-          const src=XLSX.utils.encode_cell({r:R,c:C});
-          const dst=XLSX.utils.encode_cell({r:R+2,c:C});
-          if(ws[src]){ws[dst]=ws[src];delete ws[src];}
-        }
-      }
-      ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastR+2,c:lastC}});
-      // Fila 0: logo
-      ws[XLSX.utils.encode_cell({r:0,c:0})]={v:'NOVA TD  |  '+(titulo||'Informe'),t:'s',s:{font:{bold:true,color:{rgb:'1E293B'},name:'Arial',sz:13},fill:{fgColor:{rgb:'FFFFFF'}},alignment:{horizontal:'left',vertical:'center'}}};
-      ws[XLSX.utils.encode_cell({r:1,c:0})]={v:'',t:'s'};
-      ws['!merges']=ws['!merges']||[];
-      ws['!merges'].push({s:{r:0,c:0},e:{r:0,c:lastC}});
-      ws['!rows']=ws['!rows']||[];
-      ws['!rows'][0]={hpt:22};
-      ws['!rows'][1]={hpt:6};
-      for(let R=2; R<=lastR+2; R++){
-        for(let C=0; C<=lastC; C++){
+      for(let R=range.s.r; R<=range.e.r; R++){
+        for(let C=range.s.c; C<=range.e.c; C++){
           const addr=XLSX.utils.encode_cell({r:R,c:C});
           if(!ws[addr])ws[addr]={v:'',t:'s'};
-          ws[addr].s=(R===2)?_hStyle:_normStyle;
+          ws[addr].s=(R===0)?_hStyle:_normStyle;
         }
       }
-      ws['!freeze']={xSplit:0,ySplit:3};
+      ws['!freeze']={xSplit:0,ySplit:1};
     }
-    _styleSheet(ws1, h1[0] ? Object.keys(h1[0]).length : 1, 'Informe SIGI');
+    const ws1 = XLSX.utils.json_to_sheet(h1.length?h1:[{'Sin datos':'Sin registros'}]);
+    ws1['!cols']=[{wch:10},{wch:20},{wch:18},{wch:14},{wch:28},{wch:22},{wch:30},{wch:14},{wch:13},{wch:32},{wch:20},{wch:13},{wch:14},{wch:20},{wch:20},{wch:34},{wch:14},{wch:14},{wch:14},{wch:30},{wch:28},{wch:14},{wch:14},{wch:34},{wch:14},{wch:16},{wch:16},{wch:14},{wch:28},{wch:22},{wch:10},{wch:10},{wch:34},{wch:18},{wch:18},{wch:18},{wch:18},{wch:10},{wch:18}];
+    _styleSheet(ws1, h1[0]?Object.keys(h1[0]).length:1);
     XLSX.utils.book_append_sheet(wb, ws1, 'INFORME_SIGI');
 
     // ════════════════════════════════════════════════════════════════
@@ -2833,11 +2805,9 @@ async function exportarSIGI() {
       };
     });
 
-    const ws2 = XLSX.utils.json_to_sheet(
-      h2.length ? h2 : [{'Sin datos':'Sin medicamentos en el período — el agente debe añadir medicamentos al ticket para que aparezcan aquí'}]
-    );
-    ws2['!cols'] = [{wch:20},{wch:18},{wch:36},{wch:8},{wch:10},{wch:16},{wch:28},{wch:30},{wch:14}];
-    _styleSheet(ws2, 9, 'Medicamentos');
+    const ws2 = XLSX.utils.json_to_sheet(h2.length?h2:[{'Sin datos':'Sin medicamentos'}]);
+    ws2['!cols']=[{wch:20},{wch:18},{wch:36},{wch:8},{wch:10},{wch:16},{wch:28},{wch:30},{wch:14}];
+    _styleSheet(ws2,9);
     XLSX.utils.book_append_sheet(wb, ws2, 'MEDICAMENTOS');
 
     // ════════════════════════════════════════════════════════════════
@@ -2866,9 +2836,9 @@ async function exportarSIGI() {
         '% Resolución':       asig.length ? Math.round(sol/asig.length*100)+'%' : '0%',
       };
     });
-    const ws3 = XLSX.utils.json_to_sheet(h3.length ? h3 : [{'Sin datos':'Sin agentes'}]);
-    ws3['!cols'] = [{wch:28},{wch:12},{wch:13},{wch:18},{wch:12},{wch:12},{wch:14},{wch:15},{wch:15},{wch:13}];
-    _styleSheet(ws3, 10, 'Resumen Agentes');
+    const ws3 = XLSX.utils.json_to_sheet(h3.length?h3:[{'Sin datos':'Sin agentes'}]);
+    ws3['!cols']=[{wch:28},{wch:12},{wch:13},{wch:18},{wch:12},{wch:12},{wch:14},{wch:15},{wch:15},{wch:13}];
+    _styleSheet(ws3,10);
     XLSX.utils.book_append_sheet(wb, ws3, 'RESUMEN_AGENTES');
 
     // ════════════════════════════════════════════════════════════════
@@ -2913,13 +2883,9 @@ async function exportarSIGI() {
         if(fila[col]==='') fila[col] = 0;
       });
     });
-    const ws4 = XLSX.utils.json_to_sheet(epsConConteo.length ? epsConConteo : [{'Sin datos':'Sin EPS'}]);
-    ws4['!cols'] = [
-      {wch:13},{wch:38},{wch:13},
-      {wch:11},{wch:10},{wch:10},{wch:10},{wch:13},{wch:11},{wch:11},{wch:13},{wch:10},
-      {wch:12},{wch:18},{wch:14},
-    ];
-    _styleSheet(ws4, 15, 'EPS Catálogo');
+    const ws4 = XLSX.utils.json_to_sheet(epsConConteo.length?epsConConteo:[{'Sin datos':'Sin EPS'}]);
+    ws4['!cols']=[{wch:13},{wch:38},{wch:13},{wch:11},{wch:10},{wch:10},{wch:10},{wch:13},{wch:11},{wch:11},{wch:13},{wch:10},{wch:12},{wch:18},{wch:14}];
+    _styleSheet(ws4,15);
     XLSX.utils.book_append_sheet(wb, ws4, 'EPS_CATALOGO');
 
     // ── Descargar ─────────────────────────────────────────────────
@@ -10049,8 +10015,7 @@ async function exportAgentesExcel(){
       Sancion_Incidente_Desacato:  myE.filter(e=>_nomSolX(e)==='sancion incidente desacato').length,
     };
   });
-  const ws1 = XLSX.utils.json_to_sheet(h1.length?h1:[{Sin_datos:'Sin asesores'}]);
-  ws1['!cols']=[{wch:26},{wch:30},{wch:12},{wch:16},{wch:12},{wch:13},{wch:13},{wch:16},{wch:11},{wch:11},{wch:14},{wch:10},{wch:14},{wch:16},{wch:20},{wch:18},{wch:15},{wch:22},{wch:22},{wch:8},{wch:10},{wch:10},{wch:16}];
+  const ws1 = _makeSheet(h1,[{wch:26},{wch:30},{wch:12},{wch:16},{wch:12},{wch:13},{wch:13},{wch:16},{wch:11},{wch:11},{wch:14},{wch:10},{wch:14},{wch:16},{wch:20},{wch:18},{wch:15},{wch:22},{wch:22},{wch:8},{wch:10},{wch:10},{wch:16}]);
   XLSX.utils.book_append_sheet(wb, ws1, 'Resumen Asesores');
 
   // ── Helper ticket — mismo valor en todas las hojas para BUSCARV ──────
@@ -10111,8 +10076,7 @@ async function exportAgentesExcel(){
       SLA_horas:           c.horas_sla||'',
     };
   });
-  const ws2 = XLSX.utils.json_to_sheet(h2.length?h2:[{Sin_datos:'Sin tickets'}]);
-  ws2['!cols']=[{wch:22},{wch:16},{wch:14},{wch:26},{wch:40},{wch:28},{wch:22},{wch:20},{wch:16},{wch:12},{wch:22},{wch:13},{wch:10},{wch:11},{wch:11},{wch:13},{wch:12},{wch:18},{wch:18},{wch:20},{wch:20},{wch:20},{wch:18},{wch:14},{wch:10}];
+  const ws2 = _makeSheet(h2,[{wch:22},{wch:16},{wch:14},{wch:26},{wch:40},{wch:28},{wch:22},{wch:20},{wch:16},{wch:12},{wch:22},{wch:13},{wch:10},{wch:11},{wch:11},{wch:13},{wch:12},{wch:18},{wch:18},{wch:20},{wch:20},{wch:20},{wch:18},{wch:14},{wch:10}]);
   XLSX.utils.book_append_sheet(wb, ws2, 'Tickets Detallado');
 
   // ── Hoja 3: Gestiones Reales (solo eventos que cuentan como gestión) ─
@@ -10136,8 +10100,7 @@ async function exportAgentesExcel(){
       Horas_Desde_Recepcion:  (c.received_at&&h.created_at)?((new Date(h.created_at)-new Date(c.received_at))/3600000).toFixed(1):'',
     };
   });
-  const ws3 = XLSX.utils.json_to_sheet(h3.length?h3:[{Sin_datos:'Sin gestiones en el período'}]);
-  ws3['!cols']=[{wch:18},{wch:36},{wch:22},{wch:16},{wch:22},{wch:40},{wch:13},{wch:26},{wch:20},{wch:16},{wch:10},{wch:13},{wch:11},{wch:20}];
+  const ws3 = _makeSheet(h3,[{wch:18},{wch:36},{wch:22},{wch:16},{wch:22},{wch:40},{wch:13},{wch:26},{wch:20},{wch:16},{wch:10},{wch:13},{wch:11},{wch:20}]);
   XLSX.utils.book_append_sheet(wb, ws3, 'Gestiones Reales');
 
   // ── Hoja 4: Timeline Completo (todos los eventos, para auditoría) ───
@@ -10156,67 +10119,42 @@ async function exportAgentesExcel(){
       Horas_Desde_Recepcion:  (c.received_at&&h.created_at)?((new Date(h.created_at)-new Date(c.received_at))/3600000).toFixed(1):'',
     };
   });
-  const ws4 = XLSX.utils.json_to_sheet(h4.length?h4:[{Sin_datos:'Sin eventos'}]);
-  ws4['!cols']=[{wch:18},{wch:36},{wch:22},{wch:16},{wch:22},{wch:14},{wch:40},{wch:10},{wch:13},{wch:20}];
+  const ws4 = _makeSheet(h4,[{wch:18},{wch:36},{wch:22},{wch:16},{wch:22},{wch:14},{wch:40},{wch:10},{wch:13},{wch:20}]);
   XLSX.utils.book_append_sheet(wb, ws4, 'Timeline Completo');
 
   // ── Aplicar estilos + logo a las 4 hojas ────────────────────────────
-  function _agStyle(ws, nCols, titulo) {
+  function _makeSheet(data, cols, titulo) {
+    if(!data||!data.length) return XLSX.utils.json_to_sheet([{Sin_datos:'Sin registros'}]);
     const hS  = {font:{bold:true,color:{rgb:'F1F5F9'},name:'Arial',sz:10},fill:{fgColor:{rgb:'1E293B'}},alignment:{horizontal:'left',vertical:'center',wrapText:true}};
     const rS  = {fill:{fgColor:{rgb:'FFFFFF'}},font:{name:'Arial',sz:9},alignment:{vertical:'center'}};
-    const logoS = {font:{bold:true,color:{rgb:'1E293B'},name:'Arial',sz:13},fill:{fgColor:{rgb:'FFFFFF'}},alignment:{horizontal:'left',vertical:'center'}};
-
-    // 1. Leer el rango actual (datos ya escritos en filas 0..N)
-    const range = XLSX.utils.decode_range(ws['!ref']||'A1');
-    const lastR = range.e.r;
-    const lastC = range.e.c;
-
-    // 2. Desplazar todas las celdas existentes 2 filas hacia abajo
-    for(let R=lastR; R>=0; R--){
-      for(let C=0; C<=lastC; C++){
-        const src = XLSX.utils.encode_cell({r:R,c:C});
-        const dst = XLSX.utils.encode_cell({r:R+2,c:C});
-        if(ws[src]){ ws[dst]=ws[src]; delete ws[src]; }
+    const logoS = {font:{bold:true,color:{rgb:'1E293B'},name:'Arial',sz:14},fill:{fgColor:{rgb:'FFFFFF'}},alignment:{horizontal:'left',vertical:'center'}};
+    // Construir AOA: [logo], [vacío], [headers], ...rows
+    const headers = Object.keys(data[0]);
+    const nCols = headers.length;
+    const aoa = [
+      [titulo ? 'NOVA TD  |  '+titulo : 'NOVA TD'],
+      new Array(nCols).fill(''),
+      headers,
+      ...data.map(row => headers.map(h => row[h]??''))
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    // Estilos por fila
+    for(let R=0; R<aoa.length; R++){
+      for(let C=0; C<nCols; C++){
+        const addr = XLSX.utils.encode_cell({r:R,c:C});
+        if(!ws[addr]) ws[addr]={v:'',t:'s'};
+        if(R===0) ws[addr].s = logoS;
+        else if(R===2) ws[addr].s = hS;
+        else if(R>2) ws[addr].s = rS;
       }
     }
-    // Actualizar ref
-    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:lastR+2,c:lastC}});
-
-    // 3. Fila 0: logo
-    const a0 = XLSX.utils.encode_cell({r:0,c:0});
-    ws[a0] = {v:'NOVA TD  |  '+titulo, t:'s', s:logoS};
-    // Fila 1: vacía
-    const a1 = XLSX.utils.encode_cell({r:1,c:0});
-    ws[a1] = {v:'', t:'s'};
-
-    // 4. Merge logo a lo ancho
-    ws['!merges'] = ws['!merges']||[];
-    ws['!merges'].push({s:{r:0,c:0},e:{r:0,c:lastC}});
-
-    // 5. Alturas
-    ws['!rows'] = ws['!rows']||[];
-    ws['!rows'][0] = {hpt:22};
-    ws['!rows'][1] = {hpt:6};
-
-    // 6. Estilar fila de encabezados (ahora en fila 2) y datos
-    for(let R=2; R<=lastR+2; R++){
-      for(let C=0; C<=lastC; C++){
-        const addr=XLSX.utils.encode_cell({r:R,c:C});
-        if(!ws[addr])ws[addr]={v:'',t:'s'};
-        ws[addr].s = (R===2) ? hS : rS;
-      }
-    }
-    ws['!freeze']={xSplit:0,ySplit:3};
+    ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:nCols-1}}];
+    ws['!rows'] = [{hpt:24},{hpt:6}];
+    ws['!cols'] = cols||headers.map(()=>({wch:18}));
+    ws['!freeze'] = {xSplit:0,ySplit:3};
+    return ws;
   }
-  const _nc1=h1[0]?Object.keys(h1[0]).length:1;
-  const _nc2=h2[0]?Object.keys(h2[0]).length:1;
-  const _nc3=h3[0]?Object.keys(h3[0]).length:1;
-  const _nc4=h4[0]?Object.keys(h4[0]).length:1;
-  _agStyle(ws1,_nc1,'Resumen Asesores');
-  _agStyle(ws2,_nc2,'Tickets Detallado');
-  _agStyle(ws3,_nc3,'Gestiones Reales');
-  _agStyle(ws4,_nc4,'Timeline Completo');
-
+  function _agStyle(ws,nCols,titulo){} // legacy no-op
   XLSX.writeFile(wb, `Asesores_${desde||'inicio'}_${hasta||'hoy'}.xlsx`);
 }
 
