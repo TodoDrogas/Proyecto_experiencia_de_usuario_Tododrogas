@@ -9601,20 +9601,10 @@ async function loadAgentesMetrics(){
       }
       return all;
     })(),
-    // Eventos del período — con todos los campos para historial y Excel
-    (async()=>{
-      const PAGE=1000;
-      let evs=[], off=0;
-      while(true){
-        const page=await sb(qC(`historial_eventos?agente_id=not.is.null&select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.desc&limit=${PAGE}&offset=${off}`,'created_at')).catch(()=>[]);
-        if(!page||!page.length) break;
-        evs=evs.concat(page);
-        if(page.length<PAGE) break;
-        off+=PAGE;
-        if(off>=10000) break;
-      }
-      return evs;
-    })(),
+    // Eventos de los correos del período — sin filtro de fecha para capturar
+    // gestiones/cierres que ocurrieron fuera del rango (ej: ticket de abril cerrado en mayo)
+    // Se carga DESPUÉS de tener los correos, usando sus IDs como filtro
+    Promise.resolve([]),  // placeholder — se carga abajo con los IDs de correos
     sb('agentes?select=id,nombre,email,activo,sede,rol,cedula,telefono&order=nombre.asc').catch(()=>[]),
     // Si hay filtro de asesor: todos sus correos sin filtro fecha
     _asesorFiltro
@@ -9637,6 +9627,25 @@ async function loadAgentesMetrics(){
       return new Set(evs.map(h=>h.correo_id).filter(Boolean));
     })(),
   ]);
+
+  // Cargar historial por correo_id (sin filtro de fecha) para capturar
+  // gestiones/cierres fuera del período filtrado
+  let eventos = [];
+  if(correos&&correos.length){
+    const PAGE=1000, LOTE=50;
+    const ids = correos.map(c=>c.id).filter(Boolean);
+    for(let i=0;i<ids.length;i+=LOTE){
+      const lote = ids.slice(i,i+LOTE);
+      let off=0;
+      while(true){
+        const page=await sb(`historial_eventos?correo_id=in.(${lote.join(',')})&select=id,created_at,correo_id,agente_id,evento,descripcion,datos_extra&order=created_at.asc&limit=${PAGE}&offset=${off}`).catch(()=>[]);
+        if(!page||!page.length) break;
+        eventos=eventos.concat(page);
+        if(page.length<PAGE) break;
+        off+=PAGE;
+      }
+    }
+  }
 
   _agDatos = {
     correosAsesorActual: correosAsesorActual||null,
