@@ -161,6 +161,8 @@ $payload = [
     'medicamentos'    => $medicamentos,
     'recomendacion'   => $recomendacion,
     'promedio'        => $promedio,
+    'sede_nombre'     => $sede_nombre ?: null,
+    'sede_ciudad'     => $sede_ciudad ?: null,
 ];
 
 $sb_result   = sbPost($SB_URL, $SB_KEY, 'encuestas_satisfaccion', $payload);
