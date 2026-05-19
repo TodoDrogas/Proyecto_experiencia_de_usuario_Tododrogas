@@ -533,12 +533,15 @@ input[type=file]{display:none}
     </div>
     <div class="main-view">
       <div class="vtb">
-        <span style="font-size:11px;font-weight:600;color:var(--gray7)">Vista de páginas — arrastra para reordenar</span>
+        <span style="font-size:11px;font-weight:600;color:var(--gray7)">Vista de páginas — clic para seleccionar · arrastra para reordenar</span>
         <div class="vtb-sep"></div>
-        <button class="btn btn-gray btn-xs" onclick="mergeZoom(.15)">🔍+</button>
-        <button class="btn btn-gray btn-xs" onclick="mergeZoom(-.15)">🔍−</button>
+        <button class="btn btn-gray btn-xs" onclick="mergeSelAll()">&#10003; Todo</button>
+        <button class="btn btn-gray btn-xs" onclick="mergeSelNone()">&#10007; Ninguno</button>
         <div class="vtb-sep"></div>
-        <span class="vtb-info" id="mergePgInf">—</span>
+        <button class="btn btn-gray btn-xs" onclick="mergeZoom(.15)">&#128269;+</button>
+        <button class="btn btn-gray btn-xs" onclick="mergeZoom(-.15)">&#128269;&#8722;</button>
+        <div class="vtb-sep"></div>
+        <span class="vtb-info" id="mergePgInf">&#8212;</span>
       </div>
       <div class="pg-grid" id="mergePreview">
         <div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;color:var(--gray4)">
@@ -1402,7 +1405,7 @@ async function divExportRange(){
 }
 
 // ══════════════ MODULE 3: UNIR ══════════════
-var mFiles=[],mPages=[],mZLvl=.6;
+var mFiles=[],mPages=[],mZLvl=.6,mSel=new Set();
 async function mergeAdd(ev){
   var files=Array.from(ev.target.files).filter(f=>f.name.toLowerCase().endsWith('.pdf'));
   showL('Cargando…',files.length+' PDFs');
@@ -1470,7 +1473,12 @@ async function mergeRenderOnePg(mi,c){
   var cv=document.createElement('canvas');cv.width=vport.width;cv.height=vport.height;w.appendChild(cv);
   var s=document.createElement('div');s.className='pg-src';s.textContent=f.name.length>16?f.name.substring(0,14)+'…':f.name;w.appendChild(s);
   var n=document.createElement('div');n.className='pg-num';n.textContent='Pág.'+(mi+1);w.appendChild(n);
-  var ov=document.createElement('div');ov.className='pg-ov';ov.innerHTML='<div class="pg-ov-check">✓</div>';w.appendChild(ov);
+  var ov=document.createElement('div');ov.className='pg-ov';ov.innerHTML='<div class="pg-ov-check">&#10003;</div>';w.appendChild(ov);
+  w.addEventListener('click',()=>{
+    if(mSel.has(mi)){mSel.delete(mi);w.classList.remove('sel')}
+    else{mSel.add(mi);w.classList.add('sel')}
+    mergePgInf();
+  });
   // Drag to reorder pages
   w.addEventListener('dragstart',e=>{w.classList.add('dragging');e.dataTransfer.setData('text/plain',mi)});
   w.addEventListener('dragend',()=>{w.classList.remove('dragging');document.querySelectorAll('#mergePreview .pg-th').forEach(t=>t.classList.remove('dov-l','dov-r'))});
@@ -1488,18 +1496,27 @@ async function mergeRenderOnePg(mi,c){
   page.render({canvasContext:cv.getContext('2d'),viewport:vport});
 }
 function mergeZoom(d){mZLvl=Math.min(Math.max(mZLvl+d,.3),2.5);if(mPages.length)mergeRenderPageGrid()}
+function mergeSelAll(){mSel.clear();mPages.forEach((_,i)=>mSel.add(i));document.querySelectorAll('#mergePreview .pg-th').forEach(el=>el.classList.add('sel'));mergePgInf()}
+function mergeSelNone(){mSel.clear();document.querySelectorAll('#mergePreview .pg-th').forEach(el=>el.classList.remove('sel'));mergePgInf()}
+function mergePgInf(){
+  var tot=mPages.length,sel=mSel.size;
+  document.getElementById('mergePgInf').textContent=sel>0?sel+' sel. / '+tot+'pág.':tot+'pág.';
+}
 async function mergeRm(i){
-  mFiles.splice(i,1);mergeRebuildPages();
+  mFiles.splice(i,1);mergeRebuildPages();mSel.clear();
   mergeRenderList();await mergeRenderPageGrid();
   document.getElementById('mergeBtnEx').disabled=mFiles.length===0;
 }
-function mergeClear(){mFiles=[];mPages=[];mergeRenderList();mergeRenderPageGrid();document.getElementById('mergeBtnEx').disabled=true}
+function mergeClear(){mFiles=[];mPages=[];mSel.clear();mergeRenderList();mergeRenderPageGrid();document.getElementById('mergeBtnEx').disabled=true}
 async function mergeExport(){
-  if(!mPages.length)return;showL('Uniendo PDFs…',mPages.length+' páginas');
+  if(!mPages.length)return;
+  // Si hay selección usar solo esas páginas, si no usar todas
+  var toExport=mSel.size>0?mPages.filter((_,i)=>mSel.has(i)):mPages;
+  if(!toExport.length)return;
+  showL('Uniendo PDFs…',toExport.length+' páginas');
   try{
     var fin=await PDFDocument.create();
     var srcDocs={},fallback=new Set();
-    // Pre-detectar PDFs firmados/protegidos que pdf-lib no puede copiar
     for(var fi=0;fi<mFiles.length;fi++){
       try{
         var d=await PDFDocument.load(mFiles[fi].bytes.slice(0),{ignoreEncryption:true});
@@ -1507,9 +1524,8 @@ async function mergeExport(){
         srcDocs[fi]=d;
       }catch(e){fallback.add(fi);}
     }
-    for(var mp of mPages){
+    for(var mp of toExport){
       if(fallback.has(mp.fi)){
-        // PDF firmado: renderizar página como imagen via pdf.js
         var page=await mFiles[mp.fi].jdoc.getPage(mp.p);
         var vp=page.getViewport({scale:2});
         var cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
