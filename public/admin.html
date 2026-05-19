@@ -3211,24 +3211,22 @@ async function exportarExcel() {
     const ENC = state.encuestas || [];
     const h5 = ENC.map(e => {
       const f = e.created_at ? new Date(e.created_at) : null;
-      const ex = e.datos_extra || {};
       return {
         'ID':           e.id || '',
         'Fecha':        f ? f.toLocaleDateString('es-CO') : '',
         'Hora':         f ? f.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-        'Sede_Nombre':  ex.sede_nombre || '',
-        'Sede_Ciudad':  ex.sede_ciudad || '',
         'Calificacion': e.calificacion || '',
-        'Promedio':     ex.promedio || '',
-        'Instalaciones':ex.instalaciones || '',
-        'Atencion':     ex.atencion || '',
-        'Tiempos':      ex.tiempos || '',
-        'Medicamentos': ex.medicamentos || '',
-        'Recomendacion':ex.recomendacion || '',
-        'Comentario':   e.comentario || '',
+        'Promedio':     e.promedio     || '',
+        'Instalaciones':e.instalaciones || '',
+        'Atencion':     e.atencion      || '',
+        'Tiempos':      e.tiempos       || '',
+        'Medicamentos': e.medicamentos  || '',
+        'Recomendacion':e.recomendacion || '',
+        'Comentario':   e.comentario    || '',
         'Canal':        e.canal || 'web',
-        'Nombre':       ex.nombre || '',
-        'Correo':       ex.correo || '',
+        'Nombre':       e.nombre || '',
+        'Cedula':       e.cedula || '',
+        'EPS':          e.eps    || '',
       };
     });
     const ws5 = XLSX.utils.json_to_sheet(h5.length ? h5 : [{'Sin datos':'No hay encuestas'}]);
@@ -8371,24 +8369,28 @@ async function renderMediaFormulario(email) {
 async function loadEncuestas() {
   try {
     // Lee directamente de encuestas_satisfaccion (radicar-encuesta.php inserta aquí)
-    const data = await sb('encuestas_satisfaccion?order=created_at.desc&limit=5000&select=id,created_at,calificacion,nombre,cedula,eps,sede_id,origen,canal,comentario,ticket_id,correo_id');
+    const data = await sb('encuestas_satisfaccion?order=created_at.desc&limit=5000&select=id,created_at,calificacion,nombre,cedula,eps,sede_id,origen,canal,comentario,ticket_id,correo_id,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio');
     state.encuestas = (data || []).map(ev => {
-      let ex = {};
-      try { ex = typeof ev.datos_extra === 'string' ? JSON.parse(ev.datos_extra) : (ev.datos_extra || {}); } catch(_) {}
       return {
-        id:           ev.id,
-        ticket_id:    ev.ticket_id    || null,
-        correo_id:    ev.correo_id    || null,
-        created_at:   ev.created_at,
-        calificacion: ev.calificacion || null,
-        comentario:   ev.comentario   || null,
-        canal:        ev.canal || ev.origen || 'web',
-        origen:       ev.origen || ev.canal || 'web',
-        nombre:       ev.nombre || null,
-        cedula:       ev.cedula || null,
-        eps:          ev.eps    || null,
-        sede_id:      ev.sede_id || null,
-        datos_extra:  ex,
+        id:            ev.id,
+        ticket_id:     ev.ticket_id    || null,
+        correo_id:     ev.correo_id    || null,
+        created_at:    ev.created_at,
+        calificacion:  ev.calificacion || null,
+        comentario:    ev.comentario   || null,
+        canal:         ev.canal || ev.origen || 'web',
+        origen:        ev.origen || ev.canal || 'web',
+        nombre:        ev.nombre || null,
+        cedula:        ev.cedula || null,
+        eps:           ev.eps    || null,
+        sede_id:       ev.sede_id || null,
+        instalaciones: ev.instalaciones || null,
+        atencion:      ev.atencion      || null,
+        tiempos:       ev.tiempos       || null,
+        medicamentos:  ev.medicamentos  || null,
+        recomendacion: ev.recomendacion || null,
+        promedio:      ev.promedio      || null,
+        datos_extra:   {},
       };
     });
     console.log('[loadEncuestas]', state.encuestas.length, 'encuestas cargadas');
@@ -8509,19 +8511,18 @@ function exportarEncuestasExcel() {
     return {
       'Fecha':         f ? f.toLocaleDateString('es-CO') : '',
       'Hora':          f ? f.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-      'Sede':          ex.sede_nombre    || '',
-      'Ciudad':        ex.sede_ciudad    || '',
       'Calificacion':  e.calificacion    || '',
-      'Promedio':      ex.promedio       || '',
-      'Instalaciones': ex.instalaciones  || '',
-      'Atencion':      ex.atencion       || '',
-      'Tiempos':       ex.tiempos        || '',
-      'Medicamentos':  ex.medicamentos   || '',
-      'Recomendacion': ex.recomendacion  || '',
-      'Comentario':    e.comentario || ex.comentario || '',
+      'Promedio':      e.promedio        || '',
+      'Instalaciones': e.instalaciones   || '',
+      'Atencion':      e.atencion        || '',
+      'Tiempos':       e.tiempos         || '',
+      'Medicamentos':  e.medicamentos    || '',
+      'Recomendacion': e.recomendacion   || '',
+      'Comentario':    e.comentario      || '',
       'Canal':         e.canal           || 'web',
-      'Nombre':        ex.nombre         || '',
-      'Correo':        ex.correo         || '',
+      'Nombre':        e.nombre          || '',
+      'Cedula':        e.cedula          || '',
+      'EPS':           e.eps             || '',
     };
   });
 
