@@ -1520,8 +1520,12 @@ async function mergeExport(){
     for(var fi=0;fi<mFiles.length;fi++){
       try{
         var d=await PDFDocument.load(mFiles[fi].bytes.slice(0),{ignoreEncryption:true});
-        var t=await PDFDocument.create();await t.copyPages(d,[0]);
-        srcDocs[fi]=d;
+        // PDFs con firma Adobe tienen /Perms — copyPages los copia sin contenido visible
+        // Buscar /Perms en los bytes del PDF (está en el catalog o xref)
+        var txt=new TextDecoder('latin1').decode(mFiles[fi].bytes);
+        var isSigned=txt.indexOf('/Perms')!==-1||d.isEncrypted;
+        if(isSigned) fallback.add(fi);
+        else srcDocs[fi]=d;
       }catch(e){fallback.add(fi);}
     }
     for(var mp of toExport){
