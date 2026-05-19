@@ -1495,90 +1495,40 @@ async function mergeRm(i){
 }
 function mergeClear(){mFiles=[];mPages=[];mergeRenderList();mergeRenderPageGrid();document.getElementById('mergeBtnEx').disabled=true}
 async function mergeExport(){
-  if(!mPages.length)return;
-  showL('Uniendo PDFs…',mPages.length+' páginas');
-
-  // Intentar cargar un doc con pdf-lib; si falla (PDF firmado/protegido) marcarlo para fallback
-  async function tryLoadPdfLib(bytes){
-    try{
-      var doc=await PDFDocument.load(bytes.slice(0),{ignoreEncryption:true});
-      // Verificar que realmente podemos copiar páginas (algunos firmados pasan el load pero fallan al copiar)
-      var test=await PDFDocument.create();
-      await test.copyPages(doc,[0]);
-      return doc;
-    }catch(e){return null;}
-  }
-
-  // Fallback: renderizar página con pdf.js → canvas → imagen → incrustar en pdf-lib
-  async function pageViaImage(jdoc,pageNum){
-    var page=await jdoc.getPage(pageNum);
-    var vp=page.getViewport({scale:2.0}); // 2x para buena resolución
-    var cv=document.createElement('canvas');
-    cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
-    var ctx=cv.getContext('2d');
-    ctx.fillStyle='#ffffff';ctx.fillRect(0,0,cv.width,cv.height);
-    await page.render({canvasContext:ctx,viewport:vp}).promise;
-    // Convertir a JPEG para menor peso
-    var dataUrl=cv.toDataURL('image/jpeg',0.92);
-    var b64=dataUrl.split(',')[1];
-    var bin=atob(b64);
-    var arr=new Uint8Array(bin.length);
-    for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
-    return{jpgBytes:arr,width:vp.width,height:vp.height};
-  }
-
+  if(!mPages.length)return;showL('Uniendo PDFs…',mPages.length+' páginas');
   try{
     var fin=await PDFDocument.create();
-    var srcDocs={};    // cache pdf-lib docs
-    var fallbackFi=new Set(); // índices de archivos que requieren fallback por imagen
-
-    // Pre-chequear todos los archivos
-    document.getElementById('lsub').textContent='Verificando archivos…';
+    var srcDocs={},fallback=new Set();
+    // Pre-detectar PDFs firmados/protegidos que pdf-lib no puede copiar
     for(var fi=0;fi<mFiles.length;fi++){
-      var loaded=await tryLoadPdfLib(mFiles[fi].bytes);
-      if(loaded) srcDocs[fi]=loaded;
-      else fallbackFi.add(fi);
+      try{
+        var d=await PDFDocument.load(mFiles[fi].bytes.slice(0),{ignoreEncryption:true});
+        var t=await PDFDocument.create();await t.copyPages(d,[0]);
+        srcDocs[fi]=d;
+      }catch(e){fallback.add(fi);}
     }
-
-    if(fallbackFi.size>0){
-      var names=Array.from(fallbackFi).map(i=>mFiles[i].name).join(', ');
-      document.getElementById('lsub').textContent='Modo imagen para PDFs firmados: '+names;
-    }
-
-    var done=0;
     for(var mp of mPages){
-      done++;
-      document.getElementById('lsub').textContent='Página '+done+' de '+mPages.length+'…';
-
-      if(fallbackFi.has(mp.fi)){
-        // Fallback: renderizar como imagen
-        var jdoc=mFiles[mp.fi].jdoc;
-        var{jpgBytes,width,height}=await pageViaImage(jdoc,mp.p);
-        var jpgImg=await fin.embedJpg(jpgBytes);
-        // pdf.js viewport a scale:2.0 → píxeles = puntos_originales × 2, entonces puntos = píxeles / 2
-        var ptW=width/2;
-        var ptH=height/2;
-        var newPg=fin.addPage([ptW,ptH]);
-        newPg.drawImage(jpgImg,{x:0,y:0,width:ptW,height:ptH});
+      if(fallback.has(mp.fi)){
+        // PDF firmado: renderizar página como imagen via pdf.js
+        var page=await mFiles[mp.fi].jdoc.getPage(mp.p);
+        var vp=page.getViewport({scale:2});
+        var cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
+        var ctx=cv.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,cv.width,cv.height);
+        await page.render({canvasContext:ctx,viewport:vp}).promise;
+        var b64=cv.toDataURL('image/jpeg',0.92).split(',')[1];
+        var bin=atob(b64);var arr=new Uint8Array(bin.length);
+        for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+        var img=await fin.embedJpg(arr);
+        var np=fin.addPage([vp.width/2,vp.height/2]);
+        np.drawImage(img,{x:0,y:0,width:vp.width/2,height:vp.height/2});
       }else{
-        // Ruta normal pdf-lib (preserva texto, vectores, etc.)
-        var[pg]=await fin.copyPages(srcDocs[mp.fi],[mp.p-1]);
-        fin.addPage(pg);
+        if(!srcDocs[mp.fi])srcDocs[mp.fi]=await PDFDocument.load(mFiles[mp.fi].bytes.slice(0));
+        var[pg]=await fin.copyPages(srcDocs[mp.fi],[mp.p-1]);fin.addPage(pg);
       }
     }
-
-    var saved=await fin.save();
-    dlBlob(new Blob([saved],{type:'application/pdf'}),'PDF_unido_'+Date.now()+'.pdf');
-
-    var msg=fallbackFi.size>0
-      ? 'PDF unido ✓ ('+fallbackFi.size+' archivo(s) con firma digital convertidos a imagen)'
-      : 'PDF unido ✓';
-    toast(msg);
-
-  }catch(e){
-    toast('Error al unir: '+e.message,'err');
-    console.error(e);
-  }
+    dlBlob(new Blob([await fin.save()],{type:'application/pdf'}),'PDF_unido_'+Date.now()+'.pdf');
+    toast('PDF unido ✓');
+  }catch(e){toast('Error al unir','err');console.error(e)}
   hideL();
 }
 var mDZ=document.getElementById('mergeDZ');
