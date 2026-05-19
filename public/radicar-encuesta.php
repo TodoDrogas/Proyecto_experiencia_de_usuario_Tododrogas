@@ -155,6 +155,12 @@ $payload = [
         return $rows[0]['id'] ?? null;
     })(),
     'created_at'      => $now,
+    'instalaciones'   => $instalaciones,
+    'atencion'        => $atencion,
+    'tiempos'         => $tiempos,
+    'medicamentos'    => $medicamentos,
+    'recomendacion'   => $recomendacion,
+    'promedio'        => $promedio,
 ];
 
 $sb_result   = sbPost($SB_URL, $SB_KEY, 'encuestas_satisfaccion', $payload);
