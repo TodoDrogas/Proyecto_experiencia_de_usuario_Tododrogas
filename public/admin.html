@@ -8369,7 +8369,7 @@ async function renderMediaFormulario(email) {
 async function loadEncuestas() {
   try {
     // Lee directamente de encuestas_satisfaccion (radicar-encuesta.php inserta aquí)
-    const data = await sb('encuestas_satisfaccion?order=created_at.desc&limit=5000&select=id,created_at,calificacion,nombre,cedula,eps,sede_id,origen,canal,comentario,ticket_id,correo_id,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio');
+    const data = await sb('encuestas_satisfaccion?order=created_at.desc&limit=5000&select=id,created_at,calificacion,nombre,cedula,eps,sede_id,sede_nombre,sede_ciudad,origen,canal,comentario,ticket_id,correo_id,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio');
     state.encuestas = (data || []).map(ev => {
       return {
         id:            ev.id,
@@ -8384,6 +8384,8 @@ async function loadEncuestas() {
         cedula:        ev.cedula || null,
         eps:           ev.eps    || null,
         sede_id:       ev.sede_id || null,
+        sede_nombre:   ev.sede_nombre || null,
+        sede_ciudad:   ev.sede_ciudad || null,
         instalaciones: ev.instalaciones || null,
         atencion:      ev.atencion      || null,
         tiempos:       ev.tiempos       || null,
@@ -8406,7 +8408,7 @@ function _filtrarEncuestas() {
   const ahora   = new Date();
   return (state.encuestas || []).filter(e => {
     const ex = e.datos_extra || {};
-    if (sede && ex.sede_nombre !== sede) return false;
+    if (sede && e.sede_nombre !== sede) return false;
     if (dias > 0) {
       const f = e.created_at ? new Date(e.created_at) : null;
       if (!f || (ahora - f) / 86400000 > dias) return false;
@@ -8434,7 +8436,7 @@ function renderEncuestasTab() {
   // Poblar selector de sedes
   const sedeSelect = document.getElementById('eFiltrSede');
   if (sedeSelect && sedeSelect.options.length <= 1) {
-    const sedes = [...new Set((state.encuestas||[]).map(e => (e.datos_extra||{}).sede_nombre).filter(Boolean))].sort();
+    const sedes = [...new Set((state.encuestas||[]).map(e => e.sede_nombre).filter(Boolean))].sort();
     sedes.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sedeSelect.appendChild(o); });
   }
 
@@ -8442,8 +8444,8 @@ function renderEncuestasTab() {
   const bySede = {};
   enc.forEach(e => {
     const ex = e.datos_extra || {};
-    const k  = ex.sede_nombre || '(Sin sede)';
-    if (!bySede[k]) bySede[k] = { ciudad: ex.sede_ciudad||'', total:0, suma:0, sat:0, ultimo:'' };
+    const k  = e.sede_nombre || '(Sin sede)';
+    if (!bySede[k]) bySede[k] = { ciudad: e.sede_ciudad||'', total:0, suma:0, sat:0, ultimo:'' };
     bySede[k].total++;
     bySede[k].suma += parseFloat(e.calificacion||0);
     if ((e.calificacion||0) >= 3) bySede[k].sat++;
@@ -8491,7 +8493,7 @@ function renderEncuestasTab() {
         const com = e.comentario || ex.comentario || '—';
         return `<tr>
           <td style="padding:9px 12px;border-bottom:1px solid var(--border);color:var(--ink3);white-space:nowrap">${f}</td>
-          <td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px">${ex.sede_nombre||'—'}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px">${e.sede_nombre||'—'}</td>
           <td style="padding:9px 12px;border-bottom:1px solid var(--border);text-align:center;font-weight:700;color:${col}">${cal > 0 ? estrellas(cal) + ' ' + cal : '—'}</td>
           <td style="padding:9px 12px;border-bottom:1px solid var(--border);color:var(--ink3);font-size:11px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${com.replace(/"/g,'&quot;')}">${com}</td>
           <td style="padding:9px 12px;border-bottom:1px solid var(--border);color:var(--ink3)">${e.canal||'web'}</td>
@@ -8507,11 +8509,12 @@ function exportarEncuestasExcel() {
 
   const rows = enc.map(e => {
     const f  = e.created_at ? new Date(e.created_at) : null;
-    const ex = e.datos_extra || {};
     return {
       'Fecha':         f ? f.toLocaleDateString('es-CO') : '',
       'Hora':          f ? f.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '',
-      'Calificacion':  e.calificacion    || '',
+      'Sede':          e.sede_nombre  || '',
+      'Ciudad':        e.sede_ciudad  || '',
+      'Calificacion':  e.calificacion || '',
       'Promedio':      e.promedio        || '',
       'Instalaciones': e.instalaciones   || '',
       'Atencion':      e.atencion        || '',
@@ -9258,24 +9261,28 @@ async function exportWebExcel() {
   // ── WEB_Encuesta ────────────────────────────────────────────────────
   const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
   const h_wEnc = encByCanal('web').map(e => {
-    const ex = e.datos_extra || {};
     const cal = e.calificacion || 0;
-    const corrEnc = e.correo_id ? (correoMap[e.correo_id]||{}) : {};
-    const sedeEnc = e.sede_id ? (sedesNombreMap[e.sede_id]||getSede(corrEnc)) : getSede(corrEnc);
     const eps = e.eps || getEps(e.cedula||'', {});
     return {
       'Fecha':        fmtD(e.created_at),
       'Hora':         fmtH(e.created_at),
       'Ticket_ENC':   e.ticket_id   || '',
       'Ticket_TD':    e.ticket_td   || '',
-      'Sede':         sedeEnc,
+      'Sede':         e.sede_nombre || '',
+      'Ciudad':       e.sede_ciudad || '',
       'Cédula':       e.cedula || '',
       'Nombre':       e.nombre || '',
       'EPS':          eps,
-      'Calificacion': cal,
-      'Resultado':    cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
-      'Comentario':   e.comentario  || '',
-      'Canal':        'Navegador (enlace)',
+      'Calificacion':  cal,
+      'Resultado':     cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
+      'Promedio':      e.promedio      || '',
+      'Instalaciones': e.instalaciones || '',
+      'Atencion':      e.atencion      || '',
+      'Tiempos':       e.tiempos       || '',
+      'Medicamentos':  e.medicamentos  || '',
+      'Recomendacion': e.recomendacion || '',
+      'Comentario':    e.comentario    || '',
+      'Canal':         'Navegador (enlace)',
     };
   });
   const ws_wEnc = XLSX.utils.json_to_sheet(h_wEnc.length ? h_wEnc : [{'Sin_datos':'Sin encuestas Web en el período'}]);
@@ -9329,24 +9336,28 @@ async function exportQrExcel() {
   // ── QR_Encuesta ─────────────────────────────────────────────────────
   const calLabel = v => v===1?'Insatisfecho':v===2?'Neutral':v===3?'Satisfecho':'';
   const h_qEnc = encByCanal('qr').map(e => {
-    const ex = e.datos_extra || {};
     const cal = e.calificacion || 0;
-    const corrEnc = e.correo_id ? (correoMap[e.correo_id]||{}) : {};
-    const sedeEnc = e.sede_id ? (sedesNombreMap[e.sede_id]||getSede(corrEnc)) : getSede(corrEnc);
     const eps = e.eps || getEps(e.cedula||'', {});
     return {
       'Fecha':        fmtD(e.created_at),
       'Hora':         fmtH(e.created_at),
       'Ticket_ENC':   e.ticket_id   || '',
       'Ticket_TD':    e.ticket_td   || '',
-      'Sede':         sedeEnc,
+      'Sede':         e.sede_nombre || '',
+      'Ciudad':       e.sede_ciudad || '',
       'Cédula':       e.cedula      || '',
       'Nombre':       e.nombre      || '',
       'EPS':          eps,
-      'Calificacion': cal,
-      'Resultado':    cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
-      'Comentario':   e.comentario  || '',
-      'Canal':        'QR directo',
+      'Calificacion':  cal,
+      'Resultado':     cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
+      'Promedio':      e.promedio      || '',
+      'Instalaciones': e.instalaciones || '',
+      'Atencion':      e.atencion      || '',
+      'Tiempos':       e.tiempos       || '',
+      'Medicamentos':  e.medicamentos  || '',
+      'Recomendacion': e.recomendacion || '',
+      'Comentario':    e.comentario    || '',
+      'Canal':         'QR directo',
     };
   });
   const ws_qEnc = XLSX.utils.json_to_sheet(h_qEnc.length ? h_qEnc : [{'Sin_datos':'Sin encuestas QR en el período'}]);
