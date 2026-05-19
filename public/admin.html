@@ -9403,7 +9403,7 @@ async function exportQrExcel() {
 // EXPORT NOVA TD → NOVA_TD_Detalle + Por_Sede + Preguntas + Usuarios
 // ═══════════════════════════════════════════════════════════════════════
 async function exportNovaExcel() {
-  const { D, fmtD, fmtH, getSede, getEps } = await _mExportInit();
+  const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad } = await _mExportInit();
   const wb = XLSX.utils.book_new();
   const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
 
@@ -9508,6 +9508,59 @@ async function exportNovaExcel() {
   ws_users['!cols'] = [{wch:15},{wch:28},{wch:16},{wch:9},{wch:5}];
   XLSX.utils.book_append_sheet(wb, ws_users, 'NOVA_TD_Usuarios');
 
+  // ── NOVA_Encuestas ──────────────────────────────────────────────────
+  const novaEncs = [...(D.encNovaWeb||[]), ...(D.encNovaDir||[])];
+  const h_nEnc = novaEncs.map(e => {
+    const cal = e.calificacion || 0;
+    const eps = e.eps || getEps(e.cedula||'', {});
+    return {
+      'Fecha':         fmtD(e.created_at),
+      'Hora':          fmtH(e.created_at),
+      'Ticket_ENC':    e.ticket_id    || '',
+      'Sede':          e.sede_nombre  || '',
+      'Ciudad':        e.sede_ciudad  || '',
+      'Cédula':        e.cedula       || '',
+      'Nombre':        e.nombre       || '',
+      'EPS':           eps,
+      'Calificacion':  cal,
+      'Resultado':     cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
+      'Promedio':      e.promedio      || '',
+      'Instalaciones': e.instalaciones || '',
+      'Atencion':      e.atencion      || '',
+      'Tiempos':       e.tiempos       || '',
+      'Medicamentos':  e.medicamentos  || '',
+      'Recomendacion': e.recomendacion || '',
+      'Comentario':    e.comentario    || '',
+      'Canal':         e.origen==='nova_directo'?'Nova directo':'Nova (enlace)',
+    };
+  });
+  const ws_nEnc = XLSX.utils.json_to_sheet(h_nEnc.length ? h_nEnc : [{'Sin_datos':'Sin encuestas Nova en el período'}]);
+  ws_nEnc['!cols'] = [{wch:12},{wch:8},{wch:20},{wch:28},{wch:14},{wch:13},{wch:26},{wch:16},{wch:12},{wch:16},{wch:10},{wch:14},{wch:10},{wch:10},{wch:14},{wch:14},{wch:40},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws_nEnc, 'NOVA_Encuestas');
+
+  // ── NOVA_Radicados ──────────────────────────────────────────────────
+  const novaRads = [...(D.radNovaWeb||[]), ...(D.radNovaDir||[])];
+  const h_nRad = novaRads.map(r => {
+    const re = enrichRad(r);
+    return {
+      'Fecha':       fmtD(re.received_at),
+      'Hora':        fmtH(re.received_at),
+      'Sede':        getSede(re),
+      'Cédula':      re.cedula      || '',
+      'Nombre':      re.nombre_solicitud || _parseNombreBody(re.body_content) || re.nombre || '',
+      'EPS':         re.eps_nombre  || getEps(re.cedula||'', {}),
+      'Ticket':      re.ticket_id   || '',
+      'Tipo_PQR':    tipoLabel(re.tipo_pqr),
+      'Sentimiento': sentLabel(re.sentimiento),
+      'Prioridad':   re.prioridad   || '',
+      'Estado':      re.estado      || '',
+      'Canal':       re.origen==='nova_directo'?'Nova directo':'Nova (enlace)',
+    };
+  });
+  const ws_nRad = XLSX.utils.json_to_sheet(h_nRad.length ? h_nRad : [{'Sin_datos':'Sin radicados Nova en el período'}]);
+  ws_nRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:14},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws_nRad, 'NOVA_Radicados');
+
   XLSX.writeFile(wb, `NovaTD_${desde}_${hasta}.xlsx`);
   showToast('Excel Nova (enlace) exportado ✓','success');
 }
@@ -9516,7 +9569,7 @@ async function exportNovaExcel() {
 // EXPORT GLOBAL → GLOBAL canal + GLOBAL sede
 // ═══════════════════════════════════════════════════════════════════════
 async function exportGlobalExcel() {
-  const { D, encAll, encByCanal, tipoLabel } = await _mExportInit();
+  const { D, encAll, encByCanal, tipoLabel, sentLabel, fmtD, fmtH, getSede, getEps, _parseNombreBody, enrichRad } = await _mExportInit();
   const wb = XLSX.utils.book_new();
   const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
 
@@ -9580,6 +9633,60 @@ async function exportGlobalExcel() {
   const ws_gs = XLSX.utils.json_to_sheet(h_sede.length ? h_sede : [{'Sin_datos':'Sin encuestas con sede en el período'}]);
   ws_gs['!cols'] = [{wch:36},{wch:18},{wch:15},{wch:10},{wch:13},{wch:15},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws_gs, 'GLOBAL_Sede');
+
+  // ── TODAS_Encuestas ─────────────────────────────────────────────────
+  const canalLabel = o => o==='web'?'Navegador (enlace)':o==='qr'?'QR directo':o==='nova_directo'?'Nova directo':o==='nova_web'?'Nova (enlace)':o||'web';
+  const h_aEnc = encAll.map(e => {
+    const cal = e.calificacion || 0;
+    const eps = e.eps || getEps(e.cedula||'', {});
+    return {
+      'Fecha':         fmtD(e.created_at),
+      'Hora':          fmtH(e.created_at),
+      'Ticket_ENC':    e.ticket_id    || '',
+      'Sede':          e.sede_nombre  || '',
+      'Ciudad':        e.sede_ciudad  || '',
+      'Cédula':        e.cedula       || '',
+      'Nombre':        e.nombre       || '',
+      'EPS':           eps,
+      'Calificacion':  cal,
+      'Resultado':     cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':'INSATISFACTORIO',
+      'Promedio':      e.promedio      || '',
+      'Instalaciones': e.instalaciones || '',
+      'Atencion':      e.atencion      || '',
+      'Tiempos':       e.tiempos       || '',
+      'Medicamentos':  e.medicamentos  || '',
+      'Recomendacion': e.recomendacion || '',
+      'Comentario':    e.comentario    || '',
+      'Canal':         canalLabel(e.origen || e.canal),
+    };
+  });
+  const ws_aEnc = XLSX.utils.json_to_sheet(h_aEnc.length ? h_aEnc : [{'Sin_datos':'Sin encuestas en el período'}]);
+  ws_aEnc['!cols'] = [{wch:12},{wch:8},{wch:20},{wch:28},{wch:14},{wch:13},{wch:26},{wch:16},{wch:12},{wch:16},{wch:10},{wch:14},{wch:10},{wch:10},{wch:14},{wch:14},{wch:40},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws_aEnc, 'TODAS_Encuestas');
+
+  // ── TODOS_Radicados ─────────────────────────────────────────────────
+  const allRadsFlat = [...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])];
+  const h_aRad = allRadsFlat.map(r => {
+    const re = enrichRad(r);
+    const canal = re.origen==='nova_directo'?'Nova directo':re.origen==='nova_web'?'Nova (enlace)':re.canal_contacto==='qr'?'QR directo':'Navegador (enlace)';
+    return {
+      'Fecha':       fmtD(re.received_at),
+      'Hora':        fmtH(re.received_at),
+      'Sede':        getSede(re),
+      'Cédula':      re.cedula      || '',
+      'Nombre':      re.nombre_solicitud || _parseNombreBody(re.body_content) || re.nombre || '',
+      'EPS':         re.eps_nombre  || getEps(re.cedula||'', {}),
+      'Ticket':      re.ticket_id   || '',
+      'Tipo_PQR':    tipoLabel(re.tipo_pqr),
+      'Sentimiento': sentLabel(re.sentimiento),
+      'Prioridad':   re.prioridad   || '',
+      'Estado':      re.estado      || '',
+      'Canal':       canal,
+    };
+  });
+  const ws_aRad = XLSX.utils.json_to_sheet(h_aRad.length ? h_aRad : [{'Sin_datos':'Sin radicados en el período'}]);
+  ws_aRad['!cols'] = [{wch:12},{wch:8},{wch:32},{wch:13},{wch:28},{wch:20},{wch:14},{wch:13},{wch:11},{wch:14},{wch:14},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws_aRad, 'TODOS_Radicados');
 
   XLSX.writeFile(wb, `Global_${desde}_${hasta}.xlsx`);
   showToast('Excel Global exportado ✓','success');
