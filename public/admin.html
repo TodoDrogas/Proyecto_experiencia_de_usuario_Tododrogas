@@ -2925,6 +2925,21 @@ async function exportarSIGI() {
     _styleSheet(ws4, 15);
     XLSX.utils.book_append_sheet(wb, ws4, 'EPS_CATALOGO');
 
+    // ── Hoja 5: Satisfaccion_Servicio ─────────────────────────────
+    const _hSatSIGI = correosSIGI.filter(e=>e.calificacion>0).map(e=>({
+      Fecha:              e.received_at ? new Date(e.received_at).toLocaleDateString('es-CO') : '',
+      ID:                 e.ticket_id||'',
+      Canal:              (e.canal_contacto||e.origen||'correo').toUpperCase(),
+      Agente:             e.asignado_a||'',
+      EPS:                e.eps_nombre||'',
+      Tipo_Solicitud:     e.nombre_solicitud||'',
+      Calificacion:       e.calificacion||'',
+      Calificacion_Texto: e.calificacion_texto||'',
+    }));
+    const _wsSatSIGI = XLSX.utils.json_to_sheet(_hSatSIGI.length?_hSatSIGI:[{'Sin datos':'No hay calificaciones'}]);
+    _wsSatSIGI['!cols']=[{wch:12},{wch:16},{wch:12},{wch:28},{wch:22},{wch:24},{wch:12},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, _wsSatSIGI, 'Satisfaccion_Servicio');
+
     // ── Descargar ─────────────────────────────────────────────────
     const fecha = `${desde}_${hasta}`.replace(/-/g,'');
     XLSX.writeFile(wb, `SIGI_${fecha}.xlsx`, {bookType:'xlsx', cellStyles:true});
@@ -8999,11 +9014,12 @@ function renderNovaMetrics(){
     const [cals1, cals2] = await Promise.all([sb(qCorreos), sb(qWa)]);
     const allCals = [...(cals1||[]).map(r=>r.calificacion), ...(cals2||[]).map(r=>r.calificacion)].filter(v=>v>0);
     if(allCals.length){
-      const prom = (allCals.reduce((a,b)=>a+b,0)/allCals.length).toFixed(2);
       const buena = allCals.filter(v=>v===3).length, reg = allCals.filter(v=>v===2).length, mala = allCals.filter(v=>v===1).length;
-      set('gKpiSat', `⭐ ${prom}/3`);
-      document.getElementById('gKpiSatSub').textContent = `😊${buena} 😐${reg} 😞${mala}`;
-    } else { set('gKpiSat','Sin datos'); }
+      const pctB = Math.round(buena/allCals.length*100);
+      const dominante = buena>=reg&&buena>=mala?`😊 ${pctB}% Buena`:reg>=mala?`😐 ${Math.round(reg/allCals.length*100)}% Regular`:`😞 ${Math.round(mala/allCals.length*100)}% Mala`;
+      set('gKpiSat', dominante);
+      document.getElementById('gKpiSatSub').textContent = `😊${buena} 😐${reg} 😞${mala} · ${allCals.length} resp.`;
+    } else { set('gKpiSat','Sin datos'); document.getElementById('gKpiSatSub').textContent='Sin respuestas aún'; }
   } catch(e){ console.warn('[sat-global]',e.message); } })();
   // Radicados y encuestas por canal — barras agrupadas
   _mDestroyChart('chartGlobalRad');
@@ -9957,9 +9973,10 @@ function renderAgentes(){
     const _waCals = await sb(_qWa)||[];
     const _allCals = [..._calsCorreos, ..._waCals.map(r=>r.calificacion)].filter(v=>v>0);
     if(_allCals.length){
-      const _prom = (_allCals.reduce((a,b)=>a+b,0)/_allCals.length).toFixed(2);
       const _b=_allCals.filter(v=>v===3).length,_r=_allCals.filter(v=>v===2).length,_m=_allCals.filter(v=>v===1).length;
-      setV('agKpiCalif', `⭐ ${_prom}/3`);
+      const _pctB = Math.round(_b/_allCals.length*100);
+      const _dom = _b>=_r&&_b>=_m?`😊 ${_pctB}% Buena`:_r>=_m?`😐 ${Math.round(_r/_allCals.length*100)}% Regular`:`😞 ${Math.round(_m/_allCals.length*100)}% Mala`;
+      setV('agKpiCalif', _dom);
       const _sub = document.getElementById('agKpiCalifSub');
       if(_sub) _sub.textContent = `😊${_b} 😐${_r} 😞${_m} · ${_allCals.length} resp.`;
     } else { setV('agKpiCalif','Sin datos'); }
@@ -10231,6 +10248,23 @@ async function exportAgentesExcel(){
       Sin_Calificacion:            myE.filter(e=>!e.calificacion).length,
     };
   });
+
+  // ── Hoja extra: Satisfaccion_Servicio — detalle por ticket ──────────
+  const _hSat = E.filter(e=>e.calificacion>0).map(e=>({
+    Fecha:           e.received_at ? new Date(e.received_at).toLocaleDateString('es-CO') : '',
+    ID:              e.ticket_id||e.id||'',
+    Canal:           (e.canal_contacto||e.origen||'correo').toUpperCase(),
+    Agente:          e.asignado_a||agMap[e.agente_id]||'',
+    EPS:             _epsNom(e)||'',
+    Tipificacion:    e.nombre_solicitud||'',
+    Calificacion:    e.calificacion||'',
+    Calificacion_Texto: e.calificacion_texto||'',
+    Observacion:     e.detalle_solicitud||'',
+  }));
+  const _wsSat = XLSX.utils.json_to_sheet(_hSat.length?_hSat:[{'Sin datos':'No hay calificaciones en el período'}]);
+  _wsSat['!cols']=[{wch:12},{wch:16},{wch:12},{wch:28},{wch:22},{wch:24},{wch:12},{wch:14},{wch:40}];
+  XLSX.utils.book_append_sheet(wb, _wsSat, 'Satisfaccion_Servicio');
+
   function _makeSheet(data, cols) {
     const ws = XLSX.utils.json_to_sheet(data&&data.length?data:[{Sin_datos:'Sin registros'}]);
     if(cols) ws['!cols']=cols;
