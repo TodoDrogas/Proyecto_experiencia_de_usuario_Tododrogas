@@ -8992,9 +8992,8 @@ function renderNovaMetrics(){
   const domCh=[{n:'Navegador (enlace)',v:radWebF.length},{n:'QR directo',v:radQrF.length},{n:'Nova (enlace)',v:(D.radNovaWeb||[]).length},{n:'Nova Directo',v:(D.radNovaDir||[]).length}].sort((a,b)=>b.v-a.v)[0];
   set('gKpiRad',gRad); set('gKpiEnc',gEnc); set('gKpiDom',domCh&&domCh.v>0?domCh.n:'—'); set('gKpiDigital',(gRad>0?Math.round(allRadNova/gRad*100):0)+'%');
   // ── Satisfacción global — correos + wa_sesiones ──
-  try {
+  (async()=>{ try {
     const desde = document.getElementById('novaDesde4')?.value||'';
-    const hasta = document.getElementById('novaHasta4')?.value||'';
     const qCorreos = `correos?calificacion=not.is.null${desde?'&received_at=gte.'+desde+'T00:00:00':''}&select=calificacion&limit=1000`;
     const qWa = `wa_sesiones?calificacion=not.is.null${desde?'&updated_at=gte.'+desde+'T00:00:00':''}&select=calificacion&limit=1000`;
     const [cals1, cals2] = await Promise.all([sb(qCorreos), sb(qWa)]);
@@ -9005,7 +9004,7 @@ function renderNovaMetrics(){
       set('gKpiSat', `⭐ ${prom}/3`);
       document.getElementById('gKpiSatSub').textContent = `😊${buena} 😐${reg} 😞${mala}`;
     } else { set('gKpiSat','Sin datos'); }
-  } catch(e){ console.warn('[sat-global]',e.message); }
+  } catch(e){ console.warn('[sat-global]',e.message); } })();
   // Radicados y encuestas por canal — barras agrupadas
   _mDestroyChart('chartGlobalRad');
   const cGR2=document.getElementById('chartGlobalRad');
@@ -9951,7 +9950,7 @@ function renderAgentes(){
   setV('agKpiTutela',   _kpiTutela);
 
   // ── Satisfacción correos del período ──
-  try {
+  (async()=>{ try {
     const _calsCorreos = E.filter(e=>_pqr(e)&&e.calificacion>0).map(e=>e.calificacion);
     const _desde = document.getElementById('agDesde')?.value||'';
     const _qWa = `wa_sesiones?calificacion=not.is.null${_desde?'&updated_at=gte.'+_desde+'T00:00:00':''}&select=calificacion,agente_nombre&limit=1000`;
@@ -9964,7 +9963,7 @@ function renderAgentes(){
       const _sub = document.getElementById('agKpiCalifSub');
       if(_sub) _sub.textContent = `😊${_b} 😐${_r} 😞${_m} · ${_allCals.length} resp.`;
     } else { setV('agKpiCalif','Sin datos'); }
-  } catch(e){ console.warn('[sat-ag]',e.message); }
+  } catch(e){ console.warn('[sat-ag]',e.message); } })();
 
   // ── Global Activo — backlog sin filtro de fecha ──
   const _E_actual = asesorFiltro ? (correosAsesorActual||E) : (correosGlobal.length?correosGlobal:E_all);
