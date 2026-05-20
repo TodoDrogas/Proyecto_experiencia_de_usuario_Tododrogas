@@ -3061,15 +3061,15 @@ async function saveGestion() {
       try {
         const remitente = email?.remitente||email?.from_email||'';
         if(remitente && remitente.includes('@')){
-          const correoId_enc = id;
           const baseUrl = 'https://tododrogas.online/encuesta.php';
           const btnStyle = 'display:inline-block;padding:10px 22px;border-radius:6px;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;margin:4px';
           const encuestaHtml = `
 <div style="font-family:Arial,sans-serif;margin-top:24px;padding-top:16px;border-top:1px solid #e0e0e0;text-align:center">
+  <p style="font-size:14px;color:#444;margin-bottom:4px">Atendido por <strong>${AGENT_NAME||'nuestro equipo'}</strong></p>
   <p style="font-size:14px;color:#444;margin-bottom:12px">¿Cómo califica la atención recibida?</p>
-  <a href="${baseUrl}?id=${correoId_enc}&cal=1&ag=${encodeURIComponent(AGENT_NAME)}" style="${btnStyle}background:#fee2e2;color:#dc2626">😞 Mala</a>
-  <a href="${baseUrl}?id=${correoId_enc}&cal=2&ag=${encodeURIComponent(AGENT_NAME)}" style="${btnStyle}background:#fef9c3;color:#ca8a04">😐 Regular</a>
-  <a href="${baseUrl}?id=${correoId_enc}&cal=3&ag=${encodeURIComponent(AGENT_NAME)}" style="${btnStyle}background:#dcfce7;color:#16a34a">😊 Buena</a>
+  <a href="${baseUrl}?id=${id}&cal=1&ag=${encodeURIComponent(AGENT_NAME||'')}" style="${btnStyle}background:#fee2e2;color:#dc2626">😞 Mala</a>
+  <a href="${baseUrl}?id=${id}&cal=2&ag=${encodeURIComponent(AGENT_NAME||'')}" style="${btnStyle}background:#fef9c3;color:#ca8a04">😐 Regular</a>
+  <a href="${baseUrl}?id=${id}&cal=3&ag=${encodeURIComponent(AGENT_NAME||'')}" style="${btnStyle}background:#dcfce7;color:#16a34a">😊 Buena</a>
   <p style="font-size:11px;color:#999;margin-top:12px">Tododrogas · Experiencia del Servicio</p>
 </div>`;
           const token  = await getGraphToken();
@@ -3084,7 +3084,6 @@ async function saveGestion() {
             headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
             body: JSON.stringify({message:msgPayload, saveToSentItems:false})
           });
-          // Marcar encuesta enviada en Supabase
           await sb(`correos?id=eq.${id}`,'PATCH',{encuesta_enviada_at:new Date().toISOString()});
         }
       } catch(e){ console.warn('[encuesta-correo]',e.message); }
@@ -3537,7 +3536,22 @@ async function sendReply() {
       attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:base64});
     }
 
-    const _bodyFull = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`;
+    const _encuestaHtml = (()=>{
+      const correoId_enc = id;
+      const agNom = encodeURIComponent(AGENT_NAME||'');
+      const base  = 'https://tododrogas.online/encuesta.php';
+      const bs    = 'display:inline-block;padding:10px 22px;border-radius:6px;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;text-decoration:none;margin:4px';
+      return `<div style="font-family:Arial,sans-serif;margin-top:24px;padding-top:16px;border-top:1px solid #e0e0e0;text-align:center">
+        <p style="font-size:14px;color:#444;margin-bottom:4px">Atendido por <strong>${AGENT_NAME||'nuestro equipo'}</strong></p>
+        <p style="font-size:14px;color:#444;margin-bottom:12px">¿Cómo califica la atención recibida?</p>
+        <a href="${base}?id=${correoId_enc}&cal=1&ag=${agNom}" style="${bs}background:#fee2e2;color:#dc2626">😞 Mala</a>
+        <a href="${base}?id=${correoId_enc}&cal=2&ag=${agNom}" style="${bs}background:#fef9c3;color:#ca8a04">😐 Regular</a>
+        <a href="${base}?id=${correoId_enc}&cal=3&ag=${agNom}" style="${bs}background:#dcfce7;color:#16a34a">😊 Buena</a>
+        <p style="font-size:11px;color:#999;margin-top:12px">Tododrogas · Experiencia del Servicio</p>
+      </div>`;
+    })();
+
+    const _bodyFull = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${_encuestaHtml}${hiloHTML}</div>`;
 
     // ── Resolver el message_id vigente en Graph ──────────────────────────
     // Estrategia en orden de confiabilidad:
@@ -3753,6 +3767,8 @@ async function sendReply() {
           subject_enviado: subject || ('RE: '+(email?.asunto||'')),
         })
       }); }catch{}
+      // ── Marcar encuesta enviada en correo entrante ──
+      try{ await sb(`correos?id=eq.${id}`,'PATCH',{encuesta_enviada_at:new Date().toISOString()}); }catch{}
       // ── Actualizar etiquetas en memoria ──
       state.respondidosIds.add(id);
       state.conGestionIds.add(id);
