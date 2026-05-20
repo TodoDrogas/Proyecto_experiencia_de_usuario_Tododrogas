@@ -539,6 +539,42 @@ jobs:
             sleep 2
             curl -sf http://localhost:3000 && echo "✅ webhook-twilio OK" || echo "❌ No responde"
 
+      # ── 7f. GENERAR webhook-meta/.env ───────────────────────────
+      - name: Generar webhook-meta/.env
+        run: |
+          mkdir -p webhook-meta
+          cat > webhook-meta/.env << 'ENVEOF'
+          META_TOKEN=${{ secrets.META_TOKEN }}
+          META_PHONE_NUMBER_ID=${{ secrets.META_PHONE_NUMBER_ID }}
+          META_WA_VERIFY_TOKEN=${{ secrets.META_WA_VERIFY_TOKEN }}
+          META_APP_SECRET=${{ secrets.META_APP_SECRET }}
+          SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY=${{ secrets.SUPABASE_KEY_SERVICE }}
+          PORT=3000
+          ENVEOF
+          echo "✅ webhook-meta/.env generado"
+
+      # ── 7h. INSTALAR DEPS Y REINICIAR PM2 webhook-meta ──────────
+      - name: Reiniciar webhook-meta con PM2
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.VPS_WEB_HOST }}
+          username: root
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/webhook-meta
+            npm install --omit=dev
+            if pm2 list | grep -q "webhook-meta"; then
+              pm2 restart webhook-meta
+              echo "✅ PM2 webhook-meta reiniciado"
+            else
+              pm2 start server.js --name webhook-meta
+              pm2 save
+              echo "✅ PM2 webhook-meta iniciado por primera vez"
+            fi
+            sleep 2
+            curl -sf http://localhost:3000 && echo "✅ webhook-meta OK" || echo "❌ No responde"
+
       # ── 8. MIGRAR TABLAS SUPABASE ──────────────────────────────
       - name: Migrar tablas Supabase
         continue-on-error: true
