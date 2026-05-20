@@ -1253,6 +1253,14 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
               <div class="mkpi-sub" style="color:rgba(255,255,255,.4)">Nova / total radicados</div>
             </div>
           </div>
+          <div class="mkpi-card" style="background:linear-gradient(135deg,#1e3a5f,#065f46);border-color:#10b98120">
+            <div class="mkpi-icon" style="color:#6ee7b7">😊</div>
+            <div class="mkpi-body">
+              <div class="mkpi-val" id="gKpiSat" style="color:#fff">—</div>
+              <div class="mkpi-label" style="color:rgba(255,255,255,.6)">Satisfacción</div>
+              <div class="mkpi-sub" id="gKpiSatSub" style="color:rgba(255,255,255,.4)">Promedio encuestas</div>
+            </div>
+          </div>
         </div>
 
         <!-- Gráficas global -->
@@ -1397,8 +1405,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </div>
           </div>
 
-          <!-- Fila 2: Pendientes · Gestiones · Promedio · Tutelas -->
-          <div class="mkpi-strip" style="grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+          <!-- Fila 2: Pendientes · Gestiones · Promedio · Tutelas · Calificación -->
+          <div class="mkpi-strip" style="grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px">
             <div class="mkpi-card mkpi-amber">
               <div class="mkpi-icon">⏳</div>
               <div class="mkpi-body">
@@ -1429,6 +1437,14 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
                 <div class="mkpi-val danger" id="agKpiTutela">—</div>
                 <div class="mkpi-label">Tutelas</div>
                 <div class="mkpi-sub">Con tutela</div>
+              </div>
+            </div>
+            <div class="mkpi-card mkpi-green">
+              <div class="mkpi-icon">⭐</div>
+              <div class="mkpi-body">
+                <div class="mkpi-val ok" id="agKpiCalif">—</div>
+                <div class="mkpi-label">Satisfacción</div>
+                <div class="mkpi-sub" id="agKpiCalifSub">Promedio /3</div>
               </div>
             </div>
           </div>
@@ -1500,6 +1516,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
                 <th style="color:#15803d">✉ Con Resp.</th><th style="color:#854d0e">⏳ Sin Resp.</th>
                 <th>Peticiones</th><th>Quejas</th><th>Reclamos</th><th>Sugerencias</th><th>Felicitaciones</th><th>Denuncias</th><th>Solicitudes</th><th>Información</th><th>Tutelas</th><th>Fallo/Sentencia</th><th>Req. Previo</th><th>Inc. Desacato</th><th>Sanc. Inc. Desacato</th>
                 <th>Alta sin resolver</th><th>Casos Activos</th>
+                <th style="color:#16a34a">⭐ Calificación</th>
               </tr></thead>
               <tbody id="agTableBody"></tbody>
             </table>
@@ -8974,6 +8991,21 @@ function renderNovaMetrics(){
   const gRad=allRads.length, gEnc=(D.encWeb||[]).length+(D.encQr||[]).length+allEncNova;
   const domCh=[{n:'Navegador (enlace)',v:radWebF.length},{n:'QR directo',v:radQrF.length},{n:'Nova (enlace)',v:(D.radNovaWeb||[]).length},{n:'Nova Directo',v:(D.radNovaDir||[]).length}].sort((a,b)=>b.v-a.v)[0];
   set('gKpiRad',gRad); set('gKpiEnc',gEnc); set('gKpiDom',domCh&&domCh.v>0?domCh.n:'—'); set('gKpiDigital',(gRad>0?Math.round(allRadNova/gRad*100):0)+'%');
+  // ── Satisfacción global — correos + wa_sesiones ──
+  try {
+    const desde = document.getElementById('novaDesde4')?.value||'';
+    const hasta = document.getElementById('novaHasta4')?.value||'';
+    const qCorreos = `correos?calificacion=not.is.null${desde?'&received_at=gte.'+desde+'T00:00:00':''}&select=calificacion&limit=1000`;
+    const qWa = `wa_sesiones?calificacion=not.is.null${desde?'&updated_at=gte.'+desde+'T00:00:00':''}&select=calificacion&limit=1000`;
+    const [cals1, cals2] = await Promise.all([sb(qCorreos), sb(qWa)]);
+    const allCals = [...(cals1||[]).map(r=>r.calificacion), ...(cals2||[]).map(r=>r.calificacion)].filter(v=>v>0);
+    if(allCals.length){
+      const prom = (allCals.reduce((a,b)=>a+b,0)/allCals.length).toFixed(2);
+      const buena = allCals.filter(v=>v===3).length, reg = allCals.filter(v=>v===2).length, mala = allCals.filter(v=>v===1).length;
+      set('gKpiSat', `⭐ ${prom}/3`);
+      document.getElementById('gKpiSatSub').textContent = `😊${buena} 😐${reg} 😞${mala}`;
+    } else { set('gKpiSat','Sin datos'); }
+  } catch(e){ console.warn('[sat-global]',e.message); }
   // Radicados y encuestas por canal — barras agrupadas
   _mDestroyChart('chartGlobalRad');
   const cGR2=document.getElementById('chartGlobalRad');
@@ -9720,7 +9752,7 @@ async function loadAgentesMetrics(){
   const [correos, _eventosPlaceholder, agentes, correosAsesorActual, correosGlobal, respEventosGlobal] = await Promise.all([
     // correos del período (received_at) — paginado sin límite fijo igual que el agente
     (async()=>{
-      const PAGE=1000, _fields='id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones,nombre_solicitud';
+      const PAGE=1000, _fields='id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones,nombre_solicitud,calificacion,calificacion_texto';
       let all=[], off=0;
       while(true){
         const page=await sb(qC(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=${_fields}&order=received_at.desc&limit=${PAGE}&offset=${off}`,'received_at')).catch(()=>[]);
@@ -9918,6 +9950,22 @@ function renderAgentes(){
   setV('agKpiProm',     _kpiProm);
   setV('agKpiTutela',   _kpiTutela);
 
+  // ── Satisfacción correos del período ──
+  try {
+    const _calsCorreos = E.filter(e=>_pqr(e)&&e.calificacion>0).map(e=>e.calificacion);
+    const _desde = document.getElementById('agDesde')?.value||'';
+    const _qWa = `wa_sesiones?calificacion=not.is.null${_desde?'&updated_at=gte.'+_desde+'T00:00:00':''}&select=calificacion,agente_nombre&limit=1000`;
+    const _waCals = await sb(_qWa)||[];
+    const _allCals = [..._calsCorreos, ..._waCals.map(r=>r.calificacion)].filter(v=>v>0);
+    if(_allCals.length){
+      const _prom = (_allCals.reduce((a,b)=>a+b,0)/_allCals.length).toFixed(2);
+      const _b=_allCals.filter(v=>v===3).length,_r=_allCals.filter(v=>v===2).length,_m=_allCals.filter(v=>v===1).length;
+      setV('agKpiCalif', `⭐ ${_prom}/3`);
+      const _sub = document.getElementById('agKpiCalifSub');
+      if(_sub) _sub.textContent = `😊${_b} 😐${_r} 😞${_m} · ${_allCals.length} resp.`;
+    } else { setV('agKpiCalif','Sin datos'); }
+  } catch(e){ console.warn('[sat-ag]',e.message); }
+
   // ── Global Activo — backlog sin filtro de fecha ──
   const _E_actual = asesorFiltro ? (correosAsesorActual||E) : (correosGlobal.length?correosGlobal:E_all);
   setV('agGlobalPend',  _E_actual.filter(e=>e.estado==='pendiente').length);
@@ -9957,8 +10005,17 @@ function renderAgentes(){
   // ── TABLA MAESTRA ──
   const COLS=['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#14b8a6'];
   const maxC = Math.max(...rowData.map(r=>r.tot),1);
+  // ── Calificación por asesor (correos del período) ──
+  const _califMap = {};
+  E.filter(e=>e.calificacion>0&&e.asignado_a).forEach(e=>{
+    if(!_califMap[e.asignado_a]) _califMap[e.asignado_a]={sum:0,cnt:0};
+    _califMap[e.asignado_a].sum += e.calificacion;
+    _califMap[e.asignado_a].cnt++;
+  });
   document.getElementById('agTableBody').innerHTML = rowData.map(({a,tot,pend,gest,sol,pfirma,alta,casosActivos,pCount,qCount,rCount,suCount,fCount,dCount,solCount,infCount,tutCount,falCount,reqCount,incCount,sanCount,conRespCount,sinRespCount,gestReg,resp,firmas,tRes,tColor,pct},i)=>{
     const color = COLS[i%COLS.length];
+    const _cAsesor = _califMap[a.nombre]||{sum:0,cnt:0};
+    const _califStr = _cAsesor.cnt>0 ? `⭐ ${(_cAsesor.sum/_cAsesor.cnt).toFixed(2)}/3 <span style="font-size:9px;color:var(--ink3)">(${_cAsesor.cnt})</span>` : '—';
     return `<tr>
       <td><div style="display:flex;align-items:center;gap:8px">
         <div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0">${(a.nombre||'?').charAt(0).toUpperCase()}</div>
@@ -9991,8 +10048,9 @@ function renderAgentes(){
       <td style="text-align:center;font-size:11px">${sanCount||'—'}</td>
       <td style="text-align:center"><span style="font-weight:700;color:${alta>0?'var(--red)':'var(--ink3)'}">${alta}</span></td>
       <td style="text-align:center;font-family:'DM Mono',monospace;font-weight:700;color:${casosActivos>10?'var(--red)':casosActivos>5?'#ca8a04':'var(--green)'}">${casosActivos}</td>
+      <td style="text-align:center;font-size:11px;font-weight:700;color:#16a34a">${_califStr}</td>
     </tr>`;
-  }).join('')||'<tr><td colspan="17" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
+  }).join('')||'<tr><td colspan="18" style="text-align:center;padding:24px;color:var(--ink3)">Sin asesores activos</td></tr>';
 
   // Poblar selectores de asesores
   const sel=document.getElementById('agFiltroAsesor');
@@ -10167,6 +10225,11 @@ async function exportAgentesExcel(){
       Requerimiento_Previo:        myE.filter(e=>_nomSolX(e)==='requerimiento previo').length,
       Incidente_Desacato:          myE.filter(e=>_nomSolX(e)==='incidente desacato').length,
       Sancion_Incidente_Desacato:  myE.filter(e=>_nomSolX(e)==='sancion incidente desacato').length,
+      Calificacion_Promedio:       (()=>{ const cals=myE.filter(e=>e.calificacion>0).map(e=>e.calificacion); return cals.length?(cals.reduce((a,b)=>a+b,0)/cals.length).toFixed(2):'Sin datos'; })(),
+      Calificaciones_Buena:        myE.filter(e=>e.calificacion===3).length,
+      Calificaciones_Regular:      myE.filter(e=>e.calificacion===2).length,
+      Calificaciones_Mala:         myE.filter(e=>e.calificacion===1).length,
+      Sin_Calificacion:            myE.filter(e=>!e.calificacion).length,
     };
   });
   function _makeSheet(data, cols) {
