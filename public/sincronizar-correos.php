@@ -427,23 +427,19 @@ if ($accion === 'reconciliar') {
         $to_recipients = json_encode($c['toRecipients'] ?? []);
         $cc_recipients = json_encode($c['ccRecipients'] ?? []);
 
-        $origen = 'graph_sync';
-        if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))  $origen = 'nova_directo';
-        elseif (preg_match('/NOVA\s+TD/ui', $subject))         $origen = 'nova_web';
-        elseif (preg_match('/📷\s*QR|\[(?:TD|ENC)-\d{8}-\d{4}\].*📷/u', $subject))  $origen = 'qr';
-        elseif (preg_match('/\bWEB\b/ui', $subject))           $origen = 'web';
-
         $ticket_id = null;
-        if (preg_match('/\[?(TD-\d{8}-\d{4})\]?/i', $subject, $mt)) $ticket_id = $mt[1];
-        // Si hay ticket_id y origen sigue siendo graph_sync, forzar 'web'
-        if ($ticket_id && $origen === 'graph_sync') $origen = 'web';
+        if (preg_match('/\[?(TD-\d{8}-\d{4})\]?/i', $subject, $mt_rec)) $ticket_id = $mt_rec[1];
 
-    // Extraer nombre del paciente del body HTML (tabla de datos del ciudadano)
-    $nombre_extraido = null;
-    if (preg_match('/Nombre<\/td>[^<]*<td[^>]*>([^<\n]{3,80})/i', $body_cont ?? '', $mn))
-        $nombre_extraido = trim(strip_tags($mn[1]));
-    if ($nombre_extraido && strlen($nombre_extraido) >= 3)
-        $payload['nombre'] = $nombre_extraido;
+        $origen = 'graph_sync';
+        if ($ticket_id) {
+            if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))                   $origen = 'nova_directo';
+            elseif (preg_match('/NOVA\s+TD/ui', $subject))                          $origen = 'nova_web';
+            elseif (preg_match('/📷\s*QR/u', $subject))                             $origen = 'qr';
+            elseif (preg_match('/Navegador/ui', $subject))                          $origen = 'web';
+            else                                                                     $origen = 'web';
+        } else {
+            $origen = 'email_directo';
+        }
 
         $payload = [
             'message_id'          => $msg_id,
@@ -466,7 +462,22 @@ if ($accion === 'reconciliar') {
         ];
         if ($ticket_id) $payload['ticket_id'] = $ticket_id;
 
-        $r = sbUpsert('correos', [$payload], 'message_id');
+        // Extraer nombre del body HTML
+        $nombre_extraido_rec = null;
+        if (preg_match('/Nombre<\/td>[^<]*<td[^>]*>([^<\n]{3,80})/i', $body_cont ?? '', $mn_rec))
+            $nombre_extraido_rec = trim(strip_tags($mn_rec[1]));
+        if ($nombre_extraido_rec && strlen($nombre_extraido_rec) >= 3)
+            $payload['nombre'] = $nombre_extraido_rec;
+
+        // Extraer cédula del body
+        $body_texto_rec = strip_tags(html_entity_decode($body_cont ?? '', ENT_QUOTES, 'UTF-8'));
+        $cedula_extraida_rec = null;
+        if (preg_match('/(?:C[eé]dula|Documento|C\.C\.|Doc\.?)[:\s#Nº°]*(\d[\d\.]{5,14})/iu', $body_texto_rec, $mc_rec))
+            $cedula_extraida_rec = preg_replace('/\D/', '', $mc_rec[1]);
+        if (!$cedula_extraida_rec && preg_match('/Documento<\/td>[^<]*<td[^>]*>([\d\.]{6,15})/i', $body_cont ?? '', $mc2_rec))
+            $cedula_extraida_rec = preg_replace('/\D/', '', $mc2_rec[1]);
+        if ($cedula_extraida_rec && strlen($cedula_extraida_rec) >= 6 && strlen($cedula_extraida_rec) <= 12)
+            $payload['cedula'] = $cedula_extraida_rec;
 
         if ($r['code'] >= 200 && $r['code'] < 300) {
             $corr_id = $r['data'][0]['id'] ?? null;
@@ -654,12 +665,20 @@ foreach ($todos_correos as $c) {
     $ticket_id = null;
     if (preg_match('/\[?(TD-\d{8}-\d{4})\]?/i', $subject, $m)) $ticket_id = $m[1];
 
+    // Determinar origen: primero por contenido del asunto con TD-, luego por keywords,
+    // y solo 'email_directo' si no tiene TD- (correos normales del buzón que no son radicados)
     $origen = 'graph_sync';
-    if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))  $origen = 'nova_directo';
-    elseif (preg_match('/NOVA\s+TD/ui', $subject))          $origen = 'nova_web';
-    elseif (preg_match('/📷\s*QR|\[(?:TD|ENC)-\d{8}-\d{4}\].*📷/u', $subject))  $origen = 'qr';
-    elseif (preg_match('/\bWEB\b/ui', $subject))            $origen = 'web';
-    elseif ($ticket_id)                                     $origen = 'web';
+    if ($ticket_id) {
+        // Tiene TD- → origen exacto según canal indicado en el asunto
+        if (preg_match('/NOVA\s+TD\s+DIRECTO/ui', $subject))                       $origen = 'nova_directo';
+        elseif (preg_match('/NOVA\s+TD/ui', $subject))                              $origen = 'nova_web';
+        elseif (preg_match('/📷\s*QR/u', $subject))                                 $origen = 'qr';
+        elseif (preg_match('/Navegador/ui', $subject))                              $origen = 'web';
+        else                                                                         $origen = 'web'; // TD- sin canal explícito → web
+    } else {
+        // Sin TD- → correo directo al buzón, NO es un radicado del formulario
+        $origen = 'email_directo';
+    }
 
     $payload = [
         'message_id'          => $msg_id,
@@ -880,19 +899,23 @@ function clasificarCorreo(string $correo_id, string $subject, string $body, stri
     if (!$ia) return null;
     $horas_sla=intval($ia['horas_sla']??120);
     $fecha_limite_sla=date('c',strtotime("+{$horas_sla} hours"));
-    // Solo asignar ticket_id EXT- si el correo aún no tiene uno (no sobreescribir TD-)
+    // Solo asignar ticket_id EXT- si el correo NO tiene ya un TD- (no sobreescribir radicados del formulario)
     $tiene_ticket = sbGet("correos?id=eq.$correo_id&select=ticket_id&limit=1");
     $ticket_id_actual = $tiene_ticket[0]['ticket_id'] ?? null;
-    $ticket_id_ext = $ticket_id_actual ?: "EXT-".date('Ymd')."-".str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
-    sbPatch('correos',"id=eq.$correo_id",[
+    $patch_data = [
         'tipo_pqr'=>$ia['tipo_pqr']??'peticion','sentimiento'=>$ia['sentimiento']??'neutro',
         'datos_legales'=>json_encode(['tono'=>$ia['tono']??'neutro']),'prioridad'=>$ia['prioridad']??'media',
         'nivel_riesgo'=>$ia['nivel_riesgo']??'bajo','resumen_corto'=>mb_substr($ia['resumen']??'',0,150),
         'ley_aplicable'=>$ia['ley']??'Ley 1755/2015','categoria_ia'=>$ia['categoria']??'',
         'horas_sla'=>$horas_sla,'fecha_limite_sla'=>$fecha_limite_sla,
         'es_urgente'=>($ia['sentimiento']==='urgente'||$ia['prioridad']==='critica'),
-        'ticket_id'=>$ticket_id_ext,'updated_at'=>date('c'),
-    ]);
+        'updated_at'=>date('c'),
+    ];
+    // Solo poner EXT- si no hay TD- ya guardado
+    if (!$ticket_id_actual || !str_starts_with($ticket_id_actual, 'TD-')) {
+        $patch_data['ticket_id'] = $ticket_id_actual ?: "EXT-".date('Ymd')."-".str_pad(rand(1000,9999),4,'0',STR_PAD_LEFT);
+    }
+    sbPatch('correos',"id=eq.$correo_id", $patch_data);
     usleep(300_000);
     return $ia;
 }
