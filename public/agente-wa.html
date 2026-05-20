@@ -1088,21 +1088,32 @@ async function confirmarCerrar(){
       }
     }
 
-    // ── OPERACIÓN 3: Cerrar wa_sesiones ──
+    // ── OPERACIÓN 3: Cerrar wa_sesiones + enviar encuesta ──
+    const msgEncuesta = `${ses.nombre||'Usuario'}, *${AGENT_NAME}* ha cerrado su caso. Nos importa su opinión — ¿cómo califica la atención recibida?\n\n*1️⃣* 😞 Mala\n*2️⃣* 😐 Regular\n*3️⃣* 😊 Buena`;
     await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}`,'PATCH',{
-      estado:'cerrado',
+      estado:'esperando_encuesta',
       tipificacion:accion,
       observacion_cierre:obs,
       agente_id:AGENT_ID,
+      agente_nombre:AGENT_NAME,
+      encuesta_enviada_at:now,
       updated_at:now
     });
+    // Enviar encuesta al usuario
+    try{
+      await fetch('https://tododrogas.online/wa/send',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({telefono:S.selTel, mensaje:msgEncuesta, agente_nombre:'Sistema'})
+      });
+    }catch(e){ console.warn('[encuesta-wa]',e.message); }
 
     document.getElementById('modalCerrar').classList.remove('open');
     const idx=S.sesiones.findIndex(s=>s.telefono===S.selTel);
     if(idx>=0) S.sesiones[idx].estado='cerrado';
     if(S.selSesion) S.selSesion.estado='cerrado';
     renderHdr(S.selSesion);renderInput(S.selSesion);renderInfo();updateCtrs();renderLista();
-    toast(`Gestión #${numGest+1} registrada y conversación cerrada ✓`,'ok');
+    toast(`Gestión #${numGest+1} registrada — encuesta enviada al usuario ✓`,'ok');
 
   }catch(e){
     toast('Error: '+e.message,'err');
