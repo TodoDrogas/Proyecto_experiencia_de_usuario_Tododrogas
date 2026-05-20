@@ -782,7 +782,7 @@ async function enviar(){
   ta.value='';ta.style.height='auto';
   try{
     // Enviar por Twilio (webhook propio)
-    const waR=await fetch('https://tododrogas.online/twilio/send',{
+    const waR=await fetch('https://tododrogas.online/wa/send',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({telefono:S.selTel,mensaje:txt,agente_nombre:AGENT_NAME}),
@@ -807,12 +807,13 @@ function gWaSetTutela(val){
   _gWaTutela = val;
   const si = document.getElementById('gWaTutelaSi');
   const no = document.getElementById('gWaTutelaNo');
-  si.style.borderColor = val===true  ? 'var(--blue)' : 'var(--border)';
-  si.style.background  = val===true  ? 'var(--blue-l)' : 'var(--surface2)';
-  si.style.color       = val===true  ? 'var(--blue)' : 'var(--ink3)';
-  no.style.borderColor = val===false ? 'var(--blue)' : 'var(--border)';
-  no.style.background  = val===false ? 'var(--blue-l)' : 'var(--surface2)';
-  no.style.color       = val===false ? 'var(--blue)' : 'var(--ink3)';
+  if(!si||!no) return;
+  si.style.borderColor = val===true  ? 'var(--blue)':'var(--border)';
+  si.style.background  = val===true  ? 'var(--blue-l)':'var(--surface2)';
+  si.style.color       = val===true  ? 'var(--blue)':'var(--ink3)';
+  no.style.borderColor = val===false ? 'var(--blue)':'var(--border)';
+  no.style.background  = val===false ? 'var(--blue-l)':'var(--surface2)';
+  no.style.color       = val===false ? 'var(--blue)':'var(--ink3)';
 }
 
 function gWaAgregarMed(){
@@ -1001,7 +1002,6 @@ async function confirmarCerrar(){
       metadata.detalle_solicitud= document.getElementById('gWaDetalle').value||'';
       metadata.categoria_sigi   = document.getElementById('gWaCategoria').value||'';
       metadata.tiene_tutela     = _gWaTutela;
-      // Medicamentos
       const meds = [];
       document.querySelectorAll('[id^="gWaMed_"]').forEach(card=>{
         const n = card.id.split('_')[1];
@@ -1072,8 +1072,7 @@ async function confirmarCerrar(){
         from_email:  `wa_${telWA}@tododrogas.online`,
         datos_extra: JSON.stringify(metadata),
       });
-
-      // ── OPERACIÓN 2b: Guardar medicamentos en gestiones_medicamentos ──
+      // ── OPERACIÓN 2b: gestiones_medicamentos ──
       if(metadata.medicamentos?.length){
         for(const med of metadata.medicamentos){
           try{
