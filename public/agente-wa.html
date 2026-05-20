@@ -434,14 +434,32 @@ html[data-theme="dark"]{--bg:#0f1117;--bg2:#1a1d27;--surface:#1e2130;--surface2:
             <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">Categoría</label>
             <select id="gWaCategoria" class="minput" style="min-height:auto;margin-top:3px;font-size:12px">
               <option value="">— Seleccionar —</option>
-              <option>Medicamentos</option>
-              <option>Dispensación</option>
-              <option>Atención al usuario</option>
-              <option>Facturación</option>
-              <option>Otro</option>
+              <option value="EPS">EPS</option>
+              <option value="TODODROGAS">Tododrogas</option>
+              <option value="PROVEEDOR">Proveedor</option>
+              <option value="USUARIO EXTERNO">Usuario externo</option>
+              <option value="COLABORADOR">Colaborador</option>
+              <option value="ENTE DE CONTROL">Ente de control</option>
             </select>
           </div>
         </div>
+        <div style="margin-top:8px">
+          <label style="font-size:10px;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px">¿Tiene tutela?</label>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <button id="gWaTutelaSi" onclick="gWaSetTutela(true)" style="flex:1;padding:6px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface2);font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;color:var(--ink3);transition:all .15s">SÍ</button>
+            <button id="gWaTutelaNo" onclick="gWaSetTutela(false)" style="flex:1;padding:6px;border:1.5px solid var(--border);border-radius:6px;background:var(--surface2);font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;color:var(--ink3);transition:all .15s">NO</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MEDICAMENTOS -->
+      <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:8px">MEDICAMENTOS <span style="font-weight:400;color:var(--ink3)">(opcional)</span></div>
+        <div id="gWaMedLista" style="display:flex;flex-direction:column;gap:8px"></div>
+        <button onclick="gWaAgregarMed()" style="margin-top:6px;background:var(--blue-l);color:var(--blue);border:1.5px solid var(--blue-m);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;display:flex;align-items:center;gap:5px">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Añadir medicamento
+        </button>
       </div>
     </div>
 
@@ -764,7 +782,7 @@ async function enviar(){
   ta.value='';ta.style.height='auto';
   try{
     // Enviar por Twilio (webhook propio)
-    const waR=await fetch('https://tododrogas.online/wa/send',{
+    const waR=await fetch('https://tododrogas.online/twilio/send',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({telefono:S.selTel,mensaje:txt,agente_nombre:AGENT_NAME}),
@@ -782,6 +800,40 @@ async function enviar(){
 
 // ── CERRAR — GESTIÓN SIGI ────────────────────────
 let _gWaEpsData = []; // cache EPS cargadas
+let _gWaTutela  = null;
+let _gWaMedCount = 0;
+
+function gWaSetTutela(val){
+  _gWaTutela = val;
+  const si = document.getElementById('gWaTutelaSi');
+  const no = document.getElementById('gWaTutelaNo');
+  si.style.borderColor = val===true  ? 'var(--blue)' : 'var(--border)';
+  si.style.background  = val===true  ? 'var(--blue-l)' : 'var(--surface2)';
+  si.style.color       = val===true  ? 'var(--blue)' : 'var(--ink3)';
+  no.style.borderColor = val===false ? 'var(--blue)' : 'var(--border)';
+  no.style.background  = val===false ? 'var(--blue-l)' : 'var(--surface2)';
+  no.style.color       = val===false ? 'var(--blue)' : 'var(--ink3)';
+}
+
+function gWaAgregarMed(){
+  _gWaMedCount++;
+  const id = _gWaMedCount;
+  const div = document.createElement('div');
+  div.id = `gWaMed_${id}`;
+  div.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;position:relative';
+  div.innerHTML = `
+    <div style="grid-column:span 2;display:flex;justify-content:space-between;align-items:center;font-size:10px;font-weight:700;color:var(--ink2);text-transform:uppercase">
+      MEDICAMENTO #${id}
+      <button onclick="document.getElementById('gWaMed_${id}').remove()" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;line-height:1">×</button>
+    </div>
+    <div><label style="font-size:10px;color:var(--ink3);text-transform:uppercase">Código</label><input class="minput" id="gWaMedCod_${id}" placeholder="Código del med." style="margin-top:3px;font-size:12px"></div>
+    <div><label style="font-size:10px;color:var(--ink3);text-transform:uppercase">PBS</label><select class="minput" id="gWaMedPbs_${id}" style="min-height:auto;margin-top:3px;font-size:12px"><option value="">—</option><option>SÍ</option><option>NO</option></select></div>
+    <div style="grid-column:span 2"><label style="font-size:10px;color:var(--ink3);text-transform:uppercase">Descripción (nombre)</label><input class="minput" id="gWaMedDesc_${id}" placeholder="Nombre del medicamento…" style="margin-top:3px;font-size:12px"></div>
+    <div style="grid-column:span 2"><label style="font-size:10px;color:var(--ink3);text-transform:uppercase">Artículo / Descripción escrita</label><input class="minput" id="gWaMedArt_${id}" placeholder="Descripción libre" style="margin-top:3px;font-size:12px"></div>
+    <div><label style="font-size:10px;color:var(--ink3);text-transform:uppercase">Cantidad</label><input class="minput" id="gWaMedCant_${id}" type="number" value="0" min="0" style="margin-top:3px;font-size:12px"></div>
+  `;
+  document.getElementById('gWaMedLista').appendChild(div);
+}
 
 async function abrirCerrar(){
   if(!S.selSesion) return;
@@ -811,6 +863,10 @@ async function abrirCerrar(){
   // Limpiar campos
   document.getElementById('gWaObs').value = '';
   document.getElementById('gWaAccion').value = '';
+  document.getElementById('gWaMedLista').innerHTML = '';
+  _gWaMedCount = 0;
+  _gWaTutela = null;
+  gWaSetTutela(null);
 
   if(esPrimera){
     // Pre-llenar con datos de la sesión
@@ -944,6 +1000,20 @@ async function confirmarCerrar(){
       metadata.nombre_solicitud = document.getElementById('gWaTipoSol').value||'';
       metadata.detalle_solicitud= document.getElementById('gWaDetalle').value||'';
       metadata.categoria_sigi   = document.getElementById('gWaCategoria').value||'';
+      metadata.tiene_tutela     = _gWaTutela;
+      // Medicamentos
+      const meds = [];
+      document.querySelectorAll('[id^="gWaMed_"]').forEach(card=>{
+        const n = card.id.split('_')[1];
+        meds.push({
+          codigo:      document.getElementById(`gWaMedCod_${n}`)?.value||'',
+          pbs:         document.getElementById(`gWaMedPbs_${n}`)?.value||'',
+          descripcion: document.getElementById(`gWaMedDesc_${n}`)?.value||'',
+          articulo:    document.getElementById(`gWaMedArt_${n}`)?.value||'',
+          cantidad:    parseInt(document.getElementById(`gWaMedCant_${n}`)?.value||'0')
+        });
+      });
+      if(meds.length) metadata.medicamentos = meds;
     }
 
     // ── OPERACIÓN 1: Crear o actualizar correos ──
@@ -972,6 +1042,7 @@ async function confirmarCerrar(){
         departamento_paciente: metadata.departamento,
         ciudad_paciente: metadata.ciudad,
         categoria_sigi: metadata.categoria_sigi,
+        tiene_tutela:   metadata.tiene_tutela,
         from_name:      ses.nombre||'',
         from_email:     `wa_${telWA}@tododrogas.online`,
         subject:        `WhatsApp - ${ses.nombre||S.selTel}`,
