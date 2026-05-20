@@ -1072,6 +1072,21 @@ async function confirmarCerrar(){
         from_email:  `wa_${telWA}@tododrogas.online`,
         datos_extra: JSON.stringify(metadata),
       });
+
+      // ── OPERACIÓN 2b: Guardar medicamentos en gestiones_medicamentos ──
+      if(metadata.medicamentos?.length){
+        for(const med of metadata.medicamentos){
+          try{
+            await sb('gestiones_medicamentos','POST',{
+              correo_id:   correoId,
+              codigo:      med.codigo||'',
+              descripcion: med.descripcion||med.articulo||'',
+              cantidad:    med.cantidad||0,
+              pbs:         med.pbs||'',
+            });
+          }catch(e){ console.warn('[med]',e.message); }
+        }
+      }
     }
 
     // ── OPERACIÓN 3: Cerrar wa_sesiones ──
