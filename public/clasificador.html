@@ -420,65 +420,69 @@ function esc(s){return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 function sid(s){return s.replace(/[^a-zA-Z0-9]/g,'_')}
 
 // ══════════════════════════════════════════════
-//  UPLOAD
+//  UPLOAD — PDFs para procesar + ZIPs para conservar
 // ══════════════════════════════════════════════
 async function handleUpload(ev){
-  var allFiles=Array.from(ev.target.files);
-  ev.target.value='';
+  var allFiles = Array.from(ev.target.files);
+  ev.target.value = '';
 
-  var pdfs=allFiles.filter(f=>f.name.toLowerCase().endsWith('.pdf'));
-  var zips=allFiles.filter(f=>f.name.toLowerCase().endsWith('.zip'));
+  var pdfs = allFiles.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  var zips = allFiles.filter(f => f.name.toLowerCase().endsWith('.zip'));
 
-  if(!pdfs.length){toast('No se encontraron PDFs','err');return;}
+  if(!pdfs.length){ toast('No se encontraron PDFs','err'); return; }
   log('Leyendo '+pdfs.length+' PDFs y '+zips.length+' ZIPs…');
 
-  // ── Agrupar PDFs por subcarpeta ──────────────────────────
-  var byFolder={};
-  pdfs.forEach(f=>{
-    var parts=f.webkitRelativePath.split('/').filter(Boolean);
-    var key=parts.length>=3?parts[parts.length-2]:parts.length===2?parts[0]:'RAIZ';
-    if(!byFolder[key])byFolder[key]=[];
+  // Agrupar PDFs por subcarpeta
+  var byFolder = {};
+  pdfs.forEach(f => {
+    var parts = f.webkitRelativePath.split('/').filter(Boolean);
+    var key = parts.length>=3 ? parts[parts.length-2] : parts.length===2 ? parts[0] : 'RAIZ';
+    if(!byFolder[key]) byFolder[key] = [];
     byFolder[key].push(f);
   });
 
-  // ── Agrupar ZIPs por subcarpeta ──────────────────────────
-  var zipsByFolder={};
-  zips.forEach(f=>{
-    var parts=f.webkitRelativePath.split('/').filter(Boolean);
-    var key=parts.length>=3?parts[parts.length-2]:parts.length===2?parts[0]:'RAIZ';
-    if(!zipsByFolder[key])zipsByFolder[key]=[];
+  // Agrupar ZIPs por subcarpeta
+  var zipsByFolder = {};
+  zips.forEach(f => {
+    var parts = f.webkitRelativePath.split('/').filter(Boolean);
+    var key = parts.length>=3 ? parts[parts.length-2] : parts.length===2 ? parts[0] : 'RAIZ';
+    if(!zipsByFolder[key]) zipsByFolder[key] = [];
     zipsByFolder[key].push(f);
   });
 
-  var sorted=Object.keys(byFolder).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+  var sorted = Object.keys(byFolder).sort((a,b) => a.localeCompare(b,undefined,{numeric:true}));
+
   for(var k of sorted){
-    if(!folders[k])folders[k]={files:[],zips:[],status:'pending'};
-    if(!folders[k].zips)folders[k].zips=[];
-    if(!pageMap[k])pageMap[k]=[];
-    if(!outputs[k])outputs[k]={};
+    if(!folders[k]) folders[k] = {files:[], zips:[], status:'pending'};
+    if(!folders[k].zips) folders[k].zips = [];
+    if(!pageMap[k])  pageMap[k]  = [];
+    if(!outputs[k])  outputs[k]  = {};
+
     // Cargar PDFs
     for(var file of byFolder[k]){
-      if(folders[k].files.find(x=>x.name===file.name))continue;
-      var bytes=await file.arrayBuffer();
-      var pc=0;
-      try{var d=await pdfjsLib.getDocument({data:bytes.slice(0)}).promise;pc=d.numPages;}catch(e){}
-      folders[k].files.push({name:file.name,bytes,pageCount:pc});
+      if(folders[k].files.find(x=>x.name===file.name)) continue;
+      var bytes = await file.arrayBuffer();
+      var pc = 0;
+      try{ var d = await pdfjsLib.getDocument({data:bytes.slice(0)}).promise; pc = d.numPages; }catch(e){}
+      folders[k].files.push({name:file.name, bytes, pageCount:pc});
     }
-    // Cargar ZIPs de esta subcarpeta (se conservan intactos en el output)
+
+    // Cargar ZIPs — se procesarán al descargar
     if(zipsByFolder[k]){
       for(var zf of zipsByFolder[k]){
-        if(folders[k].zips.find(x=>x.name===zf.name))continue;
-        var zbytes=await zf.arrayBuffer();
-        folders[k].zips.push({name:zf.name,bytes:zbytes});
+        if(folders[k].zips.find(x=>x.name===zf.name)) continue;
+        var zbytes = await zf.arrayBuffer();
+        folders[k].zips.push({name:zf.name, bytes:zbytes});
       }
     }
   }
+
   renderSidebar();
   showWork();
   updateBtns();
   updateStats();
-  if(sorted.length)setActive(sorted[0]);
-  log('Listo — '+Object.keys(folders).length+' carpetas · '+pdfs.length+' PDFs · '+zips.length+' ZIPs conservados');
+  if(sorted.length) setActive(sorted[0]);
+  log('Listo — '+Object.keys(folders).length+' carpetas · '+pdfs.length+' PDFs · '+zips.length+' ZIPs');
 }
 
 var dz=document.getElementById('dz');
@@ -887,64 +891,134 @@ function buildFolderSection(k,expanded){
 }
 
 // ══════════════════════════════════════════════
-//  DOWNLOAD ZIP — estructura completa preservada
-//  Cada subcarpeta: PDFs renombrados + ZIPs originales intactos
+//  CONVERTIR CUV JSON — misma lógica que NUEVO_CONVERSOR.PY
+// ══════════════════════════════════════════════
+function convertirCUV(datos){
+  // Soporta PascalCase y camelCase
+  var g = (k1,k2,def) => datos[k1] !== undefined ? datos[k1] : datos[k2] !== undefined ? datos[k2] : def;
+
+  var fechaRadicacion = g('fechaRadicacion','FechaRadicacion','0000-00-00T00:00:00.0000000');
+  // Limpiar timezone offset (+00:00)
+  if(fechaRadicacion && fechaRadicacion.includes('+'))
+    fechaRadicacion = fechaRadicacion.split('+')[0];
+
+  return {
+    resultState:             g('resultState',            'ResultState',             true),
+    procesoId:               g('procesoId',              'ProcesoId',               0),
+    numFactura:              g('numFactura',             'NumFactura',              ''),
+    codigoUnicoValidacion:   g('codigoUnicoValidacion',  'CodigoUnicoValidacion',   ''),
+    fechaRadicacion:         fechaRadicacion,
+    rutaArchivos:            g('rutaArchivos',           'RutaArchivos',            null),
+    "resultadosValidacion":  []
+  };
+}
+
+function formatearCUV(obj){
+  // Formato exacto: indent 2, resultadosValidacion:[] sin espacio
+  var s = JSON.stringify(obj, null, 2);
+  s = s.replace('"resultadosValidacion": []', '"resultadosValidacion":[]');
+  return s;
+}
+
+// ══════════════════════════════════════════════
+//  DOWNLOAD ZIP COMPLETO
+//  - PDFs renombrados por IA
+//  - ZIP interno reconstruido con CUV convertido
+//    y RIPS intacto
 // ══════════════════════════════════════════════
 async function downloadAll(){
-  var allFolders=Object.keys(folders);
-  if(!allFolders.length){toast('Sin archivos','err');return;}
-  var anyDone=allFolders.some(k=>folders[k].status==='done');
-  if(!anyDone){toast('Procesa primero con IA','err');return;}
+  var allFolders = Object.keys(folders);
+  if(!allFolders.length){ toast('Sin archivos','err'); return; }
+  var anyDone = allFolders.some(k => folders[k].status==='done');
+  if(!anyDone){ toast('Procesa primero con IA','err'); return; }
 
-  log('Generando ZIP…');
-  var zip=new JSZip();
-  var count=0;
+  log('Generando ZIP completo…');
+  var zip = new JSZip();
+  var count = 0;
 
   for(var k of allFolders){
-    var sub=zip.folder(k);
-    var outs=outputs[k]||{};
-    var fd=folders[k];
+    var sub  = zip.folder(k);
+    var outs = outputs[k] || {};
+    var fd   = folders[k];
 
+    // ── PDFs renombrados ────────────────────────────────────
     if(fd.status==='done' && Object.keys(outs).length){
-      // PDFs renombrados en orden
-      ['CRC','DFV','FEV','OPF','PDE','UNK'].forEach(pfx=>{
+      ['CRC','DFV','FEV','OPF','PDE','UNK'].forEach(pfx => {
         if(outs[pfx]){ sub.file(outs[pfx].name, outs[pfx].bytes); count++; }
       });
-      // Cualquier prefijo extra
-      Object.keys(outs).forEach(pfx=>{
+      Object.keys(outs).forEach(pfx => {
         if(!['CRC','DFV','FEV','OPF','PDE','UNK'].includes(pfx)){
           sub.file(outs[pfx].name, outs[pfx].bytes); count++;
         }
       });
     } else {
       // Carpeta sin procesar — originales intactos
-      for(var f of fd.files){
-        sub.file(f.name, f.bytes.slice(0)); count++;
-      }
+      for(var f of fd.files){ sub.file(f.name, f.bytes.slice(0)); count++; }
     }
 
-    // ── ZIPs originales — siempre se conservan sin tocar ──
-    if(fd.zips && fd.zips.length){
-      for(var z of fd.zips){
-        sub.file(z.name, z.bytes.slice(0));
+    // ── ZIPs internos — reconstruir con CUV convertido ─────
+    for(var zObj of (fd.zips||[])){
+      try{
+        var innerZip = await JSZip.loadAsync(zObj.bytes);
+        var newInner = new JSZip();
+        var innerFiles = Object.keys(innerZip.files);
+
+        for(var ipath of innerFiles){
+          var entry = innerZip.files[ipath];
+          if(entry.dir) continue;
+          var fname = ipath.split('/').pop();
+
+          if(fname.toUpperCase().includes('_CUV') && fname.toLowerCase().endsWith('.json')){
+            // ── Convertir CUV ───────────────────────────────
+            try{
+              var rawText = await entry.async('string');
+              var datosOriginales = JSON.parse(rawText);
+              var datosSalida = convertirCUV(datosOriginales);
+              var textoFinal = formatearCUV(datosSalida);
+              newInner.file(fname, textoFinal);
+              log('CUV convertido: '+fname);
+            }catch(e){
+              // Si falla parsear, incluir original
+              var rawBytes = await entry.async('uint8array');
+              newInner.file(fname, rawBytes);
+              log('CUV sin cambios (error parse): '+fname);
+            }
+          } else {
+            // ── RIPS y cualquier otro archivo — intacto ─────
+            var rawBytes = await entry.async('uint8array');
+            newInner.file(fname, rawBytes);
+          }
+        }
+
+        // Generar ZIP interno reconstruido
+        var newInnerBlob = await newInner.generateAsync({
+          type:'uint8array', compression:'DEFLATE', compressionOptions:{level:6}
+        });
+        sub.file(zObj.name, newInnerBlob);
         count++;
+
+      }catch(e){
+        // ZIP corrupto o ilegible — incluir original sin tocar
+        sub.file(zObj.name, zObj.bytes.slice(0));
+        count++;
+        log('ZIP original conservado (error): '+zObj.name);
       }
     }
   }
 
-  if(!count){toast('Sin archivos para descargar','err');return;}
+  if(!count){ toast('Sin archivos para descargar','err'); return; }
 
-  var blob=await zip.generateAsync({
+  var blob = await zip.generateAsync({
     type:'blob', compression:'DEFLATE', compressionOptions:{level:5}
   });
-  var name='Radicacion_'+new Date().toISOString().slice(0,10)+'.zip';
-  var url=URL.createObjectURL(blob);
-  var a=document.createElement('a');
-  a.href=url; a.download=name;
+  var name = 'Radicacion_'+new Date().toISOString().slice(0,10)+'.zip';
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = name;
   document.body.appendChild(a); a.click();
-  setTimeout(()=>{document.body.removeChild(a); URL.revokeObjectURL(url);}, 1500);
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
   toast('ZIP descargado — '+count+' archivos en '+allFolders.length+' carpetas ✓');
-  log('ZIP: '+name+' ('+count+' archivos)');
+  log('ZIP listo: '+name);
 }
 
 // ══════════════════════════════════════════════
