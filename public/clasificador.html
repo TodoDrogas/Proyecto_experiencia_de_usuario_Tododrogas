@@ -861,30 +861,71 @@ function buildFolderSection(k,expanded){
 }
 
 // ══════════════════════════════════════════════
-//  DOWNLOAD ZIP
+//  DOWNLOAD ZIP — estructura completa preservada
+//  Cada subcarpeta queda con los archivos renombrados.
+//  Si un tipo tiene UNK se incluye igual (sin perder nada).
 // ══════════════════════════════════════════════
 async function downloadAll(){
+  var allFolders=Object.keys(folders);
+  if(!allFolders.length){toast('Sin archivos','err');return;}
+
+  // Verificar que al menos una carpeta esté procesada
+  var anyDone=allFolders.some(k=>folders[k].status==='done');
+  if(!anyDone){toast('Procesa primero con IA','err');return;}
+
+  log('Generando ZIP…');
   var zip=new JSZip();
   var count=0;
-  for(var k of Object.keys(outputs)){
+
+  for(var k of allFolders){
     var sub=zip.folder(k);
-    for(var pfx of Object.keys(outputs[k])){
-      var o=outputs[k][pfx];
-      sub.file(o.name, o.bytes);
-      count++;
+    var outs=outputs[k]||{};
+
+    if(folders[k].status==='done' && Object.keys(outs).length){
+      // Carpeta procesada — incluir archivos renombrados
+      // Orden: CRC, DFV, FEV, OPF, PDE, UNK
+      var order=['CRC','DFV','FEV','OPF','PDE','UNK'];
+      order.forEach(pfx=>{
+        if(outs[pfx]){
+          sub.file(outs[pfx].name, outs[pfx].bytes);
+          count++;
+        }
+      });
+      // Incluir también cualquier prefijo extra no esperado
+      Object.keys(outs).forEach(pfx=>{
+        if(!order.includes(pfx)){
+          sub.file(outs[pfx].name, outs[pfx].bytes);
+          count++;
+        }
+      });
+    } else {
+      // Carpeta sin procesar — incluir archivos originales intactos
+      var fd=folders[k];
+      for(var f of fd.files){
+        sub.file(f.name, f.bytes.slice(0));
+        count++;
+      }
     }
   }
-  if(!count){toast('Sin archivos generados aún','err');return;}
-  log('Generando ZIP…');
-  var blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:5}});
+
+  if(!count){toast('Sin archivos para descargar','err');return;}
+
+  var blob=await zip.generateAsync({
+    type:'blob',
+    compression:'DEFLATE',
+    compressionOptions:{level:5}
+  });
+
   var name='Radicacion_'+new Date().toISOString().slice(0,10)+'.zip';
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');
-  a.href=url;a.download=name;
-  document.body.appendChild(a);a.click();
-  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1500);
-  toast('ZIP descargado — '+count+' archivos ✓');
-  log('ZIP: '+name);
+  a.href=url; a.download=name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{document.body.removeChild(a); URL.revokeObjectURL(url);}, 1500);
+
+  var folders_count=allFolders.length;
+  toast('ZIP descargado — '+count+' archivos en '+folders_count+' carpetas ✓');
+  log('ZIP listo: '+name+' ('+count+' archivos, '+folders_count+' carpetas)');
 }
 
 // ══════════════════════════════════════════════
