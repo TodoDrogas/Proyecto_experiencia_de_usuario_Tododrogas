@@ -2288,7 +2288,7 @@ async function exportarSIGI() {
         `fecha_resolucion,created_at,num_gestiones,tiene_tutela,categoria_sigi,categoria_ia,` +
         `nombre_solicitud,detalle_solicitud,tipo_pqr,gestion_compra,usuario_gestion_compra,` +
         `gestion_usuarios_integ,usuarios_integrales,departamento_paciente,ciudad_paciente,` +
-        `calificacion,calificacion_texto,encuesta_enviada_at` +
+        `calificacion,calificacion_texto,encuesta_enviada_at,fecha_calificacion` +
         `&order=created_at.asc&limit=1000&offset=${_off}`
       ) || [];
       if(!page.length) break;
@@ -2644,7 +2644,7 @@ async function exportarSIGI() {
     // ── Hoja 5: Satisfaccion_Correos ─────────────────────────────
     const _hSatSIGI = correosSIGI.filter(e=>e.calificacion>0).map(e=>({
       Fecha_Correo:       e.received_at||e.created_at ? new Date(e.received_at||e.created_at).toLocaleDateString('es-CO') : '',
-      Fecha_Calificacion: e.encuesta_enviada_at ? new Date(e.encuesta_enviada_at).toLocaleDateString('es-CO') : '',
+      Fecha_Calificacion: e.fecha_calificacion ? new Date(e.fecha_calificacion).toLocaleDateString('es-CO') : '',
       ID:                 e.ticket_id||'',
       Canal:              (e.canal_contacto||e.origen||'correo').toUpperCase(),
       Agente:             e.asignado_a||agById[e.agente_id]?.nombre||'',
@@ -9413,7 +9413,7 @@ async function loadAgentesMetrics(){
   const [correos, _eventosPlaceholder, agentes, correosAsesorActual, correosGlobal, respEventosGlobal] = await Promise.all([
     // correos del período (received_at) — paginado sin límite fijo igual que el agente
     (async()=>{
-      const PAGE=1000, _fields='id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones,nombre_solicitud,calificacion,calificacion_texto';
+      const PAGE=1000, _fields='id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones,nombre_solicitud,calificacion,calificacion_texto,fecha_calificacion';
       let all=[], off=0;
       while(true){
         const page=await sb(qC(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&select=${_fields}&order=received_at.desc&limit=${PAGE}&offset=${off}`,'received_at')).catch(()=>[]);
@@ -9898,7 +9898,7 @@ async function exportAgentesExcel(){
   // ── Hoja extra: Satisfaccion_Correos — detalle por ticket ──────────
   const _hSat = E.filter(e=>e.calificacion>0).map(e=>({
     Fecha_Correo:       e.received_at ? new Date(e.received_at).toLocaleDateString('es-CO') : '',
-    Fecha_Calificacion: e.encuesta_enviada_at ? new Date(e.encuesta_enviada_at).toLocaleDateString('es-CO') : '',
+    Fecha_Calificacion: e.fecha_calificacion ? new Date(e.fecha_calificacion).toLocaleDateString('es-CO') : '',
     ID:                 e.ticket_id||e.id||'',
     Canal:              (e.canal_contacto||e.origen||'correo').toUpperCase(),
     Agente:             e.asignado_a||agMap[e.agente_id]||'',
