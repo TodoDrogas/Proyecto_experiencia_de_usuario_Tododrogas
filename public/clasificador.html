@@ -662,12 +662,17 @@ async function renderPage(pdfDoc,pageNum){
 //  PROMPT POR PÁGINA — enseñamos exactamente qué es cada documento
 // ══════════════════════════════════════════════
 function buildPagePrompt(filename,pageNum,totalPages,ocrText){
+  // Si el OCR está vacío, puede ser PDF regenerado por pdf-lib (sin texto embebido)
+  var ocrNote = ocrText.trim().length < 10
+    ? '\nNOTA IMPORTANTE: El OCR no extrajo texto de esta página. Esto ocurre cuando el PDF fue regenerado por software (pdf-lib). Analiza ÚNICAMENTE la imagen visual para clasificar.'
+    : '';
+
   return `Eres un experto clasificador de documentos del sistema de salud colombiano.
 Analiza UNA SOLA PÁGINA (página ${pageNum} de ${totalPages}) del PDF "${filename}".
 Texto OCR extraído de esta página:
 """
 ${ocrText.substring(0,800)}
-"""
+"""${ocrNote}
 
 Clasifica esta página en UNO de estos tipos:
 
@@ -677,16 +682,23 @@ CRC — Acta de entrega (Tododrogas):
   "Valor Recaudado" con $0,00. Texto "Por medio de la presente, me permito certificar...".
 
 DFV — Orden de Direccionamiento / Autorización (Salud Total EPS):
-  VERSIÓN A (digital): Título "MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO". Secciones:
-  ENTIDAD RESPONSABLE DEL PAGO / INFORMACIÓN DEL PACIENTE / INFORMACIÓN PRESTADOR /
-  INFORMACIÓN DE LA TRANSACCIÓN / SERVICIOS DIRECCIONADOS / PAGOS COMPARTIDOS.
-  Emitido por Salud Total EPS código EPS002.
-  VERSIÓN B (escaneada — MUY COMÚN): Logo grande "SaludTotal EPS-S" en esquina superior
-  izquierda + número grande en esquina superior derecha tipo "No.35240306" o "No.40875453".
-  Título centrado "MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO". Mismas secciones que versión A
-  pero en formato escaneado/impreso. Al pie dice "SOLO PARA ORDENES DE COMPRA DE SERVICIOS"
-  y "Firma SALUD TOTAL EPS-S S.A." y "Firma Usuario". Código M-SNT-F008 V2.0.
-  AMBAS versiones son DFV — si ves logo SaludTotal + ORDEN DE DIRECCIONAMIENTO → siempre DFV.
+  SEÑAL PRINCIPAL: Título "MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO" (en negrilla, centrado).
+  SIEMPRE tiene estas secciones en este orden exacto:
+    1. ENTIDAD RESPONSABLE DEL PAGO → Salud Total EPS / Código EPS002
+    2. INFORMACIÓN DEL PACIENTE → CC, nombre, fecha nacimiento, dirección, municipio
+    3. INFORMACIÓN PRESTADOR → TODODROGAS CIA SAS o INVERSIONES TODO DROGAS, NIT 830500960
+    4. INFORMACIÓN DE LA TRANSACCIÓN → Régimen Contributivo, Diagnóstico, Fecha Vencimiento, No. Solicitud
+    5. SERVICIOS DIRECCIONADOS → tabla con Código / Cant / Nombre del medicamento (CMD...)
+    6. PAGOS COMPARTIDOS → Tipo Recaudo Cuota Moderadora, Valor 0, Semanas Cotizadas
+    7. INFORMACIÓN DE LA PERSONA QUE DIRECCIONA → Nombre DiegoBalS o VanessaEL
+    8. OBSERVACIONES → texto "Señor Usuario no sobreescribir..."
+  VERSIÓN A (digital con texto): fondo blanco, tipografía clara, texto seleccionable.
+  VERSIÓN B (escaneada): Logo grande "SaludTotal EPS-S" esquina sup-izq + número "No.XXXXXXXX"
+    esquina sup-der, mismas secciones pero en imagen escaneada/impresa.
+  VERSIÓN C (regenerada por pdf-lib, SIN texto OCR): visualmente igual a Versión A pero
+    el OCR no extrae texto porque fue procesado por software. Si la imagen muestra el formato
+    de ORDEN DE DIRECCIONAMIENTO con las secciones descritas → es DFV aunque no haya texto OCR.
+  REGLA: Si ves MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO + secciones de Salud Total → SIEMPRE DFV.
 
 FEV — Factura Electrónica de Venta (Tododrogas):
   "FACTURA ELECTRONICA DE VENTA No. TDNE13709". Campo CUFE (64 caracteres).
@@ -703,16 +715,17 @@ PDE — ADRES / Validación de derechos / MIPRES:
   Entidad SALUD TOTAL, Régimen CONTRIBUTIVO, Tipo Afiliado COTIZANTE.
   O reporte MIPRES con número de prescripción.
 
-Reglas absolutas:
-- Si contiene CUFE → FEV
-- Si contiene logo ADRES o BDUA → PDE
-- Si dice ORDEN DE DIRECCIONAMIENTO o ves logo SaludTotal + número tipo No.XXXXXXXX → DFV
-- Si dice ACTA DE ENTREGA o código *D18...* → CRC
-- Si tiene tabla MEDICAMENTO/DOSIS/VIA de hospital → OPF
-- Si la página está escaneada y ves logo SaludTotal EPS-S con número grande → DFV (versión B)
+Reglas absolutas (en orden de prioridad):
+1. Si contiene CUFE → FEV
+2. Si contiene logo ADRES o BDUA → PDE
+3. Si ves título MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO (con o sin texto OCR) → DFV
+4. Si ves logo SaludTotal + número No.XXXXXXXX → DFV
+5. Si dice ACTA DE ENTREGA o código *D18...* → CRC
+6. Si tiene tabla MEDICAMENTO/DOSIS/VIA de hospital → OPF
+7. Si el OCR está vacío y la imagen muestra secciones de Salud Total EPS → DFV
 
 Responde SOLO con JSON exacto sin markdown:
-{"prefix":"OPF","reason":"Orden médica Hospital San Fernando con tabla de medicamentos y firma del médico","confidence":0.98}`;
+{"prefix":"DFV","reason":"Orden de direccionamiento Salud Total EPS con secciones ENTIDAD RESPONSABLE, SERVICIOS DIRECCIONADOS y PAGOS COMPARTIDOS","confidence":0.99}`;
 }
 
 // ══════════════════════════════════════════════
