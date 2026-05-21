@@ -1334,9 +1334,29 @@ function ntdOpc(n){
   NTD.busy=false;
   NTD._encuestaVista=false;
   clearTimeout(_ntdResTimer);
-  // Registrar opción de menú usada
-  const _menuLabels={1:'Medicamentos',2:'Sedes',3:'Requisitos',4:'Radicar',5:'Radicado',6:'Horarios',7:'Encuesta',8:'PreguntaLibre'};
+  // Registrar opción de menú usada — nombres exactos del menú Nova TD
+  const _menuLabels={
+    1:'1️⃣ Estado o entrega de medicamentos',
+    2:'2️⃣ Puntos de dispensación',
+    3:'3️⃣ Requisitos para reclamar medicamentos',
+    4:'4️⃣ Radicar PQRSFD',
+    5:'5️⃣ Estado de mi radicado PQRSFD',
+    6:'6️⃣ Horarios y canales de contacto',
+    7:'7️⃣ Encuesta de satisfacción',
+    8:'8️⃣ Pregunta personalizada a Nova TD'
+  };
   if(_menuLabels[n]) NTD._menuUsados.push(_menuLabels[n]);
+  // PATCH en tiempo real — garantiza que queda guardado aunque el usuario cierre sin despedirse
+  if(NTD._sesionId){
+    const sbUrl=(typeof window.SUPABASE_URL!=='undefined'?window.SUPABASE_URL:'');
+    const sbKey=(typeof window.SUPABASE_KEY!=='undefined'?window.SUPABASE_KEY:'');
+    fetch(sbUrl+'/rest/v1/nova_sesiones?id=eq.'+NTD._sesionId,{
+      method:'PATCH',
+      headers:{'apikey':sbKey,'Authorization':'Bearer '+sbKey,
+               'Content-Type':'application/json','Prefer':'return=minimal'},
+      body:JSON.stringify({menu_elegido:NTD._menuUsados.join(',')})
+    }).catch(()=>{});
+  }
   ntdEna('Por favor escriba su respuesta...');
   var opc={1:ntdMedicamentos,2:ntdSedes,3:ntdRequisitosReclamar,
     4:ntdIrARadicar,5:ntdConsultarRadicado,6:ntdHorarios,
