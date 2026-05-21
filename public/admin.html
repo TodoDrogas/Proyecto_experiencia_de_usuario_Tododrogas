@@ -2643,7 +2643,8 @@ async function exportarSIGI() {
 
     // ── Hoja 5: Satisfaccion_Correos ─────────────────────────────
     const _hSatSIGI = correosSIGI.filter(e=>e.calificacion>0).map(e=>({
-      Fecha:              e.received_at||e.created_at ? new Date(e.received_at||e.created_at).toLocaleDateString('es-CO') : '',
+      Fecha_Correo:       e.received_at||e.created_at ? new Date(e.received_at||e.created_at).toLocaleDateString('es-CO') : '',
+      Fecha_Calificacion: e.encuesta_enviada_at ? new Date(e.encuesta_enviada_at).toLocaleDateString('es-CO') : '',
       ID:                 e.ticket_id||'',
       Canal:              (e.canal_contacto||e.origen||'correo').toUpperCase(),
       Agente:             e.asignado_a||agById[e.agente_id]?.nombre||'',
@@ -2654,7 +2655,7 @@ async function exportarSIGI() {
       Asunto:             e.subject||'',
     }));
     const _wsSatSIGI = XLSX.utils.json_to_sheet(_hSatSIGI.length?_hSatSIGI:[{'Sin datos':'No hay calificaciones en el período'}]);
-    _wsSatSIGI['!cols']=[{wch:12},{wch:16},{wch:14},{wch:28},{wch:18},{wch:22},{wch:12},{wch:16},{wch:40}];
+    _wsSatSIGI['!cols']=[{wch:14},{wch:16},{wch:16},{wch:14},{wch:28},{wch:18},{wch:22},{wch:12},{wch:16},{wch:40}];
     XLSX.utils.book_append_sheet(wb, _wsSatSIGI, 'Satisfaccion_Correos');
 
     // ── Hoja 6: Satisfaccion_WhatsApp ────────────────────────────
@@ -9896,7 +9897,8 @@ async function exportAgentesExcel(){
 
   // ── Hoja extra: Satisfaccion_Correos — detalle por ticket ──────────
   const _hSat = E.filter(e=>e.calificacion>0).map(e=>({
-    Fecha:              e.received_at ? new Date(e.received_at).toLocaleDateString('es-CO') : '',
+    Fecha_Correo:       e.received_at ? new Date(e.received_at).toLocaleDateString('es-CO') : '',
+    Fecha_Calificacion: e.encuesta_enviada_at ? new Date(e.encuesta_enviada_at).toLocaleDateString('es-CO') : '',
     ID:                 e.ticket_id||e.id||'',
     Canal:              (e.canal_contacto||e.origen||'correo').toUpperCase(),
     Agente:             e.asignado_a||agMap[e.agente_id]||'',
@@ -9907,7 +9909,7 @@ async function exportAgentesExcel(){
     Asunto:             e.subject||'',
   }));
   const _wsSat = XLSX.utils.json_to_sheet(_hSat.length?_hSat:[{'Sin datos':'No hay calificaciones en el período'}]);
-  _wsSat['!cols']=[{wch:12},{wch:16},{wch:14},{wch:28},{wch:18},{wch:22},{wch:12},{wch:16},{wch:40}];
+  _wsSat['!cols']=[{wch:14},{wch:16},{wch:16},{wch:14},{wch:28},{wch:18},{wch:22},{wch:12},{wch:16},{wch:40}];
   XLSX.utils.book_append_sheet(wb, _wsSat, 'Satisfaccion_Correos');
 
   // ── Hoja extra: Satisfaccion_WhatsApp ──────────────────────────
