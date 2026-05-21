@@ -382,6 +382,11 @@ function ruleForPage(text){
     return 'CRC';
   if(t.includes('ORDEN MEDICAMENTOS P.O.S') || t.includes('ORDEN MEDICAMENTOS POS') ||
      t.includes('ESTA ORDEN ES VALIDA HASTA') ||
+     t.includes('FORMULA MEDICA') || t.includes('FÓRMULA MÉDICA') ||
+     t.includes('FORMULA MÉDICA') || t.includes('FÓRMULA MEDICA') ||
+     t.includes('MEDICAMENTOS POS') ||
+     t.includes('PROMOTORA CLINICA') || t.includes('ZONA FRANCA') ||
+     t.includes('LICENCIADO A:') ||
      (t.includes('HOSPITAL') && t.includes('DOSIS') && t.includes('VIA') && !t.includes('CUFE')))
     return 'OPF';
   return null;
@@ -705,10 +710,27 @@ FEV — Factura Electrónica de Venta (Tododrogas):
   Tabla con Precio Uni. y Total en pesos. SubTotal / Iva 19% / Total.
   Resolución de Facturación con rango de consecutivos.
 
-OPF — Orden Médica / Fórmula (Hospital/IPS):
-  Membrete hospital (HSF, E.S.E Hospital San Fernando). "ORDEN MEDICAMENTOS P.O.S".
-  Tabla MEDICAMENTO / DOSIS / VIA / CANTIDAD. Firma del médico.
-  "Esta orden es valida Hasta: Mar.07/2026".
+OPF — Orden Médica / Fórmula (Hospital/IPS/Clínica):
+  Emitida por cualquier hospital, clínica o IPS. Existen varias versiones:
+  VERSIÓN A (E.S.E Hospital San Fernando - Amaga, NIT 890.906.346-1):
+    Membrete "HSF" esquina superior izquierda. Título "ORDEN MEDICAMENTOS P.O.S".
+    Tabla con columnas CODIGO / MEDICAMENTO / DOSIS / VIA / CANTIDAD.
+    Firma manuscrita del médico. "Esta orden es valida Hasta: Mar.07/2026".
+  VERSIÓN B (Promotora Clínica Zona Franca de Urabá S.A.S., NIT 900390423-9):
+    Encabezado centrado "PROMOTORA CLINICA ZONA FRANCA DE URABA S.A.S." + número NIT.
+    Título grande centrado "FORMULA MÉDICA" con subtítulo "EVOLUCION".
+    Secciones: DATOS PERSONALES / DATOS DE AFILIACIÓN / DATOS DEL INGRESO.
+    Tabla "MEDICAMENTOS POS" con: Medicamento (código), Concentración, Unidad,
+    Vía Administración, Cantidad, Duración.
+    Firma digital electrónica al pie con nombre del médico, especialidad y RM.
+    Texto "Declaramos que la Clínica Panamericana adoptó un sistema tecnológico..."
+    "LICENCIADO A: [PROMOTORA CLINICA ZONA FRANCA...]"
+  VERSIÓN C (cualquier otra IPS/hospital):
+    Cualquier documento con título "FORMULA MEDICA", "ORDEN MEDICA", "PRESCRIPCIÓN MÉDICA"
+    o "MEDICAMENTOS POS" emitido por una entidad de salud (hospital, clínica, IPS).
+    Siempre tiene nombre del médico, diagnóstico, medicamentos con dosis y vía.
+  REGLA: Si ves "FORMULA MÉDICA" o "ORDEN MEDICA" o "MEDICAMENTOS POS" emitido
+    por hospital/clínica/IPS (NO por Tododrogas ni Salud Total EPS) → siempre OPF.
 
 PDE — ADRES / Validación de derechos / MIPRES:
   Logo ADRES. "Base de Datos Única de Afiliados - BDUA". Tabla con Estado ACTIVO,
@@ -723,6 +745,7 @@ Reglas absolutas (en orden de prioridad):
 5. Si dice ACTA DE ENTREGA o código *D18...* → CRC
 6. Si tiene tabla MEDICAMENTO/DOSIS/VIA de hospital → OPF
 7. Si el OCR está vacío y la imagen muestra secciones de Salud Total EPS → DFV
+8. Si ves "FORMULA MÉDICA" o "MEDICAMENTOS POS" de hospital/clínica/IPS → OPF
 
 Responde SOLO con JSON exacto sin markdown:
 {"prefix":"DFV","reason":"Orden de direccionamiento Salud Total EPS con secciones ENTIDAD RESPONSABLE, SERVICIOS DIRECCIONADOS y PAGOS COMPARTIDOS","confidence":0.99}`;
