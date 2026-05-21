@@ -9,22 +9,25 @@ $SB_KEY = '__SB_KEY__';
 
 $id  = trim($_GET['id']  ?? '');
 $cal = intval($_GET['cal'] ?? 0);
-$ag  = htmlspecialchars(trim($_GET['ag'] ?? ''));
+$ag  = trim($_GET['ag']  ?? '');
 
-$textos  = [1 => 'Mala',   2 => 'Regular', 3 => 'Buena'];
-$emojis  = [1 => '😞',    2 => '😐',      3 => '😊'];
-$accents = [1 => '#ef4444', 2 => '#f59e0b', 3 => '#22c55e'];
+$textos = [1 => 'Mala', 2 => 'Regular', 3 => 'Buena'];
+$emojis = [1 => '😞', 2 => '😐', 3 => '😊'];
+$colores = [1 => '#dc2626', 2 => '#ca8a04', 3 => '#16a34a'];
+$fondos  = [1 => '#fee2e2', 2 => '#fef9c3', 3 => '#dcfce7'];
 
+// Validar parámetros
 if (!$id || !in_array($cal, [1, 2, 3])) {
     mostrarError('Enlace inválido o expirado.');
     exit;
 }
 
-$texto  = $textos[$cal];
-$emoji  = $emojis[$cal];
-$accent = $accents[$cal];
+$texto = $textos[$cal];
+$emoji = $emojis[$cal];
+$color = $colores[$cal];
+$fondo = $fondos[$cal];
 
-// Verificar si ya calificó
+// Verificar que el correo existe y no tiene calificación ya
 $ch = curl_init("$SB_URL/rest/v1/correos?id=eq.$id&select=id,calificacion,calificacion_texto&limit=1");
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
@@ -45,19 +48,17 @@ if (empty($rows)) {
 
 $row = $rows[0];
 
+// Si ya calificó, mostrar mensaje de ya respondido
 if (!empty($row['calificacion'])) {
-    $cal_prev    = $row['calificacion'];
-    $texto_prev  = $textos[$cal_prev]  ?? $row['calificacion_texto'];
-    $emoji_prev  = $emojis[$cal_prev]  ?? '✅';
-    $accent_prev = $accents[$cal_prev] ?? '#22c55e';
-    mostrarYaRespondido($texto_prev, $emoji_prev, $accent_prev, $ag);
+    mostrarYaRespondido($textos[$row['calificacion']] ?? $row['calificacion_texto'], $emojis[$row['calificacion']] ?? '');
     exit;
 }
 
-// Guardar calificación
+// Guardar calificación en correos
 $patch = json_encode([
     'calificacion'        => $cal,
     'calificacion_texto'  => $texto,
+    'fecha_calificacion'  => date('c'),
     'encuesta_enviada_at' => date('c'),
 ]);
 $ch = curl_init("$SB_URL/rest/v1/correos?id=eq.$id");
@@ -103,89 +104,65 @@ curl_setopt_array($ch, [
 curl_exec($ch);
 curl_close($ch);
 
-mostrarGracias($emoji, $texto, $accent, $ag);
+// Mostrar página de agradecimiento
+mostrarGracias($emoji, $texto, $color, $fondo, $ag);
 
-// ── Funciones HTML ────────────────────────────────────────────────────
+// ── Funciones de renderizado ──────────────────────────────────────────
 
-function css(): string {
-    return <<<CSS
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Poppins',sans-serif;background:#f0f2f5;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
-    .card{background:#fff;border-radius:20px;padding:40px 48px;max-width:520px;width:100%;box-shadow:0 4px 0 rgba(0,0,0,0.06),0 12px 40px rgba(0,0,0,0.08);text-align:center}
-    .enc-title{font-size:14px;font-weight:700;color:#0f172a;margin-bottom:4px}
-    .enc-sub{font-size:10px;font-weight:600;color:#94a3b8;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:24px}
-    .divider{height:1px;background:#f1f5f9;margin-bottom:20px;margin-top:0}
-    .logo-img{height:40px;object-fit:contain;margin-bottom:20px}
-    .agent-chip{display:inline-flex;align-items:center;gap:10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:99px;padding:8px 18px;margin-bottom:22px}
-    .av{width:28px;height:28px;border-radius:50%;background:#1e3a8a;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex-shrink:0}
-    .ag-label{font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;text-align:left}
-    .ag-name{font-size:12px;font-weight:700;color:#1e293b;text-align:left}
-    .q{font-size:17px;font-weight:700;color:#0f172a;margin-bottom:6px;line-height:1.4}
-    .q-sub{font-size:12px;color:#94a3b8;margin-bottom:28px}
-    .btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:28px}
-    .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:99px;text-decoration:none;border:none;border-bottom:3px solid;background:#f1f5f9;white-space:nowrap;font-family:'Poppins',sans-serif}
-    .btn .em{font-size:18px}
-    .btn .lb{font-size:13px;font-weight:700;color:#334155}
-    .pill{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:99px;border:none;border-bottom:3px solid;background:#f1f5f9;margin-bottom:24px}
-    .pill .em{font-size:18px}
-    .pill .lb{font-size:13px;font-weight:700;color:#334155;font-family:'Poppins',sans-serif}
-    .thanks-title{font-size:19px;font-weight:700;color:#0f172a;margin-bottom:8px}
-    .thanks-sub{font-size:13px;color:#64748b;line-height:1.6;margin-bottom:24px}
-    .footer-enc{font-size:10px;color:#cbd5e1;letter-spacing:.3px}
-CSS;
-}
-
-function mostrarGracias(string $emoji, string $texto, string $accent, string $agente): void {
-    $ag_str = $agente ? "Atendido por <strong>$agente</strong>" : '';
-    $css = css();
+function mostrarGracias(string $emoji, string $texto, string $color, string $fondo, string $agente): void {
+    $ag_str = $agente ? "<p style='font-size:14px;color:#666;margin-top:8px'>Atendido por <strong>" . htmlspecialchars($agente) . "</strong></p>" : '';
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gracias — Tododrogas</title>
-  <style>{$css}</style>
+  <title>Gracias por su calificación — Tododrogas</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #f5f5f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+    .card { background: white; border-radius: 16px; padding: 40px 32px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+    .emoji { font-size: 64px; margin-bottom: 16px; }
+    .badge { display: inline-block; padding: 6px 18px; border-radius: 99px; font-size: 15px; font-weight: bold; background: {$fondo}; color: {$color}; margin-bottom: 16px; }
+    h1 { font-size: 22px; color: #1a1a1a; margin-bottom: 8px; }
+    p { font-size: 15px; color: #555; line-height: 1.5; }
+    .footer { margin-top: 32px; font-size: 12px; color: #aaa; }
+  </style>
 </head>
 <body>
   <div class="card">
-    <img class="logo-img" src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Tododrogas">
-    <div class="thanks-title">¡Gracias por su calificación!</div>
-    <div class="thanks-sub">Su opinión nos ayuda a mejorar la experiencia del servicio.<br>{$ag_str}</div>
-    <div class="pill" style="border-bottom-color:{$accent}">
-      <span class="em">{$emoji}</span><span class="lb">{$texto}</span>
-    </div>
-    <div class="divider"></div>
-    <div class="footer-enc">Tododrogas · Experiencia del Servicio</div>
+    <div class="emoji">{$emoji}</div>
+    <div class="badge">{$texto}</div>
+    <h1>¡Gracias por su calificación!</h1>
+    <p>Su opinión nos ayuda a mejorar la atención en Tododrogas.</p>
+    {$ag_str}
+    <div class="footer">Tododrogas · Experiencia del Servicio</div>
   </div>
 </body>
 </html>
 HTML;
 }
 
-function mostrarYaRespondido(string $texto, string $emoji, string $accent, string $agente): void {
-    $ag_str = $agente ? "Atendido por <strong>$agente</strong>" : '';
-    $css = css();
+function mostrarYaRespondido(string $texto, string $emoji): void {
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ya calificado — Tododrogas</title>
-  <style>{$css}</style>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: white; border-radius: 16px; padding: 40px 32px; max-width: 400px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+    h1 { font-size: 20px; color: #1a1a1a; margin: 16px 0 8px; }
+    p { font-size: 14px; color: #666; }
+  </style>
 </head>
 <body>
   <div class="card">
-    <img class="logo-img" src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Tododrogas">
-    <div class="thanks-title">Ya registramos su calificación</div>
-    <div class="thanks-sub">Usted ya calificó este caso. ¡Gracias por su opinión!<br>{$ag_str}</div>
-    <div class="pill" style="border-bottom-color:{$accent}">
-      <span class="em">{$emoji}</span><span class="lb">{$texto}</span>
-    </div>
-    <div class="divider"></div>
-    <div class="footer-enc">Tododrogas · Experiencia del Servicio</div>
+    <div style="font-size:48px">✅</div>
+    <h1>Ya registramos su calificación</h1>
+    <p>Usted calificó este caso como <strong>{$emoji} {$texto}</strong>.<br>¡Gracias por su opinión!</p>
+    <p style="margin-top:24px;font-size:12px;color:#aaa">Tododrogas · Experiencia del Servicio</p>
   </div>
 </body>
 </html>
@@ -193,70 +170,23 @@ HTML;
 }
 
 function mostrarError(string $msg): void {
-    $css = css();
     echo <<<HTML
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Error — Tododrogas</title>
-  <style>{$css}</style>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f5f5f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: white; border-radius: 16px; padding: 40px 32px; max-width: 400px; text-align: center; box-shadow: 0 4px 24px rgba(0,0,0,.08); }
+  </style>
 </head>
 <body>
   <div class="card">
-    <div class="thanks-title" style="color:#ef4444">⚠️ Enlace inválido</div>
-    <div class="thanks-sub" style="margin-top:8px">{$msg}</div>
-    <div class="divider" style="margin-top:24px"></div>
-    <div class="footer-enc">Tododrogas · Experiencia del Servicio</div>
-  </div>
-</body>
-</html>
-HTML;
-}
-
-// Nota: mostrarEncuesta no se usa en el flujo actual — el usuario llega con cal= ya definido
-// desde el correo. Esta función es para referencia futura si se quiere mostrar la encuesta
-// antes de que el usuario elija (ej: landing sin cal en el URL).
-function mostrarEncuesta(string $id, string $agente): void {
-    $css = css();
-    $base = 'https://tododrogas.online/encuesta.php';
-    $ag_enc = urlencode($agente);
-    echo <<<HTML
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Encuesta de Satisfacción — Tododrogas</title>
-  <style>{$css}</style>
-</head>
-<body>
-  <div class="card">
-    <div class="enc-title">Encuesta de Satisfacción</div>
-    <div class="enc-sub">Experiencia del Servicio</div>
-    <div class="divider"></div>
-    <div class="agent-chip">
-      <div class="av">{$agente[0]}</div>
-      <div>
-        <div class="ag-label">Atendido por</div>
-        <div class="ag-name">{$agente}</div>
-      </div>
-    </div>
-    <div class="q">¿Cómo califica la atención recibida?</div>
-    <div class="q-sub">Su opinión nos toma menos de 5 segundos</div>
-    <div class="btns">
-      <a href="{$base}?id={$id}&cal=1&ag={$ag_enc}" class="btn" style="border-bottom-color:#ef4444">
-        <span class="em">😞</span><span class="lb">Mala</span>
-      </a>
-      <a href="{$base}?id={$id}&cal=2&ag={$ag_enc}" class="btn" style="border-bottom-color:#f59e0b">
-        <span class="em">😐</span><span class="lb">Regular</span>
-      </a>
-      <a href="{$base}?id={$id}&cal=3&ag={$ag_enc}" class="btn" style="border-bottom-color:#22c55e">
-        <span class="em">😊</span><span class="lb">Buena</span>
-      </a>
-    </div>
-    <div class="footer-enc">Tododrogas · Experiencia del Servicio</div>
+    <div style="font-size:48px">⚠️</div>
+    <h1 style="font-size:20px;margin:16px 0 8px;color:#1a1a1a">Enlace inválido</h1>
+    <p style="color:#666;font-size:14px">{$msg}</p>
+    <p style="margin-top:24px;font-size:12px;color:#aaa">Tododrogas · Experiencia del Servicio</p>
   </div>
 </body>
 </html>
