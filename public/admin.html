@@ -1104,7 +1104,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
               <div class="mchart-title">Radicados y encuestas por canal</div>
               <div class="mchart-sub">Barras agrupadas por canal · período seleccionado</div>
             </div>
-            <div class="mchart-body" style="height:220px"><canvas id="chartGlobalRad"></canvas></div>
+            <div style="display:flex;gap:12px;margin-bottom:6px" id="chartGlobalRadLeg"></div>
+            <div class="mchart-body" style="height:210px"><canvas id="chartGlobalRad"></canvas></div>
           </div>
           <div class="mchart-card">
             <div class="mchart-header">
@@ -8508,11 +8509,11 @@ async function loadNovaMetrics(){
     sb(qC('correos?or=(origen.eq.nova_web,origen.eq.nova_td)&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
     sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
     sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?canal=eq.web&select=id,created_at,calificacion&origen=is.null')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?or=(origen.eq.nova_web,origen.eq.nova_td)&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?origen=eq.qr&select=id,created_at,calificacion')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?canal=eq.web&origen=is.null&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?or=(origen.eq.nova_web,origen.eq.nova_td)&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
+    sb(qE('encuestas_satisfaccion?origen=eq.qr&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
     sb(qS('nova_sesiones?or=(origen.eq.nova_web,origen.eq.web,origen.eq.nova_td)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
     sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
     sb(qS('nova_sesiones?origen=eq.nova_bienvenida&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
@@ -8780,8 +8781,25 @@ function renderNovaMetrics(){
     });
   }};
   if(cGR2){
-    Chart.register(_barLabelPlugin);
-    _mCharts.chartGlobalRad=new Chart(cGR2.getContext('2d'),{type:'bar',data:{labels:_gLabels,datasets:[{label:'Radicados',data:_gRads,backgroundColor:'#0a1628',borderRadius:5,borderSkipped:false},{label:'Encuestas',data:_gEncs,backgroundColor:'#1558d4',borderRadius:5,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{mode:'index'}},scales:{y:{beginAtZero:true,ticks:{font:{size:9,family:'Poppins'},color:'#666'},grid:{color:'rgba(0,0,0,.05)'}},x:{ticks:{font:{size:9,family:'Poppins',weight:'600'},color:'#333'},grid:{display:false}}}}});
+    // Legend HTML
+    const _gLegEl=document.getElementById('chartGlobalRadLeg');
+    if(_gLegEl)_gLegEl.innerHTML='<span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#444"><span style="width:10px;height:10px;border-radius:2px;background:#0a1628;display:inline-block"></span>Radicados</span><span style="display:flex;align-items:center;gap:4px;font-size:10px;color:#444"><span style="width:10px;height:10px;border-radius:2px;background:#1558d4;display:inline-block"></span>Encuestas</span>';
+    _mCharts.chartGlobalRad=new Chart(cGR2.getContext('2d'),{type:'bar',data:{labels:_gLabels,datasets:[
+      {label:'Radicados',data:_gRads,backgroundColor:'#0a1628',borderRadius:{topLeft:0,topRight:0,bottomLeft:5,bottomRight:5},borderSkipped:false,stack:'s'},
+      {label:'Encuestas',data:_gEncs,backgroundColor:'#1558d4',borderRadius:{topLeft:5,topRight:5,bottomLeft:0,bottomRight:0},borderSkipped:false,stack:'s'}
+    ]},options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{mode:'index',callbacks:{footer:items=>'Total: '+(items.reduce((a,i)=>a+i.raw,0))}}},
+      scales:{y:{beginAtZero:true,ticks:{font:{size:9,family:'Poppins'},color:'#666'},grid:{color:'rgba(0,0,0,.05)'}},x:{ticks:{font:{size:9,family:'Poppins',weight:'600'},color:'#333'},grid:{display:false}}}
+    },plugins:[{id:'gRadLbls',afterDatasetsDraw(chart){
+      const{ctx}=chart;const meta1=chart.getDatasetMeta(0);const meta2=chart.getDatasetMeta(1);
+      meta2.data.forEach((bar,i)=>{
+        const tot=_gRads[i]+_gEncs[i];if(!tot)return;
+        const tw=ctx.measureText(String(tot)).width;
+        ctx.fillStyle='rgba(255,255,255,.95)';ctx.shadowColor='rgba(0,0,0,.15)';ctx.shadowBlur=4;
+        ctx.beginPath();ctx.roundRect(bar.x-tw/2-5,bar.y-20,tw+10,16,3);ctx.fill();ctx.shadowBlur=0;
+        ctx.fillStyle='#0a1628';ctx.font='600 11px Poppins,sans-serif';ctx.textAlign='center';ctx.fillText(tot,bar.x,bar.y-7);
+      });
+    }}]});
   }
 
   // Donut consolidado radicados + encuestas por canal
@@ -8821,10 +8839,10 @@ function renderNovaMetrics(){
   const encItems=['instalaciones','atencion','tiempos','medicamentos','recomendacion'];
   const encLabels=['🏗️ Instalaciones','👤 Atención','⏱️ Tiempos','💊 Medicamentos','👍 Recomendación'];
   const encProms=encItems.map(k=>{const vals=allEncs.map(e=>parseFloat(e[k]||0)).filter(v=>v>0);return vals.length?parseFloat((vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2)):0;});
-  const encColors=encProms.map(v=>v>=2.5?'rgba(22,163,74,.9)':v>=2?'rgba(245,158,11,.9)':'rgba(220,38,38,.9)');
-  const encBorders=encProms.map(v=>v>=2.5?'#15803d':v>=2?'#d97706':'#b91c1c');
+  const encColors=encProms.map((_,i)=>_BLUES[i]||_BLUES[4]);
+  const encBorders=encProms.map((_,i)=>_BLUES[i]||_BLUES[4]);
    const encResp=encItems.map(k=>allEncs.filter(e=>parseFloat(e[k]||0)>0).length);
-   if(cGEI && allEncs.length){_mCharts.chartGlobalEncItems=new Chart(cGEI.getContext('2d'),{type:'bar',data:{labels:encLabels,datasets:[{data:encProms,backgroundColor:encProms.map(v=>v>=2.5?'#0a1628':v>=2?'#1a3a6b':'#1e4d9e'),borderWidth:0,borderRadius:8,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>i.raw.toFixed(2)+'/3 · '+Math.round(i.raw/3*100)+'%'}}},scales:{x:{min:0,max:3,ticks:{font:{size:9,family:'Poppins'},color:'#666'},grid:{color:'rgba(0,0,0,.05)'}},y:{ticks:{font:{size:10,family:'Poppins',weight:'600'},color:'#333'},grid:{display:false}}}},plugins:[{id:'gEncLbls2',afterDatasetsDraw(chart){const{ctx}=chart;encProms.forEach((v,i)=>{if(!v)return;const bar=chart.getDatasetMeta(0).data[i];const label=v.toFixed(1)+'/3 · '+Math.round(v/3*100)+'%';ctx.fillStyle='#fff';ctx.font='600 10px Poppins,sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(label,bar.x+6,bar.y);});}}]});}
+   if(cGEI && allEncs.length && encProms.some(v=>v>0)){_mCharts.chartGlobalEncItems=new Chart(cGEI.getContext('2d'),{type:'bar',data:{labels:encLabels,datasets:[{data:encProms,backgroundColor:_BLUES.slice(0,5),borderWidth:0,borderRadius:8,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>i.raw.toFixed(2)+'/3 · '+Math.round(i.raw/3*100)+'% ('+encResp[i.dataIndex]+' resp.)'}}},scales:{x:{min:0,max:3,ticks:{font:{size:9,family:'Poppins'},color:'#666'},grid:{color:'rgba(0,0,0,.05)'}},y:{ticks:{font:{size:11,family:'Poppins',weight:'600'},color:'#222'},grid:{display:false}}}},plugins:[{id:'gEncLbls2',afterDatasetsDraw(chart){const{ctx}=chart;encProms.forEach((v,i)=>{if(!v)return;const bar=chart.getDatasetMeta(0).data[i];const label=v.toFixed(1)+'/3  '+Math.round(v/3*100)+'%  ('+encResp[i]+' resp.)';const tw=ctx.measureText(label).width;const inside=bar.x-bar.base>tw+20;ctx.fillStyle=inside?'#fff':'#0a1628';ctx.font='600 10px Poppins,sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillText(label,inside?bar.x-tw-10:bar.x+6,bar.y);});}}]});} else if(cGEI){const ctx2=cGEI.getContext('2d');ctx2.fillStyle='#aaa';ctx2.font='13px Poppins,sans-serif';ctx2.textAlign='center';ctx2.textBaseline='middle';ctx2.fillText('Sin encuestas con ítems en el período',cGEI.width/2,cGEI.height/2);}
    else if(cGEI){const ctx2=cGEI.getContext('2d');ctx2.fillStyle='#888';ctx2.font='13px Poppins,sans-serif';ctx2.textAlign='center';ctx2.fillText('Sin encuestas en el período',cGEI.width/2,cGEI.height/2);}
 
   // Tabla global
