@@ -818,29 +818,85 @@ sbPost('historial_eventos', [
 
 log_msg("=== SYNC END v3.1 === " . json_encode($stats));
 
-// ══ CIERRE AUTOMÁTICO ENCUESTAS WA (timeout 1 hora) ══════════════════
+// ══ GESTIÓN ENCUESTAS WHATSAPP ════════════════════════════════════════
 try {
-    $hace1h = date('c', strtotime('-1 hour'));
+    $ahora    = date('c');
+    $hace45m  = date('c', strtotime('-45 minutes'));
+    $hace60m  = date('c', strtotime('-60 minutes'));
+    $hace1h   = date('c', strtotime('-1 hour'));
 
-    // 1. Cerrar sesiones en esperando_encuesta con encuesta_enviada_at > 1h
-    $vencidas = sbGet("wa_sesiones?estado=eq.esperando_encuesta&encuesta_enviada_at=lt.{$hace1h}&select=telefono");
+    // ── 1. Recordatorio a los 45 min (solo una vez) ──────────────
+    $pendRec = sbGet(
+        "wa_sesiones?estado=eq.esperando_encuesta" .
+        "&encuesta_enviada_at=lt.{$hace45m}" .
+        "&encuesta_enviada_at=gte.{$hace60m}" .
+        "&recordatorio_enviado=is.null" .
+        "&select=telefono,nombre"
+    );
+    if (!empty($pendRec)) {
+        $metaToken   = getenv('META_TOKEN') ?: '';
+        $metaPhoneId = getenv('META_PHONE_NUMBER_ID') ?: '';
+        foreach ($pendRec as $s) {
+            $tel  = $s['telefono'] ?? '';
+            $nom  = $s['nombre']   ?? 'Usuario';
+            if (!$tel) continue;
+            // Enviar recordatorio
+            if ($metaToken && $metaPhoneId) {
+                $msg = "¿Nos regalas un momento, *{$nom}*? Solo toca *1️⃣*, *2️⃣* o *3️⃣* para calificar tu atención de hoy 😊";
+                $payload = json_encode([
+                    'messaging_product' => 'whatsapp',
+                    'to'   => ltrim($tel, '+'),
+                    'type' => 'text',
+                    'text' => ['body' => $msg],
+                ]);
+                $ch = curl_init("https://graph.facebook.com/v19.0/{$metaPhoneId}/messages");
+                curl_setopt_array($ch, [
+                    CURLOPT_POST           => true,
+                    CURLOPT_POSTFIELDS     => $payload,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_HTTPHEADER     => [
+                        "Authorization: Bearer {$metaToken}",
+                        "Content-Type: application/json",
+                    ],
+                ]);
+                curl_exec($ch);
+                curl_close($ch);
+            }
+            // Marcar recordatorio enviado
+            sbPatch('wa_sesiones', "telefono=eq." . urlencode($tel), [
+                'recordatorio_enviado' => $ahora,
+                'updated_at'           => $ahora,
+            ]);
+            log_msg("  [recordatorio-wa] Enviado a: {$tel}");
+        }
+    }
+
+    // ── 2. Cerrar encuestas vencidas (+1h sin respuesta) ─────────
+    $vencidas = sbGet(
+        "wa_sesiones?estado=eq.esperando_encuesta" .
+        "&encuesta_enviada_at=lt.{$hace1h}" .
+        "&select=telefono"
+    );
     if (!empty($vencidas)) {
         foreach ($vencidas as $v) {
             $tel = $v['telefono'] ?? '';
             if (!$tel) continue;
             sbPatch('wa_sesiones', "telefono=eq." . urlencode($tel), [
-                'estado'              => 'cerrado',
-                'calificacion'        => null,
-                'calificacion_texto'  => 'Sin calificación',
-                'updated_at'          => date('c'),
+                'estado'             => 'cerrado',
+                'calificacion_texto' => 'Sin calificación',
+                'updated_at'         => $ahora,
             ]);
-            log_msg("  [encuesta-wa] Cerrado sin respuesta: $tel");
+            log_msg("  [encuesta-wa] Cerrado sin respuesta: {$tel}");
+            $stats['auto_cerrados']++;
         }
-        $stats['auto_cerrados'] += count($vencidas);
     }
 
-    // 2. Cerrar sesiones nova/escalado/esperando con inactividad > 1h
-    $inactivas = sbGet("wa_sesiones?estado=in.(nova,escalado,esperando)&updated_at=lt.{$hace1h}&select=telefono,estado");
+    // ── 3. Cerrar sesiones inactivas +1h (nova/escalado/esperando) ─
+    $inactivas = sbGet(
+        "wa_sesiones?estado=in.(nova,escalado,esperando)" .
+        "&updated_at=lt.{$hace1h}" .
+        "&select=telefono,estado"
+    );
     if (!empty($inactivas)) {
         foreach ($inactivas as $s) {
             $tel = $s['telefono'] ?? '';
@@ -848,14 +904,15 @@ try {
             sbPatch('wa_sesiones', "telefono=eq." . urlencode($tel), [
                 'estado'             => 'cerrado',
                 'calificacion_texto' => 'Sin calificación',
-                'updated_at'         => date('c'),
+                'updated_at'         => $ahora,
             ]);
-            log_msg("  [inactividad-wa] Cerrado por inactividad: $tel ({$s['estado']})");
+            log_msg("  [inactividad-wa] Cerrado: {$tel} ({$s['estado']})");
+            $stats['auto_cerrados']++;
         }
-        $stats['auto_cerrados'] += count($inactivas);
     }
+
 } catch (Exception $e) {
-    log_msg("  [encuesta-wa] ERROR: " . $e->getMessage());
+    log_msg("  [encuestas-wa] ERROR: " . $e->getMessage());
 }
 // ═════════════════════════════════════════════════════════════════════
 
