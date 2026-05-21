@@ -360,12 +360,22 @@ function ruleForPage(text){
     return 'FEV';
   if(t.includes('ADRES') || t.includes('BDUA') ||
      t.includes('BASE DE DATOS ÚNICA DE AFILIADOS') ||
-     t.includes('FECHA DE AFILIACIÓN EFECTIVA') || t.includes('MIPRES'))
+     t.includes('BASE DE DATOS UNICA DE AFILIADOS') ||
+     t.includes('FECHA DE AFILIACIÓN EFECTIVA') ||
+     t.includes('FECHA DE AFILIACION EFECTIVA') || t.includes('MIPRES'))
     return 'PDE';
   if(t.includes('MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO') ||
+     t.includes('MEDICAMENTOS - ORDEN DE DIRECCIONAMIENTO') ||
      t.includes('ORDEN DE DIRECCIONAMIENTO') ||
      t.includes('SERVICIOS DIRECCIONADOS') ||
-     (t.includes('ENTIDAD RESPONSABLE DEL PAGO') && t.includes('INFORMACIÓN PRESTADOR')))
+     t.includes('ENTIDAD RESPONSABLE DEL PAGO') ||
+     t.includes('INFORMACIÓN DE LA TRANSACCIÓN') ||
+     t.includes('INFORMACION DE LA TRANSACCION') ||
+     t.includes('PAGOS COMPARTIDOS') ||
+     (t.includes('SALUD TOTAL') && t.includes('EPS002')) ||
+     (t.includes('SALUD TOTAL') && t.includes('PRESTADOR')) ||
+     (t.includes('FECHA VENCIMIENTO') && t.includes('NO. SOLICITUD')) ||
+     (t.includes('INFORMACIÓN PRESTADOR') || t.includes('INFORMACION PRESTADOR')))
     return 'DFV';
   if(t.includes('ACTA DE ENTREGA') || /\*D\d{14}\*/.test(t) ||
      t.includes('NOMBRE DE PERSONA QUE RECIBE') || t.includes('VALOR RECAUDADO'))
@@ -563,32 +573,34 @@ async function processAll(){
         setStep(2);
         log(fileObj.name+' · pág '+p+'/'+pdfDoc.numPages);
 
-        // 1. Extraer texto OCR de esta página
-        var ocrText=await extractPageText(pdfDoc,p);
+        var prefix, method, imgB64=null;
 
-        // 2. Intentar regla determinista
-        var rulePrefix=ruleForPage(ocrText);
-        var prefix,method,imgB64=null;
+        // 1. Extraer texto OCR de esta página
+        var ocrText = await extractPageText(pdfDoc,p);
+
+        // 2. Intentar regla determinista sobre el texto
+        var rulePrefix = ruleForPage(ocrText);
 
         if(rulePrefix){
-          prefix=rulePrefix; method='rule';
+          prefix = rulePrefix; method = 'rule';
         } else {
-          // 3. Renderizar página y llamar a GPT-4o
+          // 3. Sin texto o sin match → GPT-4o Vision (imagen)
           setStep(3);
-          imgB64=await renderPage(pdfDoc,p);
+          imgB64 = await renderPage(pdfDoc,p);
           log('GPT-4o: '+fileObj.name+' pág '+p+'…');
           try{
-            var cls=await classifyPage(imgB64,ocrText,p,pdfDoc.numPages,fileObj.name);
-            prefix=cls.prefix; method='ai';
+            var cls = await classifyPage(imgB64,ocrText,p,pdfDoc.numPages,fileObj.name);
+            prefix = cls.prefix; method = 'ai';
           }catch(e){
-            prefix='UNK'; method='err';
+            prefix = 'UNK'; method = 'err';
             log('Error GPT-4o pág '+p+': '+e.message);
           }
         }
 
         pageMap[k].push({
           srcFile:fileObj.name, srcPage:p,
-          prefix, method, ocrText,
+          prefix, method,
+          ocrText: typeof ocrText !== 'undefined' ? ocrText : '',
           imgB64: imgB64||null
         });
 
