@@ -54,6 +54,7 @@ jobs:
             public/whatsapp-webhook.php
             public/nova-wa.php
             public/encuesta.php
+            public/clasificador-proxy.php
           )
           for f in "${PHP_FILES[@]}"; do
             [ -f "$f" ] || { echo "⚠️  $f no existe — omitiendo"; continue; }
@@ -70,11 +71,11 @@ jobs:
             sed -i "s|__ADMIN_PASS__|${{ secrets.ADMIN_PASS }}|g"                   "$f"
             sed -i "s|__USUARIO_GESTOR__|${{ secrets.USUARIO_GESTOR }}|g"           "$f"
             sed -i "s|__PASS_GESTOR__|${{ secrets.PASS_GESTOR }}|g"                 "$f"
-            sed -i "s|__TOKEN_WHATSAPP__|${{ secrets.TOKEN_WHATSAPP }}|g"          "$f"
-            sed -i "s|__WA_VERIFY_TOKEN__|${{ secrets.WA_VERIFY_TOKEN }}|g"        "$f"
-            sed -i "s|__APP_SECRET__|${{ secrets.APP_SECRET }}|g"                  "$f"
-            sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_KEY }}|g"            "$f"
-            sed -i "s|__NOVA_TOKEN__|${{ secrets.NOVA_TOKEN }}|g"                "$f"
+            sed -i "s|__TOKEN_WHATSAPP__|${{ secrets.TOKEN_WHATSAPP }}|g"           "$f"
+            sed -i "s|__WA_VERIFY_TOKEN__|${{ secrets.WA_VERIFY_TOKEN }}|g"         "$f"
+            sed -i "s|__APP_SECRET__|${{ secrets.APP_SECRET }}|g"                   "$f"
+            sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_KEY }}|g"             "$f"
+            sed -i "s|__NOVA_TOKEN__|${{ secrets.NOVA_TOKEN }}|g"                   "$f"
             echo "✅ $f inyectado"
           done
 
@@ -169,7 +170,7 @@ jobs:
             ERRORS=$((ERRORS+1))
           fi
           PLACEHOLDERS='__SB_URL__\|__SB_KEY__\|__OPENAI_KEY__\|__AZURE_TENANT_ID__\|__AZURE_CLIENT_ID__\|__AZURE_CLIENT_SECRET__\|__GRAPH_USER_ID__\|__ADMIN_TOKEN__\|__INBOX_FOLDER_ID__\|__ANTHROPIC_KEY__'
-          for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php public/sincronizar-correos.php public/nova-td-respuesta.php public/nova-proxy.php public/nova-consulta.php public/cargar-plantillas.php public/validar-paciente.php public/admin-buscar-paciente.php public/admin-buscar-medicamento.php public/whatsapp-webhook.php; do
+          for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php public/sincronizar-correos.php public/nova-td-respuesta.php public/nova-proxy.php public/nova-consulta.php public/cargar-plantillas.php public/validar-paciente.php public/admin-buscar-paciente.php public/admin-buscar-medicamento.php public/whatsapp-webhook.php public/clasificador-proxy.php; do
             [ -f "$f" ] || continue
             if grep -q "$PLACEHOLDERS" "$f"; then
               echo "❌ Placeholders sin reemplazar en $f"
@@ -195,8 +196,6 @@ jobs:
           source:   "public/"
           target:   /var/www/pqr/
           strip_components: 1
-
-
 
       # ── 7f. GENERAR webhook-meta/.env ───────────────────────────
       - name: Generar webhook-meta/.env
@@ -301,7 +300,7 @@ jobs:
             ERRORS=0
             for f in /var/www/pqr/radicar-pqr.php /var/www/pqr/sincronizar-correos.php \
                      /var/www/pqr/nova-td-respuesta.php /var/www/pqr/login.php \
-                     /var/www/pqr/whatsapp-webhook.php; do
+                     /var/www/pqr/whatsapp-webhook.php /var/www/pqr/clasificador-proxy.php; do
               [ -f "$f" ] || continue
               OUT=$(php -l "$f" 2>&1)
               if echo "$OUT" | grep -q "No syntax errors"; then
@@ -311,7 +310,7 @@ jobs:
                 ERRORS=$((ERRORS+1))
               fi
             done
-            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__ADMIN_TOKEN__\|__ANTHROPIC_KEY__' \
+            FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__ADMIN_TOKEN__\|__OPENAI_KEY__' \
               /var/www/pqr/*.php 2>/dev/null || true)
             if [ -n "$FOUND" ]; then
               echo "❌ Placeholders en: $FOUND"
