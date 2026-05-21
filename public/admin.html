@@ -9441,100 +9441,77 @@ async function exportQrExcel() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// EXPORT NOVA TD → NOVA_Sesiones + NOVA_Encuestas_y_Radicados
+// EXPORT NOVA TD → NOVA_TD — hoja única
 // ═══════════════════════════════════════════════════════════════════════
 async function exportNovaExcel() {
   const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad } = await _mExportInit();
   const wb = XLSX.utils.book_new();
   const desde = D.desde||'inicio', hasta = D.hasta||'hoy';
 
-  const allSes = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])];
+  // Excluir pruebas (cedula 1152712313)
+  const _esPrueba = r => (r.cedula||'')==='1152712313' || (r.es_vip===true && (r.cedula||'')==='1152712313');
 
-  // ── HOJA 1: NOVA_Sesiones ────────────────────────────────────────────
-  const h_ses = allSes.map(s => {
+  const allSes = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])]
+    .filter(s => !_esPrueba(s));
+
+  // Índice encuestas por cédula+fecha para cruzar con sesiones
+  const novaEncs = [...encByCanal('nova_web'),...encByCanal('nova_directo'),...encByCanal('nova_td')]
+    .filter(e => !_esPrueba(e));
+  const novaRads = [...(D.radNovaWeb||[]),...(D.radNovaDir||[])]
+    .filter(r => !_esPrueba(r));
+
+  // Índice: cédula → {enc, rad} para cruzar con sesiones
+  const idxEnc = {};
+  novaEncs.forEach(e => {
+    const k = (e.cedula||'')+'_'+fmtD(e.created_at);
+    if (!idxEnc[k]) idxEnc[k] = e;
+  });
+  const idxRad = {};
+  novaRads.forEach(r => {
+    const re = enrichRad(r);
+    const k = (re.cedula||'')+'_'+fmtD(re.received_at);
+    if (!idxRad[k]) idxRad[k] = re;
+  });
+
+  // ── ÚNICA HOJA: NOVA_TD ──────────────────────────────────────────────
+  const h_nova = allSes.map(s => {
     const menus = (s.menu_elegido||'').split(',').map(m=>m.trim()).filter(Boolean);
-    const sede = getSede(s) || s.municipio || '';
+    const sede  = (getSede(s)||s.municipio||'').replace(/&middot;/g,'·').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ');
+    const fecha = fmtD(s.created_at);
+    const k     = (s.cedula||'')+'_'+fecha;
+    const enc   = idxEnc[k] || null;
+    const rad   = idxRad[k] || null;
+    const cal   = enc ? (enc.calificacion||0) : 0;
+
     return {
-      'Fecha':          fmtD(s.created_at),
+      'Fecha':          fecha,
       'Hora':           fmtH(s.created_at),
       'Canal':          s.origen==='nova_directo'?'Nova directo':s.origen==='nova_qr'?'Nova QR':'Nova (enlace)',
-      'Sede':           sede.replace(/&middot;/g,'·').replace(/&amp;/g,'&').replace(/&nbsp;/g,' '),
+      'Sede':           sede,
       'Municipio':      s.municipio || '',
       'EPS':            s.eps_paciente || s.eps || '',
       'Cédula':         s.cedula || '',
       'Nombre':         s.nombre || '',
       'Menú_Elegido':   menus.length ? menus.join(', ') : '',
-      'Pregunta_Libre': (s.preguntas_libres||0) > 0 ? 'Sí' : 'No',
+      'Pregunta_Libre': (s.preguntas_libres||0)>0 ? 'Sí' : 'No',
       'Pasó_Asesor':    (s.motivo_cierre||'').toLowerCase().includes('asesor') ? 'Sí' : 'No',
       'Motivo_Cierre':  s.motivo_cierre || 'sin_registro',
+      // Radicado vinculado
+      'Radicó':         rad ? 'Sí' : 'No',
+      'Ticket':         rad ? rad.ticket_id||'' : '',
+      'Tipo_PQR':       rad ? tipoLabel(rad.tipo_pqr) : '',
+      'Sentimiento':    rad ? sentLabel(rad.sentimiento) : '',
+      'Estado':         rad ? rad.estado||'' : '',
+      // Encuesta vinculada
+      'Encuestó':       enc ? 'Sí' : 'No',
+      'Calificacion':   enc ? cal||'' : '',
+      'Resultado':      enc ? (cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':cal>0?'INSATISFACTORIO':'') : '',
     };
   });
-  const ws_ses = XLSX.utils.json_to_sheet(h_ses.length ? h_ses : [{'Sin_datos':'Sin sesiones Nova en el período'}]);
-  ws_ses['!cols'] = [{wch:12},{wch:8},{wch:14},{wch:34},{wch:18},{wch:18},{wch:13},{wch:28},{wch:28},{wch:14},{wch:13},{wch:16}];
-  XLSX.utils.book_append_sheet(wb, ws_ses, 'NOVA_Sesiones');
 
-  // ── HOJA 2: NOVA_Encuestas_y_Radicados ──────────────────────────────
-  const novaEncs  = [...encByCanal('nova_web'), ...encByCanal('nova_directo'), ...encByCanal('nova_td')];
-  const novaRads  = [...(D.radNovaWeb||[]), ...(D.radNovaDir||[])];
-
-  const h_encrad = [];
-
-  // Encuestas
-  novaEncs.forEach(e => {
-    const cal = e.calificacion || 0;
-    const sede = (e.sede_nombre||'').replace(/&middot;/g,'·').replace(/&amp;/g,'&');
-    h_encrad.push({
-      'Fecha':       fmtD(e.created_at),
-      'Hora':        fmtH(e.created_at),
-      'Tipo':        'Encuesta',
-      'Canal':       e.origen==='nova_directo'?'Nova directo':'Nova (enlace)',
-      'Sede':        sede,
-      'Ciudad':      e.sede_ciudad || '',
-      'EPS':         e.eps || getEps(e.cedula||'', {}),
-      'Cédula':      e.cedula || '',
-      'Nombre':      e.nombre || '',
-      'ID':          e.ticket_id || '',
-      'Tipo_PQR':    '',
-      'Sentimiento': '',
-      'Prioridad':   '',
-      'Estado':      '',
-      'Calificacion': cal || '',
-      'Resultado':   cal>=3?'SATISFACTORIO':cal>=2?'NEUTRO':cal>0?'INSATISFACTORIO':'',
-      'Comentario':  e.comentario || '',
-    });
-  });
-
-  // Radicados
-  novaRads.forEach(r => {
-    const re = enrichRad(r);
-    const sede = getSede(re).replace(/&middot;/g,'·').replace(/&amp;/g,'&');
-    h_encrad.push({
-      'Fecha':       fmtD(re.received_at),
-      'Hora':        fmtH(re.received_at),
-      'Tipo':        'Radicado',
-      'Canal':       re.origen==='nova_directo'?'Nova directo':'Nova (enlace)',
-      'Sede':        sede,
-      'Ciudad':      re.ciudad_paciente || '',
-      'EPS':         re.eps_nombre || getEps(re.cedula||'', {}),
-      'Cédula':      re.cedula || '',
-      'Nombre':      re.nombre_solicitud || _parseNombreBody(re.body_content) || re.nombre || '',
-      'ID':          re.ticket_id || '',
-      'Tipo_PQR':    tipoLabel(re.tipo_pqr),
-      'Sentimiento': sentLabel(re.sentimiento),
-      'Prioridad':   re.prioridad || '',
-      'Estado':      re.estado || '',
-      'Calificacion': '',
-      'Resultado':   '',
-      'Comentario':  '',
-    });
-  });
-
-  // Ordenar por fecha
-  h_encrad.sort((a,b) => new Date(a.Fecha) - new Date(b.Fecha));
-
-  const ws_er = XLSX.utils.json_to_sheet(h_encrad.length ? h_encrad : [{'Sin_datos':'Sin encuestas ni radicados Nova en el período'}]);
-  ws_er['!cols'] = [{wch:12},{wch:8},{wch:10},{wch:14},{wch:34},{wch:18},{wch:18},{wch:13},{wch:28},{wch:20},{wch:13},{wch:13},{wch:10},{wch:16},{wch:12},{wch:16},{wch:40}];
-  XLSX.utils.book_append_sheet(wb, ws_er, 'NOVA_Encuestas_y_Radicados');
+  const ws = XLSX.utils.json_to_sheet(h_nova.length ? h_nova : [{'Sin_datos':'Sin sesiones Nova en el período'}]);
+  ws['!cols'] = [{wch:12},{wch:8},{wch:14},{wch:34},{wch:18},{wch:18},{wch:13},{wch:28},{wch:28},{wch:14},{wch:13},{wch:16},{wch:8},{wch:18},{wch:13},{wch:13},{wch:16},{wch:9},{wch:12},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws, 'NOVA_TD');
 
   XLSX.writeFile(wb, `NovaTD_${desde}_${hasta}.xlsx`);
   showToast('Excel Nova exportado ✓','success');
