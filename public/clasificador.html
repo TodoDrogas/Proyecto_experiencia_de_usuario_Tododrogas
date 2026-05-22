@@ -152,11 +152,13 @@ input[type=file]{display:none}
 .fsec-chev.open{transform:rotate(90deg)}
 .fsec-body{padding:8px;display:flex;flex-direction:column;gap:5px}
 .fsec-body.hide{display:none}
+.fsec-body.loading-state{padding:10px 12px;display:flex;align-items:center;gap:8px;
+  font-size:10px;color:var(--amber);font-family:'IBM Plex Mono',monospace}
 
 /* SOURCE PDF ROW */
 .src-row{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
-  overflow:hidden}
-.src-hd{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border)}
+  overflow:hidden;min-height:32px}
+.src-hd{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border);min-height:32px}
 .src-ico{font-size:12px;flex-shrink:0;color:var(--txt3)}
 .src-name{font-size:11px;color:var(--txt2);font-family:'IBM Plex Mono',monospace;
   flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -825,10 +827,10 @@ async function classifyPage(imgB64,ocrText,pageNum,totalPages,filename){
 var OBLIGATORIOS = ['CRC','DFV','FEV','OPF'];
 
 function folderNeedsReview(k){
+  if(!folders[k] || folders[k].status!=='done') return false;
   var outs = outputs[k] || {};
   var missingObl = OBLIGATORIOS.some(pfx => !outs[pfx]);
-  var hasErrors  = (folders[k] && (folders[k].failedFiles||[]).length > 0)
-                || (folders[k] && folders[k].status==='error');
+  var hasErrors  = (folders[k].failedFiles||[]).length > 0;
   return missingObl || hasErrors;
 }
 
@@ -957,6 +959,18 @@ function buildFolderSection(k,expanded){
     hd.querySelector('.fsec-chev').classList.toggle('open');
     setActive(k);
   });
+
+  // Si está procesando, mostrar estado de carga compacto en lugar de filas vacías
+  if(st==='processing'){
+    body.className='fsec-body'+(expanded?'':' hide')+' loading-state';
+    var spinEl=document.createElement('div');spinEl.className='spin';
+    body.appendChild(spinEl);
+    var loadTxt=document.createElement('span');
+    var doneP=pm.filter(p=>p.prefix&&p.prefix!=='').length;
+    loadTxt.textContent='Analizando… '+doneP+'/'+fd.files.reduce((a,f)=>a+(f.pageCount||0),0)+' páginas';
+    body.appendChild(loadTxt);
+    sec.appendChild(body);return sec;
+  }
 
   // Source PDFs con sus páginas mapeadas
   fd.files.forEach(fileObj=>{
@@ -1099,7 +1113,7 @@ async function downloadAll(){
       });
       // ── PDFs que fallaron al abrirse → incluir originales sin tocar ──
       for(var ff of (fd.failedFiles||[])){
-        sub.file(ff.name, ff.bytes.slice(0)); count++;
+        sub.file('ORIGINAL_'+ff.name, ff.bytes.slice(0)); count++;
         log('Incluido original sin procesar: '+ff.name);
       }
     } else {
