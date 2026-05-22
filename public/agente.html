@@ -3335,6 +3335,67 @@ async function toggleReply(modo) {
     _attachAdd(this.files); this.value='';
   });
   document.getElementById('replyEditor').focus();
+
+  // ── Al reenviar: precargar adjuntos del correo original ──────────────
+  if (modo === 'forward') {
+    (async () => {
+      try {
+        const correoId = email.id;
+        const msgId    = email.message_id || email.raw?.id || email.raw?.internetMessageId || '';
+        const userId   = window.GRAPH_USER_ID || '';
+
+        // 1. Intentar desde Supabase primero (adjuntos entrantes guardados)
+        let adjsSB = [];
+        try {
+          adjsSB = await sb(`adjuntos?correo_id=eq.${correoId}&direccion=eq.entrante&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido`) || [];
+        } catch(e) { /* silencioso */ }
+
+        if (adjsSB.length > 0) {
+          for (const a of adjsSB) {
+            if (!a.storage_url || !a.nombre) continue;
+            try {
+              const res = await fetch(a.storage_url);
+              if (!res.ok) continue;
+              const blob = await res.blob();
+              const file = new File([blob], a.nombre, { type: a.tipo_contenido || blob.type || 'application/octet-stream' });
+              if (!_attachedFiles.has(file.name)) {
+                _attachedFiles.set(file.name, { file, id: 'a' + (++_attachCounter) });
+              }
+            } catch(e) { console.warn('[forward-adj] storage fetch error:', a.nombre, e.message); }
+          }
+          _attachRender();
+          return; // Si encontró en Supabase no necesita ir a Graph
+        }
+
+        // 2. Fallback: Graph API
+        if (!msgId || !userId) return;
+        const token = await getGraphToken();
+        if (!token) return;
+        const rAdj = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments?$select=id,name,contentType,size,isInline`,
+          { headers: { 'Authorization': 'Bearer ' + token } }
+        );
+        if (!rAdj.ok) return;
+        const aData = await rAdj.json();
+        const visibles = (aData.value || []).filter(a => !a.isInline);
+        for (const a of visibles) {
+          try {
+            const proxyUrl = '/adj-proxy.php?url=' + encodeURIComponent(
+              `https://graph.microsoft.com/v1.0/users/${userId}/messages/${msgId}/attachments/${a.id}/$value`
+            );
+            const res = await fetch(proxyUrl);
+            if (!res.ok) continue;
+            const blob = await res.blob();
+            const file = new File([blob], a.name, { type: a.contentType || blob.type || 'application/octet-stream' });
+            if (!_attachedFiles.has(file.name)) {
+              _attachedFiles.set(file.name, { file, id: 'a' + (++_attachCounter) });
+            }
+          } catch(e) { console.warn('[forward-adj] graph fetch error:', a.name, e.message); }
+        }
+        _attachRender();
+      } catch(e) { console.warn('[forward-adj] error general:', e.message); }
+    })();
+  }
   // Activar autocompletado en campos Para y CC
   // Activar autocompletado (sin delay — los inputs ya existen en el DOM)
   _acInit(document.getElementById('replyTo'));
