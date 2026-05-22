@@ -667,9 +667,8 @@ async function renderPage(pdfDoc,pageNum){
 //  PROMPT POR PÁGINA — enseñamos exactamente qué es cada documento
 // ══════════════════════════════════════════════
 function buildPagePrompt(filename,pageNum,totalPages,ocrText){
-  // Si el OCR está vacío, puede ser PDF regenerado por pdf-lib (sin texto embebido)
   var ocrNote = ocrText.trim().length < 10
-    ? '\nNOTA IMPORTANTE: El OCR no extrajo texto de esta página. Esto ocurre cuando el PDF fue regenerado por software (pdf-lib). Analiza ÚNICAMENTE la imagen visual para clasificar.'
+    ? '\nNOTA IMPORTANTE: El OCR no extrajo texto de esta página (PDF escaneado o regenerado sin texto embebido). Debes clasificar ÚNICAMENTE analizando la imagen visual. Busca títulos, logos, secciones y estructura visual para determinar el tipo.'
     : '';
 
   return `Eres un experto clasificador de documentos del sistema de salud colombiano.
@@ -697,12 +696,9 @@ DFV — Orden de Direccionamiento / Autorización (Salud Total EPS):
     6. PAGOS COMPARTIDOS → Tipo Recaudo Cuota Moderadora, Valor 0, Semanas Cotizadas
     7. INFORMACIÓN DE LA PERSONA QUE DIRECCIONA → Nombre DiegoBalS o VanessaEL
     8. OBSERVACIONES → texto "Señor Usuario no sobreescribir..."
-  VERSIÓN A (digital con texto): fondo blanco, tipografía clara, texto seleccionable.
-  VERSIÓN B (escaneada): Logo grande "SaludTotal EPS-S" esquina sup-izq + número "No.XXXXXXXX"
-    esquina sup-der, mismas secciones pero en imagen escaneada/impresa.
-  VERSIÓN C (regenerada por pdf-lib, SIN texto OCR): visualmente igual a Versión A pero
-    el OCR no extrae texto porque fue procesado por software. Si la imagen muestra el formato
-    de ORDEN DE DIRECCIONAMIENTO con las secciones descritas → es DFV aunque no haya texto OCR.
+  VERSIÓN A (digital con texto): fondo blanco, tipografía clara.
+  VERSIÓN B (escaneada): Logo grande "SaludTotal EPS-S" esquina sup-izq + número "No.XXXXXXXX".
+  VERSIÓN C (sin texto OCR): visualmente igual a Versión A, OCR vacío por pdf-lib.
   REGLA: Si ves MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO + secciones de Salud Total → SIEMPRE DFV.
 
 FEV — Factura Electrónica de Venta (Tododrogas):
@@ -717,20 +713,22 @@ OPF — Orden Médica / Fórmula (Hospital/IPS/Clínica):
     Tabla con columnas CODIGO / MEDICAMENTO / DOSIS / VIA / CANTIDAD.
     Firma manuscrita del médico. "Esta orden es valida Hasta: Mar.07/2026".
   VERSIÓN B (Promotora Clínica Zona Franca de Urabá S.A.S., NIT 900390423-9):
-    Encabezado centrado "PROMOTORA CLINICA ZONA FRANCA DE URABA S.A.S." + número NIT.
-    Título grande centrado "FORMULA MÉDICA" con subtítulo "EVOLUCION".
-    Secciones: DATOS PERSONALES / DATOS DE AFILIACIÓN / DATOS DEL INGRESO.
-    Tabla "MEDICAMENTOS POS" con: Medicamento (código), Concentración, Unidad,
-    Vía Administración, Cantidad, Duración.
-    Firma digital electrónica al pie con nombre del médico, especialidad y RM.
-    Texto "Declaramos que la Clínica Panamericana adoptó un sistema tecnológico..."
-    "LICENCIADO A: [PROMOTORA CLINICA ZONA FRANCA...]"
+    MUY IMPORTANTE: Este documento puede venir ESCANEADO sin texto OCR extraíble.
+    Señales visuales clave (busca en la imagen aunque el OCR esté vacío):
+    • Encabezado centrado en negrilla: "PROMOTORA CLINICA ZONA FRANCA DE URABA S.A.S."
+    • Número NIT centrado: "900390423"
+    • Título grande centrado: "FORMULA MÉDICA" o "FORMULA MEDICA"
+    • Subtítulo: "EVOLUCION"
+    • Secciones: DATOS PERSONALES / DATOS DE AFILIACIÓN / DATOS DEL INGRESO
+    • Tabla "MEDICAMENTOS POS" con medicamentos, concentración, unidad, vía, cantidad, duración
+    • Firma digital manuscrita al pie del médico
+    • Texto al pie: "Declaramos que la Clínica Panamericana adoptó un sistema tecnológico..."
+    • Última línea: "LICENCIADO A: [PROMOTORA CLINICA ZONA FRANCA DE URABA S.A.S. - PANAMERICANA]"
+    → Si ves CUALQUIERA de estas señales → es OPF aunque el OCR esté vacío.
   VERSIÓN C (cualquier otra IPS/hospital):
     Cualquier documento con título "FORMULA MEDICA", "ORDEN MEDICA", "PRESCRIPCIÓN MÉDICA"
     o "MEDICAMENTOS POS" emitido por una entidad de salud (hospital, clínica, IPS).
-    Siempre tiene nombre del médico, diagnóstico, medicamentos con dosis y vía.
-  REGLA: Si ves "FORMULA MÉDICA" o "ORDEN MEDICA" o "MEDICAMENTOS POS" emitido
-    por hospital/clínica/IPS (NO por Tododrogas ni Salud Total EPS) → siempre OPF.
+  REGLA: Si ves "FORMULA MÉDICA" o "MEDICAMENTOS POS" de hospital/clínica/IPS → OPF.
 
 PDE — ADRES / Validación de derechos / MIPRES:
   Logo ADRES. "Base de Datos Única de Afiliados - BDUA". Tabla con Estado ACTIVO,
@@ -740,15 +738,17 @@ PDE — ADRES / Validación de derechos / MIPRES:
 Reglas absolutas (en orden de prioridad):
 1. Si contiene CUFE → FEV
 2. Si contiene logo ADRES o BDUA → PDE
-3. Si ves título MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO (con o sin texto OCR) → DFV
+3. Si ves título MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO (con o sin OCR) → DFV
 4. Si ves logo SaludTotal + número No.XXXXXXXX → DFV
 5. Si dice ACTA DE ENTREGA o código *D18...* → CRC
-6. Si tiene tabla MEDICAMENTO/DOSIS/VIA de hospital → OPF
-7. Si el OCR está vacío y la imagen muestra secciones de Salud Total EPS → DFV
-8. Si ves "FORMULA MÉDICA" o "MEDICAMENTOS POS" de hospital/clínica/IPS → OPF
+6. Si ves encabezado PROMOTORA CLINICA ZONA FRANCA o FORMULA MÉDICA + EVOLUCION → OPF
+7. Si tiene tabla MEDICAMENTO/DOSIS/VIA de hospital/clínica → OPF
+8. Si el OCR está vacío y la imagen muestra secciones de Salud Total EPS → DFV
+9. Si el OCR está vacío y la imagen muestra FORMULA MÉDICA o clínica/hospital → OPF
+10. Usa UNK SOLO si genuinamente no puedes determinar el tipo después de analizar todo.
 
 Responde SOLO con JSON exacto sin markdown:
-{"prefix":"DFV","reason":"Orden de direccionamiento Salud Total EPS con secciones ENTIDAD RESPONSABLE, SERVICIOS DIRECCIONADOS y PAGOS COMPARTIDOS","confidence":0.99}`;
+{"prefix":"OPF","reason":"Fórmula médica Promotora Clínica Zona Franca de Urabá con tabla MEDICAMENTOS POS y firma digital","confidence":0.99}`;
 }
 
 // ══════════════════════════════════════════════
