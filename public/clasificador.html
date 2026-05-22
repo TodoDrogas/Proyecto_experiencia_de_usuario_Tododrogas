@@ -204,6 +204,19 @@ input[type=file]{display:none}
 .warn-row{display:flex;align-items:center;gap:6px;padding:5px 10px;
   background:rgba(255,171,64,.07);border-top:1px solid rgba(255,171,64,.15);
   font-size:9px;color:var(--amber);font-family:'IBM Plex Mono',monospace}
+/* REVISAR badge */
+.revisar-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(255,82,82,.12);border:1px solid rgba(255,82,82,.35);
+  border-radius:5px;padding:2px 8px;
+  font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:700;
+  color:var(--red);letter-spacing:.5px;flex-shrink:0
+}
+.revisar-banner{
+  display:flex;align-items:center;gap:8px;padding:7px 11px;
+  background:rgba(255,82,82,.07);border-top:1px solid rgba(255,82,82,.2);
+  font-size:10px;color:var(--red);font-family:'IBM Plex Mono',monospace;font-weight:600
+}
 
 /* WORK FOOT */
 .work-foot{padding:9px 13px;background:var(--bg2);border-top:1px solid var(--border);
@@ -531,13 +544,16 @@ function renderSidebar(){
     var pm=pageMap[k]||[];
     var totalPages=pm.length;
     var donePages=pm.filter(p=>p.prefix&&p.prefix!=='UNK').length;
+    var needsRev = st==='done' && folderNeedsReview(k);
+    var dotClass = needsRev ? 'proc' : dc; // amber dot if needs review
+    var dispName = needsRev ? k+'<span style="color:var(--red);font-size:9px"> _REVISAR</span>' : k;
     return`<div class="frow${activeFolder===k?' active':''}" onclick="setActive('${esc(k)}')">
-      <span class="frow-ico">${st==='done'?'📂':'📁'}</span>
+      <span class="frow-ico">${st==='done'?(needsRev?'⚠️':'📂'):'📁'}</span>
       <div class="frow-info">
-        <div class="frow-name">${k}</div>
+        <div class="frow-name">${dispName}</div>
         <div class="frow-meta">${fd.files.length} PDF${fd.files.length!==1?'s':''} · ${totalPages} págs</div>
       </div>
-      <div class="dot ${dc}"></div>
+      <div class="dot ${dotClass}"></div>
     </div>`;
   }).join('');
 }
@@ -584,14 +600,17 @@ async function processAll(){
         try{
           pdfDoc = await pdfjsLib.getDocument({data:fileObj.bytes.slice(0)}).promise;
         }catch(pdfErr){
-          log('⚠ PDF inválido, omitiendo: '+fileObj.name);
-          toast('PDF inválido omitido: '+fileObj.name,'inf',4000);
+          log('⚠ PDF inválido, se incluirá original: '+fileObj.name);
+          toast('PDF inválido — se incluye sin procesar: '+fileObj.name,'inf',4000);
+          // Guardar referencia para incluirlo como original en el ZIP
+          if(!folders[k].failedFiles) folders[k].failedFiles=[];
+          folders[k].failedFiles.push({name:fileObj.name, bytes:fileObj.bytes});
           var skipCount = fileObj.pageCount||1;
           for(var sp=1;sp<=skipCount;sp++){
             pageMap[k].push({srcFile:fileObj.name,srcPage:sp,prefix:'UNK',method:'err',ocrText:'',imgB64:null});
           }
           progDone+=skipCount;
-          setProgress(progDone,progTotal,'Saltando PDF inválido…');
+          setProgress(progDone,progTotal,'PDF inválido incluido como original…');
           continue;
         }
 
@@ -800,6 +819,34 @@ async function classifyPage(imgB64,ocrText,pageNum,totalPages,filename){
 }
 
 // ══════════════════════════════════════════════
+//  DETECTAR SI UNA CARPETA NECESITA REVISIÓN
+//  Obligatorios: CRC, DFV, FEV, OPF (PDE es opcional)
+// ══════════════════════════════════════════════
+var OBLIGATORIOS = ['CRC','DFV','FEV','OPF'];
+
+function folderNeedsReview(k){
+  var outs = outputs[k] || {};
+  var missingObl = OBLIGATORIOS.some(pfx => !outs[pfx]);
+  var hasErrors  = (folders[k] && (folders[k].failedFiles||[]).length > 0)
+                || (folders[k] && folders[k].status==='error');
+  return missingObl || hasErrors;
+}
+
+function folderMissing(k){
+  var outs = outputs[k] || {};
+  var missing = OBLIGATORIOS.filter(pfx => !outs[pfx]);
+  var failed  = (folders[k] && folders[k].failedFiles)||[];
+  if(failed.length) missing.push('⚠ '+failed.length+' PDF(s) con error');
+  return missing;
+}
+
+function folderDisplayName(k){
+  if(folders[k] && folders[k].status==='done' && folderNeedsReview(k))
+    return k+'_REVISAR';
+  return k;
+}
+
+// ══════════════════════════════════════════════
 //  CONSTRUIR PDFs DE SALIDA POR CARPETA
 //  Agrupa páginas del mismo tipo y genera un PDF por tipo
 // ══════════════════════════════════════════════
@@ -833,7 +880,14 @@ async function buildOutputs(k){
         newDoc.addPage(copied);
         addedPages++;
       }catch(pageErr){
-        log('⚠ Pág '+pg.srcPage+' de '+pg.srcFile+' omitida: '+pageErr.message);
+        log('⚠ Pág '+pg.srcPage+' de '+pg.srcFile+' no se pudo copiar: '+pageErr.message);
+        // Registrar el archivo original para incluirlo en el ZIP sin procesar
+        if(!folders[k].failedFiles) folders[k].failedFiles=[];
+        var alreadyRegistered = folders[k].failedFiles.some(ff=>ff.name===pg.srcFile);
+        if(!alreadyRegistered && fileObj){
+          folders[k].failedFiles.push({name:fileObj.name, bytes:fileObj.bytes});
+          log('⚠ '+fileObj.name+' se incluirá como original en el ZIP');
+        }
       }
     }
 
@@ -879,15 +933,25 @@ function buildFolderSection(k,expanded){
   var hd=document.createElement('div');
   hd.className='fsec-hd';
   var doneCount=Object.keys(outs).filter(p=>p!=='UNK').length;
+  var needsRev2 = st==='done' && folderNeedsReview(k);
+  var missing2 = needsRev2 ? folderMissing(k) : [];
   hd.innerHTML=`
-    <div class="dot ${dotCls}" style="flex-shrink:0"></div>
-    <span class="fsec-name">${k}</span>
+    <div class="dot ${needsRev2?'proc':dotCls}" style="flex-shrink:0"></div>
+    <span class="fsec-name">${k}${needsRev2?'<span class="revisar-badge">⚠ _REVISAR</span>':''}</span>
     <span class="fsec-meta">${fd.files.length} PDFs · ${pm.length} págs → ${doneCount} archivos</span>
     <span class="fsec-chev${expanded?' open':''}">›</span>`;
   sec.appendChild(hd);
 
   var body=document.createElement('div');
   body.className='fsec-body'+(expanded?'':' hide');
+
+  // ── Banner REVISAR con faltantes ──
+  if(needsRev2 && missing2.length){
+    var revBanner=document.createElement('div');
+    revBanner.className='revisar-banner';
+    revBanner.innerHTML='⚠ Faltan obligatorios: <strong style="margin-left:5px">'+missing2.join(', ')+'</strong> &nbsp;→&nbsp; Carpeta marcada como _REVISAR en el ZIP';
+    body.appendChild(revBanner);
+  }
   hd.addEventListener('click',()=>{
     body.classList.toggle('hide');
     hd.querySelector('.fsec-chev').classList.toggle('open');
@@ -1017,7 +1081,9 @@ async function downloadAll(){
   var count = 0;
 
   for(var k of allFolders){
-    var sub  = zip.folder(k);
+    // Determinar nombre de carpeta en el ZIP
+    var zipFolderName = (folders[k].status==='done' && folderNeedsReview(k)) ? k+'_REVISAR' : k;
+    var sub  = zip.folder(zipFolderName);
     var outs = outputs[k] || {};
     var fd   = folders[k];
 
@@ -1031,6 +1097,11 @@ async function downloadAll(){
           sub.file(outs[pfx].name, outs[pfx].bytes); count++;
         }
       });
+      // ── PDFs que fallaron al abrirse → incluir originales sin tocar ──
+      for(var ff of (fd.failedFiles||[])){
+        sub.file('ORIGINAL_'+ff.name, ff.bytes.slice(0)); count++;
+        log('Incluido original sin procesar: '+ff.name);
+      }
     } else {
       // Carpeta sin procesar — originales intactos
       for(var f of fd.files){ sub.file(f.name, f.bytes.slice(0)); count++; }
