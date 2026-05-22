@@ -292,7 +292,7 @@ input[type=file]{display:none}
   </div>
 
   <label class="dz" id="dz" for="finput">
-    <input type="file" id="finput" webkitdirectory multiple onchange="handleUpload(event)">
+    <input type="file" id="finput" webkitdirectory multiple>
     <div class="dz-ico">📂</div>
     <div class="dz-t">Subir carpeta raíz</div>
     <div class="dz-s">Todas las subcarpetas TDNE<br>con los PDFs mezclados</div>
@@ -609,11 +609,17 @@ async function handleUpload(ev){
   log('Listo — '+Object.keys(folders).length+' carpetas · '+pdfs.length+' PDFs · '+zips.length+' ZIPs');
 }
 
-var dz=document.getElementById('dz');
-dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
-dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
-dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');
-  handleUpload({target:{files:e.dataTransfer.files,value:''}});});
+var dz;
+window.addEventListener('DOMContentLoaded',function(){
+  dz=document.getElementById('dz');
+  var finput=document.getElementById('finput');
+  if(finput) finput.addEventListener('change', handleUpload);
+  if(!dz)return;
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');
+    handleUpload({target:{files:e.dataTransfer.files,value:''}});});
+});
 
 // ══════════════════════════════════════════════
 //  SIDEBAR
@@ -1239,7 +1245,7 @@ function clearAll(){
   updateBtns();updateStats();log('listo');
 }
 
-updateBtns();
+window.addEventListener('DOMContentLoaded', function(){ updateBtns(); });
 
 // ── GALAXY BACKGROUND ──
 (function(){
