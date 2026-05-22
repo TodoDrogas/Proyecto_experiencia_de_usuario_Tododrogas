@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DOCAI — Separador Inteligente</title>
+<title>NOVA TD — Separador Inteligente</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
@@ -232,10 +232,10 @@ input[type=file]{display:none}
 <div class="app">
 
 <div class="topbar">
-  <div class="logo">DOCAI <em>//</em> Separador</div>
+  <div class="logo">NOVA TD <em>//</em> Separador</div>
   <div id="gstats" style="display:flex;gap:4px"></div>
   <div class="topbar-sp"></div>
-  <div class="model-tag">GPT-4o · página por página · separar + unir + renombrar</div>
+  <div class="model-tag">NOVA TD Vision · página por página · separar + unir + renombrar</div>
 </div>
 
 <div class="body">
@@ -285,7 +285,7 @@ input[type=file]{display:none}
     <div class="w-flow">
       <div class="w-box"><div class="w-pfx">PDF</div><div class="w-desc">3 PDFs mezclados</div></div>
       <div class="w-arrow">→</div>
-      <div class="w-box"><div class="w-pfx">👁</div><div class="w-desc">GPT-4o por página</div></div>
+      <div class="w-box"><div class="w-pfx">👁</div><div class="w-desc">NOVA Vision por página</div></div>
       <div class="w-arrow">→</div>
       <div class="w-box"><div class="w-pfx">✂️</div><div class="w-desc">Separa y agrupa</div></div>
       <div class="w-arrow">→</div>
@@ -305,7 +305,7 @@ input[type=file]{display:none}
         <span class="step-sep">›</span>
         <div class="step" id="s2"><div class="step-n">2</div>OCR + Reglas</div>
         <span class="step-sep">›</span>
-        <div class="step" id="s3"><div class="step-n">3</div>GPT-4o por página</div>
+        <div class="step" id="s3"><div class="step-n">3</div>NOVA Vision por página</div>
         <span class="step-sep">›</span>
         <div class="step" id="s4"><div class="step-n">4</div>Separar + unir</div>
         <span class="step-sep">›</span>
@@ -332,6 +332,13 @@ input[type=file]{display:none}
 <div class="toast" id="toast"></div>
 
 <script>
+// ── GUARDIA DE SESIÓN ──
+(function(){
+  var role = '';
+  try{ role = sessionStorage.getItem('pqr_role')||''; }catch(e){}
+  if(!role){ window.location.replace('login_clasificador.html'); }
+})();
+
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 var {PDFDocument} = PDFLib;
@@ -589,16 +596,16 @@ async function processAll(){
         if(rulePrefix){
           prefix = rulePrefix; method = 'rule';
         } else {
-          // 3. Sin texto o sin match → GPT-4o Vision (imagen)
+          // 3. Sin texto o sin match → NOVA TD Vision (imagen)
           setStep(3);
           imgB64 = await renderPage(pdfDoc,p);
-          log('GPT-4o: '+fileObj.name+' pág '+p+'…');
+          log('NOVA Vision: '+fileObj.name+' pág '+p+'…');
           try{
             var cls = await classifyPage(imgB64,ocrText,p,pdfDoc.numPages,fileObj.name);
             prefix = cls.prefix; method = 'ai';
           }catch(e){
             prefix = 'UNK'; method = 'err';
-            log('Error GPT-4o pág '+p+': '+e.message);
+            log('Error NOVA Vision pág '+p+': '+e.message);
           }
         }
 
@@ -884,7 +891,7 @@ function buildFolderSection(k,expanded){
         var pfx=pg.prefix||'UNK';
         var tag=document.createElement('span');
         tag.className='ptag ptag-'+pfx.toLowerCase();
-        var methodMark=pg.method==='rule'?'⚡':pg.method==='ai'?'🤖':'';
+        var methodMark=pg.method==='rule'?'⚡':pg.method==='ai'?'✦':'';
         tag.textContent=methodMark+'p'+(i+1)+':'+pfx;
         pWrap.appendChild(tag);
       });
@@ -978,7 +985,7 @@ async function downloadAll(){
   var allFolders = Object.keys(folders);
   if(!allFolders.length){ toast('Sin archivos','err'); return; }
   var anyDone = allFolders.some(k => folders[k].status==='done');
-  if(!anyDone){ toast('Procesa primero con IA','err'); return; }
+  if(!anyDone){ toast('Procesa primero con NOVA','err'); return; }
 
   log('Generando ZIP completo…');
   var zip = new JSZip();
