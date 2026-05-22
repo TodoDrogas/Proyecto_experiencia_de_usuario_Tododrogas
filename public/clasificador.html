@@ -13,6 +13,8 @@
     if(!role||!user){ window.location.replace('login_clasificador.html'); }
   }catch(e){ window.location.replace('login_clasificador.html'); }
 })();
+// Proxy para onchange inline — llama a la función real cuando esté lista
+function handleUpload(ev){ window._pendingUpload=ev; if(window._handleUploadReady) window._handleUploadReady(ev); }
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
@@ -301,12 +303,12 @@ input[type=file]{display:none}
     <span class="pill" id="fcount">0</span>
   </div>
 
-  <div class="dz" id="dz" onclick="document.getElementById('finput').click()">
-    <input type="file" id="finput" webkitdirectory multiple style="display:none">
+  <label class="dz" id="dz" for="finput">
+    <input type="file" id="finput" webkitdirectory multiple onchange="handleUpload(event)">
     <div class="dz-ico">📂</div>
     <div class="dz-t">Subir carpeta raíz</div>
     <div class="dz-s">Todas las subcarpetas TDNE<br>con los PDFs mezclados</div>
-  </div>
+  </label>
 
   <div class="flist" id="flist"></div>
 
@@ -556,7 +558,7 @@ function sid(s){return s.replace(/[^a-zA-Z0-9]/g,'_')}
 // ══════════════════════════════════════════════
 //  UPLOAD — PDFs para procesar + ZIPs para conservar
 // ══════════════════════════════════════════════
-async function handleUpload(ev){
+async function _handleUploadReal(ev){
   var allFiles = Array.from(ev.target.files);
   ev.target.value = '';
 
@@ -619,14 +621,18 @@ async function handleUpload(ev){
   log('Listo — '+Object.keys(folders).length+' carpetas · '+pdfs.length+' PDFs · '+zips.length+' ZIPs');
 }
 
+// Registrar la función real y procesar cualquier upload pendiente
+window._handleUploadReady = _handleUploadReal;
+if(window._pendingUpload) _handleUploadReal(window._pendingUpload);
+
 var dz = document.getElementById('dz');
 var finput = document.getElementById('finput');
-if(finput) finput.addEventListener('change', handleUpload);
+if(finput) finput.addEventListener('change', _handleUploadReal);
 if(dz){
   dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
   dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
   dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');
-    handleUpload({target:{files:e.dataTransfer.files,value:''}});});
+    _handleUploadReal({target:{files:e.dataTransfer.files,value:''}});});
 }
 
 // ══════════════════════════════════════════════
