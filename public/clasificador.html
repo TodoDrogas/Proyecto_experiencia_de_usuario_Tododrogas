@@ -575,59 +575,76 @@ async function processAll(){
     renderSidebar();
     if(activeFolder===k)renderResults();
 
-    // ── Por cada PDF de la carpeta ──────────────────────────
-    for(var fileObj of folders[k].files){
-      log('Procesando: '+fileObj.name+' ('+fileObj.pageCount+' págs)');
-      var pdfDoc=await pdfjsLib.getDocument({data:fileObj.bytes.slice(0)}).promise;
+    try{
+      // ── Por cada PDF de la carpeta ──────────────────────────
+      for(var fileObj of folders[k].files){
+        log('Procesando: '+fileObj.name+' ('+fileObj.pageCount+' págs)');
 
-      // ── Por cada página ─────────────────────────────────
-      for(var p=1;p<=pdfDoc.numPages;p++){
-        setStep(2);
-        log(fileObj.name+' · pág '+p+'/'+pdfDoc.numPages);
-
-        var prefix, method, imgB64=null;
-
-        // 1. Extraer texto OCR de esta página
-        var ocrText = await extractPageText(pdfDoc,p);
-
-        // 2. Intentar regla determinista sobre el texto
-        var rulePrefix = ruleForPage(ocrText);
-
-        if(rulePrefix){
-          prefix = rulePrefix; method = 'rule';
-        } else {
-          // 3. Sin texto o sin match → NOVA TD Vision (imagen)
-          setStep(3);
-          imgB64 = await renderPage(pdfDoc,p);
-          log('NOVA Vision: '+fileObj.name+' pág '+p+'…');
-          try{
-            var cls = await classifyPage(imgB64,ocrText,p,pdfDoc.numPages,fileObj.name);
-            prefix = cls.prefix; method = 'ai';
-          }catch(e){
-            prefix = 'UNK'; method = 'err';
-            log('Error NOVA Vision pág '+p+': '+e.message);
+        var pdfDoc;
+        try{
+          pdfDoc = await pdfjsLib.getDocument({data:fileObj.bytes.slice(0)}).promise;
+        }catch(pdfErr){
+          log('⚠ PDF inválido, omitiendo: '+fileObj.name);
+          toast('PDF inválido omitido: '+fileObj.name,'inf',4000);
+          var skipCount = fileObj.pageCount||1;
+          for(var sp=1;sp<=skipCount;sp++){
+            pageMap[k].push({srcFile:fileObj.name,srcPage:sp,prefix:'UNK',method:'err',ocrText:'',imgB64:null});
           }
+          progDone+=skipCount;
+          setProgress(progDone,progTotal,'Saltando PDF inválido…');
+          continue;
         }
 
-        pageMap[k].push({
-          srcFile:fileObj.name, srcPage:p,
-          prefix, method,
-          ocrText: typeof ocrText !== 'undefined' ? ocrText : '',
-          imgB64: imgB64||null
-        });
+        // ── Por cada página ─────────────────────────────────
+        for(var p=1;p<=pdfDoc.numPages;p++){
+          setStep(2);
+          log(fileObj.name+' · pág '+p+'/'+pdfDoc.numPages);
 
-        progDone++;
-        setProgress(progDone,progTotal,'Analizando '+progDone+'/'+progTotal+' páginas…');
-        if(activeFolder===k)renderResults();
+          var prefix, method, imgB64=null;
+
+          var ocrText = await extractPageText(pdfDoc,p);
+          var rulePrefix = ruleForPage(ocrText);
+
+          if(rulePrefix){
+            prefix = rulePrefix; method = 'rule';
+          } else {
+            setStep(3);
+            imgB64 = await renderPage(pdfDoc,p);
+            log('NOVA Vision: '+fileObj.name+' pág '+p+'…');
+            try{
+              var cls = await classifyPage(imgB64,ocrText,p,pdfDoc.numPages,fileObj.name);
+              prefix = cls.prefix; method = 'ai';
+            }catch(e){
+              prefix = 'UNK'; method = 'err';
+              log('Error NOVA Vision pág '+p+': '+e.message);
+            }
+          }
+
+          pageMap[k].push({
+            srcFile:fileObj.name, srcPage:p,
+            prefix, method,
+            ocrText: typeof ocrText !== 'undefined' ? ocrText : '',
+            imgB64: imgB64||null
+          });
+
+          progDone++;
+          setProgress(progDone,progTotal,'Analizando '+progDone+'/'+progTotal+' páginas…');
+          if(activeFolder===k)renderResults();
+        }
       }
+
+      // ── PASO 4: Agrupar y generar PDFs de salida ────────────
+      setStep(4);
+      log('Generando PDFs de salida para '+k+'…');
+      await buildOutputs(k);
+      folders[k].status='done';
+
+    }catch(folderErr){
+      folders[k].status='error';
+      log('⚠ Error en carpeta '+k+': '+folderErr.message);
+      toast('Error en carpeta '+k+' — continuando con las demás','inf',5000);
     }
 
-    // ── PASO 4: Agrupar y generar PDFs de salida ────────────
-    setStep(4);
-    log('Generando PDFs de salida para '+k+'…');
-    await buildOutputs(k);
-
-    folders[k].status='done';
     renderSidebar();
     if(activeFolder===k)renderResults();
     updateStats();
@@ -801,24 +818,32 @@ async function buildOutputs(k){
   outputs[k]={};
 
   for(var pfx of Object.keys(groups)){
+    if(pfx==='UNK') continue; // no generar PDF de no identificados
     var pageIdxs=groups[pfx];
     var newDoc=await PDFDocument.create();
+    var addedPages=0;
 
     for(var idx of pageIdxs){
       var pg=pages[idx];
       var fileObj=folders[k].files.find(f=>f.name===pg.srcFile);
       if(!fileObj)continue;
-      var srcDoc=await PDFDocument.load(fileObj.bytes.slice(0));
-      var [copied]=await newDoc.copyPages(srcDoc,[pg.srcPage-1]);
-      newDoc.addPage(copied);
+      try{
+        var srcDoc=await PDFDocument.load(fileObj.bytes.slice(0),{ignoreEncryption:true});
+        var [copied]=await newDoc.copyPages(srcDoc,[pg.srcPage-1]);
+        newDoc.addPage(copied);
+        addedPages++;
+      }catch(pageErr){
+        log('⚠ Pág '+pg.srcPage+' de '+pg.srcFile+' omitida: '+pageErr.message);
+      }
     }
 
+    if(addedPages===0) continue; // no guardar PDFs vacíos
     var pdfBytes=await newDoc.save();
     var outName=pfx+'_'+k+'.pdf';
     outputs[k][pfx]={
       name:outName,
       bytes:pdfBytes,
-      pages:pageIdxs.length,
+      pages:addedPages,
       prefix:pfx
     };
   }
