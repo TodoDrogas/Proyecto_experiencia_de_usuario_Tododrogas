@@ -2,968 +2,1330 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Consulta de Radicado · Tododrogas</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DOCAI — Separador Inteligente</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="config.js" onerror="console.warn('config.js no cargó')"></script>
 <style>
-:root{
-  --ink:#0a0e1a;--ink2:#3a4258;--ink3:#8892a4;
-  --bg:#f2f4f8;--surface:#ffffff;--border:#dde1eb;
-  --blue:#2563eb;--blue-d:#1d4ed8;--blue-glow:rgba(37,99,235,.22);
-  --cyan:#00c4e8;--cyan-dim:rgba(0,196,232,.13);
-  --green:#16a34a;--red:#dc2626;--yellow:#d97706;--orange:#ea580c;
-  --shadow:0 4px 24px rgba(10,14,26,.12),0 1px 4px rgba(10,14,26,.06);
-}
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;font-family:'Poppins',sans-serif}
-body{background:var(--ink);display:flex;flex-direction:row;height:100dvh;overflow:hidden;position:relative;}
-#bg-canvas{position:fixed;inset:0;z-index:0;pointer-events:none;}
+:root{
+  --bg:#f5f7f5;--bg2:#ffffff;--bg3:#f0f4f1;--bg4:#e8ede9;--bg5:#dde5de;
+  --border:#dde8de;--border2:#c8d8c9;
+  --txt:#1a2e1b;--txt2:#4a6b4c;--txt3:#8aa88c;
+  --green:#00a651;--green2:#008f45;--gbg:rgba(0,166,81,.07);
+  --blue:#2563eb;--bbg:rgba(37,99,235,.08);
+  --amber:#d97706;--abg:rgba(217,119,6,.09);
+  --red:#dc2626;--rbg:rgba(220,38,38,.08);
+  --purple:#7c3aed;--pbg:rgba(124,58,237,.08);
+  --r:6px;--r2:10px
+}
+html,body{height:100%;font-family:'Poppins',sans-serif;background:var(--bg);color:var(--txt);overflow:hidden}
+.app{display:flex;flex-direction:column;height:100dvh}
 
-/* ── LEFT PANEL ── */
-.left-panel{
-  flex:1;position:relative;z-index:1;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:clamp(16px,3vh,48px) clamp(20px,4vw,52px);overflow:hidden;height:100dvh;
-}
-.left-panel::before{
-  content:'';position:absolute;width:680px;height:680px;top:-180px;left:-160px;
-  background:radial-gradient(circle,rgba(37,99,235,.2) 0%,transparent 68%);
-  animation:orb1 14s ease-in-out infinite alternate;pointer-events:none;
-}
-.left-panel::after{
-  content:'';position:absolute;width:460px;height:460px;bottom:-120px;right:-80px;
-  background:radial-gradient(circle,rgba(0,196,232,.12) 0%,transparent 65%);
-  animation:orb2 18s ease-in-out infinite alternate;pointer-events:none;
-}
-@keyframes orb1{from{transform:translate(0,0) scale(1);}to{transform:translate(70px,50px) scale(1.18);}}
-@keyframes orb2{from{transform:translate(0,0);}to{transform:translate(-50px,-35px) scale(1.12);}}
-.left-grid{
-  position:absolute;inset:0;pointer-events:none;
-  background-image:linear-gradient(rgba(0,196,232,.03) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(0,196,232,.03) 1px,transparent 1px);
-  background-size:56px 56px;
-  mask-image:radial-gradient(ellipse 72% 72% at 50% 50%,black 40%,transparent 100%);
-}
-.scan-line{
-  position:absolute;left:0;right:0;height:1px;
-  background:linear-gradient(90deg,transparent,rgba(0,196,232,.25),transparent);
-  animation:scan 9s linear infinite;pointer-events:none;
-}
-@keyframes scan{0%{top:-2%;opacity:0;}8%{opacity:1;}92%{opacity:1;}100%{top:102%;opacity:0;}}
-.left-content{position:relative;z-index:2;max-width:clamp(300px,85%,540px);text-align:center;width:100%;}
-.sigi-badge{
-  display:inline-flex;align-items:center;gap:8px;
-  border-radius:8px;padding:5px 14px;margin-bottom:clamp(6px,1vh,12px);
-  font-family:'DM Mono',monospace;font-size:10px;font-weight:500;
-  letter-spacing:2px;color:var(--cyan);backdrop-filter:blur(8px);
-  background:rgba(0,196,232,.08);border:1px solid rgba(0,196,232,.2);
-}
-.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--cyan);
-  box-shadow:0 0 8px var(--cyan);animation:pulse 2s infinite;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.left-headline{
-  font-size:clamp(22px,3.2vw,42px);font-weight:800;line-height:1.12;
-  color:#fff;margin-bottom:clamp(4px,0.8vh,10px);letter-spacing:-.5px;
-}
-.left-headline .hl{
-  background:linear-gradient(135deg,var(--blue) 0%,var(--cyan) 100%);
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-}
-.left-sub{font-size:clamp(11px,1.3vh,13px);color:rgba(255,255,255,.45);margin-bottom:clamp(8px,1.5vh,20px);font-weight:400;}
+/* TOPBAR */
+.topbar{height:54px;display:flex;align-items:center;gap:14px;padding:0 20px;
+  background:#fff;border-bottom:2px solid var(--green);flex-shrink:0;
+  box-shadow:0 2px 12px rgba(0,166,81,.08)}
+.topbar::after{display:none}
+.logo-img{height:28px;object-fit:contain;flex-shrink:0}
+.logo-sep{width:1px;height:20px;background:var(--border2);flex-shrink:0}
+.logo-tag{font-family:'DM Mono',monospace;font-size:10px;font-weight:500;
+  color:var(--green);letter-spacing:2px;text-transform:uppercase;
+  background:var(--gbg);border:1px solid rgba(0,166,81,.2);
+  border-radius:20px;padding:3px 10px}
+.topbar-sp{flex:1}
+.model-tag{font-family:'DM Mono',monospace;font-size:10px;color:var(--txt3);
+  background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:3px 10px}
+.gstat{font-family:'DM Mono',monospace;font-size:9px;padding:2px 8px;
+  border-radius:20px;border:1px solid var(--border2);color:var(--txt3);background:var(--bg3)}
+.gstat.on{border-color:rgba(0,166,81,.3);color:var(--green);background:var(--gbg)}
 
-/* Stats */
-.stats-row{display:flex;gap:8px;justify-content:center;margin-bottom:clamp(6px,1.2vh,18px);}
-.stat-box{
-  background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);
-  border-radius:10px;padding:clamp(6px,1vh,12px) clamp(10px,1.5vw,18px);text-align:center;
-}
-.stat-val{font-size:clamp(13px,1.8vh,20px);font-weight:800;color:#fff;font-family:'DM Mono',monospace;line-height:1;}
-.stat-lbl{font-size:clamp(8px,1vh,10px);color:rgba(255,255,255,.35);letter-spacing:1px;text-transform:uppercase;margin-top:2px;}
+/* BODY */
+.body{display:flex;flex:1;overflow:hidden}
 
-/* Info cards */
-.info-chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;}
-.chip{
-  display:inline-flex;align-items:center;gap:6px;
-  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
-  border-radius:20px;padding:6px 14px;font-size:11px;color:rgba(255,255,255,.6);
-}
-.chip-dot{width:5px;height:5px;border-radius:50%;box-shadow:0 0 5px currentColor;}
-.chip-dot.blue{background:var(--blue);color:var(--blue);}
+/* SIDEBAR */
+.sb{width:290px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden}
+.sb-hd{padding:10px 13px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.sb-lbl{font-size:10px;font-weight:500;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--txt3);font-family:'DM Mono',monospace}
+.pill{font-family:'DM Mono',monospace;font-size:10px;padding:2px 8px;
+  border-radius:20px;background:var(--bg5);color:var(--txt2);border:1px solid var(--border2)}
 
-/* Carrusel frases consulta */
-.carousel-slide-consulta{
-  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);
-  border-radius:14px;padding:16px 20px;text-align:center;
-  animation:slideInC .5s cubic-bezier(.16,1,.3,1);
-}
-@keyframes slideInC{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
-.carousel-icon-c{font-size:28px;margin-bottom:8px;display:block;}
-.carousel-text-c{font-size:13px;color:rgba(200,215,255,.8);line-height:1.5;}
-.carousel-dots-c{display:flex;gap:5px;justify-content:center;margin-top:10px;}
-.cdot-c{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.2);}
-.cdot-c.active{width:20px;border-radius:4px;background:linear-gradient(90deg,var(--blue),var(--cyan));}
-.chip-dot.cyan{background:var(--cyan);color:var(--cyan);}
-.chip-dot.green{background:#16a34a;color:#16a34a;}
+/* DROP */
+.dz{margin:10px;border:1px dashed var(--border2);border-radius:var(--r2);
+  padding:18px 12px;text-align:center;cursor:pointer;transition:all .18s;background:var(--bg3)}
+.dz:hover,.dz.drag{border-color:var(--green);background:var(--gbg)}
+.dz-ico{font-size:22px;margin-bottom:5px;opacity:.4}
+.dz-t{font-size:13px;font-weight:500}
+.dz-s{font-size:10px;color:var(--txt3);margin-top:3px;line-height:1.8;
+  font-family:'DM Mono',monospace}
+input[type=file]{display:none}
 
-/* ── RIGHT PANEL ── */
-.right-panel{
-  width:50%;flex-shrink:0;position:relative;z-index:1;
-  background:var(--surface);
-  display:flex;flex-direction:column;align-items:stretch;
-  padding:clamp(14px,2.5vh,32px) clamp(16px,2.5vw,40px);
-  box-shadow:8px 0 48px rgba(10,14,26,.18);
-  overflow-y:auto;height:100dvh;
-}
-.right-panel::before{
-  content:'';position:absolute;top:0;left:0;right:0;height:3px;
-  background:linear-gradient(90deg,var(--blue),var(--cyan),#7c3aed);
-}
-.panel-logo{margin-bottom:clamp(8px,1.5vh,20px);width:100%;text-align:center;}
-.panel-logo img{height:clamp(24px,4vh,40px);object-fit:contain;}
+/* FOLDER LIST */
+.flist{flex:1;overflow-y:auto;padding:4px}
+.flist::-webkit-scrollbar{width:3px}
+.flist::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.fempty{text-align:center;padding:24px 10px;opacity:.25}
+.fempty-ico{font-size:20px;margin-bottom:5px}
+.fempty-txt{font-size:10px;color:var(--txt3);font-family:'DM Mono',monospace}
+.frow{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:var(--r);
+  margin-bottom:2px;cursor:pointer;border:1px solid transparent;transition:all .13s}
+.frow:hover{background:var(--bg3);border-color:var(--border)}
+.frow.active{background:var(--bg4);border-color:var(--border2)}
+.frow-ico{font-size:13px;flex-shrink:0}
+.frow-info{flex:1;min-width:0}
+.frow-name{font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frow-meta{font-size:9px;color:var(--txt3);font-family:'DM Mono',monospace;margin-top:1px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--border2);flex-shrink:0}
+.dot.ok{background:var(--green)}
+.dot.proc{background:var(--amber);animation:pulse 1.1s infinite}
+.dot.err{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
 
-/* Search */
-.panel-title{font-size:clamp(14px,2vh,20px);font-weight:700;color:var(--ink);margin-bottom:clamp(2px,0.4vh,5px);letter-spacing:-.3px;}
-.panel-sub{font-size:clamp(10px,1.3vh,12px);color:var(--ink3);margin-bottom:clamp(6px,1.2vh,16px);line-height:1.5;}
-.form-group{width:100%;margin-bottom:clamp(5px,0.9vh,11px);}
-.form-label{display:block;font-size:11px;font-weight:700;letter-spacing:.8px;
-  text-transform:uppercase;color:var(--ink3);margin-bottom:8px;}
-.form-input{
-  width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;
-  padding:clamp(8px,1.2vh,12px) 14px;font-size:clamp(11px,1.4vh,13px);font-family:'DM Mono',monospace;font-weight:500;
-  color:var(--ink);outline:none;transition:all .2s;letter-spacing:.5px;
-}
-.form-input:focus{border-color:var(--blue);background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.08);}
-.form-input::placeholder{color:var(--ink3);font-family:'Poppins',sans-serif;letter-spacing:0;font-size:12px;}
-.btn-submit{
-  width:100%;background:var(--blue);color:#fff;border:none;border-radius:10px;
-  padding:clamp(9px,1.4vh,13px);font-size:clamp(11px,1.5vh,14px);font-family:'Poppins',sans-serif;font-weight:700;
-  cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;
-  gap:8px;letter-spacing:.3px;
-}
-.btn-submit:hover:not(:disabled){background:var(--blue-d);transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,.3);}
-.btn-submit:disabled{opacity:.6;cursor:not-allowed;transform:none;}
-.hint{font-size:clamp(9px,1.1vh,11px);color:var(--ink3);margin-top:clamp(3px,0.5vh,6px);text-align:center;}
+/* SIDEBAR FOOT */
+.sb-foot{padding:10px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:5px;flex-shrink:0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;
+  border-radius:var(--r);border:none;font-family:'Poppins',sans-serif;font-size:12px;
+  font-weight:500;cursor:pointer;transition:all .14s;white-space:nowrap}
+.btn:disabled{opacity:.28;cursor:not-allowed}
+.btn-green{background:var(--green);color:#000;font-weight:600}
+.btn-green:hover:not(:disabled){background:var(--green2);transform:translateY(-1px)}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-blue:hover:not(:disabled){transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:var(--txt2);border:1px solid var(--border2)}
+.btn-ghost:hover:not(:disabled){background:var(--bg4)}
+.btn-danger{background:var(--rbg);color:var(--red);border:1px solid rgba(255,82,82,.2)}
+.btn-full{width:100%}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn-row{display:flex;gap:5px}
 
-/* Error */
-.error-msg{
-  background:#fef2f2;border:1px solid #fecaca;color:var(--red);
-  border-radius:8px;padding:10px 14px;font-size:12px;font-weight:600;
-  margin-bottom:14px;display:none;align-items:center;gap:8px;
-}
-.error-msg.show{display:flex;}
+/* MAIN */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
 
-/* Loading */
-.loading-wrap{display:none;text-align:center;padding:clamp(10px,1.5vh,18px) 0;}
+/* WELCOME */
+.welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;text-align:center;padding:40px;position:relative;z-index:1}
+.w-title{font-size:22px;font-weight:300;line-height:1.4}
+.w-title b{font-weight:700;color:var(--green)}
+.w-sub{font-size:11px;color:var(--txt3);line-height:1.9;max-width:420px;
+  font-family:'DM Mono',monospace}
+.w-flow{display:flex;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap;justify-content:center}
+.w-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);
+  padding:8px 12px;text-align:center;min-width:90px}
+.w-pfx{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--green)}
+.w-desc{font-size:9px;color:var(--txt3);margin-top:2px;line-height:1.4}
+.w-arrow{font-size:16px;color:var(--txt3)}
+
+/* Nova ring welcome — MÁS GRANDE */
+.w-nova-ring{position:relative;width:240px;height:240px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.w-nova-ring::before{content:'';position:absolute;inset:-30px;border-radius:50%;
+  background:radial-gradient(circle,rgba(0,166,81,.13) 0%,transparent 60%);
+  animation:wGlow 3.5s ease-in-out infinite}
+@keyframes wGlow{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:1;transform:scale(1.08)}}
+.w-ring{position:absolute;border-radius:50%}
+.w-r1{inset:0;border:1.5px solid rgba(0,166,81,.30);animation:rotR 50s linear infinite}
+.w-r2{inset:-22px;border:1px solid rgba(0,166,81,.12);animation:rotL 80s linear infinite}
+@keyframes rotR{to{transform:rotate(360deg)}}
+@keyframes rotL{to{transform:rotate(-360deg)}}
+.w-orb{position:absolute;border-radius:50%;top:50%;left:50%}
+.w-o1{width:9px;height:9px;background:var(--green);
+  box-shadow:0 2px 10px rgba(0,166,81,.5);animation:wOrb1 32s linear infinite}
+.w-o2{width:5px;height:5px;background:rgba(0,166,81,.6);
+  animation:wOrb1 32s linear infinite;animation-delay:-16s}
+@keyframes wOrb1{
+  from{transform:translate(-4.5px,-4.5px) rotate(0deg) translateX(120px)}
+  to{transform:translate(-4.5px,-4.5px) rotate(360deg) translateX(120px)}}
+.w-core{width:170px;height:170px;border-radius:50%;z-index:1;
+  background:radial-gradient(circle at 38% 32%,rgba(0,166,81,.18) 0%,transparent 55%),
+    radial-gradient(circle,#f4fbf6 0%,#e6f5ea 100%);
+  border:2px solid rgba(0,166,81,.28);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 8px 40px rgba(0,166,81,.18),0 2px 12px rgba(0,166,81,.10),
+    inset 0 0 30px rgba(0,166,81,.06)}
+.w-nova-img{width:112px;height:112px;object-fit:contain;border-radius:50%;
+  filter:drop-shadow(0 3px 12px rgba(0,166,81,.35))}
+.w-status{display:inline-flex;align-items:center;gap:7px;
+  background:rgba(0,166,81,.06);border:1px solid rgba(0,166,81,.20);
+  border-radius:20px;padding:5px 14px;
+  font-family:'DM Mono',monospace;font-size:9px;font-weight:500;
+  letter-spacing:1.8px;color:rgba(0,140,60,.85)}
+.w-sdot{width:5px;height:5px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 7px var(--green);animation:wPulse 2.5s ease-in-out infinite}
+@keyframes wPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.2;transform:scale(.5)}}
+
+/* WORK */
+.work{display:none;flex-direction:column;overflow:hidden;flex:1}
+.work.on{display:flex}
+
+/* PROGRESS */
+.prog{padding:11px 15px;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.prog-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:5px}
+.prog-lbl{font-size:11px;font-weight:500}
+.prog-pct{font-family:'DM Mono',monospace;font-size:11px;color:var(--green)}
+.prog-track{height:2px;background:var(--bg5);border-radius:2px;overflow:hidden;margin-bottom:6px}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--green),#00c853);
+  border-radius:2px;transition:width .3s ease;width:0%}
+.steps{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:4px;font-size:9px;
+  font-family:'DM Mono',monospace;color:var(--txt3);transition:color .2s}
+.step.active{color:var(--amber)}
+.step.done{color:var(--green)}
+.step-n{width:14px;height:14px;border-radius:50%;border:1px solid currentColor;
+  display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0}
+.step-sep{color:var(--txt3);font-size:9px}
+
+/* RESULTS AREA */
+.results{flex:1;overflow-y:auto;padding:10px 13px;display:flex;flex-direction:column;gap:6px}
+.results::-webkit-scrollbar{width:4px}
+.results::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* FOLDER SECTION */
+.fsec{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden}
+.fsec-hd{display:flex;align-items:center;gap:8px;padding:8px 11px;border-bottom:1px solid var(--border);
+  background:var(--bg3);cursor:pointer;user-select:none}
+.fsec-hd:hover{background:var(--bg4)}
+.fsec-name{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;flex:1}
+.fsec-meta{font-size:9px;color:var(--txt3);font-family:'DM Mono',monospace}
+.fsec-chev{font-size:10px;color:var(--txt3);transition:transform .2s}
+.fsec-chev.open{transform:rotate(90deg)}
+.fsec-body{padding:8px;display:flex;flex-direction:column;gap:5px}
+.fsec-body.hide{display:none}
+
+/* SOURCE PDF ROW */
+.src-row{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden}
+.src-hd{display:flex;align-items:center;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border)}
+.src-ico{font-size:12px;flex-shrink:0;color:var(--txt3)}
+.src-name{font-size:11px;color:var(--txt2);font-family:'DM Mono',monospace;
+  flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src-pages{font-size:9px;color:var(--txt3);font-family:'DM Mono',monospace;flex-shrink:0}
+.src-status{font-size:9px;font-family:'DM Mono',monospace;flex-shrink:0}
+.src-loading{display:flex;align-items:center;gap:6px;padding:7px 10px;
+  font-size:10px;color:var(--amber)}
+.spin{width:12px;height:12px;border:1.5px solid var(--bg5);
+  border-top-color:var(--amber);border-radius:50%;animation:spin .6s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
-.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--blue);
-  border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 12px;}
-.loading-txt{font-size:12px;color:var(--ink3);}
 
-/* Divider */
-.divider{width:100%;height:1px;background:var(--border);margin:clamp(6px,1vh,14px) 0;}
+/* PAGE TAGS */
+.pages-wrap{padding:6px 10px;display:flex;flex-wrap:wrap;gap:4px}
+.ptag{font-family:'DM Mono',monospace;font-size:9px;padding:2px 7px;
+  border-radius:20px;display:flex;align-items:center;gap:4px}
+.ptag-crc{background:var(--pbg);color:var(--purple);border:1px solid rgba(206,147,216,.2)}
+.ptag-dfv{background:var(--bbg);color:var(--blue);border:1px solid rgba(68,138,255,.2)}
+.ptag-fev{background:var(--gbg);color:var(--green);border:1px solid rgba(0,166,81,.2)}
+.ptag-opf{background:var(--abg);color:var(--amber);border:1px solid rgba(255,171,64,.2)}
+.ptag-pde{background:var(--rbg);color:var(--red);border:1px solid rgba(255,82,82,.2)}
+.ptag-unk{background:var(--bg5);color:var(--txt3);border:1px solid var(--border2)}
 
-/* ── RESULTADO ── */
-.result-wrap{display:none;width:100%;}
+/* OUTPUT FILES */
+.out-section{padding:6px 10px 8px;border-top:1px solid var(--border)}
+.out-lbl{font-size:9px;color:var(--txt3);font-family:'DM Mono',monospace;
+  text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
+.out-files{display:flex;flex-direction:column;gap:3px}
+.out-file{display:flex;align-items:center;gap:7px;padding:5px 8px;
+  background:var(--bg4);border-radius:var(--r);border:1px solid var(--border2)}
+.out-file.ok{border-color:rgba(0,166,81,.2);background:var(--gbg)}
+.out-file-ico{font-size:12px;flex-shrink:0}
+.out-file-name{font-family:'DM Mono',monospace;font-size:10px;font-weight:500;
+  flex:1;color:var(--green)}
+.out-file-pages{font-size:9px;color:var(--txt3);font-family:'DM Mono',monospace}
+.out-badge{font-family:'DM Mono',monospace;font-size:9px;padding:2px 7px;
+  border-radius:20px;flex-shrink:0}
+.ob-crc{background:var(--pbg);color:var(--purple);border:1px solid rgba(206,147,216,.2)}
+.ob-dfv{background:var(--bbg);color:var(--blue);border:1px solid rgba(68,138,255,.2)}
+.ob-fev{background:var(--gbg);color:var(--green);border:1px solid rgba(0,166,81,.2)}
+.ob-opf{background:var(--abg);color:var(--amber);border:1px solid rgba(255,171,64,.2)}
+.ob-pde{background:var(--rbg);color:var(--red);border:1px solid rgba(255,82,82,.2)}
+.ob-unk{background:var(--bg5);color:var(--txt3);border:1px solid var(--border2)}
 
-/* Ticket header */
-.ticket-top{
-  background:var(--bg);border:1.5px solid var(--border);border-radius:12px;
-  padding:clamp(7px,1.1vh,13px);margin-bottom:clamp(5px,0.8vh,9px);
-}
-.ticket-id-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
-.ticket-id{font-family:'DM Mono',monospace;font-size:12px;font-weight:700;color:var(--blue);}
-.estado-badge{
-  display:inline-flex;align-items:center;gap:5px;
-  padding:4px 12px;border-radius:20px;font-size:10px;font-weight:700;
-}
-.eb-abierto{background:#eff6ff;color:var(--blue);border:1px solid #bfdbfe;}
-.eb-en_gestion{background:#fffbeb;color:var(--yellow);border:1px solid #fde68a;}
-.eb-respondido{background:#f0fdf4;color:var(--green);border:1px solid #bbf7d0;}
-.eb-cerrado{background:#f9fafb;color:#6b7280;border:1px solid #e5e7eb;}
-.eb-escalado{background:#fef2f2;color:var(--red);border:1px solid #fecaca;}
-.ticket-resumen{font-size:clamp(11px,1.3vh,13px);font-weight:600;color:var(--ink);margin-bottom:2px;line-height:1.3;}
-.ticket-meta{font-size:11px;color:var(--ink3);}
+/* WARN */
+.warn-row{display:flex;align-items:center;gap:6px;padding:5px 10px;
+  background:rgba(255,171,64,.07);border-top:1px solid rgba(255,171,64,.15);
+  font-size:9px;color:var(--amber);font-family:'DM Mono',monospace}
 
-/* Info grid */
-.info-grid{
-  display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:clamp(5px,0.8vh,9px);
-}
-.info-cell{
-  background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:clamp(4px,0.7vh,8px) 10px;
-}
-.info-cell.full{grid-column:span 2;}
-.ic-label{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
-  color:var(--ink3);margin-bottom:3px;}
-.ic-value{font-size:12px;font-weight:600;color:var(--ink);}
-.ic-value.mono{font-family:'DM Mono',monospace;font-size:11px;}
-.sla-ok{color:var(--green);}
-.sla-warn{color:var(--yellow);}
-.sla-vencido{color:var(--red);}
+/* WORK FOOT */
+.work-foot{padding:9px 13px;background:var(--bg2);border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:9px;flex-shrink:0}
+.wf-info{flex:1;font-size:10px;color:var(--txt3);font-family:'DM Mono',monospace}
 
-/* Timeline */
-.tl-card{
-  background:var(--bg);border:1.5px solid var(--border);border-radius:12px;overflow:hidden;
-}
-.tl-head{
-  padding:clamp(6px,0.9vh,10px) 14px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;justify-content:space-between;
-  background:#fff;
-}
-.tl-title{font-size:12px;font-weight:700;color:var(--ink);}
-.tl-count{font-size:10px;color:var(--ink3);background:var(--bg);
-  border-radius:20px;padding:2px 10px;border:1px solid var(--border);}
-.tl-body{padding:4px 0;}
-.tl-item{display:flex;gap:10px;padding:clamp(6px,0.9vh,10px) 14px;border-bottom:1px solid rgba(0,0,0,.04);}
-.tl-item:last-child{border-bottom:none;}
-.tl-spine{display:flex;flex-direction:column;align-items:center;flex-shrink:0;}
-.tl-dot{width:9px;height:9px;border-radius:50%;border:2px solid #fff;
-  flex-shrink:0;margin-top:2px;box-shadow:0 0 0 1px currentColor;}
-.tl-dot.blue{color:var(--blue);background:var(--blue);}
-.tl-dot.green{color:var(--green);background:var(--green);}
-.tl-dot.yellow{color:var(--yellow);background:var(--yellow);}
-.tl-dot.red{color:var(--red);background:var(--red);}
-.tl-dot.gray{color:#9ca3af;background:#9ca3af;}
-.tl-line{width:2px;flex:1;background:var(--border);margin-top:4px;}
-.tl-ev{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;
-  color:var(--blue);margin-bottom:2px;}
-.tl-desc{font-size:clamp(10px,1.2vh,12px);color:var(--ink2);line-height:1.4;}
-.tl-time{font-size:10px;color:var(--ink3);font-family:'DM Mono',monospace;margin-top:3px;}
+/* LOG */
+.logbar{height:26px;background:var(--bg3);border-top:1px solid var(--border);
+  display:flex;align-items:center;gap:6px;padding:0 13px;flex-shrink:0}
+.log-p{font-family:'DM Mono',monospace;font-size:10px;color:var(--green)}
+.log-m{font-family:'DM Mono',monospace;font-size:10px;color:var(--txt3);
+  flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* Respuesta */
-.resp-card{
-  background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
-  padding:12px 14px;margin:8px 16px;
-}
-.resp-label{font-size:10px;font-weight:700;color:var(--green);
-  text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;}
-.resp-txt{font-size:11px;color:var(--ink2);line-height:1.6;
-  max-height:100px;overflow-y:auto;}
-
-/* Back link */
-.back-link{
-  display:inline-flex;align-items:center;gap:6px;
-  font-size:12px;color:var(--ink3);text-decoration:none;
-  margin-top:clamp(6px,1vh,14px);transition:color .2s;
-}
-.back-link:hover{color:var(--blue);}
-
-/* ── RESPONSIVE ── */
-@media(max-width:860px){
-  body{flex-direction:column;height:auto;overflow:auto;}
-  .right-panel{
-    width:100%;padding:80px 24px 36px;
-    height:auto;box-shadow:none;
-    border-bottom:3px solid var(--blue);
-  }
-  .left-panel{
-    width:100%;height:auto;padding:36px 24px 40px;
-    order:1;overflow:visible;
-  }
-  .left-panel::before,.left-panel::after{width:300px;height:300px;}
-  .left-content{max-width:100%;}
-  .left-headline{font-size:clamp(24px,6vw,36px);}
-  .stats-row{justify-content:center;gap:10px;}
-  .info-chips{justify-content:center;}
-  .info-grid{grid-template-columns:1fr 1fr;}
-}
-@media(max-width:480px){
-  .right-panel{padding:24px 18px 28px;}
-  .left-panel{padding:28px 18px 36px;}
-  .form-input{font-size:15px;padding:14px 16px;}
-  .btn-submit{padding:15px;font-size:15px;}
-  .info-grid{grid-template-columns:1fr;}
-  .info-cell.full{grid-column:span 1;}
-  .stats-row{flex-wrap:wrap;}
-  .stat-box{min-width:80px;}
-  .panel-logo img{height:30px;}
-  .left-headline{font-size:clamp(22px,7vw,30px);}
-}
+/* TOAST */
+.toast{position:fixed;bottom:15px;right:15px;z-index:9999;padding:8px 15px;
+  border-radius:var(--r);font-size:12px;font-weight:500;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);transform:translateY(50px);opacity:0;
+  transition:all .2s;pointer-events:none}
+.toast.on{transform:translateY(0);opacity:1}
+.t-ok{background:var(--green);color:#000}
+.t-err{background:var(--red);color:#fff}
+.t-inf{background:var(--amber);color:#000}
 </style>
 </head>
 <body>
-<canvas id="bg-canvas"></canvas>
+<canvas id="bg-canvas" style="position:fixed;inset:0;z-index:0;pointer-events:none"></canvas>
+<div class="app">
 
-<!-- ══ RIGHT ══ -->
-<div class="right-panel">
+<div class="topbar">
+  <img class="logo-img"
+    src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png"
+    alt="Tododrogas" onerror="this.style.display='none'">
+  <div class="logo-tag">Radicación con Nova TD</div>
+  <div class="topbar-sp"></div>
+</div>
 
-  <!-- Contenedor centrado: logo + form -->
-  <div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;">
+<div class="body">
+<!-- SIDEBAR -->
+<div class="sb">
+  <div class="sb-hd">
+    <span class="sb-lbl">Subcarpetas</span>
+    <span class="pill" id="fcount">0</span>
+  </div>
 
-    <!-- Logo -->
-    <div style="width:100%;text-align:center;margin-bottom:clamp(8px,1.5vh,20px);">
-      <img id="formLogo"
-        src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png"
-        alt="Tododrogas"
-        style="height:clamp(28px,4.5vh,46px);object-fit:contain;display:inline-block;"
-        onerror="this.outerHTML='<span style=\'font-size:24px;font-weight:800;color:var(--blue);\'>Tododrogas</span>'">
-    </div>
+  <label class="dz" id="dz" for="finput">
+    <input type="file" id="finput" webkitdirectory multiple onchange="handleUpload(event)">
+    <div class="dz-ico">📂</div>
+    <div class="dz-t">Subir carpeta raíz</div>
+    <div class="dz-s">Todas las subcarpetas TDNE<br>con los PDFs mezclados</div>
+  </label>
 
-  <div style="width:100%;">
-    <div class="panel-title">Consulta el estado de tu PQRSFD</div>
-    <div class="panel-sub">Ingresa su número de cédula para ver todos tus radicados.</div>
+  <div class="flist" id="flist"></div>
 
-    <div class="error-msg" id="error-msg">
-      <span>⚠️</span><span id="error-txt"></span>
-    </div>
-
-    <!-- PASO 1: Cédula -->
-    <div id="paso-cedula">
-      <div class="form-group">
-        <label class="form-label">Número de cédula</label>
-        <input class="form-input" id="inp-cedula" type="text"
-          placeholder="Ej: 1234567890"
-          inputmode="numeric"
-          oninput="this.value=this.value.replace(/\D/g,'')"
-          onkeydown="if(event.key==='Enter') buscarPorCedula()">
-      </div>
-      <button class="btn-submit" id="btn-cedula" onclick="buscarPorCedula()">
-        <span id="btn-icon-ced">🔍</span>
-        <span id="btn-txt-ced">Consultar mis radicados</span>
+  <div class="sb-foot">
+    <button class="btn btn-green btn-full" id="btnProcess" disabled onclick="processAll()">
+      ▶&nbsp; Separar y renombrar todo
+    </button>
+    <div class="btn-row">
+      <button class="btn btn-blue btn-full btn-sm" id="btnDl" disabled onclick="downloadAll()">
+        ⬇&nbsp; Descargar ZIP
       </button>
-      <div class="hint">Ley 1755/2015 · Respuesta máximo 15 días hábiles</div>
+      <button class="btn btn-danger btn-sm" onclick="clearAll()">✕</button>
     </div>
-
-    <!-- PASO 2: Lista de radicados -->
-    <div id="paso-lista" style="display:none;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-        <button onclick="volverBusqueda()" style="background:none;border:none;color:var(--blue);cursor:pointer;font-size:13px;font-weight:600;padding:0;">← Volver</button>
-        <div id="lista-nombre" style="font-size:14px;font-weight:700;color:var(--ink);"></div>
-      </div>
-
-      <!-- Filtros -->
-      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center;">
-        <select id="filtro-mes" class="form-input" style="flex:1;min-width:130px;padding:8px 12px;font-size:13px;" onchange="aplicarFiltros()">
-          <option value="">Todos los meses</option>
-        </select>
-        <input id="filtro-ticket" class="form-input" type="text"
-          placeholder="TD-XXXX (opcional)"
-          style="flex:1;min-width:130px;padding:8px 12px;font-size:13px;"
-          oninput="this.value=this.value.toUpperCase()"
-          onkeydown="if(event.key==='Enter') aplicarFiltros()">
-        <button onclick="aplicarFiltros()" style="background:var(--blue);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">Filtrar</button>
-      </div>
-
-      <div id="lista-radicados"></div>
-    </div>
-
-  </div>
-
-  <!-- Loading -->
-  <div class="loading-wrap" id="loading-wrap">
-    <div class="spinner"></div>
-    <div class="loading-txt" id="loading-txt">Consultando…</div>
-  </div>
-
-  <!-- Resultado -->
-  <div class="result-wrap" id="result-wrap">
-    <div class="divider"></div>
-
-    <!-- Ticket -->
-    <div class="ticket-top">
-      <div class="ticket-id-row">
-        <div class="ticket-id" id="r-id"></div>
-        <div class="estado-badge" id="r-badge"></div>
-      </div>
-      <div class="ticket-resumen" id="r-resumen"></div>
-      <div class="ticket-meta" id="r-meta"></div>
-    </div>
-
-    <!-- Mensaje de estado para el ciudadano -->
-    <div id="r-msg-estado" style="display:none;padding:clamp(6px,0.9vh,10px) 14px;border-radius:10px;font-size:clamp(11px,1.3vh,13px);font-weight:600;margin-bottom:clamp(5px,0.8vh,9px);"></div>
-
-    <!-- Grid info simplificado -->
-    <div class="info-grid">
-      <div class="info-cell">
-        <div class="ic-label">Tipo</div>
-        <div class="ic-value" id="r-tipo"></div>
-      </div>
-      <div class="info-cell">
-        <div class="ic-label">Canal de radicación</div>
-        <div class="ic-value" id="r-canal"></div>
-      </div>
-      <!-- Última actualización quitada -->
-    </div>
-
-    <!-- Adjunto: audio, canvas o transcripción -->
-    <div id="r-adjunto" style="display:none;margin-bottom:12px;"></div>
-
-    <!-- Timeline -->
-    <div class="tl-card">
-      <div class="tl-head">
-        <div class="tl-title">📋 Historial de gestiones</div>
-        <div class="tl-count" id="r-count">0 eventos</div>
-      </div>
-      <div class="tl-body" id="r-timeline"></div>
-    </div>
-
-    <!-- Adjuntos de cierre: se inyectan dentro del paso Solucionado en renderTimeline -->
-
-    <a class="back-link" href="pqr_bienvenida.html">← Volver al inicio</a>
-  </div>
-  </div><!-- cierre contenedor centrado -->
-
-</div>
-
-<!-- ══ LEFT ══ -->
-<div class="left-panel">
-  <div class="left-grid"></div>
-  <div class="scan-line"></div>
-  <div class="left-content" style="padding-top:0;">
-
-    <div class="sigi-badge">
-      <span class="badge-dot"></span>
-      PQRSFD · Tododrogas CIA S.A.S
-    </div>
-
-    <div class="left-headline">
-      Consulta el estado<br>de <span class="hl">tu radicado</span>
-    </div>
-    <div class="left-sub">Seguimiento en tiempo real · Transparencia total</div>
-
-    <div class="stats-row">
-      <div class="stat-box">
-        <div class="stat-val">15</div>
-        <div class="stat-lbl">Días SLA</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-val">24/7</div>
-        <div class="stat-lbl">Nova TD</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-val">100%</div>
-        <div class="stat-lbl">Trazable</div>
-      </div>
-    </div>
-
-    <!-- Carrusel dinámico desde configuracion_sistema.frases_consulta -->
-    <div id="consulta-carousel" style="margin-bottom:clamp(2px,0.5vh,6px);">
-      <div class="info-chips" id="chips-static">
-        <div class="chip"><span class="chip-dot blue"></span>Estado en tiempo real</div>
-        <div class="chip"><span class="chip-dot cyan"></span>Historial de gestiones</div>
-        <div class="chip"><span class="chip-dot green"></span>Respuestas del equipo</div>
-        <div class="chip"><span class="chip-dot blue"></span>Línea de tiempo completa</div>
-      </div>
-    </div>
-
-    <!-- QR Medicamentos centrado -->
-    <div style="margin-top:clamp(8px,1.5vh,22px);display:flex;flex-direction:column;align-items:center;gap:clamp(5px,0.8vh,10px);">
-      <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--cyan);">📱 Escanea si quieres conocer el estado de tus medicamentos</div>
-      <img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/QR%20MEDICAMENTOS.jpeg"
-        alt="QR Medicamentos"
-        style="width:clamp(90px,14vh,150px);height:clamp(90px,14vh,150px);border-radius:12px;border:3px solid rgba(0,196,232,.4);display:block;box-shadow:0 0 28px rgba(0,196,232,.18);">
-      <div style="margin-top:6px;text-align:center;">
-        <div style="font-size:clamp(9px,1.1vh,11px);color:rgba(255,255,255,.5);margin-bottom:3px;">o ingresa a este link</div>
-        <a href="https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb"
-          target="_blank"
-          style="display:inline-block;background:rgba(0,196,232,.15);border:1.5px solid rgba(0,196,232,.5);
-          border-radius:10px;padding:clamp(5px,0.8vh,9px) 12px;font-size:clamp(9px,1.1vh,12px);color:var(--cyan);
-          font-family:'DM Mono',monospace;letter-spacing:.3px;text-decoration:none;
-          transition:all .2s;word-break:break-all;line-height:1.5;"
-          onmouseover="this.style.background='rgba(0,196,232,.28)';this.style.boxShadow='0 0 16px rgba(0,196,232,.3)'"
-          onmouseout="this.style.background='rgba(0,196,232,.15)';this.style.boxShadow='none'">
-          🔗 dispensacion.tododrogas.com.co
-        </a>
-      </div>
-    </div>
-
   </div>
 </div>
 
+<!-- MAIN -->
+<div class="main">
+  <div class="welcome" id="welcome">
+
+    <!-- Nova circle -->
+    <div class="w-nova-ring">
+      <div class="w-ring w-r1"></div>
+      <div class="w-ring w-r2"></div>
+      <div class="w-ring w-r3"></div>
+      <span class="w-orb w-o1"></span>
+      <span class="w-orb w-o2"></span>
+      <div class="w-core">
+        <img class="w-nova-img"
+          src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png"
+          alt="Nova TD" onerror="this.style.display='none'">
+      </div>
+    </div>
+
+    <div class="w-status">
+      <span class="w-sdot"></span>Nova TD · Lista para trabajar
+    </div>
+
+    <div class="w-title">Radicación <b>inteligente</b><br>con <b>Nova TD</b></div>
+    <div class="w-sub">
+      Inteligencia artificial que analiza, separa y organiza<br>
+      cada página en segundos. Sin errores. Sin intervención manual.
+    </div>
+
+    <div class="w-flow">
+      <div class="w-box"><div class="w-pfx">PDF</div><div class="w-desc">PDFs mezclados</div></div>
+      <div class="w-arrow">→</div>
+      <div class="w-box"><div class="w-pfx" style="color:var(--green)">Nova</div><div class="w-desc">IA por página</div></div>
+      <div class="w-arrow">→</div>
+      <div class="w-box"><div class="w-pfx">✂️</div><div class="w-desc">Separa y agrupa</div></div>
+      <div class="w-arrow">→</div>
+      <div class="w-box"><div class="w-pfx" style="font-size:10px">CRC·DFV·FEV<br>OPF·PDE</div><div class="w-desc">5 PDFs correctos</div></div>
+    </div>
+  </div>
+
+  <div class="work" id="work">
+    <div class="prog">
+      <div class="prog-top">
+        <span class="prog-lbl" id="progLbl">Esperando…</span>
+        <span class="prog-pct" id="progPct">0%</span>
+      </div>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+      <div class="steps">
+        <div class="step" id="s1"><div class="step-n">1</div>Carga</div>
+        <span class="step-sep">›</span>
+        <div class="step" id="s2"><div class="step-n">2</div>OCR + Reglas</div>
+        <span class="step-sep">›</span>
+        <div class="step" id="s3"><div class="step-n">3</div>Nova IA</div>
+        <span class="step-sep">›</span>
+        <div class="step" id="s4"><div class="step-n">4</div>Separar + unir</div>
+        <span class="step-sep">›</span>
+        <div class="step" id="s5"><div class="step-n">5</div>ZIP listo</div>
+      </div>
+    </div>
+
+    <div class="results" id="results"></div>
+
+    <div class="work-foot">
+      <span class="wf-info" id="wfInfo">—</span>
+      <button class="btn btn-blue btn-sm" id="btnDl2" disabled onclick="downloadAll()">
+        ⬇&nbsp; Descargar ZIP completo
+      </button>
+    </div>
+    <div class="logbar">
+      <span class="log-p">>_</span>
+      <span class="log-m" id="logM">listo</span>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+<div class="toast" id="toast"></div>
 
 <script>
-const SB_URL  = window.SUPABASE_URL  || '';
-const SB_ANON = window.SUPABASE_KEY  || '';
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+var {PDFDocument} = PDFLib;
+var PROXY = '/clasificador-proxy.php';
 
-const ESTADOS = {
-  abierto:         {label:'📬 Recibido',               cls:'eb-abierto'},
-  pendiente:       {label:'📬 Recibido',               cls:'eb-abierto'},
-  en_gestion:      {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
-  gestion:         {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
-  gestionado:      {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
-  respondido:      {label:'✅ Solucionado',             cls:'eb-respondido'},
-  cerrado:         {label:'✅ Solucionado',             cls:'eb-respondido'},
-  solucionado:     {label:'✅ Solucionado',             cls:'eb-respondido'},
-  pendiente_firma: {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
-  escalado:        {label:'🔍 En gestión prioritaria', cls:'eb-en_gestion'},
+// ══════════════════════════════════════════════
+//  TIPOS
+// ══════════════════════════════════════════════
+var T = {
+  CRC:{label:'Acta de entrega',        ico:'🧾',color:'crc'},
+  DFV:{label:'Autorización/Direc.',    ico:'🔀',color:'dfv'},
+  FEV:{label:'Factura electrónica',    ico:'💵',color:'fev'},
+  OPF:{label:'Orden/Fórmula médica',   ico:'💊',color:'opf'},
+  PDE:{label:'ADRES/Validación',       ico:'🏥',color:'pde'},
+  UNK:{label:'No identificado',        ico:'❓',color:'unk'}
 };
 
-const EV_COLOR = {
-  creado:'blue',asignado:'blue',respondido:'green',cerrado:'gray',
-  escalado:'red',reabierto:'yellow',acuse_enviado:'green',
-  audio_procesado:'blue',canvas_procesado:'blue',
-  en_gestion:'yellow',solucionado:'green',
-};
+// ══════════════════════════════════════════════
+//  REGLAS DETERMINISTAS POR TEXTO DE PÁGINA
+// ══════════════════════════════════════════════
+function ruleForPage(text){
+  var t = text.toUpperCase();
 
-function fmt(iso){
-  if(!iso) return '—';
-  const d=new Date(iso);
-  return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})
-    +' '+d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  // ── FEV — Factura Electrónica ─────────────────────────────────────────────
+  // OCR siempre rico. Señales únicas y consistentes en todos los lotes.
+  if(t.includes('CUFE:') ||
+     t.includes('FACTURA ELECTRONICA DE VENTA') ||
+     t.includes('MERCANCIA EXCLUIDA') ||
+     t.includes('RESOLUCION DE FACTURACION') ||
+     t.includes('RESOLUCION 18764') ||
+     t.includes('AUTORRETENEDORES DE RENTA') ||
+     t.includes('ICA 5X1000 EN MEDELLIN') ||
+     t.includes('GRANDES CONTRIBUYENTES') ||
+     (t.includes('TDNE') && t.includes('PRECIO UNI')) ||
+     (t.includes('TODODROGAS') && t.includes('SUBTOTAL')))
+    return 'FEV';
+
+  // ── PDE — ADRES / BDUA ────────────────────────────────────────────────────
+  // OCR siempre rico. Algunos vienen con URL de aplicaciones.adres.gov.co
+  if(t.includes('ADRES') ||
+     t.includes('BDUA') ||
+     t.includes('APLICACIONES.ADRES.GOV.CO') ||
+     t.includes('BASE DE DATOS UNICA DE AFILIADOS') ||
+     t.includes('BASE DE DATOS ÚNICA DE AFILIADOS') ||
+     t.includes('ADMINISTRADORA DE LOS RECURSOS DEL SISTEMA GENERAL') ||
+     t.includes('FECHA DE AFILIACION EFECTIVA') ||
+     t.includes('FECHA DE AFILIACIÓN EFECTIVA') ||
+     t.includes('TIPO DE AFILIADO') ||
+     t.includes('COTIZANTE') ||
+     t.includes('MIPRES') ||
+     t.includes('TOKENID='))
+    return 'PDE';
+
+  // ── CRC — Acta de Entrega Tododrogas ─────────────────────────────────────
+  // OCR siempre rico. Patrón único: código *Dxx260xxxxxx* + "Acta de Entrega"
+  if(t.includes('ACTA DE ENTREGA') ||
+     /\*D\d{2,3}26\d{7,}\*/.test(t) ||  // *D18260401596* o *D14260501759*
+     t.includes('NOMBRE DE PERSONA QUE RECIBE') ||
+     t.includes('VALOR RECAUDADO') ||
+     t.includes('COP/CREC/CM') ||
+     t.includes('COP/CREC/CMO') ||
+     (t.includes('TODODROGAS') && t.includes('ENTREGA')) ||
+     (t.includes('CON LA PRESENTE SE HACE ENTREGA')))
+    return 'CRC';
+
+  // ── DFV — Orden Direccionamiento Salud Total ──────────────────────────────
+  // OCR SIEMPRE VACÍO en producción real (pdf-lib o escaneado)
+  // Estas reglas son fallback por si alguna versión futura tiene texto
+  if(t.includes('MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO') ||
+     t.includes('ORDEN DE DIRECCIONAMIENTO') ||
+     t.includes('SERVICIOS DIRECCIONADOS') ||
+     t.includes('ENTIDAD RESPONSABLE DEL PAGO') ||
+     t.includes('INFORMACION DE LA TRANSACCION') ||
+     t.includes('INFORMACIÓN DE LA TRANSACCIÓN') ||
+     t.includes('PAGOS COMPARTIDOS') ||
+     (t.includes('SALUD TOTAL') && t.includes('EPS002')) ||
+     (t.includes('SALUD TOTAL') && t.includes('INFORMACIÓN PRESTADOR')) ||
+     (t.includes('SALUD TOTAL') && t.includes('INFORMACION PRESTADOR')) ||
+     t.includes('SEOR USUARIO NO SOBREESCRIBIR') ||
+     t.includes('SEÑOR USUARIO NO SOBREESCRIBIR') ||
+     t.includes('DIEGOBALS') ||
+     t.includes('VANESSAEL'))
+    return 'DFV';
+
+  // ── OPF — Orden / Fórmula Médica ─────────────────────────────────────────
+  // OCR SIEMPRE VACÍO en producción real (escaneado)
+  // Estas reglas son fallback por si alguna versión futura tiene texto
+  if(t.includes('ORDEN MEDICAMENTOS P.O.S') ||
+     t.includes('ORDEN MEDICAMENTOS POS') ||
+     t.includes('ESTA ORDEN ES VALIDA HASTA') ||
+     t.includes('ESTA ORDEN ES VÁLIDA HASTA') ||
+     t.includes('FORMULA MEDICA') ||
+     t.includes('FÓRMULA MÉDICA') ||
+     t.includes('FORMULA MÉDICA') ||
+     t.includes('FÓRMULA MEDICA') ||
+     t.includes('MEDICAMENTOS POS') ||
+     t.includes('PROMOTORA CLINICA') ||
+     t.includes('ZONA FRANCA DE URABA') ||
+     t.includes('LICENCIADO A:') ||
+     t.includes('CLINICA PANAMERICANA') ||
+     t.includes('900390423') ||
+     t.includes('890906346') ||
+     t.includes('E.S.E HOSPITAL') ||
+     t.includes('ESE HOSPITAL') ||
+     (t.includes('HOSPITAL') && t.includes('DOSIS') && t.includes('VIA') && !t.includes('CUFE')))
+    return 'OPF';
+
+  return null; // → pasa a IA Vision
 }
-function fmtDate(iso){
-  if(!iso) return '—';
-  return new Date(iso).toLocaleDateString('es-CO',{day:'2-digit',month:'long',year:'numeric'});
+
+// ══════════════════════════════════════════════
+//  ESTADO GLOBAL
+// ══════════════════════════════════════════════
+// folders[folderKey] = { files:[{name,bytes,pageCount}], status }
+// pageMap[folderKey] = [
+//   { srcFile, srcPage, prefix, method, imgB64, ocrText }
+// ]
+// outputs[folderKey] = { CRC:[pageIdx,...], DFV:[...], ... }
+var folders={}, pageMap={}, outputs={}, processing=false;
+var progTotal=0, progDone=0;
+
+// ══════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════
+function log(m){document.getElementById('logM').textContent=m;}
+function toast(m,type,d){
+  var t=document.getElementById('toast');
+  t.textContent=m; t.className='toast t-'+(type||'ok')+' on';
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),d||3200);
 }
-function setText(id,txt){const el=document.getElementById(id);if(el)el.textContent=txt||'—';}
+function setStep(n){
+  [1,2,3,4,5].forEach(i=>{
+    var el=document.getElementById('s'+i);
+    el.className='step'+(i<n?' done':i===n?' active':'');
+  });
+}
+function setProgress(done,total,label){
+  var pct=total?Math.round(done/total*100):0;
+  document.getElementById('progFill').style.width=pct+'%';
+  document.getElementById('progPct').textContent=pct+'%';
+  if(label)document.getElementById('progLbl').textContent=label;
+}
+function updateBtns(){
+  var hasF=Object.keys(folders).length>0;
+  var hasDone=Object.values(folders).some(f=>f.status==='done');
+  document.getElementById('btnProcess').disabled=!hasF||processing;
+  document.getElementById('btnDl').disabled=!hasDone;
+  document.getElementById('btnDl2').disabled=!hasDone;
+}
+function esc(s){return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
+function sid(s){return s.replace(/[^a-zA-Z0-9]/g,'_')}
 
-const CONSULTA_URL = window.NOVA_URL || '/nova-consulta.php';
-let _cedula_actual = '';
-let _nombre_actual = '';
-let _radicados_cache = [];
-let _meses_cache = [];
+// ══════════════════════════════════════════════
+//  UPLOAD — PDFs para procesar + ZIPs para conservar
+// ══════════════════════════════════════════════
+async function handleUpload(ev){
+  var allFiles = Array.from(ev.target.files);
+  ev.target.value = '';
 
-// ── PASO 1: Buscar por cédula ─────────────────────────────────────────
-async function buscarPorCedula() {
-  const ced = document.getElementById('inp-cedula').value.trim().replace(/\D/g,'');
-  if (!ced) { showError('Ingresa tu número de cédula.'); return; }
-  if (ced.length < 6) { showError('La cédula debe tener al menos 6 dígitos.'); return; }
+  var pdfs = allFiles.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  var zips = allFiles.filter(f => f.name.toLowerCase().endsWith('.zip'));
 
-  setLoading(true, 'Validando identidad…');
-  document.getElementById('error-msg').classList.remove('show');
+  if(!pdfs.length){ toast('No se encontraron PDFs','err'); return; }
+  log('Leyendo '+pdfs.length+' PDFs y '+zips.length+' ZIPs…');
 
-  // Paso 1a: Validar que existe en tabla_usuarios
-  try {
-    const vr = await fetch(window.VALIDAR_URL || '/validar-paciente.php', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({cedula: ced})
-    });
-    const vd = await vr.json();
-    if (!vd.ok) {
-      setLoading(false);
-      showError(vd.msg || 'No encontramos tu cédula en el sistema. Verifica el número.');
-      return;
+  // Agrupar PDFs por subcarpeta
+  var byFolder = {};
+  pdfs.forEach(f => {
+    var parts = f.webkitRelativePath.split('/').filter(Boolean);
+    var key = parts.length>=3 ? parts[parts.length-2] : parts.length===2 ? parts[0] : 'RAIZ';
+    if(!byFolder[key]) byFolder[key] = [];
+    byFolder[key].push(f);
+  });
+
+  // Agrupar ZIPs por subcarpeta
+  var zipsByFolder = {};
+  zips.forEach(f => {
+    var parts = f.webkitRelativePath.split('/').filter(Boolean);
+    var key = parts.length>=3 ? parts[parts.length-2] : parts.length===2 ? parts[0] : 'RAIZ';
+    if(!zipsByFolder[key]) zipsByFolder[key] = [];
+    zipsByFolder[key].push(f);
+  });
+
+  var sorted = Object.keys(byFolder).sort((a,b) => a.localeCompare(b,undefined,{numeric:true}));
+
+  for(var k of sorted){
+    if(!folders[k]) folders[k] = {files:[], zips:[], status:'pending'};
+    if(!folders[k].zips) folders[k].zips = [];
+    if(!pageMap[k])  pageMap[k]  = [];
+    if(!outputs[k])  outputs[k]  = {};
+
+    // Cargar PDFs
+    for(var file of byFolder[k]){
+      if(folders[k].files.find(x=>x.name===file.name)) continue;
+      var bytes = await file.arrayBuffer();
+      var pc = 0;
+      try{ var d = await pdfjsLib.getDocument({data:bytes.slice(0)}).promise; pc = d.numPages; }catch(e){}
+      folders[k].files.push({name:file.name, bytes, pageCount:pc});
     }
-    _nombre_actual = vd.nombre || '';
-    _cedula_actual = ced;
-  } catch(e) {
-    setLoading(false);
-    showError('Error al validar. Intenta de nuevo.');
-    return;
+
+    // Cargar ZIPs — se procesarán al descargar
+    if(zipsByFolder[k]){
+      for(var zf of zipsByFolder[k]){
+        if(folders[k].zips.find(x=>x.name===zf.name)) continue;
+        var zbytes = await zf.arrayBuffer();
+        folders[k].zips.push({name:zf.name, bytes:zbytes});
+      }
+    }
   }
 
-  // Paso 1b: Traer radicados por cédula
-  await cargarRadicados('', '');
+  renderSidebar();
+  showWork();
+  updateBtns();
+  updateStats();
+  if(sorted.length) setActive(sorted[0]);
+  log('Listo — '+Object.keys(folders).length+' carpetas · '+pdfs.length+' PDFs · '+zips.length+' ZIPs');
 }
 
-// ── Cargar radicados con filtros ──────────────────────────────────────
-async function cargarRadicados(mes, ticket) {
-  setLoading(true, 'Buscando tus radicados…');
-  try {
-    const r = await fetch(CONSULTA_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        accion: 'radicados_cedula',
-        cedula: _cedula_actual,
-        mes:    mes    || '',
-        ticket: ticket || '',
-      })
-    });
-    const d = await r.json();
-    setLoading(false);
+var dz=document.getElementById('dz');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');
+  handleUpload({target:{files:e.dataTransfer.files,value:''}});});
 
-    _radicados_cache = d.radicados || [];
-    _meses_cache     = d.meses_disponibles || [];
-
-    // Poblar selector de meses
-    const sel = document.getElementById('filtro-mes');
-    sel.innerHTML = '<option value="">Todos los meses</option>';
-    _meses_cache.forEach(m => {
-      const [y, mo] = m.split('-');
-      const label = new Date(y, parseInt(mo)-1, 1).toLocaleDateString('es-CO',{month:'long',year:'numeric'});
-      sel.innerHTML += `<option value="${m}" ${m===mes?'selected':''}>${label}</option>`;
-    });
-    if (mes) sel.value = mes;
-
-    // Mostrar lista
-    document.getElementById('paso-cedula').style.display = 'none';
-    document.getElementById('paso-lista').style.display  = 'block';
-    document.getElementById('lista-nombre').textContent  =
-      _nombre_actual ? `Hola, ${_nombre_actual.split(' ')[0]} 👋` : '';
-
-    renderLista(d);
-  } catch(e) {
-    setLoading(false);
-    showError('Error al consultar. Intenta de nuevo.');
-  }
-}
-
-// ── Renderizar lista de radicados ─────────────────────────────────────
-function renderLista(d) {
-  const el = document.getElementById('lista-radicados');
-  if (!d.encontrado || !d.radicados.length) {
-    el.innerHTML = `<div style="text-align:center;padding:32px 0;color:var(--ink3);font-size:14px;">
-      📭 ${d.mensaje || 'No encontramos radicados con esos filtros.'}
-    </div>`;
+// ══════════════════════════════════════════════
+//  SIDEBAR
+// ══════════════════════════════════════════════
+var activeFolder=null;
+function renderSidebar(){
+  var keys=Object.keys(folders);
+  document.getElementById('fcount').textContent=keys.length;
+  var el=document.getElementById('flist');
+  if(!keys.length){
+    el.innerHTML="";
     return;
   }
-
-  el.innerHTML = d.radicados.map(r => {
-    const est = ESTADOS[r.estado] || {label: r.estado, cls:'eb-abierto'};
-    const fecha = r.creado ? fmtDate(r.creado) : '—';
-    const tipoLabel = r.tipo ? r.tipo.charAt(0).toUpperCase()+r.tipo.slice(1) : '';
-    const estadoMsg = getMensajeEstado(r.estado, r.tipo||'default');
-
-    return `<div onclick="verDetalle('${r.ticket_id||r.id}')"
-      style="background:var(--surface);border:1px solid var(--border);border-radius:14px;
-             padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:box-shadow .15s;
-             display:flex;flex-direction:column;gap:6px;"
-      onmouseenter="this.style.boxShadow='0 4px 18px rgba(37,99,235,.12)'"
-      onmouseleave="this.style.boxShadow='none'">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-        <div style="font-size:13px;font-weight:700;color:var(--ink);font-family:'DM Mono',monospace;">
-          ${r.ticket_id || '—'}
-        </div>
-        <div class="estado-badge ${est.cls}" style="font-size:11px;">${est.label}</div>
+  el.innerHTML=keys.map(k=>{
+    var fd=folders[k],st=fd.status;
+    var dc=st==='done'?'ok':st==='processing'?'proc':st==='error'?'err':'';
+    var pm=pageMap[k]||[];
+    var totalPages=pm.length;
+    var donePages=pm.filter(p=>p.prefix&&p.prefix!=='UNK').length;
+    return`<div class="frow${activeFolder===k?' active':''}" onclick="setActive('${esc(k)}')">
+      <span class="frow-ico">${st==='done'?'📂':'📁'}</span>
+      <div class="frow-info">
+        <div class="frow-name">${k}</div>
+        <div class="frow-meta">${fd.files.length} PDF${fd.files.length!==1?'s':''} · ${totalPages} págs</div>
       </div>
-      <div style="font-size:12px;color:var(--ink3);">${tipoLabel}${r.categoria?' · '+r.categoria:''}</div>
-      <div style="font-size:11px;color:var(--ink3);">${fecha}</div>
-      ${r.resumen ? `<div style="font-size:12px;color:var(--ink2);margin-top:2px;">${r.resumen}</div>` : ''}
-      ${r.mensaje_ux 
-        ? `<div style="font-size:12px;color:var(--green);font-weight:600;margin-top:4px;">${r.mensaje_ux}</div>` 
-        : `<div style="font-size:11px;color:var(--ink3);margin-top:4px">${estadoMsg.icon} ${estadoMsg.msg}</div>`}
+      <div class="dot ${dc}"></div>
     </div>`;
   }).join('');
 }
+function setActive(k){
+  activeFolder=k;
+  renderSidebar();
+  renderResults();
+}
+function showWork(){
+  document.getElementById('welcome').style.display='none';
+  document.getElementById('work').classList.add('on');
+}
 
-// ── Ver detalle de un radicado ────────────────────────────────────────
-async function verDetalle(ticket_id) {
-  if (!ticket_id) return;
-  setLoading(true, 'Cargando detalle…');
-  document.getElementById('paso-lista').style.display = 'none';
-  document.getElementById('result-wrap').style.display = 'none';
+// ══════════════════════════════════════════════
+//  PROCESS ALL
+// ══════════════════════════════════════════════
+async function processAll(){
+  processing=true;updateBtns();
+  var pending=Object.keys(folders).filter(k=>['pending','error'].includes(folders[k].status));
+  if(!pending.length){toast('Todo ya procesado','inf');processing=false;updateBtns();return;}
 
-  try {
-    const r = await fetch(CONSULTA_URL, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({accion:'radicado', ticket_id})
-    });
-    const d = await r.json();
-    setLoading(false);
+  // Contar total de páginas a procesar
+  var totalPages=0;
+  for(var k of pending){
+    for(var f of folders[k].files) totalPages+=f.pageCount;
+  }
+  progTotal=totalPages; progDone=0;
+  setStep(1);
+  setProgress(0,progTotal,'Analizando páginas…');
 
-    if (!d.encontrado) {
-      showError('No se pudo cargar el detalle. Intenta de nuevo.');
-      document.getElementById('paso-lista').style.display = 'block';
-      return;
+  for(var k of pending){
+    folders[k].status='processing';
+    pageMap[k]=[];
+    outputs[k]={};
+    renderSidebar();
+    if(activeFolder===k)renderResults();
+
+    // ── Por cada PDF de la carpeta ──────────────────────────
+    for(var fileObj of folders[k].files){
+      log('Procesando: '+fileObj.name+' ('+fileObj.pageCount+' págs)');
+      var pdfDoc=await pdfjsLib.getDocument({data:fileObj.bytes.slice(0)}).promise;
+
+      // ── Por cada página ─────────────────────────────────
+      for(var p=1;p<=pdfDoc.numPages;p++){
+        setStep(2);
+        log(fileObj.name+' · pág '+p+'/'+pdfDoc.numPages);
+
+        var prefix, method, imgB64=null;
+
+        // 1. Extraer texto OCR de esta página
+        var ocrText = await extractPageText(pdfDoc,p);
+
+        // 2. Intentar regla determinista sobre el texto
+        var rulePrefix = ruleForPage(ocrText);
+
+        if(rulePrefix){
+          prefix = rulePrefix; method = 'rule';
+        } else {
+          // 3. Sin texto o sin match → IA Vision (imagen)
+          setStep(3);
+          imgB64 = await renderPage(pdfDoc,p);
+          log('IA: '+fileObj.name+' pág '+p+'…');
+          try{
+            var cls = await classifyPage(imgB64,ocrText,p,pdfDoc.numPages,fileObj.name);
+            prefix = cls.prefix; method = 'ai';
+          }catch(e){
+            prefix = 'UNK'; method = 'err';
+            log('Error IA pág '+p+': '+e.message);
+          }
+        }
+
+        pageMap[k].push({
+          srcFile:fileObj.name, srcPage:p,
+          prefix, method,
+          ocrText: typeof ocrText !== 'undefined' ? ocrText : '',
+          imgB64: imgB64||null
+        });
+
+        progDone++;
+        setProgress(progDone,progTotal,'Analizando '+progDone+'/'+progTotal+' páginas…');
+        if(activeFolder===k)renderResults();
+      }
     }
 
-    // Renderizar resultado igual que antes
-    renderResultado(d);
-  } catch(e) {
-    setLoading(false);
-    showError('Error al cargar detalle.');
-    document.getElementById('paso-lista').style.display = 'block';
+    // ── PASO 4: Agrupar y generar PDFs de salida ────────────
+    setStep(4);
+    log('Generando PDFs de salida para '+k+'…');
+    await buildOutputs(k);
+
+    folders[k].status='done';
+    renderSidebar();
+    if(activeFolder===k)renderResults();
+    updateStats();
+  }
+
+  setStep(5);
+  setProgress(progTotal,progTotal,'✓ Completado');
+  processing=false;updateBtns();
+  toast('✓ Separación completa — descarga el ZIP');
+  log('Listo');
+  var totalOut=Object.values(outputs).reduce((a,o)=>a+Object.keys(o).length,0);
+  document.getElementById('wfInfo').textContent=totalOut+' archivos generados en '+Object.keys(outputs).length+' carpetas';
+}
+
+// ══════════════════════════════════════════════
+//  EXTRAER TEXTO DE UNA PÁGINA
+// ══════════════════════════════════════════════
+async function extractPageText(pdfDoc,pageNum){
+  try{
+    var page=await pdfDoc.getPage(pageNum);
+    var content=await page.getTextContent();
+    return content.items.map(i=>i.str).join(' ').trim();
+  }catch(e){return '';}
+}
+
+// ══════════════════════════════════════════════
+//  RENDERIZAR UNA PÁGINA → BASE64
+// ══════════════════════════════════════════════
+async function renderPage(pdfDoc,pageNum){
+  var page=await pdfDoc.getPage(pageNum);
+  var vp0=page.getViewport({scale:1});
+  var sc=Math.min(560/vp0.width,760/vp0.height,2.0);
+  var vp=page.getViewport({scale:sc});
+  var cv=document.createElement('canvas');
+  cv.width=Math.round(vp.width);
+  cv.height=Math.round(vp.height);
+  var ctx=cv.getContext('2d');
+  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,cv.width,cv.height);
+  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  return cv.toDataURL('image/jpeg',0.88).split(',')[1];
+}
+
+// ══════════════════════════════════════════════
+//  PROMPT MAESTRO — basado en análisis real de OCR de 13 lotes
+//  REALIDAD: CRC/FEV/PDE → OCR siempre rico
+//            DFV/OPF     → OCR siempre vacío (escaneados o pdf-lib)
+// ══════════════════════════════════════════════
+function buildPagePrompt(filename,pageNum,totalPages,ocrText){
+  var hasText = ocrText.trim().length > 15;
+  var ocrNote = !hasText
+    ? '\nATENCIÓN: OCR vacío. Normal en este sistema — DFV y OPF siempre llegan escaneados. Clasifica EXCLUSIVAMENTE por análisis visual de la imagen.'
+    : '';
+
+  return `Eres un clasificador experto en documentos de radicación farmacéutica del sistema de salud colombiano para TODODROGAS CIA S.A.S. (NIT 830500960), que dispensa medicamentos POS a afiliados de SALUD TOTAL EPS en Antioquia.
+
+PÁGINA ${pageNum} de ${totalPages} — archivo: "${filename}"
+OCR: """${ocrText.substring(0,1000)}"""${ocrNote}
+
+━━━ TIPOS DE DOCUMENTO ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+【CRC】 ACTA DE ENTREGA — Tododrogas CIA S.A.S.
+  OCR: SIEMPRE rico. Señales únicas:
+  - "Acta de Entrega" en encabezado + logo Tododrogas
+  - Código único: *D18260401596* o *D14260501759* (asterisco+D+números)
+  - "Con la presente se hace entrega de los medicamentos e insumos"
+  - "Nombre de persona que recibe" + espacio para firma
+  - "Valor Recaudado / Cop/Crec/Cm" con valor $0,00
+  - Tabla: Cod / Descripción / Laboratorio / Lote / Fecha Venc / Und / U.Pres / C.Pend
+  - Funcionario: RAMIREZ VARGAS ISABEL CRISTINA u otro empleado Tododrogas
+
+【DFV】 ORDEN DE DIRECCIONAMIENTO — Salud Total EPS (NIT 800130907, EPS002)
+  OCR: SIEMPRE VACÍO en producción real. CLASIFICA POR IMAGEN VISUAL.
+  VERSIÓN A — Digital (más frecuente, texto impreso nítido, sin logo grande):
+    • Título centrado negrilla: "MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO"
+    • Fecha/hora esquina derecha: "22 Ene 2026 07:38 AM"
+    • 8 secciones con recuadros en negrilla (en este orden):
+      1. ENTIDAD RESPONSABLE DEL PAGO → Salud Total EPS / Código: EPS002
+      2. INFORMACIÓN DEL PACIENTE → CC, nombre, fecha nacimiento, dirección, municipio Amaga/Medellín
+      3. INFORMACIÓN PRESTADOR → INVERSIONES TODO DROGAS S A S / NIT 830500960 / Código 31828
+      4. INFORMACIÓN DE LA TRANSACCIÓN → Régimen Contributivo-POS-Evento, Diagnóstico E10.9, Fecha Vencimiento, No. Solicitud 01222026021898
+      5. SERVICIOS DIRECCIONADOS → tabla Código/Cant/Nombre con (CMD 10) EZETIMIBA o SITAGLIPTINA...
+      6. PAGOS COMPARTIDOS → Tipo Recaudo: Cuota Moderadora, Valor: 0, Semanas Cotizadas: 52
+      7. INFORMACIÓN DE LA PERSONA QUE DIRECCIONA → DiegoBalS o VanessaEL, Cargo General
+      8. OBSERVACIONES → "Señor Usuario no sobreescribir ni enmendar este documento..."
+  VERSIÓN B — Escaneada con logo (menos frecuente):
+    • Logo grande "SaludTotal EPS-S" esquina sup-izquierda
+    • Número grande esquina sup-derecha: "No.35240306" o "No.40875453"
+    • Mismas 8 secciones en formato impreso/escaneado
+    • Al pie: "SOLO PARA ORDENES DE COMPRA DE SERVICIOS"
+    • "Firma SALUD TOTAL EPS-S S.A." + "Firma Usuario" + código M-SNT-F008 V2.0
+  → REGLA: Cualquier variante con "ORDEN DE DIRECCIONAMIENTO" + Salud Total = DFV
+
+【FEV】 FACTURA ELECTRÓNICA DE VENTA — Tododrogas CIA S.A.S.
+  OCR: SIEMPRE rico. Señales únicas:
+  - "FACTURA ELECTRONICA DE VENTA No. TDNE13709" (número consecutivo TDNE)
+  - CUFE: cadena hexadecimal de 64 caracteres en campo específico
+  - "Somos Autorretenedores de Renta Resolución 3527 del 29 de Abril de 2015"
+  - "ICA 5x1000 en Medellin Res. 36452 del 11de Diciembre de 2018"
+  - "Grandes Contribuyentes Resolución 000200 del 27 de diciembre de 2024"
+  - Tabla: Descripción/Laboratorio/Lote/Fecha Venc/Und/Iva/Precio Uni/Total
+  - Precios unitarios (2.179, 3.788) y totales (61.012, 113.640)
+  - "SubTotal / Dscto / Iva 19% / Cop/CRec/CMod / Total: 235.664,00"
+  - "Vlr letras: DOSCIENTOS TREINTA Y CINCO MIL..."
+  - Cliente: ENTIDAD PROMOTORA SALUD TOTAL REGIMEN CONTRIBUTIVO
+
+【OPF】 ORDEN MÉDICA / FÓRMULA MÉDICA — Hospital o IPS
+  OCR: SIEMPRE VACÍO en producción real. CLASIFICA POR IMAGEN VISUAL.
+  VERSIÓN A — E.S.E. Hospital San Fernando (Amaga, NIT 890.906.346-1):
+    • Logo "HSF" esquina superior izquierda
+    • Encabezado: "E.S.E HOSPITAL SAN FERNANDO - AMAGA / Nit: 890.906.346-1"
+    • Título: "ORDEN MEDICAMENTOS P.O.S"
+    • Campos: Nombre paciente, Teléfono, Historia, Entidad (SALUDTOTAL CONTRIBUTIVO CAPITA)
+    • T.Atención: CONTROL ENFERMEDADES CRONICAS / Código Dx: E119-E785
+    • Tabla: CODIGO / MEDICAMENTO / DOSIS / VIA / CANTIDAD
+    • Medicamentos: SITAGLIPTINA/METFORMINA, ROSUVASTATINA/EZETIMIBE
+    • Firma manuscrita del médico + nombre (ARENAS IZAQUITA MARIA JOSE) + registro 1.193.371.751
+    • "Esta orden es valida Hasta: Mar.07/2026"
+  VERSIÓN B — Promotora Clínica Zona Franca de Urabá S.A.S. (NIT 900390423):
+    ⚠ LLEGA ESCANEADA — busca estas señales visuales aunque OCR esté vacío:
+    • Encabezado centrado negrilla: "PROMOTORA CLINICA ZONA FRANCA DE URABA S.A.S."
+    • NIT centrado: "900390423"
+    • Título grande: "FORMULA MÉDICA" subtítulo "EVOLUCION"
+    • Campos: N° Historia Clínica, N° Folio, Folio Asociado, Tipo Externo
+    • Secciones: DATOS PERSONALES / DATOS DE AFILIACIÓN / DATOS DEL INGRESO
+    • DATOS DE AFILIACIÓN: Entidad Ingreso SALUD TOTAL EPS S.A., Plan Beneficio CONTRIBUTIVO HOSPITALARIO
+    • Tabla "MEDICAMENTOS POS": código/concentración/unidad/vía/cantidad/duración
+    • Firma manuscrita digital del médico al pie
+    • "Declaramos que la Clínica Panamericana adoptó un sistema tecnológico de alta seguridad"
+    • Número de página: "Pagina: 3/5", número reporte 1037485949
+    • ÚLTIMA LÍNEA: "LICENCIADO A: [PROMOTORA CLINICA ZONA FRANCA DE URABA S.A.S. - PANAMERICANA] NIT [900390423-9]"
+  VERSIÓN C — Cualquier otra IPS/clínica/hospital:
+    • Membrete institucional en la parte superior
+    • Título: "FORMULA MEDICA", "ORDEN MEDICA", "PRESCRIPCIÓN MÉDICA" o "RECETA MÉDICA"
+    • Datos paciente + diagnóstico + medicamentos con dosis y vía
+    • Nombre y firma del médico prescriptor
+
+【PDE】 VALIDACIÓN DE DERECHOS — ADRES / BDUA / MIPRES
+  OCR: SIEMPRE rico. Señales únicas:
+  - URL: "aplicaciones.adres.gov.co/BDUA_Internet/Pages/RespuestaConsulta.aspx?tokenId=..."
+  - "ADMINISTRADORA DE LOS RECURSOS DEL SISTEMA GENERAL DE SEGURIDAD SOCIAL EN SALUD - ADRES"
+  - "Base de Datos Única de Afiliados – BDUA"
+  - "Resultados de la consulta"
+  - Tabla 1: COLUMNAS/DATOS — CC, número identificación, nombres, apellidos, departamento ANTIOQUIA, municipio AMAGA
+  - Tabla 2: Estado ACTIVO / Entidad SALUD TOTAL / Régimen CONTRIBUTIVO / Fecha inicio 01/10/2024 / Fin 31/12/2999 / Tipo COTIZANTE
+  - "Fecha de Impresión: 04/22/2026 07:37:16" + dirección IP estación origen
+
+━━━ ÁRBOL DE DECISIÓN (sigue este orden exacto) ━━━━━━━━━━━━━━━━━━━━
+
+1. ¿OCR tiene CUFE o "FACTURA ELECTRONICA DE VENTA"? → FEV
+2. ¿OCR tiene ADRES, BDUA, adres.gov.co o tokenId? → PDE
+3. ¿OCR tiene "Acta de Entrega" o código *D18260...* o *D14260...*? → CRC
+4. ¿IMAGEN muestra "MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO" + secciones Salud Total? → DFV
+5. ¿IMAGEN muestra logo "SaludTotal EPS-S" + número "No.XXXXXXXX"? → DFV
+6. ¿IMAGEN muestra "PROMOTORA CLINICA ZONA FRANCA" o "FORMULA MÉDICA" + EVOLUCION? → OPF
+7. ¿IMAGEN muestra logo HSF + "ORDEN MEDICAMENTOS P.O.S" + tabla DOSIS/VIA? → OPF
+8. ¿IMAGEN muestra membrete hospital/clínica + medicamentos + firma médico? → OPF
+9. ¿OCR vacío + imagen con secciones ENTIDAD RESPONSABLE DEL PAGO / PAGOS COMPARTIDOS? → DFV
+10. ¿OCR vacío + imagen con tabla medicamentos de IPS/clínica? → OPF
+11. Solo si NINGÚN criterio aplica → UNK (último recurso absoluto)
+
+Responde ÚNICAMENTE con JSON exacto, sin markdown ni texto adicional:
+{"prefix":"DFV","reason":"Orden de direccionamiento Salud Total EPS Versión A con secciones ENTIDAD RESPONSABLE DEL PAGO, SERVICIOS DIRECCIONADOS y PAGOS COMPARTIDOS. OCR vacío — clasificado por imagen visual","confidence":0.99}`;
+}
+
+// ══════════════════════════════════════════════
+//  CLASIFICAR PÁGINA VÍA PROXY
+// ══════════════════════════════════════════════
+async function classifyPage(imgB64,ocrText,pageNum,totalPages,filename){
+  var prompt=buildPagePrompt(filename,pageNum,totalPages,ocrText);
+  var body={pages_b64:[imgB64],ocr_text:ocrText,prompt};
+  var resp=await fetch(PROXY,{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!resp.ok){
+    var txt=await resp.text().catch(()=>'');
+    throw new Error('Proxy '+resp.status+': '+txt.substring(0,80));
+  }
+  var data=await resp.json();
+  var raw=(data.text||'').replace(/```json|```/g,'').trim();
+  try{
+    var p=JSON.parse(raw);
+    if(!['CRC','DFV','FEV','OPF','PDE','UNK'].includes(p.prefix))p.prefix='UNK';
+    return p;
+  }catch(e){
+    var m=raw.match(/"prefix"\s*:\s*"([A-Z]+)"/);
+    return{prefix:m?m[1]:'UNK',reason:raw.substring(0,80),confidence:0.5};
   }
 }
 
-// ── Aplicar filtros ───────────────────────────────────────────────────
-function aplicarFiltros() {
-  const mes    = document.getElementById('filtro-mes').value;
-  const ticket = document.getElementById('filtro-ticket').value.trim();
-  cargarRadicados(mes, ticket);
-}
+// ══════════════════════════════════════════════
+//  CONSTRUIR PDFs DE SALIDA POR CARPETA
+//  Agrupa páginas del mismo tipo y genera un PDF por tipo
+// ══════════════════════════════════════════════
+async function buildOutputs(k){
+  var pages=pageMap[k];
+  if(!pages||!pages.length)return;
 
-// ── Volver a búsqueda ─────────────────────────────────────────────────
-function volverBusqueda() {
-  document.getElementById('paso-lista').style.display   = 'none';
-  document.getElementById('result-wrap').style.display  = 'none';
-  document.getElementById('paso-cedula').style.display  = 'block';
-  document.getElementById('error-msg').classList.remove('show');
-}
+  // Agrupar índices de página por prefix
+  var groups={};
+  pages.forEach((pg,idx)=>{
+    var pfx=pg.prefix||'UNK';
+    if(!groups[pfx])groups[pfx]=[];
+    groups[pfx].push(idx);
+  });
 
-function volverLista() {
-  document.getElementById('result-wrap').style.display  = 'none';
-  document.getElementById('paso-lista').style.display   = 'block';
-}
+  outputs[k]={};
 
-function setLoading(on, txt) {
-  document.getElementById('loading-wrap').style.display = on ? 'block' : 'none';
-  if (txt) document.getElementById('loading-txt').textContent = txt;
-  if (!on) document.getElementById('loading-wrap').style.display = 'none';
-}
+  for(var pfx of Object.keys(groups)){
+    var pageIdxs=groups[pfx];
+    var newDoc=await PDFDocument.create();
 
-// ── Renderizar detalle (mismo diseño que antes) ───────────────────────
-// ── Mensajes por estado y tipo ──────────────────────────────────────
-const MENSAJES_ESTADO = {
-  solucionado: {
-    felicitacion: { icon:'💙', msg:'Gracias por tus palabras. Tu mensaje llegó al corazón de nuestro equipo y nos inspira a seguir mejorando cada día.', cls:'verde' },
-    sugerencia:   { icon:'🌟', msg:'Tu sugerencia fue recibida y tenida en cuenta. Nos ayudas a crecer como organización.', cls:'verde' },
-    default:      { icon:'✅', msg:'Tu solicitud fue atendida y resuelta exitosamente. Gracias por comunicarte con Tododrogas.', cls:'verde' },
-  },
-  pendiente: {
-    queja:     { icon:'⏳', msg:'Tu queja está registrada y será atendida en máximo 15 días hábiles según la Ley 1755/2015.', cls:'amarillo' },
-    reclamo:   { icon:'⏳', msg:'Tu reclamo está en revisión. Un asesor especializado lo atenderá pronto.', cls:'amarillo' },
-    peticion:  { icon:'⏳', msg:'Tu petición fue radicada y está pendiente de asignación.', cls:'amarillo' },
-    denuncia:  { icon:'🔒', msg:'Tu denuncia está siendo procesada con total confidencialidad.', cls:'amarillo' },
-    default:   { icon:'⏳', msg:'Tu solicitud está registrada y pendiente de gestión.', cls:'amarillo' },
-  },
-  gestion: {
-    queja:    { icon:'🔍', msg:'Un asesor está revisando tu caso. Te responderemos en los tiempos establecidos.', cls:'azul' },
-    reclamo:  { icon:'🔍', msg:'Tu reclamo está siendo revisado por nuestro equipo especializado.', cls:'azul' },
-    default:  { icon:'🔍', msg:'Tu caso está siendo gestionado activamente por nuestro equipo.', cls:'azul' },
-  },
-  respondido:      { default: { icon:'✅', msg:'Tu caso fue atendido y solucionado. Gracias por comunicarte con Tododrogas.', cls:'verde' } },
-  pendiente_firma: { default: { icon:'🔍', msg:'Tu caso está en gestión prioritaria. Un agente se comunicará contigo pronto.', cls:'azul' } },
-  gestion:         { default: { icon:'🔍', msg:'Tu caso está siendo gestionado activamente por nuestro equipo especializado.', cls:'azul' } },
-  gestionado:      { default: { icon:'🔍', msg:'Tu caso está siendo gestionado activamente por nuestro equipo especializado.', cls:'azul' } },
-  cerrado:         { default: { icon:'✅', msg:'Tu caso fue cerrado exitosamente.', cls:'verde' } },
-  abierto:         { default: { icon:'📋', msg:'Tu solicitud está registrada en nuestro sistema.', cls:'gris' } },
-};
-
-function getMensajeEstado(estado, tipo) {
-  const grupo = MENSAJES_ESTADO[estado] || MENSAJES_ESTADO['abierto'];
-  const t = tipo || 'default';
-  return grupo[t] || grupo['default'] || { icon:'📋', msg:'Tu solicitud está registrada en nuestro sistema.', cls:'gris' };
-}
-
-async function renderResultado(d) {
-  document.getElementById('result-wrap').style.display = 'block';
-
-  const est = ESTADOS[d.estado] || {label: d.estado, cls:'eb-abierto'};
-  const badge = document.getElementById('r-badge');
-  badge.textContent = est.label;
-  badge.className   = 'estado-badge ' + est.cls;
-
-  setText('r-id', d.ticket_id);
-  setText('r-resumen', d.resumen || '');
-  setText('r-tipo', d.tipo || '—');
-  setText('r-canal', d.canal || '—');
-
-  const fl = d.fecha_limite
-    ? new Date(d.fecha_limite).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'})
-    : '—';
-
-  const metaParts = [];
-  if (d.agente)  metaParts.push('👤 ' + d.agente);
-  if (d.creado)  metaParts.push('📅 ' + fmtDate(d.creado));
-  if (fl !== '—') metaParts.push('⏰ Límite: ' + fl + (d.sla_vencido ? ' ⚠️' : ''));
-  setText('r-meta', metaParts.join(' · '));
-
-  // Mensaje de estado
-  const msgEl = document.getElementById('r-msg-estado');
-  const msgData = getMensajeEstado(d.estado, d.tipo);
-  if (msgData) {
-    msgEl.style.display     = 'block';
-    msgEl.style.background  = msgData.bg;
-    msgEl.style.color       = msgData.color;
-    msgEl.style.border      = '1px solid ' + msgData.border;
-    msgEl.textContent       = msgData.txt;
-  }
-
-  // Historial — buscar adjuntos primero si está solucionado, luego renderizar todo junto
-  const eventos = d.historial || [];
-  const estadosSolucion = ['cerrado','respondido','solucionado','cerrado_automatico','firma_confirmada','correo_respondido'];
-
-  if(estadosSolucion.includes(d.estado) && d.ticket_id && SB_URL && SB_ANON) {
-    // Primero renderizar sin adjuntos (rápido), luego actualizar con adjuntos cuando lleguen
-    renderTimeline(eventos, d.estado, d, []);
-    const hdr = {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}};
-    fetch(SB_URL+'/rest/v1/correos?ticket_id=eq.'+encodeURIComponent(d.ticket_id)+'&select=id&limit=1', hdr)
-      .then(r=>r.json())
-      .then(rows=>{
-        const cid = rows&&rows[0]&&rows[0].id;
-        if(!cid) return Promise.resolve([[], []]);
-        return Promise.all([
-          fetch(SB_URL+'/rest/v1/adjuntos?correo_id=eq.'+cid+'&direccion=eq.saliente&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion&order=created_at.desc&limit=10', hdr).then(r=>r.json()).catch(()=>[]),
-          fetch(SB_URL+'/rest/v1/adjuntos?correo_id=eq.'+cid+'&direccion=eq.firma_cierre&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido,direccion&order=created_at.desc&limit=5', hdr).then(r=>r.json()).catch(()=>[])
-        ]);
-      })
-      .then(results=>{
-        if(!results) return;
-        const todosAdjs = [...(results[0]||[]), ...(results[1]||[])];
-        if(todosAdjs.length) renderTimeline(eventos, d.estado, d, todosAdjs);
-      })
-      .catch(()=>{});
-  } else {
-    renderTimeline(eventos, d.estado, d, []);
-  }
-
-  // Botón volver a lista
-  const existing = document.getElementById('btn-volver-lista');
-  if (!existing) {
-    const bv = document.createElement('button');
-    bv.id = 'btn-volver-lista';
-    bv.textContent = '← Ver todos mis radicados';
-    bv.style.cssText = 'background:none;border:none;color:var(--blue);cursor:pointer;font-size:13px;font-weight:600;padding:0;margin-bottom:12px;display:block;';
-    bv.onclick = volverLista;
-    document.getElementById('result-wrap').prepend(bv);
-  }
-}
-
-function renderTimeline(eventos, estado, c, adjuntos) {
-  const tl = document.getElementById('r-timeline');
-  if (!tl) return;
-  tl.innerHTML = '';
-
-  // Solo 3 pasos visibles — sin gestión interna expuesta al usuario
-  const estadosFinal = ['cerrado','respondido','solucionado','cerrado_automatico','firma_confirmada','correo_respondido'];
-  const esSolucionado = estadosFinal.includes(estado);
-  const enGestion = ['gestion','en_gestion','asignado','pendiente_firma','escalado','gestionado'].includes(estado)
-    || eventos.some(e=>['asignado','asignado_manual','en_gestion','gestion','observacion','escalado','pendiente_firma','respondido'].includes(e.evento));
-
-  // ── Extraer fechas exactas desde el historial de eventos ──
-  const evAsignado    = eventos.find(e=>['asignado_manual','asignado','asignado_automatico'].includes(e.evento));
-  const evFirma       = eventos.find(e=>e.evento==='firma_confirmada');
-  const fechaAsignado = evAsignado?.created_at || null;
-  const fechaSolucion = evFirma?.created_at || (esSolucionado ? (c?.actualizado||c?.creado) : null);
-
-  // Construir HTML de adjuntos para inyectar en el paso solucionado
-  let adjHTML = '';
-  if(esSolucionado && adjuntos && adjuntos.length) {
-    const links = adjuntos.map(a => {
-      const bytes = a.tamano_bytes||0;
-      const size  = bytes>=1048576?(bytes/1048576).toFixed(1)+' MB':bytes>=1024?Math.round(bytes/1024)+' KB':bytes+' B';
-      const ext   = (a.nombre||'').split('.').pop().toLowerCase();
-      const icon  = ext==='pdf'?'📄':['png','jpg','jpeg','gif','webp'].includes(ext)?'🖼️':['mp3','ogg','wav','m4a'].includes(ext)?'🎵':['zip','rar'].includes(ext)?'🗜️':'📎';
-      return '<a href="'+a.storage_url+'" target="_blank" rel="noopener" '
-        +'style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;'
-        +'background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;'
-        +'padding:6px 12px;text-decoration:none;color:#15803d;'
-        +'font-size:11px;font-weight:600;">'
-        +icon+' '+a.nombre
-        +' <span style="color:#4ade80;font-size:10px">('+size+')</span>'
-        +' <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">'
-        +'<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>'
-        +'<polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>'
-        +'</a>';
-    }).join('');
-    adjHTML = '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px">'+links+'</div>';
-  }
-
-  const pasos = [
-    {
-      col: 'blue', done: true,
-      lbl: '📩 Correo recibido',
-      desc: 'Tu solicitud fue radicada exitosamente en nuestra plataforma.',
-      fecha: c?.creado
-    },
-    {
-      col: enGestion && !esSolucionado ? 'yellow' : (esSolucionado ? 'green' : 'grey'),
-      done: enGestion || esSolucionado,
-      lbl: '🔍 En gestión',
-      desc: 'Un agente especializado está atendiendo su caso con prioridad.',
-      fecha: fechaAsignado
-    },
-    {
-      col: esSolucionado ? 'green' : 'grey',
-      done: esSolucionado,
-      lbl: '✅ Solucionado',
-      desc: 'Tu caso fue atendido exitosamente. Gracias por comunicarte con Tododrogas.',
-      fecha: fechaSolucion,
-      extra: adjHTML
+    for(var idx of pageIdxs){
+      var pg=pages[idx];
+      var fileObj=folders[k].files.find(f=>f.name===pg.srcFile);
+      if(!fileObj)continue;
+      var srcDoc=await PDFDocument.load(fileObj.bytes.slice(0));
+      var [copied]=await newDoc.copyPages(srcDoc,[pg.srcPage-1]);
+      newDoc.addPage(copied);
     }
-  ];
 
-  setText('r-count', pasos.filter(p=>p.done).length + ' de 3 etapas completadas');
+    var pdfBytes=await newDoc.save();
+    var outName=pfx+'_'+k+'.pdf';
+    outputs[k][pfx]={
+      name:outName,
+      bytes:pdfBytes,
+      pages:pageIdxs.length,
+      prefix:pfx
+    };
+  }
+}
 
-  pasos.forEach((paso, i) => {
-    const isLast = i === pasos.length - 1;
-    const div = document.createElement('div');
-    div.className = 'tl-item';
-    div.style.opacity = paso.done ? '1' : '0.35';
-    div.innerHTML =
-      '<div class="tl-spine">'
-        + '<div class="tl-dot ' + paso.col + '"></div>'
-        + (isLast ? '' : '<div class="tl-line"></div>')
-      + '</div>'
-      + '<div style="flex:1;min-width:0">'
-        + '<div class="tl-ev">' + paso.lbl + '</div>'
-        + (paso.done ? '<div class="tl-desc">' + paso.desc + '</div>' : '')
-        + (paso.fecha ? '<div class="tl-time">' + fmt(paso.fecha) + '</div>' : '')
-        + (paso.extra || '')
-      + '</div>';
-    tl.appendChild(div);
+// ══════════════════════════════════════════════
+//  RENDER RESULTS — vista de carpeta activa
+// ══════════════════════════════════════════════
+function renderResults(){
+  var area=document.getElementById('results');
+  area.innerHTML='';
+  var keys=Object.keys(folders);
+  if(!keys.length)return;
+
+  // Mostrar todas las carpetas, expandir la activa
+  keys.forEach(k=>{
+    area.appendChild(buildFolderSection(k, k===activeFolder));
   });
 }
 
-function autoFormat(inp){
-  if(!inp.value.includes('@')) inp.value=inp.value.toUpperCase();
+function buildFolderSection(k,expanded){
+  var fd=folders[k];
+  var pm=pageMap[k]||[];
+  var outs=outputs[k]||{};
+  var st=fd.status;
+  var dotCls=st==='done'?'ok':st==='processing'?'proc':st==='error'?'err':'';
+
+  var sec=document.createElement('div');
+  sec.className='fsec';
+  sec.id='fsec_'+sid(k);
+
+  // Header
+  var hd=document.createElement('div');
+  hd.className='fsec-hd';
+  var doneCount=Object.keys(outs).filter(p=>p!=='UNK').length;
+  hd.innerHTML=`
+    <div class="dot ${dotCls}" style="flex-shrink:0"></div>
+    <span class="fsec-name">${k}</span>
+    <span class="fsec-meta">${fd.files.length} PDFs · ${pm.length} págs → ${doneCount} archivos</span>
+    <span class="fsec-chev${expanded?' open':''}">›</span>`;
+  sec.appendChild(hd);
+
+  var body=document.createElement('div');
+  body.className='fsec-body'+(expanded?'':' hide');
+  hd.addEventListener('click',()=>{
+    body.classList.toggle('hide');
+    hd.querySelector('.fsec-chev').classList.toggle('open');
+    setActive(k);
+  });
+
+  // Source PDFs con sus páginas mapeadas
+  fd.files.forEach(fileObj=>{
+    var srcRow=document.createElement('div');
+    srcRow.className='src-row';
+
+    var srcHd=document.createElement('div');
+    srcHd.className='src-hd';
+    srcHd.innerHTML=`
+      <span class="src-ico">📄</span>
+      <span class="src-name">${fileObj.name}</span>
+      <span class="src-pages">${fileObj.pageCount} pág${fileObj.pageCount!==1?'s':''}</span>`;
+    srcRow.appendChild(srcHd);
+
+    // Páginas clasificadas de este archivo
+    var myPages=pm.filter(p=>p.srcFile===fileObj.name);
+    if(myPages.length){
+      var pWrap=document.createElement('div');
+      pWrap.className='pages-wrap';
+      myPages.forEach((pg,i)=>{
+        var pfx=pg.prefix||'UNK';
+        var tag=document.createElement('span');
+        tag.className='ptag ptag-'+pfx.toLowerCase();
+        var methodMark=pg.method==='rule'?'⚡':pg.method==='ai'?'🤖':'';
+        tag.textContent=methodMark+'p'+(i+1)+':'+pfx;
+        pWrap.appendChild(tag);
+      });
+      srcRow.appendChild(pWrap);
+    } else if(st==='processing'){
+      var loadRow=document.createElement('div');
+      loadRow.className='src-loading';
+      loadRow.innerHTML='<div class="spin"></div>Analizando páginas…';
+      srcRow.appendChild(loadRow);
+    }
+    body.appendChild(srcRow);
+  });
+
+  // Archivos de salida generados
+  if(Object.keys(outs).length){
+    var outSec=document.createElement('div');
+    outSec.className='out-section';
+    outSec.innerHTML='<div class="out-lbl">Archivos generados</div>';
+    var outFiles=document.createElement('div');
+    outFiles.className='out-files';
+
+    // Mostrar en orden: CRC, DFV, FEV, OPF, PDE, UNK
+    ['CRC','DFV','FEV','OPF','PDE','UNK'].forEach(pfx=>{
+      if(!outs[pfx])return;
+      var o=outs[pfx];
+      var dt=T[pfx]||T.UNK;
+      var row=document.createElement('div');
+      row.className='out-file ok';
+      row.innerHTML=`
+        <span class="out-file-ico">${dt.ico}</span>
+        <span class="out-file-name">${o.name}</span>
+        <span class="out-file-pages">${o.pages} pág${o.pages!==1?'s':''}</span>
+        <span class="out-badge ob-${pfx.toLowerCase()}">${pfx}</span>`;
+      outFiles.appendChild(row);
+    });
+    outSec.appendChild(outFiles);
+
+    // Warning si falta algún tipo esperado
+    var expected=['CRC','DFV','FEV','OPF','PDE'];
+    var missing=expected.filter(p=>!outs[p]);
+    if(missing.length&&st==='done'){
+      var warn=document.createElement('div');
+      warn.className='warn-row';
+      warn.textContent='⚠ Falta: '+missing.join(', ')+' — revisa los PDFs fuente';
+      outSec.appendChild(warn);
+    }
+    body.appendChild(outSec);
+  }
+
+  sec.appendChild(body);
+  return sec;
 }
 
+// ══════════════════════════════════════════════
+//  CONVERTIR CUV JSON — misma lógica que NUEVO_CONVERSOR.PY
+// ══════════════════════════════════════════════
+function convertirCUV(datos){
+  // Soporta PascalCase y camelCase
+  var g = (k1,k2,def) => datos[k1] !== undefined ? datos[k1] : datos[k2] !== undefined ? datos[k2] : def;
 
+  var fechaRadicacion = g('fechaRadicacion','FechaRadicacion','0000-00-00T00:00:00.0000000');
+  // Limpiar timezone offset (+00:00)
+  if(fechaRadicacion && fechaRadicacion.includes('+'))
+    fechaRadicacion = fechaRadicacion.split('+')[0];
 
-// ── Carrusel frases_consulta desde Supabase ──
-(async()=>{
-  if(!SB_URL||!SB_ANON) return;
-  try{
-    const r=await fetch(SB_URL+'/rest/v1/configuracion_sistema?id=eq.main&select=data',
-      {headers:{apikey:SB_ANON,Authorization:'Bearer '+SB_ANON}});
-    if(!r.ok) return;
-    const rows=await r.json();
-    const frases=rows?.[0]?.data?.frases_consulta;
-    if(!frases||!frases.length) return;
+  return {
+    resultState:             g('resultState',            'ResultState',             true),
+    procesoId:               g('procesoId',              'ProcesoId',               0),
+    numFactura:              g('numFactura',             'NumFactura',              ''),
+    codigoUnicoValidacion:   g('codigoUnicoValidacion',  'CodigoUnicoValidacion',   ''),
+    fechaRadicacion:         fechaRadicacion,
+    rutaArchivos:            g('rutaArchivos',           'RutaArchivos',            null),
+    "resultadosValidacion":  []
+  };
+}
 
-    // Ocultar chips estáticos y mostrar carrusel
-    const staticEl=document.getElementById('chips-static');
-    if(staticEl) staticEl.style.display='none';
+function formatearCUV(obj){
+  // Formato exacto: indent 2, resultadosValidacion:[] sin espacio
+  var s = JSON.stringify(obj, null, 2);
+  s = s.replace('"resultadosValidacion": []', '"resultadosValidacion":[]');
+  return s;
+}
 
-    const wrap=document.getElementById('consulta-carousel');
-    if(!wrap) return;
+// ══════════════════════════════════════════════
+//  DOWNLOAD ZIP COMPLETO
+//  - PDFs renombrados por IA
+//  - ZIP interno reconstruido con CUV convertido
+//    y RIPS intacto
+// ══════════════════════════════════════════════
+async function downloadAll(){
+  var allFolders = Object.keys(folders);
+  if(!allFolders.length){ toast('Sin archivos','err'); return; }
+  var anyDone = allFolders.some(k => folders[k].status==='done');
+  if(!anyDone){ toast('Procesa primero con IA','err'); return; }
 
-    let idx=0;
-    function renderSlide(){
-      const f=frases[idx%frases.length];
-      wrap.innerHTML=`
-        <div class="carousel-slide-consulta">
-          <span class="carousel-icon-c">${f.icon||'📋'}</span>
-          <div class="carousel-text-c">${f.text||''}</div>
-        </div>
-        <div class="carousel-dots-c">
-          ${frases.map((_,i)=>'<div class="cdot-c'+(i===idx%frases.length?' active':'')+'"></div>').join('')}
-        </div>`;
+  log('Generando ZIP completo…');
+  var zip = new JSZip();
+  var count = 0;
+
+  for(var k of allFolders){
+    var sub  = zip.folder(k);
+    var outs = outputs[k] || {};
+    var fd   = folders[k];
+
+    // ── PDFs renombrados ────────────────────────────────────
+    if(fd.status==='done' && Object.keys(outs).length){
+      ['CRC','DFV','FEV','OPF','PDE','UNK'].forEach(pfx => {
+        if(outs[pfx]){ sub.file(outs[pfx].name, outs[pfx].bytes); count++; }
+      });
+      Object.keys(outs).forEach(pfx => {
+        if(!['CRC','DFV','FEV','OPF','PDE','UNK'].includes(pfx)){
+          sub.file(outs[pfx].name, outs[pfx].bytes); count++;
+        }
+      });
+    } else {
+      // Carpeta sin procesar — originales intactos
+      for(var f of fd.files){ sub.file(f.name, f.bytes.slice(0)); count++; }
     }
-    renderSlide();
-    setInterval(()=>{idx++;renderSlide();},3500);
-  }catch(e){}
-})();
 
-// Auto-buscar desde URL ?t=TD-xxx (compatibilidad links existentes)
-(()=>{
-  const t=new URLSearchParams(window.location.search).get('t');
-  if(t){
-    const el=document.getElementById('inp-cedula');
-    if(el) el.placeholder='Ingresa tu cédula para ver el radicado '+t;
-  }
-})();
+    // ── ZIPs internos — reconstruir con CUV convertido ─────
+    for(var zObj of (fd.zips||[])){
+      try{
+        var innerZip = await JSZip.loadAsync(zObj.bytes);
+        var newInner = new JSZip();
+        var innerFiles = Object.keys(innerZip.files);
 
-// Canvas fondo animado (igual que login)
-(()=>{
-  const canvas=document.getElementById('bg-canvas');
-  const ctx=canvas.getContext('2d');
-  let W,H,pts=[];
-  function resize(){W=canvas.width=window.innerWidth;H=canvas.height=window.innerHeight;init();}
-  function init(){
-    pts=[];
-    for(let i=0;i<55;i++) pts.push({
-      x:Math.random()*W,y:Math.random()*H,
-      vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3,
-      r:Math.random()*1.5+.5
-    });
-  }
-  function draw(){
-    ctx.clearRect(0,0,W,H);
-    pts.forEach(p=>{
-      p.x+=p.vx;p.y+=p.vy;
-      if(p.x<0||p.x>W)p.vx*=-1;
-      if(p.y<0||p.y>H)p.vy*=-1;
-      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      ctx.fillStyle='rgba(37,99,235,.25)';ctx.fill();
-    });
-    pts.forEach((a,i)=>pts.slice(i+1).forEach(b=>{
-      const d=Math.hypot(a.x-b.x,a.y-b.y);
-      if(d<130){
-        ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);
-        ctx.strokeStyle='rgba(37,99,235,'+(1-d/130)*.08+')';ctx.stroke();
+        for(var ipath of innerFiles){
+          var entry = innerZip.files[ipath];
+          if(entry.dir) continue;
+          var fname = ipath.split('/').pop();
+
+          if(fname.toUpperCase().includes('_CUV') && fname.toLowerCase().endsWith('.json')){
+            // ── Convertir CUV ───────────────────────────────
+            try{
+              var rawText = await entry.async('string');
+              var datosOriginales = JSON.parse(rawText);
+              var datosSalida = convertirCUV(datosOriginales);
+              var textoFinal = formatearCUV(datosSalida);
+              newInner.file(fname, textoFinal);
+              log('CUV convertido: '+fname);
+            }catch(e){
+              // Si falla parsear, incluir original
+              var rawBytes = await entry.async('uint8array');
+              newInner.file(fname, rawBytes);
+              log('CUV sin cambios (error parse): '+fname);
+            }
+          } else {
+            // ── RIPS y cualquier otro archivo — intacto ─────
+            var rawBytes = await entry.async('uint8array');
+            newInner.file(fname, rawBytes);
+          }
+        }
+
+        // Generar ZIP interno reconstruido
+        var newInnerBlob = await newInner.generateAsync({
+          type:'uint8array', compression:'DEFLATE', compressionOptions:{level:6}
+        });
+        sub.file(zObj.name, newInnerBlob);
+        count++;
+
+      }catch(e){
+        // ZIP corrupto o ilegible — incluir original sin tocar
+        sub.file(zObj.name, zObj.bytes.slice(0));
+        count++;
+        log('ZIP original conservado (error): '+zObj.name);
       }
-    }));
+    }
+  }
+
+  if(!count){ toast('Sin archivos para descargar','err'); return; }
+
+  var blob = await zip.generateAsync({
+    type:'blob', compression:'DEFLATE', compressionOptions:{level:5}
+  });
+  var name = 'Radicacion_'+new Date().toISOString().slice(0,10)+'.zip';
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
+  toast('ZIP descargado — '+count+' archivos en '+allFolders.length+' carpetas ✓');
+  log('ZIP listo: '+name);
+}
+
+// ══════════════════════════════════════════════
+//  STATS
+// ══════════════════════════════════════════════
+function updateStats(){
+  var tf=Object.keys(folders).length;
+  var tp=Object.values(pageMap).flat().length;
+  var to=Object.values(outputs).reduce((a,o)=>a+Object.keys(o).length,0);
+  var el=document.getElementById('gstats');
+  if(!tf){el.innerHTML='';return;}
+  el.innerHTML=
+    `<div class="gstat${tf?' on':''}">📁 ${tf}</div>`+
+    `<div class="gstat${tp?' on':''}">📄 ${tp} págs</div>`+
+    `<div class="gstat${to?' on':''}">✓ ${to} archivos</div>`;
+}
+
+// ══════════════════════════════════════════════
+//  CLEAR
+// ══════════════════════════════════════════════
+function clearAll(){
+  folders={};pageMap={};outputs={};activeFolder=null;processing=false;
+  renderSidebar();
+  document.getElementById('welcome').style.display='';
+  document.getElementById('work').classList.remove('on');
+  setProgress(0,1,'Esperando…');setStep(1);
+  updateBtns();updateStats();log('listo');
+}
+
+updateBtns();
+
+// ── GALAXY BACKGROUND ──
+(function(){
+  var cv=document.getElementById('bg-canvas');if(!cv)return;
+  var ctx=cv.getContext('2d'),W,H;
+  function resize(){W=cv.width=innerWidth;H=cv.height=innerHeight}
+  resize();addEventListener('resize',resize);
+
+  // Stars que parpadean
+  var stars=[];
+  for(var i=0;i<220;i++) stars.push({
+    x:Math.random(),y:Math.random(),
+    r:Math.random()*1.3+.2,
+    a:Math.random()*.22+.04,
+    tw:Math.random()*Math.PI*2,
+    spd:Math.random()*.025+.006
+  });
+
+  // Nubes de nebulosa
+  var nebulae=[
+    {x:.2,y:.25,rx:.32,c:'rgba(0,166,81,'},
+    {x:.78,y:.55,rx:.26,c:'rgba(0,166,81,'},
+    {x:.5,y:.85,rx:.22,c:'rgba(34,197,94,'},
+    {x:.12,y:.72,rx:.18,c:'rgba(0,200,100,'},
+    {x:.88,y:.18,rx:.24,c:'rgba(0,166,81,'},
+    {x:.55,y:.35,rx:.14,c:'rgba(16,185,129,'},
+  ];
+
+  // Partículas flotantes conectadas
+  var pts=[];
+  for(var i=0;i<60;i++) pts.push({
+    x:Math.random()*1440,y:Math.random()*900,
+    vx:(Math.random()-.5)*.14,vy:(Math.random()-.5)*.14,
+    r:Math.random()*.85+.2,a:Math.random()*.15+.03,
+    pulse:Math.random()*Math.PI*2
+  });
+
+  var t=0;
+  function draw(){
+    t+=.007;
+    ctx.clearRect(0,0,W,H);
+
+    // Nebulosas
+    nebulae.forEach(n=>{
+      var cx=n.x*W, cy=n.y*H, rad=n.rx*Math.min(W,H)*.7;
+      var grad=ctx.createRadialGradient(cx,cy,0,cx,cy,rad);
+      grad.addColorStop(0,n.c+'0.055)');
+      grad.addColorStop(.4,n.c+'0.022)');
+      grad.addColorStop(1,n.c+'0)');
+      ctx.fillStyle=grad;
+      ctx.beginPath();ctx.arc(cx,cy,rad,0,Math.PI*2);ctx.fill();
+    });
+
+    // Estrellas parpadeantes
+    stars.forEach(s=>{
+      s.tw+=s.spd;
+      var a=s.a*(0.4+0.6*Math.sin(s.tw));
+      ctx.beginPath();ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,166,81,${a})`;ctx.fill();
+    });
+
+    // Partículas con movimiento
+    pts.forEach(p=>{
+      p.x+=p.vx;p.y+=p.vy;p.pulse+=.018;
+      if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;
+    });
+
+    // Líneas de conexión
+    for(var i=0;i<pts.length;i++) for(var j=i+1;j<pts.length;j++){
+      var dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<115){
+        ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);
+        ctx.strokeStyle=`rgba(0,166,81,${(1-d/115)*.055})`;ctx.lineWidth=.55;ctx.stroke();
+      }
+    }
+
+    // Puntos
+    pts.forEach(p=>{
+      var a=p.a*(0.5+0.5*Math.sin(p.pulse));
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(0,140,55,${a})`;ctx.fill();
+    });
+
     requestAnimationFrame(draw);
   }
-  window.addEventListener('resize',resize);
-  resize();draw();
+  draw();
 })();
-</script>
 </body>
 </html>
