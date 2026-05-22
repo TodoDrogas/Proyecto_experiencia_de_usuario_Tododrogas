@@ -5535,7 +5535,11 @@ async function toggleReply(modo) {
         // 1. Intentar desde Supabase primero (adjuntos entrantes guardados)
         let adjsSB = [];
         try {
-          adjsSB = await sb(`adjuntos?correo_id=eq.${correoId}&direccion=eq.entrante&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido`) || [];
+          const _rawAdjs = await sb(`adjuntos?correo_id=eq.${correoId}&direccion=eq.entrante&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido`) || [];
+          // Deduplicar por nombre (puede haber duplicados si el sync corrió varias veces)
+          const _seen = new Map();
+          for (const a of _rawAdjs) { if (a.nombre && !_seen.has(a.nombre)) _seen.set(a.nombre, a); }
+          adjsSB = [..._seen.values()];
         } catch(e) { /* silencioso */ }
 
         if (adjsSB.length > 0) {
