@@ -206,6 +206,23 @@ input[type=file]{display:none}
 .warn-row{display:flex;align-items:center;gap:6px;padding:5px 10px;
   background:rgba(255,171,64,.07);border-top:1px solid rgba(255,171,64,.15);
   font-size:9px;color:var(--amber);font-family:'IBM Plex Mono',monospace}
+/* COMPACT RESULT ROWS — carpetas no activas */
+.fsec-compact{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 11px;border-radius:var(--r);
+  background:var(--bg2);border:1px solid var(--border);
+  cursor:pointer;transition:background .12s;margin-bottom:4px;
+  min-height:30px
+}
+.fsec-compact:hover{background:var(--bg3);border-color:var(--border2)}
+.fsec-compact-proc{border-color:rgba(255,171,64,.25);background:rgba(255,171,64,.04)}
+.fsc-name{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:500;
+  flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  display:flex;align-items:center;gap:6px}
+.fsc-meta{font-size:9px;color:var(--txt3);font-family:'IBM Plex Mono',monospace;
+  flex-shrink:0;white-space:nowrap}
+.fsc-proc{color:var(--amber)}
+
 /* REVISAR badge */
 .revisar-badge{
   display:inline-flex;align-items:center;gap:5px;
@@ -590,8 +607,9 @@ async function processAll(){
     folders[k].status='processing';
     pageMap[k]=[];
     outputs[k]={};
+    activeFolder=k;  // Enfocar automáticamente la carpeta en proceso
     renderSidebar();
-    if(activeFolder===k)renderResults();
+    renderResults();
 
     try{
       // ── Por cada PDF de la carpeta ──────────────────────────
@@ -650,7 +668,9 @@ async function processAll(){
 
           progDone++;
           setProgress(progDone,progTotal,'Analizando '+progDone+'/'+progTotal+' páginas…');
-          if(activeFolder===k)renderResults();
+          renderResults();
+          var el=document.getElementById('fsec_'+sid(k));
+          if(el) el.scrollIntoView({block:'nearest',behavior:'smooth'});
         }
       }
 
@@ -659,6 +679,7 @@ async function processAll(){
       log('Generando PDFs de salida para '+k+'…');
       await buildOutputs(k);
       folders[k].status='done';
+      renderResults();
 
     }catch(folderErr){
       folders[k].status='error';
@@ -926,6 +947,21 @@ function buildFolderSection(k,expanded){
   var outs=outputs[k]||{};
   var st=fd.status;
   var dotCls=st==='done'?'ok':st==='processing'?'proc':st==='error'?'err':'';
+
+  // ── Carpeta NO activa → fila resumen compacta, sin cuerpo ──
+  if(!expanded){
+    var needsRevC = folderNeedsReview(k);
+    var dotC = needsRevC ? 'proc' : dotCls;
+    var doneC = Object.keys(outs).filter(p=>p!=='UNK').length;
+    var sec2=document.createElement('div');
+    sec2.className='fsec-compact'+(st==='processing'?' fsec-compact-proc':'');
+    sec2.onclick=()=>setActive(k);
+    sec2.innerHTML=`
+      <div class="dot ${dotC}" style="flex-shrink:0"></div>
+      <span class="fsc-name">${k}${needsRevC?'<span class="revisar-badge" style="font-size:8px;padding:1px 6px">⚠</span>':''}</span>
+      <span class="fsc-meta">${st==='processing'?'<span class="fsc-proc">procesando…</span>':(st==='done'?doneC+' archivos':'pendiente')}</span>`;
+    return sec2;
+  }
 
   var sec=document.createElement('div');
   sec.className='fsec';
