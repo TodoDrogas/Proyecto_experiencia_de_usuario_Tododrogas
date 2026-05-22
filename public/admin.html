@@ -5523,6 +5523,67 @@ async function toggleReply(modo) {
   // Activar autocompletado (sin delay — los inputs ya existen en el DOM)
   _acInit(document.getElementById('replyTo'));
   _acInit(document.getElementById('replyCC'));
+
+  // ── Al reenviar: precargar adjuntos del correo original ──────────────
+  if (modo === 'forward') {
+    (async () => {
+      try {
+        const correoId = email.id;
+        const msgId    = email.message_id || email.raw?.id || email.raw?.internetMessageId || '';
+        const userId   = window.GRAPH_USER_ID || '';
+
+        // 1. Intentar desde Supabase primero (adjuntos entrantes guardados)
+        let adjsSB = [];
+        try {
+          adjsSB = await sb(`adjuntos?correo_id=eq.${correoId}&direccion=eq.entrante&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido`) || [];
+        } catch(e) { /* silencioso */ }
+
+        if (adjsSB.length > 0) {
+          for (const a of adjsSB) {
+            if (!a.storage_url || !a.nombre) continue;
+            try {
+              const res = await fetch(a.storage_url);
+              if (!res.ok) continue;
+              const blob = await res.blob();
+              const file = new File([blob], a.nombre, { type: a.tipo_contenido || blob.type || 'application/octet-stream' });
+              if (!_attachedFiles.has(file.name)) {
+                _attachedFiles.set(file.name, { file, id: 'a' + (++_attachCounter) });
+              }
+            } catch(e) { console.warn('[forward-adj] storage fetch error:', a.nombre, e.message); }
+          }
+          _attachRender();
+          return;
+        }
+
+        // 2. Fallback: Graph API
+        if (!msgId || !userId) return;
+        const token = await getGraphToken();
+        if (!token) return;
+        const rAdj = await fetch(
+          `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments?$select=id,name,contentType,size,isInline`,
+          { headers: { 'Authorization': 'Bearer ' + token } }
+        );
+        if (!rAdj.ok) return;
+        const aData = await rAdj.json();
+        const visibles = (aData.value || []).filter(a => !a.isInline);
+        for (const a of visibles) {
+          try {
+            const proxyUrl = '/adj-proxy.php?url=' + encodeURIComponent(
+              `https://graph.microsoft.com/v1.0/users/${userId}/messages/${msgId}/attachments/${a.id}/$value`
+            );
+            const res = await fetch(proxyUrl);
+            if (!res.ok) continue;
+            const blob = await res.blob();
+            const file = new File([blob], a.name, { type: a.contentType || blob.type || 'application/octet-stream' });
+            if (!_attachedFiles.has(file.name)) {
+              _attachedFiles.set(file.name, { file, id: 'a' + (++_attachCounter) });
+            }
+          } catch(e) { console.warn('[forward-adj] graph fetch error:', a.name, e.message); }
+        }
+        _attachRender();
+      } catch(e) { console.warn('[forward-adj] error general:', e.message); }
+    })();
+  }
 }
 
 
@@ -5692,13 +5753,19 @@ async function sendReply() {
       : await _buildAndSendMail(token,userId,messagePayload);
 
     const totalAdj=_attachedFiles.size;
+    const _esReenvio = window._replyModo === 'forward';
     if(r.ok||r.status===202||r.status===200){
       const adjInfo=totalAdj>0?` (${totalAdj} adjunto${totalAdj>1?'s':''})` :'';
-      showToast('Respuesta enviada ✓'+adjInfo,'success');
+      showToast((_esReenvio?'Reenvío':'Respuesta')+' enviado ✓'+adjInfo,'success');
       const todosLosArchivos=[...inlineFiles,...largeFiles];
-      await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,100),correo_id_saliente:null});
-      // Marcar el correo original como respondido
-      try { await sb(`correos?id=eq.${id}`,'PATCH',{tiene_respuesta:true}); } catch(eR){console.warn('[tiene_respuesta]',eR.message);}
+      // Reenvío de admin: evento neutro que no alimenta métricas de agentes
+      if (_esReenvio) {
+        await addHistorialEvent(id,email,'reenvio_admin',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Reenvío manual por admin: '+body.replace(/<[^>]*>/g,'').substring(0,100),correo_id_saliente:null});
+      } else {
+        await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,100),correo_id_saliente:null});
+        // Marcar el correo original como respondido (solo en respuesta, no en reenvío)
+        try { await sb(`correos?id=eq.${id}`,'PATCH',{tiene_respuesta:true}); } catch(eR){console.warn('[tiene_respuesta]',eR.message);}
+      }
       // Guardar correo saliente capturando su ID para el timeline
       let _adminSalienteId = null;
       try {
@@ -5742,11 +5809,11 @@ async function sendReply() {
           console.warn('[adjuntos-storage]', eAdj.message);
         }
       }
-      // Actualizar el evento correo_respondido ya guardado con el correo_id_saliente
+      // Actualizar el evento ya guardado con el correo_id_saliente
       if(_adminSalienteId) {
         try {
-          // Buscar el evento recién creado y actualizarlo
-          const _evRows = await sb(`historial_eventos?correo_id=eq.${id}&evento=eq.correo_respondido&order=created_at.desc&limit=1`);
+          const _evNombre = _esReenvio ? 'reenvio_admin' : 'correo_respondido';
+          const _evRows = await sb(`historial_eventos?correo_id=eq.${id}&evento=eq.${_evNombre}&order=created_at.desc&limit=1`);
           if(_evRows && _evRows[0]?.id) {
             const _evMeta = _parseMeta(_evRows[0].datos_extra||'{}');
             _evMeta.correo_id_saliente = _adminSalienteId;
@@ -5754,12 +5821,15 @@ async function sendReply() {
           }
         } catch(e5){ console.warn('[correo-saliente-admin link]', e5.message); }
       }
-      try {
-        const corrOrig=state.emails.find(e=>e.raw?.conversation_id===email?.raw?.conversation_id&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
-        const idGest=corrOrig?.id||id;
-        const freshG=await sb(`correos?id=eq.${idGest}&select=num_gestiones&limit=1`);
-        await sb(`correos?id=eq.${idGest}`,'PATCH',{num_gestiones:(freshG?.[0]?.num_gestiones||0)+1});
-      } catch(e3){ console.warn('[gestiones-admin]',e3.message); }
+      // Incrementar num_gestiones solo si NO es reenvío
+      if (!_esReenvio) {
+        try {
+          const corrOrig=state.emails.find(e=>e.raw?.conversation_id===email?.raw?.conversation_id&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
+          const idGest=corrOrig?.id||id;
+          const freshG=await sb(`correos?id=eq.${idGest}&select=num_gestiones&limit=1`);
+          await sb(`correos?id=eq.${idGest}`,'PATCH',{num_gestiones:(freshG?.[0]?.num_gestiones||0)+1});
+        } catch(e3){ console.warn('[gestiones-admin]',e3.message); }
+      }
       // Si el correo actual era borrador, marcarlo como enviado
       if (email?.origen==='borrador'||email?.estado==='borrador'||email?.is_draft) {
         try { await sb(`correos?id=eq.${id}`,'PATCH',{estado:'enviado',origen:'saliente',is_draft:false}); } catch(e4){}
