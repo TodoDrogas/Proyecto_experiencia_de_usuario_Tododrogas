@@ -396,6 +396,15 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 var {PDFDocument} = PDFLib;
 var PROXY = '/clasificador-proxy.php';
 
+// ── GUARD DE SESIÓN ──────────────────────────────
+(function(){
+  var role = sessionStorage.getItem('pqr_role');
+  var user = sessionStorage.getItem('rips_user');
+  if(!role || !user){
+    window.location.replace('login_clasificador.html');
+  }
+})();
+
 // ══════════════════════════════════════════════
 //  TIPOS
 // ══════════════════════════════════════════════
@@ -609,17 +618,15 @@ async function handleUpload(ev){
   log('Listo — '+Object.keys(folders).length+' carpetas · '+pdfs.length+' PDFs · '+zips.length+' ZIPs');
 }
 
-var dz;
-window.addEventListener('DOMContentLoaded',function(){
-  dz=document.getElementById('dz');
-  var finput=document.getElementById('finput');
-  if(finput) finput.addEventListener('change', handleUpload);
-  if(!dz)return;
+var dz = document.getElementById('dz');
+var finput = document.getElementById('finput');
+if(finput) finput.addEventListener('change', handleUpload);
+if(dz){
   dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
   dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
   dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');
     handleUpload({target:{files:e.dataTransfer.files,value:''}});});
-});
+}
 
 // ══════════════════════════════════════════════
 //  SIDEBAR
@@ -1245,7 +1252,7 @@ function clearAll(){
   updateBtns();updateStats();log('listo');
 }
 
-window.addEventListener('DOMContentLoaded', function(){ updateBtns(); });
+updateBtns();
 
 // ── GALAXY BACKGROUND ──
 (function(){
