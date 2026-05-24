@@ -2027,33 +2027,43 @@ async function loadSigiMetrics() {
     const enGest    = correosRecibidos.filter(x=>_asig(x)&&x.estado==='gestion').length;
     const pteFirma  = correosRecibidos.filter(x=>_asig(x)&&x.estado==='pendiente_firma').length;
     const cerrados  = correosRecibidos.filter(x=>_asig(x)&&(x.estado==='solucionado'||x.estado==='gestionado')).length;
-    // Con/Sin Respuesta — usar historial de eventos igual que la vista del agente
+    // Con/Sin Respuesta — usar _respSetGlobal de Asesores (set histórico completo sin filtro fecha)
+    // Misma fuente que la tabla de Asesores para garantizar consistencia entre vistas
     const _idsPeriodoSigi = new Set(correosRecibidos.filter(_asig).map(x=>x.id));
     const _EXCL_SIGI = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
       'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
       'pendiente_firma','firma_confirmada']);
-    let _sigiHistorial = [];
-    try {
-      const _sigiIds = [..._idsPeriodoSigi];
-      const _LOTE_SIGI = 400;
-      for(let i=0; i<_sigiIds.length; i+=_LOTE_SIGI) {
-        const lote = _sigiIds.slice(i, i+_LOTE_SIGI);
-        let off=0;
-        while(true) {
-          const page = await sb(
-            `historial_eventos?correo_id=in.(${lote.join(',')})&select=correo_id,evento&limit=1000&offset=${off}`
-          ) || [];
-          page.forEach(h=>_sigiHistorial.push(h));
-          if(page.length<1000) break;
-          off+=1000;
-          if(off>=20000) break;
+
+    // Intentar usar _respSetGlobal ya cargado; si no está disponible, cargar propio
+    let _sigiConRespIds;
+    if(_agDatos?.respSet?.size > 0) {
+      // ✅ Usar el set global ya cargado por loadAgentesMetrics — misma fuente que tabla Asesores
+      _sigiConRespIds = new Set([..._idsPeriodoSigi].filter(id=>_agDatos.respSet.has(id)));
+    } else {
+      // Fallback: cargar propio si Asesores no se ha visitado aún
+      let _sigiHistorial = [];
+      try {
+        const _sigiIds = [..._idsPeriodoSigi];
+        const _LOTE_SIGI = 400;
+        for(let i=0; i<_sigiIds.length; i+=_LOTE_SIGI) {
+          const lote = _sigiIds.slice(i, i+_LOTE_SIGI);
+          let off=0;
+          while(true) {
+            const page = await sb(
+              `historial_eventos?correo_id=in.(${lote.join(',')})&evento=eq.correo_respondido&select=correo_id&limit=1000&offset=${off}`
+            ) || [];
+            page.forEach(h=>{ if(h.correo_id) _sigiHistorial.push(h); });
+            if(page.length<1000) break;
+            off+=1000;
+            if(off>=20000) break;
+          }
         }
-      }
-    } catch(e) { _sigiHistorial = []; }
-    const _sigiConRespIds = new Set(_sigiHistorial.filter(h=>h.evento==='correo_respondido'&&_idsPeriodoSigi.has(h.correo_id)).map(h=>h.correo_id));
-    const _sigiConGestIds = new Set(_sigiHistorial.filter(h=>!_EXCL_SIGI.has(h.evento)&&_idsPeriodoSigi.has(h.correo_id)).map(h=>h.correo_id));
+      } catch(e) { _sigiHistorial = []; }
+      _sigiConRespIds = new Set(_sigiHistorial.map(h=>h.correo_id).filter(Boolean));
+    }
+    const _sigiConGestIds = _idsPeriodoSigi; // simplificado — gestión = tener al menos 1 evento
     const conResp = _sigiConRespIds.size;
-    // Sin Respuesta = todos los del período sin correo_respondido
+    // Sin Respuesta = tickets con agente que NUNCA han sido respondidos (toda la historia)
     const sinResp = correosRecibidos.filter(x=>_asig(x)&&!_sigiConRespIds.has(x.id)).length;
 
     // ── KPIs Fila 2 ──
@@ -3249,7 +3259,10 @@ function updateFolderCounts() {
   if(_infoBar && state.folder === 'informacion') _infoBar.style.display = _infoCount > 0 ? 'flex' : 'none';
   const urgEl = document.getElementById('fc-urgente');
   if(urgEl) urgEl.textContent = _all.filter(e=>_pqr(e)&&(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma'&&e.estado!=='informacion').length;
-  const _idsConRespFC = state._activosConResp || state._idsConResp || new Set();
+  // fc-sin_respuesta — misma fuente que SIGI y Asesores: set global histórico
+  const _idsConRespFC = _agDatos?.respSet?.size > 0
+    ? _agDatos.respSet
+    : (state._activosConResp || state._idsConResp || new Set());
   const srEl = document.getElementById('fc-sin_respuesta');
   if(srEl) {
     const _allActivos = state._activosAgentes || state.allEmails || state.emails;
@@ -3269,16 +3282,21 @@ function renderFolderAgents() {
   // Solo renderizar cuando loadTicketsActivosAgentes haya cargado su propia data
   if (!state._activosAgentes) return;
   const all = state._activosAgentes;
-  const _idsConResp = state._activosConResp || state._idsConResp || new Set();
+  // Usar _respSetGlobal de _agDatos si está disponible — misma fuente que tabla Asesores
+  // Garantiza que "sin respuesta" = nunca respondido en toda la historia
+  const _idsConResp = _agDatos?.respSet?.size > 0
+    ? _agDatos.respSet
+    : (state._activosConResp || state._idsConResp || new Set());
   const _idsConGest = state._activosConGest || state._idsConGest || new Set();
   el.innerHTML = activos.map((a,i)=>{
     const mis   = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&(e.asignado_a===a.id||e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())))&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
     const total = mis.filter(e=>e.estado!=='informacion').length;
     // Pendientes = estado exacto 'pendiente' (igual que fc-pendiente y métricas)
     const pendiente = mis.filter(e=>e.estado==='pendiente').length;
-    // Sin respuesta = activos sin correo_respondido (igual que fc-sin_respuesta y métricas)
+    // Sin respuesta = tickets con agente que NUNCA han sido respondidos (toda la historia)
+    // Mismo universo que SIGI y Asesores: incluye solucionados
     const sinResp = mis.filter(e=>
-      e.estado!=='informacion'&&e.estado!=='solucionado'&&e.estado!=='gestionado'&&
+      e.estado!=='informacion' &&
       !_idsConResp.has(e.id)
     ).length;
     const ini      = (a.nombre||'?').charAt(0).toUpperCase();
