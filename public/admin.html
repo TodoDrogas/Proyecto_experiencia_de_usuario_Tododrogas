@@ -3075,31 +3075,29 @@ async function loadEmails(horasVentana = 0) {
     state.emails = Array.from(hilos.values());
 
     // ── Calcular IDs con respuesta y con gestión (para badges CON/SIN RESPUESTA) ──
-    // Mismo EXCL que métricas — ambos sets deben coincidir exactamente con la vista del agente.
     const _EXCL_BADGE = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado',
       'nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion',
       'pendiente_firma','firma_confirmada']);
     try {
-      const ids = allEmails.map(e=>e.id).filter(Boolean);
+      // Query global sin filtro de correo_id — cubre TODOS los tickets respondidos en la historia
+      // Misma fuente que _respSetGlobal en Asesores — garantiza consistencia total
       state._idsConResp = new Set();
       state._idsConGest = new Set();
+      const PAGE_RESP = 1000;
+      let _offResp = 0;
+      while(true) {
+        const evSnap = await sb(
+          `historial_eventos?evento=eq.correo_respondido&select=correo_id&limit=${PAGE_RESP}&offset=${_offResp}`
+        ) || [];
+        evSnap.forEach(h => { if(h.correo_id) state._idsConResp.add(h.correo_id); });
+        if(evSnap.length < PAGE_RESP) break;
+        _offResp += PAGE_RESP;
+        if(_offResp >= 100000) break;
+      }
+      // conGestionIds — solo para los correos en memoria (suficiente para badges del panel)
+      const ids = allEmails.map(e=>e.id).filter(Boolean);
       if(ids.length > 0) {
         const loteSize = 400;
-        // Query separada por correo_respondido — evita corte por volumen mezclado
-        for(let i = 0; i < ids.length; i += loteSize) {
-          const lote = ids.slice(i, i + loteSize);
-          let _off = 0;
-          while(true) {
-            const evSnap = await sb(
-              `historial_eventos?correo_id=in.(${lote.join(',')})&evento=eq.correo_respondido&select=correo_id&limit=1000&offset=${_off}`
-            ) || [];
-            evSnap.forEach(h => { if(h.correo_id) state._idsConResp.add(h.correo_id); });
-            if(evSnap.length < 1000) break;
-            _off += 1000;
-            if(_off >= 50000) break;
-          }
-        }
-        // Query para conGestionIds
         for(let i = 0; i < ids.length; i += loteSize) {
           const lote = ids.slice(i, i + loteSize);
           let _off = 0;
