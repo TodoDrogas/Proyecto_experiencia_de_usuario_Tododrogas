@@ -3302,6 +3302,12 @@ function setAgentFolder(agentId, el) {
   state.folder = 'agent_'+agentId;
   document.querySelectorAll('.folder-item').forEach(i=>i.classList.remove('active'));
   if(el) el.classList.add('active');
+  // Ocultar barra selección Información al cambiar de carpeta
+  const bar = document.getElementById('infoSelectBar');
+  if(bar) bar.style.display = 'none';
+  const chk = document.getElementById('chkSelectAllInfo');
+  if(chk) chk.checked = false;
+  limpiarSeleccion();
   renderEmailList();
 }
 
@@ -7346,8 +7352,9 @@ function actualizarBarraMasiva() {
       (state.agents||[]).filter(a=>a.activo!==false).map(a=>
         `<option value="${a.id}">${a.nombre}</option>`
       ).join('');
-    // Mostrar botón eliminar solo si TODOS los seleccionados son de Información
-    const todosInfo = [...state.selectedIds].every(id => {
+    // Mostrar botón eliminar solo si estamos EN carpeta Información Y todos los seleccionados son Info
+    const enCarpetaInfo = state.folder === 'informacion';
+    const todosInfo = enCarpetaInfo && [...state.selectedIds].every(id => {
       const e = (state.allEmails||state.emails||[]).find(x=>x.id===id);
       return e?.estado === 'informacion';
     });
