@@ -2282,28 +2282,7 @@ async function exportarSIGI() {
     // Deduplicar correos por id — evita filas duplicadas en Excel
     const correosSIGI = [...new Map(correos.map(c=>[c.id,c])).values()];
     const correoIds = correosSIGI.map(c => c.id).filter(id => id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
-    // Medicamentos: lotes en paralelo para garantizar que todos lleguen
-    // Medicamentos vienen de historial_eventos.datos_extra->medicamentos (array)
-    // El historial ya fue cargado arriba — extraer medicamentos de ahí
-    const meds = [];
-    hist.forEach(h => {
-      try {
-        const ex = typeof h.datos_extra === 'string' ? JSON.parse(h.datos_extra) : (h.datos_extra || {});
-        const arr = ex.medicamentos;
-        if (Array.isArray(arr) && arr.length) {
-          arr.forEach(m => {
-            meds.push({
-              correo_id:           h.correo_id,
-              codigo:              m.codigo              || '',
-              descripcion:         m.descripcion         || '',
-              descripcion_escrita: m.descripcion_escrita || '',
-              cantidad:            m.cantidad            || '',
-              pbs:                 m.pbs                 || '',
-            });
-          });
-        }
-      } catch(e) {}
-    });
+    // Medicamentos: se extraen del historial más abajo
 
 
     // Helper condicional local para exportarSIGI
@@ -2326,6 +2305,29 @@ async function exportarSIGI() {
           if (!prev || (ex.nombre_paciente && !prev.nombre_paciente)) {
             datosGestion[h.correo_id] = ex;
           }
+        }
+      } catch(e) {}
+    });
+
+    // Medicamentos: lotes en paralelo para garantizar que todos lleguen
+    // Medicamentos vienen de historial_eventos.datos_extra->medicamentos (array)
+    // El historial ya fue cargado arriba — extraer medicamentos de ahí
+    const meds = [];
+    hist.forEach(h => {
+      try {
+        const ex = typeof h.datos_extra === 'string' ? JSON.parse(h.datos_extra) : (h.datos_extra || {});
+        const arr = ex.medicamentos;
+        if (Array.isArray(arr) && arr.length) {
+          arr.forEach(m => {
+            meds.push({
+              correo_id:           h.correo_id,
+              codigo:              m.codigo              || '',
+              descripcion:         m.descripcion         || '',
+              descripcion_escrita: m.descripcion_escrita || '',
+              cantidad:            m.cantidad            || '',
+              pbs:                 m.pbs                 || '',
+            });
+          });
         }
       } catch(e) {}
     });
