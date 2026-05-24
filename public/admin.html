@@ -1980,11 +1980,8 @@ let _sigiChartNombre=null, _sigiChartCategoria=null, _sigiChartEps=null,
     _sigiChartDepto=null,  _sigiChartTendencia=null;
 
 function initAsesorFechas() {
-  if(document.getElementById('agDesde')?.value) return;
-  const hoy   = new Date();
-  const desde = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  document.getElementById('agDesde').value = desde.toISOString().slice(0,10);
-  document.getElementById('agHasta').value = hoy.toISOString().slice(0,10);
+  // No se pre-llenan fechas — la tabla muestra global por defecto.
+  // El admin filtra manualmente si quiere un período específico.
 }
 // Alias requerido por showPage()
 function initAgFechas() { initAsesorFechas(); }
@@ -9468,8 +9465,8 @@ async function loadAgentesMetrics(){
         evs=evs.concat(page);
         if(page.length<PAGE) break;
         off+=PAGE;
-        if(off>=30000){ // techo de seguridad — Bug 6
-          showToast('⚠️ Se alcanzó el límite de 30.000 eventos. Filtra por fecha para ver datos completos.','info');
+        if(off>=100000){ // techo de seguridad — Bug 6
+          showToast('⚠️ Se alcanzó el límite de 100.000 eventos. Filtra por fecha para ver datos completos.','info');
           break;
         }
       }
@@ -9645,23 +9642,15 @@ function renderAgentes(){
     const myE = [...new Map(_myERaw.map(e=>[e.id,e])).values()];
     const _myIds = new Set(myE.map(e=>e.id));
 
-    // Para gestiones: E_all sin filtro fecha → num_gestiones histórico total igual al que ve el agente — Bug 1
-    // Usar _gestGlobal (query dedicada sin filtro fecha con num_gestiones) para mayor precisión
-    const _myGestRaw = (_gestGlobal||[]).filter(e=>
-      e.agente_id===a.id ||
-      (e.asignado_a && (
-        e.asignado_a === a.id ||
-        e.asignado_a.trim().toLowerCase() === a.nombre.trim().toLowerCase()
-      ))
-    );
-    // Gestiones = suma de num_gestiones de TODOS los tickets del agente (sin filtro fecha) — Bug 1
-    const gestReg = _myGestRaw.reduce((s,e)=>s+(e.num_gestiones||0),0);
-    const numGest = gestReg;
     // myH por agente_id (para resp, firmas)
     const myH = H.filter(h=>h.agente_id===a.id&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
     // myH_byCorreo: eventos de los correos del agente aunque el evento tenga otro agente_id
     // Cubre tickets asignados via asignado_a donde el evento puede tener agente_id distinto
     const myH_byCorreo = H.filter(h=>_myIds.has(h.correo_id)&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
+
+    // Gestiones = eventos _esGR del agente en el período, igual que cargarMetricasAgente del agente — Bug 1
+    const gestReg = myH.filter(h=>_esGR(h)).length;
+    const numGest = gestReg;
 
     const tot     = myE.length;
     const pend    = myE.filter(e=>_pqr(e)&&e.estado==='pendiente').length; // Bug 4 — consistente con gest y pfirma
