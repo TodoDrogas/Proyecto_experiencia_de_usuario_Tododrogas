@@ -2404,12 +2404,19 @@ async function exportarSIGI() {
       return {
         '# Gestiones':             c.num_gestiones || 0,
         'Código PQR':              ticketId,                    // Col B — siempre lleno
-        'Tipo Documento':          c.tipo_documento || 'CÉDULA DE CIUDADANÍA',
+        'Tipo Documento':          pac?.['Tipo De Documento'] || c.tipo_documento || 'CÉDULA DE CIUDADANÍA',
         'Documento':               pac?.['Cedula Pacientes'] || pac?.['Cedula Paciente'] || c.cedula_paciente || c.cedula || '',
         'Nombre y Apellidos':      pac?.['Nombre Paciente']  || c.from_name || c.nombre || '',
-        'Dirección':               c.direccion_paciente || '',
+        'Dirección':               pac?.['Direccion'] || c.direccion_paciente || '',
         'Email':                   c.from_email || c.correo || '',
-        'Teléfono':                c.telefono_contacto || '',
+        'Teléfono':                (()=>{
+          const INVALIDOS = new Set(['S/D','NT','NA','N/A','0','1','-','']);
+          const t = (pac?.['Telefono']||'').toString().trim();
+          const valido = t.length >= 7 && !INVALIDOS.has(t.toUpperCase()) && /\d{6,}/.test(t.replace(/[\s\-().]/g,''));
+          const tc = (c.telefono_contacto||'').toString().trim();
+          const tcValido = tc.length >= 7 && !INVALIDOS.has(tc.toUpperCase()) && /\d{6,}/.test(tc.replace(/[\s\-().]/g,''));
+          return valido ? t : (tcValido ? tc : '');
+        })(),
         'NIT EPS':                 eps?.nit || '',
         'EPS':                     eps?.nombre || '',
         'Origen':                  c.origen || '',
@@ -2427,7 +2434,7 @@ async function exportarSIGI() {
         'Fecha Resp. Usuario':     fGest,                       // Col W = igual a V
         'Respuesta Asignación':    pgReal?.descripcion || '',
         'Fecha PQRSFD Cerrada':    fCierre,                     // Col Y
-        'Departamento':            c.departamento_paciente || '',
+        'Departamento':            pac?.['Departamento'] || c.departamento_paciente || '',
         'Ciudad':                  pac?.['Ciudad']       || c.ciudad_paciente || '',
         'Código Medicamento':      '',   // datos en hoja MEDICAMENTOS
         'Descripción Medicamento': '',
