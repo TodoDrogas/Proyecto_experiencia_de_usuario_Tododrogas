@@ -2576,53 +2576,37 @@ async function exportarSIGI() {
 
     // ════════════════════════════════════════════════════════════════
     // HOJA 4 — EPS_CATALOGO
-    // Tipos exactos de la BD (tipo_pqr) + 3 cols estado al final
-    // Se usa comparación exacta (no includes) para evitar duplicados
+    // Solo estados: En Gestión | Pte. Firma | Solucionadas | Total
+    // Los 4 totales deben sumar el total gestionado
     // ════════════════════════════════════════════════════════════════
-    const TIPOS_EPS = [
-      { col:'PETICIÓN',     vals:['peticion','petición'] },
-      { col:'QUEJA',        vals:['queja'] },
-      { col:'RECLAMO',      vals:['reclamo'] },
-      { col:'SUGERENCIA',   vals:['sugerencia'] },
-      { col:'FELICITACIÓN', vals:['felicitacion','felicitación'] },
-      { col:'SOLICITUD',    vals:['solicitud'] },
-      { col:'DENUNCIA',     vals:['denuncia'] },
-      { col:'TUTELA',       vals:['tutela'] },
-      { col:'INFORMACIÓN',  vals:['informacion','información','informativo'] },
-    ];
-
     const epsConConteo = epsCat.map(e => {
       const casosEps = correosSIGI.filter(c => c.eps_id === e.id);
-      const fila = {
-        'NIT':          e.nit || '',
-        'Nombre EPS':   e.nombre || '',
-        'Total PQRSFD': casosEps.length,
+      if (!casosEps.length) return null;
+      const enGestion   = casosEps.filter(c => c.estado === 'gestion').length;
+      const pteFirma    = casosEps.filter(c => c.estado === 'pendiente_firma').length;
+      const solucionadas = casosEps.filter(c => c.estado === 'solucionado' || c.estado === 'gestionado').length;
+      const total       = enGestion + pteFirma + solucionadas;
+      return {
+        'Nombre EPS':        e.nombre || '',
+        'En Gestión':        enGestion,
+        'Pte. Firma':        pteFirma,
+        'Solucionadas':      solucionadas,
+        'Total':             total,
       };
-      TIPOS_EPS.forEach(t => {
-        fila[t.col] = casosEps.filter(c => {
-          const v = (c.tipo_pqr || c.nombre_solicitud || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-          return t.vals.some(tv => v === tv || v.includes(tv));
-        }).length || '';
-      });
-      fila['Gestión']            = casosEps.filter(c => c.estado==='gestion').length            || '';
-      fila['Pendiente de firma'] = casosEps.filter(c => c.estado==='pendiente_firma').length    || '';
-      fila['Solucionadas']       = casosEps.filter(c => c.estado==='solucionado'||c.estado==='gestionado').length || '';
-      return fila;
+    }).filter(Boolean);
+
+    // Fila de totales al final
+    epsConConteo.push({
+      'Nombre EPS':   'TOTAL',
+      'En Gestión':   epsConConteo.reduce((s,f) => s + f['En Gestión'], 0),
+      'Pte. Firma':   epsConConteo.reduce((s,f) => s + f['Pte. Firma'], 0),
+      'Solucionadas': epsConConteo.reduce((s,f) => s + f['Solucionadas'], 0),
+      'Total':        epsConConteo.reduce((s,f) => s + f['Total'], 0),
     });
 
-    // EPS: reemplazar '' por 0 para celdas numéricas
-    epsConConteo.forEach(fila => {
-      [...TIPOS_EPS.map(t=>t.col),'Gestión','Pendiente de firma','Solucionadas'].forEach(col => {
-        if(fila[col]==='') fila[col] = 0;
-      });
-    });
     const ws4 = XLSX.utils.json_to_sheet(epsConConteo.length ? epsConConteo : [{'Sin datos':'Sin EPS'}]);
-    ws4['!cols'] = [
-      {wch:13},{wch:38},{wch:13},
-      {wch:11},{wch:10},{wch:10},{wch:10},{wch:13},{wch:11},{wch:11},{wch:13},{wch:10},
-      {wch:12},{wch:18},{wch:14},
-    ];
-    _styleSheet(ws4, 15);
+    ws4['!cols'] = [{wch:38},{wch:13},{wch:13},{wch:14},{wch:10}];
+    _styleSheet(ws4, 5);
     XLSX.utils.book_append_sheet(wb, ws4, 'EPS_CATALOGO');
 
     // ── Hoja 5: Satisfaccion_Correos ─────────────────────────────
