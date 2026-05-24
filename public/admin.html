@@ -1988,35 +1988,39 @@ function initAgFechas() { initAsesorFechas(); }
 // Hook reservado para futura línea de tiempo por asesor — no hace nada aún
 function renderAgTimeline() {}
 function initSigiFechas() {
-  if(document.getElementById('sigiDesde').value) return;
-  const hoy   = new Date();
-  const desde = new Date(hoy); desde.setDate(1); desde.setMonth(hoy.getMonth()-1);
-  document.getElementById('sigiDesde').value = desde.toISOString().slice(0,10);
-  document.getElementById('sigiHasta').value = hoy.toISOString().slice(0,10);
+  // No se pre-llenan fechas — muestra global por defecto.
+  // El admin filtra manualmente si quiere un período específico.
 }
 
 async function loadSigiMetrics() {
   const desde = document.getElementById('sigiDesde').value;
   const hasta = document.getElementById('sigiHasta').value;
-  if(!desde||!hasta) return;
 
   document.getElementById('sigiLastUpdate').textContent = 'Cargando…';
 
   try {
+    // Helper condicional — solo agrega filtro de fecha si el admin lo especificó
+    const _dS = desde ? desde+'T00:00:00-05:00' : '';
+    const _hS = hasta ? hasta+'T23:59:59-05:00' : '';
+    const encS = s => encodeURIComponent(s);
+    const qS = (base, field) => {
+      let r = base;
+      if(_dS) r += `&${field}=gte.`+encS(_dS);
+      if(_hS) r += `&${field}=lte.`+encS(_hS);
+      return r;
+    };
     // ── Consultas paralelas ──
     const [correos, correosRecibidos, correosInfo, correosGlobal] = await Promise.all([
-      // Correos con gestiones en el período (para tabla, gráficas)
-      sb(`correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false` +
-         `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
+      // Correos con gestiones — sin filtro fecha si no hay rango definido
+      sb(qS(`correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false` +
          `&select=id,ticket_id,nombre,nombre_solicitud,detalle_solicitud,num_gestiones,tiene_tutela,categoria_sigi,estado,eps_id,departamento_paciente,received_at` +
-         `&order=received_at.desc&limit=5000`).catch(()=>[]),
+         `&order=received_at.desc&limit=5000`, 'received_at')).catch(()=>[]),
       // Total recibidos en el período — incluye informacion, paginado para no perder registros
       (async()=>{
         let all=[],off=0;
         while(true){
-          const p=await sb(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false` +
-            `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
-            `&select=id,estado,agente_id,tiene_respuesta,tiene_tutela&limit=1000&offset=${off}`).catch(()=>[]);
+          const p=await sb(qS(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false` +
+            `&select=id,estado,agente_id,tiene_respuesta,tiene_tutela&limit=1000&offset=${off}`, 'received_at')).catch(()=>[]);
           if(!p||!p.length) break;
           all=all.concat(p);
           if(p.length<1000) break;
@@ -2224,9 +2228,10 @@ async function exportarSIGI() {
     let correos = [];
     let _off = 0;
     while(true) {
+      const _dEx = desde ? `&received_at=gte.${desde}T00:00:00-05:00` : '';
+      const _hEx = hasta ? `&received_at=lte.${hasta}T23:59:59-05:00` : '';
       const page = await sb(
-        `correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false` +
-        `&received_at=gte.${desde}T00:00:00-05:00&received_at=lte.${hasta}T23:59:59-05:00` +
+        `correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&is_draft=is.false`+_dEx+_hEx+
         `&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,tipo_documento,` +
         `direccion_paciente,telefono_contacto,eps_id,origen,estado,prioridad,agente_id,asignado_a,` +
         `fecha_resolucion,created_at,num_gestiones,tiene_tutela,categoria_sigi,categoria_ia,` +
@@ -2275,7 +2280,7 @@ async function exportarSIGI() {
 
 
     // Historial por fecha del período
-    const hist = await sb(`historial_eventos?created_at=gte.${desde}T00:00:00-05:00&created_at=lte.${hasta}T23:59:59-05:00&agente_id=not.is.null&order=created_at.asc&limit=10000`).catch(()=>[]) || [];
+    const hist = await sb(qS(`historial_eventos?agente_id=not.is.null&order=created_at.asc&limit=10000`, 'created_at')).catch(()=>[]) || [];
 
     // ── Cruzar tabla_usuarios por cédula ─────────────────────────────
     const cedulas = [...new Set(correos.map(c => c.cedula_paciente||c.cedula||'').filter(Boolean))];
@@ -2603,7 +2608,9 @@ async function exportarSIGI() {
     XLSX.utils.book_append_sheet(wb, _wsSatSIGI, 'Satisfaccion_Correos');
 
     // ── Hoja 6: Satisfaccion_WhatsApp ────────────────────────────
-    const _waSessions = await sb(`wa_sesiones?calificacion=not.is.null&updated_at=gte.${desde}T00:00:00-05:00&updated_at=lte.${hasta}T23:59:59-05:00&select=telefono,nombre,eps,agente_nombre,calificacion,calificacion_texto,updated_at,tipificacion&limit=2000`).catch(()=>[]);
+    const _waD = desde ? `&updated_at=gte.${desde}T00:00:00-05:00` : '';
+    const _waH = hasta ? `&updated_at=lte.${hasta}T23:59:59-05:00` : '';
+    const _waSessions = await sb(`wa_sesiones?calificacion=not.is.null`+_waD+_waH+`&select=telefono,nombre,eps,agente_nombre,calificacion,calificacion_texto,updated_at,tipificacion&limit=2000`).catch(()=>[]);
     const _hSatWa = (_waSessions||[]).filter(s=>s.calificacion>0).map(s=>({
       Fecha:              s.updated_at ? new Date(s.updated_at).toLocaleDateString('es-CO') : '',
       ID:                 `WA-${(s.telefono||'').replace('+','')}`,
