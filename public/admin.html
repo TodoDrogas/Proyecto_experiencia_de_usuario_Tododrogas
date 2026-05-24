@@ -10210,7 +10210,7 @@ async function exportAgentesExcel(){
 
   const h1 = act.map(a=>{
     const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
-    const _myERawX = E.filter(e=>
+    const _myERawX = _allTickets.filter(e=>
       // asignado_a solo como fallback cuando agente_id está vacío
       (e.agente_id===a.id || (!e.agente_id && e.asignado_a&&(e.asignado_a===a.id||e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())))
       && _pqrAg(e)
@@ -10220,9 +10220,9 @@ async function exportAgentesExcel(){
     const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
     const sol = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
-    // Bug 1 — gestiones históricas usando E_all (sin filtro fecha) + num_gestiones
-    const _myEAllRawX = E_all.filter(e=>
-      (e.agente_id===a.id || (e.asignado_a&&(e.asignado_a===a.id||e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())))
+    // Bug 1 — gestiones históricas usando _allTickets (fetch fresco) + num_gestiones
+    const _myEAllRawX = _allTickets.filter(e=>
+      (e.agente_id===a.id || (!e.agente_id && e.asignado_a&&(e.asignado_a===a.id||e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())))
       && _pqrAg(e)
     );
     const myE_allX = [...new Map(_myEAllRawX.map(e=>[e.id,e])).values()];
@@ -10238,7 +10238,7 @@ async function exportAgentesExcel(){
       Email:                   a.email||'',
       Rol:                     a.rol||'',
       Cedula:                  a.cedula||'',
-      Casos_Activos:           casosActivos,
+      // Casos_Activos eliminado del Excel
       Total_Asignados:         myE.length,
       Pendientes:              myE.filter(e=>e.estado==='pendiente').length,
       En_Gestion:              myE.filter(e=>e.estado==='gestion').length,
