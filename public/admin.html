@@ -9440,7 +9440,7 @@ async function loadAgentesMetrics(){
 
   const _asesorFiltro = (document.getElementById('agFiltroAsesorKpi')?.value||'').trim();
 
-  const [correos, _eventosPlaceholder, agentes, correosAsesorActual, correosGlobal, respEventosGlobal] = await Promise.all([
+  const [correos, _eventosPlaceholder, agentes, correosAsesorActual, correosGlobal, respEventosGlobal, correosGestionesGlobal] = await Promise.all([
     // correos del período (received_at) — paginado sin límite fijo igual que el agente
     (async()=>{
       const PAGE=1000, _fields='id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,received_at,fecha_resolucion,estado,prioridad,asignado_a,agente_id,horas_sla,sentimiento,tipo_pqr,canal_contacto,origen,eps_id,ciudad_paciente,tiene_tutela,categoria_sigi,num_gestiones,nombre_solicitud,calificacion,calificacion_texto,fecha_calificacion';
@@ -9496,6 +9496,20 @@ async function loadAgentesMetrics(){
       }
       return new Set(evs.map(h=>h.correo_id).filter(Boolean));
     })(),
+    // Correos históricos completos solo con agente_id y num_gestiones — para calcular gestiones totales sin filtro fecha
+    (async()=>{
+      const PAGE=1000, _gFields='id,agente_id,asignado_a,num_gestiones';
+      let all=[], off=0;
+      while(true){
+        const page=await sb(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&num_gestiones=gt.0&select=${_gFields}&order=received_at.desc&limit=${PAGE}&offset=${off}`).catch(()=>[]);
+        if(!page||!page.length) break;
+        all=all.concat(page);
+        if(page.length<PAGE) break;
+        off+=PAGE;
+        if(off>=100000) break;
+      }
+      return all;
+    })(),
   ]);
 
   // Cargar historial por correo_id sin filtro de fecha —
@@ -9520,6 +9534,7 @@ async function loadAgentesMetrics(){
   _agDatos = {
     correosAsesorActual: correosAsesorActual||null,
     correosGlobal: correosGlobal||[],
+    correosGestionesGlobal: correosGestionesGlobal||[],
     asesorFiltroActivo: _asesorFiltro||null,
     correos: correos||[],
     eventos: eventos||[],
@@ -9594,7 +9609,7 @@ function actualizarRespuestaRealtime(evento) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function renderAgentes(){
-  const { correos:E_all, eventos:H_all, agentes, correosAsesorActual, correosGlobal, respSet:_respSetGlobal, desde:_agDesde, hasta:_agHasta } = _agDatos;
+  const { correos:E_all, eventos:H_all, agentes, correosAsesorActual, correosGlobal, correosGestionesGlobal:_gestGlobal, respSet:_respSetGlobal, desde:_agDesde, hasta:_agHasta } = _agDatos;
   const _dISO = _agDesde ? _agDesde+'T00:00:00-05:00' : '';
   const _hISO = _agHasta ? _agHasta+'T23:59:59-05:00' : '';
   const sedeFiltro   = (document.getElementById('agFiltroSedeKpi')?.value||'').trim();
@@ -9631,15 +9646,17 @@ function renderAgentes(){
     const _myIds = new Set(myE.map(e=>e.id));
 
     // Para gestiones: E_all sin filtro fecha → num_gestiones histórico total igual al que ve el agente — Bug 1
-    const _myEAllRaw = E_all.filter(e=>
-      (e.agente_id===a.id ||
-       (e.asignado_a && (
-         e.asignado_a === a.id ||
-         e.asignado_a.trim().toLowerCase() === a.nombre.trim().toLowerCase()
-       )))
-      && _pqrAg(e)
+    // Usar _gestGlobal (query dedicada sin filtro fecha con num_gestiones) para mayor precisión
+    const _myGestRaw = (_gestGlobal||[]).filter(e=>
+      e.agente_id===a.id ||
+      (e.asignado_a && (
+        e.asignado_a === a.id ||
+        e.asignado_a.trim().toLowerCase() === a.nombre.trim().toLowerCase()
+      ))
     );
-    const myE_all = [...new Map(_myEAllRaw.map(e=>[e.id,e])).values()];
+    // Gestiones = suma de num_gestiones de TODOS los tickets del agente (sin filtro fecha) — Bug 1
+    const gestReg = _myGestRaw.reduce((s,e)=>s+(e.num_gestiones||0),0);
+    const numGest = gestReg;
     // myH por agente_id (para resp, firmas)
     const myH = H.filter(h=>h.agente_id===a.id&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
     // myH_byCorreo: eventos de los correos del agente aunque el evento tenga otro agente_id
@@ -9681,9 +9698,6 @@ function renderAgentes(){
     // Sin Respuesta = todos los del período que NO tienen correo_respondido
     const sinRespCount = myE.filter(e=>!_ticketsResp.has(e.id)).length;
 
-    // Gestiones = suma de num_gestiones de TODOS los tickets del agente (histórico, sin filtro fecha) — Bug 1
-    const gestReg = myE_all.reduce((s,e)=>s+(e.num_gestiones||0),0);
-    const numGest = gestReg;
     const resp    = myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).length;
     const firmas  = myH.filter(h=>h.evento==='firma_confirmada'&&_myIds.has(h.correo_id)).length;
 
