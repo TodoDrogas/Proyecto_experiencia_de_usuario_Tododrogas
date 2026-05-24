@@ -9681,8 +9681,9 @@ function renderAgentes(){
     // Sin Respuesta = todos los del período que NO tienen correo_respondido
     const sinRespCount = myE.filter(e=>!_ticketsResp.has(e.id)).length;
 
-    // Gestiones = suma de num_gestiones igual que el agente — Bug 1
-    const gestReg = myE.reduce((s,e)=>s+(e.num_gestiones||0),0);
+    // Gestiones del período = eventos de gestión en tickets del agente, capturando también
+    // gestiones registradas por admin (myH_byCorreo filtra por correo_id, no por agente_id) — Bug 1
+    const gestReg = myH_byCorreo.filter(h=>_esGR(h)&&_myIds.has(h.correo_id)).length;
     const numGest = gestReg;
     const resp    = myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).length;
     const firmas  = myH.filter(h=>h.evento==='firma_confirmada'&&_myIds.has(h.correo_id)).length;
@@ -9968,13 +9969,14 @@ async function exportAgentesExcel(){
     );
     const myE = [...new Map(_myERawX.map(e=>[e.id,e])).values()];
     const myH = H.filter(h=>h.agente_id===a.id&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
+    const _myIdsX = new Set(myE.map(e=>e.id));
+    const myH_byCorreoX = H.filter(h=>_myIdsX.has(h.correo_id)&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
     const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
     const sol = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
-    // gestReg sincronizado con pantalla (correo_respondido SÍ cuenta)
-    const cidsAsesor = new Set(myE.map(e=>e.id));
-    // Gestiones: suma de num_gestiones (más preciso que contar eventos con límite Supabase)
-    const gestReg = myE.reduce((s,e)=>s+(e.num_gestiones||0),0);
+    // gestReg sincronizado con tabla — usa myH_byCorreo para capturar gestiones de admin también — Bug 1
+    const cidsAsesor = _myIdsX;
+    const gestReg = myH_byCorreoX.filter(h=>_esGR(h)&&_myIdsX.has(h.correo_id)).length;
     // casos_activos DINÁMICO — no leer campo estático de agentes
     const casosActivos = myE.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
     // Con/Sin Respuesta — binario
