@@ -6524,7 +6524,7 @@ async function exportarMisMetricas() {
     Total_Asignados:      CP.length,
     En_Gestion:           CP.filter(function(x){return x.estado==='gestion';}).length,
     Con_Respuesta:        idsConResp.size,
-    Sin_Respuesta:        [...idsConGest].filter(function(id){return !idsConResp.has(id);}).length,
+    Sin_Respuesta:        CP.filter(function(x){ return !idsConResp.has(x.id) && x.estado!=='informacion' && x.estado!=='borrador' && x.estado!=='enviado'; }).length,
     Pendiente_Firma:      CP.filter(function(x){return x.estado==='pendiente_firma';}).length,
     Cerrados:             sol,
     Pct_Resolucion:       CP.length>0?Math.round(sol/CP.length*100)+'%':'0%',
@@ -6757,10 +6757,9 @@ async function cargarMetricasAgente() {
   // En Gestión = correos del período con ese estado actual
   var _cardGest = correosPeriodo.filter(function(x){return x.estado==='gestion';}).length;
   var _cardConResp  = _idsConRespP.size;
-  // Sin Respuesta = activos del período (excluye solucionado/gestionado como el badge del panel) sin correo_respondido
+  // Sin Respuesta — incluye solucionados, todo correo debe tener al menos una respuesta
   var _cardSinResp  = correosPeriodo.filter(function(x){
     return !_idsConRespP.has(x.id) &&
-           x.estado!=='solucionado' && x.estado!=='gestionado' &&
            x.estado!=='informacion' && x.estado!=='borrador' && x.estado!=='enviado';
   }).length;
   // Pte. Firma = correos del período con ese estado actual
