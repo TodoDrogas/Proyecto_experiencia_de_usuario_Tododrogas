@@ -2294,8 +2294,14 @@ async function exportarSIGI() {
     const meds = _medResults.flat().filter(Boolean);
 
 
+    // Helper condicional local para exportarSIGI
+    const _dEx2 = desde ? `&received_at=gte.${desde}T00:00:00-05:00` : '';
+    const _hEx2 = hasta ? `&received_at=lte.${hasta}T23:59:59-05:00` : '';
+    const _dExH = desde ? `&created_at=gte.${desde}T00:00:00-05:00` : '';
+    const _hExH = hasta ? `&created_at=lte.${hasta}T23:59:59-05:00` : '';
+
     // Historial por fecha del período
-    const hist = await sb(qS(`historial_eventos?agente_id=not.is.null&order=created_at.asc&limit=10000`, 'created_at')).catch(()=>[]) || [];
+    const hist = await sb(`historial_eventos?agente_id=not.is.null&order=created_at.asc&limit=10000`+_dExH+_hExH).catch(()=>[]) || [];
 
     // ── Cruzar tabla_usuarios por cédula ─────────────────────────────
     const cedulas = [...new Set(correos.map(c => c.cedula_paciente||c.cedula||'').filter(Boolean))];
@@ -10127,7 +10133,7 @@ function abrirCorreoAdmin(correoId) {
 
 
 async function exportAgentesExcel(){
-  const { correos:E, eventos:H, agentes, desde, hasta, respSet:_respSetGlobal } = _agDatos;
+  const { correos:E, correos:E_all, eventos:H, agentes, correosGestionesGlobal:_gestGlobalX, desde, hasta, respSet:_respSetGlobal } = _agDatos;
   const _dISO = desde ? desde+'T00:00:00-05:00' : '';
   const _hISO = hasta ? hasta+'T23:59:59-05:00' : '';
   const wb   = XLSX.utils.book_new();
