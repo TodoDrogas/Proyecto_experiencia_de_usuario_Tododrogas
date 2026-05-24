@@ -699,6 +699,12 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="searchInput" placeholder="Buscar remitente, asunto..." oninput="renderEmailList()" autocomplete="off">
         </div>
+        <!-- Barra selección masiva — solo visible en carpeta Información -->
+        <div id="infoSelectBar" style="display:none;align-items:center;gap:8px;margin-top:8px;padding:6px 8px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px">
+          <input type="checkbox" id="chkSelectAllInfo" style="width:15px;height:15px;accent-color:#dc2626;cursor:pointer" onchange="toggleSeleccionarTodoInfo(this.checked)">
+          <label for="chkSelectAllInfo" style="font-size:11px;font-weight:700;color:#dc2626;cursor:pointer;user-select:none">Seleccionar todo</label>
+          <span id="infoSelectCount" style="font-size:10px;color:#9ca3af;margin-left:2px"></span>
+        </div>
         <div class="list-filters" id="sortFilters">
           <button class="filter-chip active" onclick="setSort('fecha',this)">Por fecha</button>
           <button class="filter-chip" onclick="setSort('prioridad',this)">Prioridad</button>
@@ -1385,6 +1391,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
   <button onclick="accionMasiva('asignar')" style="background:#2563eb;color:#fff;border:none;padding:7px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">Asignar</button>
   <button onclick="accionMasiva('informacion')" style="background:#0891b2;color:#fff;border:none;padding:7px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">ℹ️ Información</button>
   <button onclick="accionMasiva('pendiente')" style="background:#ca8a04;color:#fff;border:none;padding:7px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">Pendiente</button>
+  <button id="barraBtnEliminarInfo" onclick="eliminarSeleccionadosInfo()" style="display:none;background:#dc2626;color:#fff;border:none;padding:7px 16px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif">🗑️ Eliminar permanentemente</button>
   <button onclick="limpiarSeleccion()" style="background:none;border:1px solid #475569;color:#94a3b8;padding:7px 12px;border-radius:8px;font-size:11px;cursor:pointer;font-family:'Poppins',sans-serif">✕ Cancelar</button>
 </div>
 
@@ -3234,6 +3241,13 @@ function setFolder(f, el) {
   state.folder = f;
   document.querySelectorAll('.folder-item').forEach(i=>i.classList.remove('active'));
   if(el) el.classList.add('active');
+  // Mostrar barra selección solo en carpeta Información
+  const bar = document.getElementById('infoSelectBar');
+  if(bar) bar.style.display = f === 'informacion' ? 'flex' : 'none';
+  // Resetear checkbox y selección al cambiar carpeta
+  const chk = document.getElementById('chkSelectAllInfo');
+  if(chk) chk.checked = false;
+  limpiarSeleccion();
   renderEmailList();
 }
 
@@ -3256,6 +3270,10 @@ function updateFolderCounts() {
     const el = document.getElementById('fc-'+s);
     if(el) el.textContent = _all.filter(e=>e.estado===s&&_pqr(e)).length;
   });
+  // Mostrar barra selección si carpeta activa es Información
+  const _infoCount = _all.filter(e=>e.estado==='informacion'&&_pqr(e)).length;
+  const _infoBar = document.getElementById('infoSelectBar');
+  if(_infoBar && state.folder === 'informacion') _infoBar.style.display = _infoCount > 0 ? 'flex' : 'none';
   const urgEl = document.getElementById('fc-urgente');
   if(urgEl) urgEl.textContent = _all.filter(e=>_pqr(e)&&(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma'&&e.estado!=='informacion').length;
   const _idsConRespFC = state._activosConResp || state._idsConResp || new Set();
@@ -4062,6 +4080,123 @@ async function marcarInformacion() {
   renderEmailList();
   renderFolderAgents();
 }
+
+// ── ELIMINACIÓN MASIVA DE INFORMACIÓN ────────────────────────────────────────
+// Borra en lotes: adjuntos → historial_eventos → gestiones_medicamentos → correos
+async function eliminarMasivoInformacion(ids) {
+  if(!ids || !ids.length) return 0;
+  const LOTE = 20;
+  let eliminados = 0;
+  const total = ids.length;
+
+  // Mostrar modal de progreso
+  const modal   = document.getElementById('modalProgresoElim');
+  const bar     = document.getElementById('progresoElimBar');
+  const count   = document.getElementById('progresoElimCount');
+  const pct     = document.getElementById('progresoElimPct');
+  const sub     = document.getElementById('progresoElimSub');
+  const _upd = () => {
+    const p = total > 0 ? Math.round(eliminados / total * 100) : 0;
+    if(bar)   bar.style.width   = p + '%';
+    if(count) count.textContent = `${eliminados} / ${total}`;
+    if(pct)   pct.textContent   = p + '%';
+    if(sub)   sub.textContent   = eliminados < total
+      ? `Eliminando lote ${Math.ceil(eliminados/LOTE)+1} de ${Math.ceil(total/LOTE)}...`
+      : '¡Listo!';
+  };
+  if(modal) { modal.style.display = 'flex'; _upd(); }
+
+  for(let i = 0; i < ids.length; i += LOTE) {
+    const lote = ids.slice(i, i + LOTE);
+    const inClause = lote.join(',');
+    try {
+      // 1. Adjuntos
+      await sb(`adjuntos?correo_id=in.(${inClause})`, 'DELETE');
+      // 2. Historial de eventos
+      await sb(`historial_eventos?correo_id=in.(${inClause})`, 'DELETE');
+      // 3. Gestiones de medicamentos
+      await sb(`gestiones_medicamentos?correo_id=in.(${inClause})`, 'DELETE');
+      // 4. Correos
+      await fetch(`${SB_URL}/rest/v1/correos?id=in.(${inClause})`, {
+        method: 'DELETE',
+        headers: {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'}
+      });
+      // Remover del state local
+      const loteSet = new Set(lote);
+      state.emails    = state.emails.filter(e=>!loteSet.has(e.id));
+      state.allEmails = (state.allEmails||[]).filter(e=>!loteSet.has(e.id));
+      eliminados += lote.length;
+      _upd();
+    } catch(err) {
+      console.error('[eliminarMasivoInfo] lote error:', err.message);
+    }
+    if(i + LOTE < ids.length) await new Promise(r=>setTimeout(r,150));
+  }
+
+  // Cerrar modal tras breve pausa para que se vea el 100%
+  await new Promise(r=>setTimeout(r,700));
+  if(modal) modal.style.display = 'none';
+
+  return eliminados;
+}
+
+// Vaciar TODA la carpeta Información de una vez
+async function vaciarCarpetaInformacion() {
+  const _all = state.allEmails || state.emails;
+  const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
+  const infoIds = _all.filter(e=>e.estado==='informacion'&&_pqr(e)).map(e=>e.id);
+
+  if(!infoIds.length) { showToast('No hay correos de Información para eliminar','info'); return; }
+
+  const confirmMsg = `⚠️ ELIMINAR PERMANENTEMENTE\n\n${infoIds.length} correo${infoIds.length>1?'s':''} de Información\n\nSe borrarán también: adjuntos, historial y gestiones asociadas.\n\nEsta acción NO se puede deshacer.\n\n¿Continuar?`;
+  if(!confirm(confirmMsg)) return;
+
+  try {
+    const n = await eliminarMasivoInformacion(infoIds);
+    showToast(`✅ ${n} correos de Información eliminados permanentemente`, 'success');
+    state.selectedId = null;
+    document.getElementById('emailView').style.display='none';
+    document.getElementById('mgmtPanel').style.display='none';
+    document.getElementById('noSelection').style.display='flex';
+    updateFolderCounts();
+    renderEmailList();
+    renderFolderAgents();
+  } catch(err) {
+    showToast('Error al eliminar: '+err.message.substring(0,80),'error');
+  } finally {
+    if(btn) { btn.textContent = '🗑️ Vaciar'; btn.disabled = false; }
+  }
+}
+
+// Eliminar los correos de Información seleccionados en la barra masiva
+async function eliminarSeleccionadosInfo() {
+  const ids = [...state.selectedIds];
+  if(!ids.length) return;
+
+  // Verificar que todos son de Información
+  const noInfo = ids.filter(id => {
+    const e = (state.allEmails||state.emails||[]).find(x=>x.id===id);
+    return e?.estado !== 'informacion';
+  });
+  if(noInfo.length) { showToast('Solo se pueden eliminar correos en estado Información','error'); return; }
+
+  const confirmMsg = `⚠️ ELIMINAR PERMANENTEMENTE\n\n${ids.length} correo${ids.length>1?'s':''} de Información seleccionados\n\nSe borrarán también: adjuntos, historial y gestiones asociadas.\n\nEsta acción NO se puede deshacer.\n\n¿Continuar?`;
+  if(!confirm(confirmMsg)) return;
+
+  showToast(`Eliminando ${ids.length} correos...`, 'info');
+
+  const n = await eliminarMasivoInformacion(ids);
+  showToast(`✅ ${n} correos eliminados permanentemente`, 'success');
+  limpiarSeleccion();
+  state.selectedId = null;
+  document.getElementById('emailView').style.display='none';
+  document.getElementById('mgmtPanel').style.display='none';
+  document.getElementById('noSelection').style.display='flex';
+  updateFolderCounts();
+  renderEmailList();
+  renderFolderAgents();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function eliminarCorreoInformacion() {
   const id = state.selectedId;
@@ -7169,8 +7304,25 @@ function toggleBulkSelect(id) {
   renderEmailList();
 }
 
+function toggleSeleccionarTodoInfo(checked) {
+  const _all = state.allEmails || state.emails;
+  const _pqr = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
+  const infoIds = _all.filter(e=>e.estado==='informacion'&&_pqr(e)).map(e=>e.id);
+  if(checked) infoIds.forEach(id=>state.selectedIds.add(id));
+  else state.selectedIds.clear();
+  // Actualizar contador en la barra
+  const cnt = document.getElementById('infoSelectCount');
+  if(cnt) cnt.textContent = checked && infoIds.length ? `(${infoIds.length})` : '';
+  actualizarBarraMasiva();
+  renderEmailList();
+}
+
 function limpiarSeleccion() {
   state.selectedIds.clear();
+  const chk = document.getElementById('chkSelectAllInfo');
+  if(chk) chk.checked = false;
+  const cnt = document.getElementById('infoSelectCount');
+  if(cnt) cnt.textContent = '';
   actualizarBarraMasiva();
   renderEmailList();
 }
@@ -7188,6 +7340,13 @@ function actualizarBarraMasiva() {
       (state.agents||[]).filter(a=>a.activo!==false).map(a=>
         `<option value="${a.id}">${a.nombre}</option>`
       ).join('');
+    // Mostrar botón eliminar solo si TODOS los seleccionados son de Información
+    const todosInfo = [...state.selectedIds].every(id => {
+      const e = (state.allEmails||state.emails||[]).find(x=>x.id===id);
+      return e?.estado === 'informacion';
+    });
+    const btnElimInfo = document.getElementById('barraBtnEliminarInfo');
+    if(btnElimInfo) btnElimInfo.style.display = todosInfo && n > 0 ? 'inline-block' : 'none';
   } else {
     barra.style.display = 'none';
   }
@@ -10510,6 +10669,28 @@ function cerrarObsDispensa() {
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:.25rem">
       <button onclick="cerrarObsDispensa()" style="padding:9px 22px;border-radius:8px;border:1.5px solid #dde1eb;background:#fff;font-size:13px;font-weight:500;cursor:pointer;color:#3a4258;font-family:'Poppins',sans-serif">Cancelar</button>
       <button id="btnGuardarObsDispensa" onclick="guardarObsDispensa()" style="padding:9px 26px;border-radius:8px;border:none;background:#2563eb;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:'Poppins',sans-serif">Guardar</button>
+    </div>
+  </div>
+</div>
+<!-- ══ MODAL PROGRESO ELIMINACIÓN INFO ══ -->
+<div id="modalProgresoElim" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(10,14,26,.55);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:2rem 2.5rem;max-width:420px;width:92%;box-shadow:0 8px 40px rgba(10,14,26,.25);display:flex;flex-direction:column;gap:1.2rem">
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:40px;height:40px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg width="18" height="18" fill="none" stroke="#dc2626" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </div>
+      <div>
+        <p style="font-size:15px;font-weight:700;color:#0a0e1a;margin:0 0 2px">Eliminando correos de Información</p>
+        <p id="progresoElimSub" style="font-size:12px;color:#64748b;margin:0">Preparando...</p>
+      </div>
+    </div>
+    <!-- Barra de progreso -->
+    <div style="background:#f1f5f9;border-radius:99px;height:10px;overflow:hidden">
+      <div id="progresoElimBar" style="height:100%;background:linear-gradient(90deg,#dc2626,#f87171);border-radius:99px;width:0%;transition:width .3s ease"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span id="progresoElimCount" style="font-size:12px;font-weight:700;color:#dc2626">0 / 0</span>
+      <span id="progresoElimPct" style="font-size:20px;font-weight:800;color:#0a0e1a">0%</span>
     </div>
   </div>
 </div>
