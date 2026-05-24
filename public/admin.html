@@ -10333,22 +10333,36 @@ async function exportAgentesExcel(){
     const evFirma = evs.find(h=>h.evento==='pendiente_firma');
     // Hora cierre: primer solucionado o firma_confirmada
     const evCierre= evs.find(h=>h.evento==='solucionado'||h.evento==='firma_confirmada'||h.evento==='cerrado_automatico'||h.evento==='gestionado');
+
+    // Enriquecer campos vacíos con datos_extra de la primera gestión
+    // Tickets sin gestión #1 completa tienen cedula/nombre/eps/ciudad vacíos en correos
+    let _extra = {};
+    if(evGest?.datos_extra) {
+      try { _extra = JSON.parse(evGest.datos_extra||'{}'); } catch {}
+    }
+    const _ced    = c.cedula||c.cedula_paciente||_extra.cedula_paciente||_extra.cedula||'';
+    const _nom    = c.nombre||_extra.nombre_paciente||_extra.nombre||'';
+    const _ciudad = c.ciudad_paciente||_extra.ciudad_paciente||_extra.ciudad||'';
+    const _eps    = epsNombre || (_extra.eps_id ? (_epsMap[_extra.eps_id]||'') : '') || _extra.eps_nombre||'';
+    const _tipoPqr= c.tipo_pqr||_extra.tipo_pqr||'';
+    const _sentim = c.sentimiento||_extra.sentimiento||'';
+
     return {
       Ticket:              ticketInterno,
       ID_Correo:           c.id||'',
-      Cedula_Paciente:     c.cedula||c.cedula_paciente||'',
-      Nombre_Paciente:     c.nombre||'',
+      Cedula_Paciente:     _ced,
+      Nombre_Paciente:     _nom,
       Asunto:              c.subject||'',
       Remitente_Email:     c.from_email||'',
       Remitente_Nombre:    c.from_name||'',
-      EPS:                 epsNombre,
-      Ciudad:              c.ciudad_paciente||'',
+      EPS:                 _eps,
+      Ciudad:              _ciudad,
       Tiene_Tutela:        c.tiene_tutela===true?'SÍ':c.tiene_tutela===false?'NO':'',
       Asesor:              agMap[c.agente_id]||agMap[c.asignado_a]||'',
       Estado:              c.estado||'',
       Prioridad:           c.prioridad||'',
-      Sentimiento:         c.sentimiento||'',
-      Tipo_PQR:            c.tipo_pqr||'',
+      Sentimiento:         _sentim,
+      Tipo_PQR:            _tipoPqr,
       Num_Gestiones:       c.num_gestiones||0,
       Canal:               c.canal_contacto||c.origen||'',
       // ── Timeline de hitos ──
