@@ -9874,7 +9874,7 @@ function actualizarRespuestaRealtime(evento) {
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-function renderAgentes(){
+async function renderAgentes(){
   const { correos:E_all, eventos:H_all, agentes, correosAsesorActual, correosGlobal, correosGestionesGlobal:_gestGlobal, respSet:_respSetGlobal, desde:_agDesde, hasta:_agHasta } = _agDatos;
   const _dISO = _agDesde ? _agDesde+'T00:00:00-05:00' : '';
   const _hISO = _agHasta ? _agHasta+'T23:59:59-05:00' : '';
@@ -9976,20 +9976,16 @@ function renderAgentes(){
   const sum = (f) => rowData.reduce((s,r)=>s+f(r),0);
 
   const _cardAsig     = sum(r=>r.tot);
-  // Obtener total real de BD para la card (independiente de E_all en memoria)
+  // Fetch count directo a BD para coincidir con SIGI
+  let _cardAsigReal = _cardAsig;
   try {
-    const _totalBD = await sb(
-      `correos?agente_id=not.is.null&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&estado=neq.informacion&is_draft=is.false&select=id&limit=1&offset=0`,
-      'HEAD'
-    ).catch(()=>null);
-    // Supabase devuelve el total en el header Content-Range — usar _cardAsig como fallback
-  } catch(_) {}
-  // Fetch count directo
-  const _countRes = await fetch(
-    `${SB_URL}/rest/v1/correos?agente_id=not.is.null&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&estado=neq.informacion&is_draft=is.false&select=id`,
-    { method:'HEAD', headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'count=exact'} }
-  ).catch(()=>null);
-  const _cardAsigReal = _countRes ? parseInt(_countRes.headers.get('content-range')?.split('/')?.[1]||_cardAsig) : _cardAsig;
+    const _countRes = await fetch(
+      `${SB_URL}/rest/v1/correos?agente_id=not.is.null&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&estado=neq.informacion&is_draft=is.false&select=id`,
+      { method:'HEAD', headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'count=exact'} }
+    );
+    const _cr = _countRes.headers.get('content-range');
+    if(_cr) _cardAsigReal = parseInt(_cr.split('/')?.[1]) || _cardAsig;
+  } catch(_) { _cardAsigReal = _cardAsig; }
   const _cardGest     = sum(r=>r.gest);
   const _cardConResp  = sum(r=>r.conRespCount);
   // agCardSinResp — usa E_all (todos los tickets con agente, sin filtro fecha) igual que SIGI
