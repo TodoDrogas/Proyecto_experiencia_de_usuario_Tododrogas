@@ -10313,9 +10313,29 @@ async function exportAgentesExcel(){
     return `EXT-${ymd}-${c.id.slice(-4).toUpperCase()}`;
   };
 
-  // ── Hoja 2: Detalle Tickets — una fila por correo, 16 columnas unificadas ──
+  // ── Hoja 2: Detalle Tickets — una fila por correo, 17 columnas unificadas ──
   const _E_uniq = [...new Map(E.filter(c=>c.agente_id).map(c=>[c.id,c])).values()]
     .sort((a,b)=>new Date(a.received_at)-new Date(b.received_at));
+
+  // Fetch fresco para correos sin cedula/nombre/ciudad — campos que se llenan en gestión #1
+  const _idsVacios = _E_uniq
+    .filter(c=>!c.cedula&&!c.cedula_paciente&&!c.nombre&&!c.ciudad_paciente)
+    .map(c=>c.id);
+  if(_idsVacios.length > 0) {
+    try {
+      const _LOTE = 200;
+      for(let _i=0; _i<_idsVacios.length; _i+=_LOTE) {
+        const _chunk = _idsVacios.slice(_i, _i+_LOTE);
+        const _fresh = await sb(
+          `correos?id=in.(${_chunk.join(',')})&select=id,cedula,cedula_paciente,nombre,ciudad_paciente,eps_id`
+        ).catch(()=>[]) || [];
+        _fresh.forEach(r=>{
+          const idx = _E_uniq.findIndex(c=>c.id===r.id);
+          if(idx>-1) Object.assign(_E_uniq[idx], r);
+        });
+      }
+    } catch(e) { console.warn('[exportExcel] fetch fresco vacíos:', e.message); }
+  }
   const _MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const h2 = _E_uniq.map(c=>{
     const evs = H.filter(h=>h.correo_id===c.id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
@@ -10341,13 +10361,17 @@ async function exportAgentesExcel(){
     const _nom  = c.nombre||_extra.nombre_paciente||_extra.nombre||'';
     const _ciu  = c.ciudad_paciente||_extra.ciudad_paciente||_extra.ciudad||'';
     const _eps  = _epsNom(c)||(_extra.eps_id?(_epsMap[_extra.eps_id]||''):'')||_extra.eps_nombre||'';
+    // Descripcion: asunto del correo + descripción de primera gestión como complemento
+    const _descGest = evGest?.descripcion||'';
+    const _subject  = c.subject||'';
+    const _desc     = _subject || _descGest;
     // Mes desde fecha de recepción
     const _mes  = c.received_at ? _MESES[new Date(c.received_at).getMonth()] : '';
     return {
       Mes:                    _mes,
       ID_Correo:              c.id||'',
       Ticket:                 _buildTicket(c),
-      Descripcion:            c.subject||'',
+      Descripcion:            _desc,
       Remitente_Mail:         c.from_email||'',
       Cedula_Paciente:        _ced,
       Nombre_Paciente:        _nom,
