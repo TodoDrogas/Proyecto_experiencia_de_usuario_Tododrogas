@@ -9946,7 +9946,14 @@ function renderAgentes(){
   const _cardAsig     = sum(r=>r.tot);
   const _cardGest     = sum(r=>r.gest);
   const _cardConResp  = sum(r=>r.conRespCount);
-  const _cardSinResp  = sum(r=>r.sinRespCount);
+  // agCardSinResp — usa E_all (todos los tickets con agente, sin filtro fecha) igual que SIGI
+  // sinRespCount de la tabla permanece por período para el detalle por asesor
+  const _cardSinResp  = E_all.filter(e=>
+    e.agente_id &&
+    e.origen!=='saliente' && e.origen!=='borrador' &&
+    e.estado!=='enviado' && e.estado!=='borrador' && e.estado!=='informacion' &&
+    !(_respSetGlobal||new Set()).has(e.id)
+  ).length;
   const _cardFirma    = sum(r=>r.pfirma);
   const _cardCerrados = sum(r=>r.sol);
   const _kpiPend      = sum(r=>r.pend);
