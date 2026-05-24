@@ -10314,7 +10314,12 @@ async function exportAgentesExcel(){
   };
 
   // ── Hoja 2: Detalle Tickets — fetch fresco de campos paciente directo de BD ──
-  const _E_uniq = [...new Map(E.filter(c=>c.agente_id).map(c=>[c.id,c])).values()]
+  const _E_uniq = [...new Map(E.filter(c=>
+    c.agente_id &&
+    c.origen!=='saliente' && c.origen!=='borrador' &&
+    c.estado!=='enviado' && c.estado!=='borrador' &&
+    c.is_draft!==true
+  ).map(c=>[c.id,c])).values()]
     .sort((a,b)=>new Date(a.received_at)-new Date(b.received_at));
 
   // Fetch fresco de cedula/nombre/ciudad/eps para TODOS los correos — garantiza datos actualizados
