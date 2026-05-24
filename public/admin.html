@@ -1225,10 +1225,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 
           <!-- KPIs SIGI — Fila 1 -->
           <div class="mkpi-strip" style="margin-bottom:10px">
-            <div class="mkpi-card mkpi-a1"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="sigiKpiTotal">—</div><span class="mkpi-emoji">📥</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Total Recibidos</div><div class="mkpi-sub">Incl. información</div></div><div class="mkpi-bar-bottom"></div></div>
-            <div class="mkpi-card mkpi-a2"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="sigiKpiInfo">—</div><span class="mkpi-emoji">ℹ️</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Información</div><div class="mkpi-sub">Del período</div></div><div class="mkpi-bar-bottom"></div></div>
-            <div class="mkpi-card mkpi-a3"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="sigiKpiRecibidos">—</div><span class="mkpi-emoji">👤</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Asignados</div><div class="mkpi-sub">Con agente</div></div><div class="mkpi-bar-bottom"></div></div>
-            <div class="mkpi-card mkpi-a4"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="sigiKpiEnGest">—</div><span class="mkpi-emoji">✏️</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">En Gestión</div><div class="mkpi-sub">Del período</div></div><div class="mkpi-bar-bottom"></div></div>
+            <div class="mkpi-card mkpi-a1"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="sigiKpiRecibidos">—</div><span class="mkpi-emoji">👤</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Asignados</div><div class="mkpi-sub">Con agente</div></div><div class="mkpi-bar-bottom"></div></div>
+            <div class="mkpi-card mkpi-a2"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="sigiKpiEnGest">—</div><span class="mkpi-emoji">✏️</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">En Gestión</div><div class="mkpi-sub">Del período</div></div><div class="mkpi-bar-bottom"></div></div>
           </div>
           <!-- KPIs SIGI — Fila 2 -->
           <div class="mkpi-strip">
@@ -1936,6 +1934,9 @@ let chartEstados=null,chartAgentes=null,chartTendencia=null,chartPrioridad=null,
     chartResolucion=null,chartAcciones=null,chartHoras=null,chartDiaSemana=null,
     chartPrioBacklog=null,chartAgentSol=null,chartAntiguedad=null,chartTramos=null,
     chartAgSol=null,chartAgTiempo=null,chartAgGest=null; // variables mantenidas por compatibilidad
+
+// _agDatos: datos del tab Asesores — declarado globalmente para que sidebar y SIGI lo usen
+let _agDatos = { correos:[], eventos:[], agentes:[], respSet: new Set(), correosGlobal:[], correosGestionesGlobal:[] };
 
 function destroyChart(c){if(c){try{c.destroy();}catch{}}return null;}
 
@@ -3259,10 +3260,9 @@ function updateFolderCounts() {
   if(_infoBar && state.folder === 'informacion') _infoBar.style.display = _infoCount > 0 ? 'flex' : 'none';
   const urgEl = document.getElementById('fc-urgente');
   if(urgEl) urgEl.textContent = _all.filter(e=>_pqr(e)&&(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma'&&e.estado!=='informacion').length;
-  // fc-sin_respuesta — misma fuente que SIGI y Asesores: set global histórico
-  const _idsConRespFC = _agDatos?.respSet?.size > 0
-    ? _agDatos.respSet
-    : (state._activosConResp || state._idsConResp || new Set());
+  // fc-sin_respuesta — usa _activosConResp (cargado al inicio) enriquecido con _agDatos.respSet si está disponible
+  const _respSetFC = _agDatos?.respSet?.size > 0 ? _agDatos.respSet : (state._activosConResp || new Set());
+  const _idsConRespFC = new Set([...( state._activosConResp || new Set()), ..._respSetFC]);
   const srEl = document.getElementById('fc-sin_respuesta');
   if(srEl) {
     const _allActivos = state._activosAgentes || state.allEmails || state.emails;
@@ -3282,11 +3282,9 @@ function renderFolderAgents() {
   // Solo renderizar cuando loadTicketsActivosAgentes haya cargado su propia data
   if (!state._activosAgentes) return;
   const all = state._activosAgentes;
-  // Usar _respSetGlobal de _agDatos si está disponible — misma fuente que tabla Asesores
-  // Garantiza que "sin respuesta" = nunca respondido en toda la historia
-  const _idsConResp = _agDatos?.respSet?.size > 0
-    ? _agDatos.respSet
-    : (state._activosConResp || state._idsConResp || new Set());
+  // Unir _activosConResp (siempre disponible) con _agDatos.respSet (disponible tras visitar Asesores)
+  const _respSetFolders = _agDatos?.respSet?.size > 0 ? _agDatos.respSet : new Set();
+  const _idsConResp = new Set([...(state._activosConResp || new Set()), ..._respSetFolders]);
   const _idsConGest = state._activosConGest || state._idsConGest || new Set();
   el.innerHTML = activos.map((a,i)=>{
     const mis   = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&(e.asignado_a===a.id||e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())))&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
