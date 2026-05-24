@@ -2310,10 +2310,16 @@ async function exportarSIGI() {
     });
 
     // Medicamentos: lotes en paralelo para garantizar que todos lleguen
-    // Medicamentos vienen de historial_eventos.datos_extra->medicamentos (array)
-    // El historial ya fue cargado arriba — extraer medicamentos de ahí
+    // Medicamentos: query dedicada — busca solo eventos con medicamentos en el período
+    const _medChunks2 = [];
+    for(let i=0; i<correoIds.length; i+=50) _medChunks2.push(correoIds.slice(i,i+50));
+    const _medRaw = (await Promise.all(
+      _medChunks2.map(chunk =>
+        sb(`historial_eventos?correo_id=in.(${chunk.join(',')})&datos_extra=not.is.null&order=created_at.asc&limit=5000`).catch(()=>[])
+      )
+    )).flat().filter(Boolean);
     const meds = [];
-    hist.forEach(h => {
+    _medRaw.forEach(h => {
       try {
         const ex = typeof h.datos_extra === 'string' ? JSON.parse(h.datos_extra) : (h.datos_extra || {});
         const arr = ex.medicamentos;
@@ -2566,36 +2572,7 @@ async function exportarSIGI() {
     _styleSheet(ws2, 9);
     XLSX.utils.book_append_sheet(wb, ws2, 'MEDICAMENTOS');
 
-    // ════════════════════════════════════════════════════════════════
-    // HOJA 3 — RESUMEN_AGENTES
-    // Backlog eliminado → Alta_Sin_Resolver + Pendientes + En_Gestion
-    // ════════════════════════════════════════════════════════════════
-    const h3 = agentesRaw.map(ag => {
-      const asig   = correosSIGI.filter(c => c.agente_id === ag.id || (c.asignado_a||'').trim().toLowerCase() === ag.nombre.trim().toLowerCase());
-      const sol    = asig.filter(c => c.estado==='solucionado' || c.estado==='gestionado').length;
-      const infoCount = asig.filter(c => c.estado==='informacion').length;
-      const pend   = asig.filter(c => c.estado==='pendiente').length;
-      const enG    = asig.filter(c => c.estado==='gestion').length;
-      const alta   = asig.filter(c => c.prioridad==='alta' && ['pendiente','gestion'].includes(c.estado)).length;
-      const tGest  = asig.reduce((s,c) => s+(c.num_gestiones||0), 0);
-      const tutela = asig.filter(c => c.tiene_tutela===true).length;
-      return {
-        'Agente':             ag.nombre || '',
-        'Total Casos':        asig.length,
-        'Solucionados':       sol,
-        'Alta_Sin_Resolver':  alta,
-        'Pendientes':         pend,
-        'En_Gestion':         enG,
-        'Total Gestiones':    tGest,
-        'Prom. Gest./Caso':   asig.length ? (tGest/asig.length).toFixed(1) : '0',
-        'Casos con Tutela':   tutela,
-        '% Resolución':       asig.length ? Math.round(sol/asig.length*100)+'%' : '0%',
-      };
-    });
-    const ws3 = XLSX.utils.json_to_sheet(h3.length ? h3 : [{'Sin datos':'Sin agentes'}]);
-    ws3['!cols'] = [{wch:28},{wch:12},{wch:13},{wch:18},{wch:12},{wch:12},{wch:14},{wch:15},{wch:15},{wch:13}];
-    _styleSheet(ws3, 10);
-    XLSX.utils.book_append_sheet(wb, ws3, 'RESUMEN_AGENTES');
+
 
     // ════════════════════════════════════════════════════════════════
     // HOJA 4 — EPS_CATALOGO
