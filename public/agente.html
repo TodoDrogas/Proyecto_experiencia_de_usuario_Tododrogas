@@ -971,21 +971,35 @@ async function loadEmails() {
     if(_ids.length > 0) {
       try {
         const _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']);
-        // FIX: paginar en bloques de 200 IDs para cubrir todos los tickets sin cortar
         const _BLOCK = 200;
+
+        // 1) correo_respondido — query filtrada, no mezclada — evita corte por volumen
         for(let _bi = 0; _bi < _ids.length; _bi += _BLOCK) {
           const _chunk = _ids.slice(_bi, _bi + _BLOCK);
           let _off = 0;
           while(true) {
-            const _histSnap = await sb(
+            const _snap = await sb(
+              `historial_eventos?correo_id=in.(${_chunk.join(',')})&evento=eq.correo_respondido&select=correo_id&limit=1000&offset=${_off}`
+            ) || [];
+            _snap.forEach(h => { if(h.correo_id) state.respondidosIds.add(h.correo_id); });
+            if(_snap.length < 1000) break;
+            _off += 1000;
+          }
+        }
+
+        // 2) conGestionIds — todos los eventos no excluidos
+        for(let _bi = 0; _bi < _ids.length; _bi += _BLOCK) {
+          const _chunk = _ids.slice(_bi, _bi + _BLOCK);
+          let _off = 0;
+          while(true) {
+            const _snap = await sb(
               `historial_eventos?correo_id=in.(${_chunk.join(',')})&select=correo_id,evento&limit=1000&offset=${_off}`
             ) || [];
-            _histSnap.forEach(h => {
+            _snap.forEach(h => {
               if(!h.correo_id) return;
               if(!_EXCL.has(h.evento)) state.conGestionIds.add(h.correo_id);
-              if(h.evento === 'correo_respondido') state.respondidosIds.add(h.correo_id);
             });
-            if(_histSnap.length < 1000) break;
+            if(_snap.length < 1000) break;
             _off += 1000;
           }
         }
