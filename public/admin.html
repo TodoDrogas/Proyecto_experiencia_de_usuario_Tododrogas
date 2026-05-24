@@ -10314,7 +10314,9 @@ async function exportAgentesExcel(){
   };
 
   // ── Hoja 2: Detalle Tickets — una fila por correo, 16 columnas unificadas ──
-  const _E_uniq = [...new Map(E.filter(c=>c.agente_id).map(c=>[c.id,c])).values()];
+  const _E_uniq = [...new Map(E.filter(c=>c.agente_id).map(c=>[c.id,c])).values()]
+    .sort((a,b)=>new Date(a.received_at)-new Date(b.received_at));
+  const _MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const h2 = _E_uniq.map(c=>{
     const evs = H.filter(h=>h.correo_id===c.id).sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
     const fmt = dt => dt ? new Date(dt).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}) : '';
@@ -10323,13 +10325,26 @@ async function exportAgentesExcel(){
     const evResp  = evs.find(h=>h.evento==='correo_respondido');
     const evFirma = evs.find(h=>h.evento==='pendiente_firma');
     const evCierre= evs.find(h=>h.evento==='solucionado'||h.evento==='firma_confirmada'||h.evento==='cerrado_automatico'||h.evento==='gestionado');
+    // Enriquecer con datos_extra de CUALQUIER evento del historial que tenga los datos
+    // No solo del primero — un ticket puede no tener gestión #1 pero sí otros eventos con datos
     let _extra = {};
-    if(evGest?.datos_extra) { try { _extra = JSON.parse(evGest.datos_extra||'{}'); } catch {} }
-    const _ced    = c.cedula||c.cedula_paciente||_extra.cedula_paciente||_extra.cedula||'';
-    const _nom    = c.nombre||_extra.nombre_paciente||_extra.nombre||'';
-    const _ciudad = c.ciudad_paciente||_extra.ciudad_paciente||_extra.ciudad||'';
-    const _eps    = _epsNom(c)||(_extra.eps_id?(_epsMap[_extra.eps_id]||''):'')||_extra.eps_nombre||'';
+    for(const ev of evs) {
+      if(!ev.datos_extra) continue;
+      try {
+        const _ex = JSON.parse(ev.datos_extra||'{}');
+        // Tomar el primer evento que tenga cedula o nombre
+        if(_ex.cedula_paciente||_ex.cedula||_ex.nombre_paciente||_ex.nombre) { _extra = _ex; break; }
+      } catch {}
+    }
+    // Prioridad: campo directo en correos (siempre actualizado) → datos_extra de gestión
+    const _ced  = c.cedula||c.cedula_paciente||_extra.cedula_paciente||_extra.cedula||'';
+    const _nom  = c.nombre||_extra.nombre_paciente||_extra.nombre||'';
+    const _ciu  = c.ciudad_paciente||_extra.ciudad_paciente||_extra.ciudad||'';
+    const _eps  = _epsNom(c)||(_extra.eps_id?(_epsMap[_extra.eps_id]||''):'')||_extra.eps_nombre||'';
+    // Mes desde fecha de recepción
+    const _mes  = c.received_at ? _MESES[new Date(c.received_at).getMonth()] : '';
     return {
+      Mes:                    _mes,
       ID_Correo:              c.id||'',
       Ticket:                 _buildTicket(c),
       Descripcion:            c.subject||'',
@@ -10337,7 +10352,7 @@ async function exportAgentesExcel(){
       Cedula_Paciente:        _ced,
       Nombre_Paciente:        _nom,
       EPS:                    _eps,
-      Ciudad:                 _ciudad,
+      Ciudad:                 _ciu,
       Estado_Ticket:          c.estado||'',
       Hora_Recibido:          fmt(c.received_at),
       Hora_Asignacion:        fmt(evAsig?.created_at),
@@ -10348,7 +10363,7 @@ async function exportAgentesExcel(){
       Canal:                  c.canal_contacto||c.origen||'',
     };
   });
-  const ws2 = _makeSheet(h2,[{wch:36},{wch:22},{wch:45},{wch:30},{wch:14},{wch:28},{wch:30},{wch:18},{wch:14},{wch:18},{wch:18},{wch:20},{wch:20},{wch:18},{wch:18},{wch:14}]);
+  const ws2 = _makeSheet(h2,[{wch:12},{wch:36},{wch:22},{wch:45},{wch:30},{wch:14},{wch:28},{wch:30},{wch:18},{wch:14},{wch:18},{wch:18},{wch:20},{wch:20},{wch:18},{wch:18},{wch:14}]);
   XLSX.utils.book_append_sheet(wb, ws2, 'Detalle Tickets');
 
     XLSX.writeFile(wb, `Asesores_${desde||'inicio'}_${hasta||'hoy'}.xlsx`);
