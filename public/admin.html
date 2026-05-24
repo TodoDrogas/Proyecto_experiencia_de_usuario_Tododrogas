@@ -1910,9 +1910,8 @@ const SB_URL = window.SUPABASE_URL || 'https://TU_PROYECTO.supabase.co';
 const SB_KEY = window.SUPABASE_KEY || 'TU_ANON_KEY';
 const OPENAI_KEY = window.OPENAI_KEY || localStorage.getItem('ag_openai_key') || '';
 
-// Cliente Supabase JS — usado exclusivamente para Realtime (WebSocket).
-// Las queries normales siguen usando sb() con fetch para no cambiar nada existente.
-// Se usa _sbRT para no colisionar con window.supabase que expone el SDK globalmente.
+// Cliente Supabase JS — solo para Realtime (WebSocket). Las queries usan sb() con fetch.
+// _sbRT evita colisión con window.supabase que expone el SDK globalmente.
 const _sbRT = (window.supabase?.createClient || (() => null))(SB_URL, SB_KEY);
 
 async function sb(path, method='GET', body=null) {
@@ -3161,6 +3160,23 @@ async function loadTicketsActivosAgentes() {
     state._activosConGest = new Set();
     if(ids.length > 0) {
       const loteSize = 400;
+
+      // 1) Solo correo_respondido — query filtrada para no cortar por volumen mezclado
+      for(let i = 0; i < ids.length; i += loteSize) {
+        const lote = ids.slice(i, i + loteSize);
+        let _evOff = 0;
+        while(true) {
+          const evSnap = await sb(
+            'historial_eventos?correo_id=in.(' + lote.join(',') + ')&evento=eq.correo_respondido&select=correo_id&limit=1000&offset=' + _evOff
+          ) || [];
+          evSnap.forEach(h => { if(h.correo_id) state._activosConResp.add(h.correo_id); });
+          if(evSnap.length < 1000) break;
+          _evOff += 1000;
+          if(_evOff >= 50000) break;
+        }
+      }
+
+      // 2) Todos los eventos para conGestionIds
       for(let i = 0; i < ids.length; i += loteSize) {
         const lote = ids.slice(i, i + loteSize);
         let _evOff = 0;
@@ -3170,8 +3186,7 @@ async function loadTicketsActivosAgentes() {
           ) || [];
           evSnap.forEach(h => {
             if(!h.correo_id) return;
-            if(h.evento === 'correo_respondido') state._activosConResp.add(h.correo_id);
-            if(!_EXCL_BADGE.has(h.evento))       state._activosConGest.add(h.correo_id);
+            if(!_EXCL_BADGE.has(h.evento)) state._activosConGest.add(h.correo_id);
           });
           if(evSnap.length < 1000) break;
           _evOff += 1000;
@@ -3262,7 +3277,7 @@ function renderFolderAgents() {
   const _idsConResp = state._activosConResp || state._idsConResp || new Set();
   const _idsConGest = state._activosConGest || state._idsConGest || new Set();
   el.innerHTML = activos.map((a,i)=>{
-    const mis   = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase()))&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
+    const mis   = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&(e.asignado_a===a.id||e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())))&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
     const total = mis.filter(e=>e.estado!=='informacion').length;
     // Pendientes = estado exacto 'pendiente' (igual que fc-pendiente y métricas)
     const pendiente = mis.filter(e=>e.estado==='pendiente').length;
@@ -9515,88 +9530,63 @@ async function loadAgentesMetrics(){
 
   renderAgentes();
   if(lu) lu.textContent='Act. '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
-  iniciarRealtimeAsesores(); // Realtime — mantiene la tabla viva sin recargar
+  iniciarRealtimeAsesores();
 }
 
 // ── REALTIME ASESORES ─────────────────────────────────────────────────────
-// Mantiene _agDatos.correos actualizado en tiempo real sin recargar todo.
-// Solo actúa cuando el tab Asesores está visible.
 let _realtimeChannel = null;
 
 function iniciarRealtimeAsesores() {
-  // Si ya hay canal activo lo removemos antes de crear uno nuevo
   if(_realtimeChannel) {
     try { _sbRT.removeChannel(_realtimeChannel); } catch(e) {}
     _realtimeChannel = null;
   }
-
-  // Verificar que _sbRT esté disponible
   if(!_sbRT?.channel) {
     console.warn('[Realtime] cliente no disponible — se omite suscripción');
     return;
   }
-
   _realtimeChannel = _sbRT
     .channel('admin-asesores-realtime')
-    .on('postgres_changes', {
-      event: '*',        // INSERT, UPDATE, DELETE
-      schema: 'public',
-      table: 'correos'
-    }, payload => {
-      // Solo procesar si el tab Asesores está activo
+    .on('postgres_changes', { event:'*', schema:'public', table:'correos' }, payload => {
       if(!document.getElementById('mtab-asesores')?.classList.contains('active')) return;
       actualizarCorreoRealtime(payload);
     })
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'historial_eventos'
-    }, payload => {
+    .on('postgres_changes', { event:'INSERT', schema:'public', table:'historial_eventos' }, payload => {
       if(!document.getElementById('mtab-asesores')?.classList.contains('active')) return;
       actualizarRespuestaRealtime(payload.new);
     })
     .subscribe(status => {
-      if(status === 'SUBSCRIBED') {
-        console.info('[Realtime] Asesores conectado ✓');
-      } else if(status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-        console.warn('[Realtime] Error de conexión:', status);
-      }
+      if(status==='SUBSCRIBED') console.info('[Realtime] Asesores conectado ✓');
+      else if(status==='CHANNEL_ERROR'||status==='TIMED_OUT') console.warn('[Realtime] Error:',status);
     });
 }
 
 function actualizarCorreoRealtime(payload) {
   if(!_agDatos?.correos) return;
-  const { eventType, new: nuevo, old: viejo } = payload;
-
-  if(eventType === 'DELETE') {
-    _agDatos.correos = _agDatos.correos.filter(c => c.id !== viejo?.id);
-  } else if(eventType === 'INSERT') {
-    // Solo agregar si pasa los mismos filtros que la query original
-    if(nuevo?.origen !== 'saliente' && nuevo?.origen !== 'borrador' &&
-       nuevo?.estado !== 'informacion' && nuevo?.estado !== 'borrador' &&
-       nuevo?.is_draft !== true) {
+  const { eventType, new:nuevo, old:viejo } = payload;
+  if(eventType==='DELETE') {
+    _agDatos.correos = _agDatos.correos.filter(c=>c.id!==viejo?.id);
+  } else if(eventType==='INSERT') {
+    if(nuevo?.origen!=='saliente'&&nuevo?.origen!=='borrador'&&
+       nuevo?.estado!=='informacion'&&nuevo?.estado!=='borrador'&&nuevo?.is_draft!==true) {
       _agDatos.correos.push(nuevo);
     }
-  } else if(eventType === 'UPDATE') {
-    const idx = _agDatos.correos.findIndex(c => c.id === nuevo?.id);
-    if(idx > -1) {
-      _agDatos.correos[idx] = { ..._agDatos.correos[idx], ...nuevo };
-    } else if(nuevo?.origen !== 'saliente' && nuevo?.origen !== 'borrador' &&
-              nuevo?.estado !== 'informacion' && nuevo?.is_draft !== true) {
-      // Ticket que antes no cumplía filtros y ahora sí (ej: se asignó)
+  } else if(eventType==='UPDATE') {
+    const idx = _agDatos.correos.findIndex(c=>c.id===nuevo?.id);
+    if(idx>-1) _agDatos.correos[idx] = {..._agDatos.correos[idx],...nuevo};
+    else if(nuevo?.origen!=='saliente'&&nuevo?.origen!=='borrador'&&
+            nuevo?.estado!=='informacion'&&nuevo?.is_draft!==true) {
       _agDatos.correos.push(nuevo);
     }
   }
-
-  // Actualizar indicador de tiempo y re-renderizar
   const lu = document.getElementById('agLastUpdate');
-  if(lu) lu.textContent = 'En vivo · ' + new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
+  if(lu) lu.textContent='En vivo · '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
   renderAgentes();
 }
 
 function actualizarRespuestaRealtime(evento) {
   if(!_agDatos?.respSet) return;
-  if(evento?.evento === 'correo_respondido' && evento?.correo_id) {
+  if(evento?.evento==='correo_respondido'&&evento?.correo_id) {
     _agDatos.respSet.add(evento.correo_id);
     renderAgentes();
   }
@@ -9638,9 +9628,19 @@ function renderAgentes(){
     );
     // Deduplicar por id (un ticket puede cumplir ambos criterios: agente_id y asignado_a)
     const myE = [...new Map(_myERaw.map(e=>[e.id,e])).values()];
-    // Eventos del período del agente — filtrar por agente_id O por correo_id de sus tickets
     const _myIds = new Set(myE.map(e=>e.id));
-    // myH por agente_id (para gestReg, resp, firmas)
+
+    // Para gestiones: E_all sin filtro fecha → num_gestiones histórico total igual al que ve el agente — Bug 1
+    const _myEAllRaw = E_all.filter(e=>
+      (e.agente_id===a.id ||
+       (e.asignado_a && (
+         e.asignado_a === a.id ||
+         e.asignado_a.trim().toLowerCase() === a.nombre.trim().toLowerCase()
+       )))
+      && _pqrAg(e)
+    );
+    const myE_all = [...new Map(_myEAllRaw.map(e=>[e.id,e])).values()];
+    // myH por agente_id (para resp, firmas)
     const myH = H.filter(h=>h.agente_id===a.id&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
     // myH_byCorreo: eventos de los correos del agente aunque el evento tenga otro agente_id
     // Cubre tickets asignados via asignado_a donde el evento puede tener agente_id distinto
@@ -9653,9 +9653,9 @@ function renderAgentes(){
     const pfirma  = myE.filter(e=>_pqr(e)&&e.estado==='pendiente_firma').length;
     const alta    = myE.filter(e=>e.prioridad==='alta'&&['pendiente','gestion'].includes(e.estado)).length;
     const casosActivos = myE.filter(e=>_pqr(e)&&['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
-    // Bug 5 — nombre_solicitud si existe (llenado en primera gestión), tipo_pqr como fallback (clasificado por IA)
+    // Bug 5 — nombre_solicitud si existe (llenado en primera gestión), tipo_pqr como fallback
     const _nomSol = e => {
-      const ns = (e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      const ns=(e.nombre_solicitud||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
       if(ns) return ns;
       return (e.tipo_pqr||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     };
@@ -9681,9 +9681,8 @@ function renderAgentes(){
     // Sin Respuesta = todos los del período que NO tienen correo_respondido
     const sinRespCount = myE.filter(e=>!_ticketsResp.has(e.id)).length;
 
-    // Gestiones del período = eventos de gestión en tickets del agente, capturando también
-    // gestiones registradas por admin (myH_byCorreo filtra por correo_id, no por agente_id) — Bug 1
-    const gestReg = myH_byCorreo.filter(h=>_esGR(h)&&_myIds.has(h.correo_id)).length;
+    // Gestiones = suma de num_gestiones de TODOS los tickets del agente (histórico, sin filtro fecha) — Bug 1
+    const gestReg = myE_all.reduce((s,e)=>s+(e.num_gestiones||0),0);
     const numGest = gestReg;
     const resp    = myH.filter(h=>h.evento==='correo_respondido'&&_myIds.has(h.correo_id)).length;
     const firmas  = myH.filter(h=>h.evento==='firma_confirmada'&&_myIds.has(h.correo_id)).length;
@@ -9963,20 +9962,23 @@ async function exportAgentesExcel(){
   const h1 = act.map(a=>{
     const _pqrAg = e => e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador';
     const _myERawX = E.filter(e=>
-      // Bug 2 — comparar asignado_a contra ID y contra nombre
+      // Bug 2 — asignado_a contra ID y contra nombre
       (e.agente_id===a.id || (e.asignado_a&&(e.asignado_a===a.id||e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())))
       && _pqrAg(e)
     );
     const myE = [...new Map(_myERawX.map(e=>[e.id,e])).values()];
     const myH = H.filter(h=>h.agente_id===a.id&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
-    const _myIdsX = new Set(myE.map(e=>e.id));
-    const myH_byCorreoX = H.filter(h=>_myIdsX.has(h.correo_id)&&(!_dISO||h.created_at>=_dISO)&&(!_hISO||h.created_at<=_hISO));
     const res = myE.filter(e=>e.fecha_resolucion&&e.received_at);
     const avgH= res.length>0?(res.reduce((s,e)=>{const h=(new Date(e.fecha_resolucion)-new Date(e.received_at))/3600000;return s+(h>0?h:0);},0)/res.length).toFixed(1):'';
     const sol = myE.filter(e=>e.estado==='solucionado'||e.estado==='gestionado').length;
-    // gestReg sincronizado con tabla — usa myH_byCorreo para capturar gestiones de admin también — Bug 1
-    const cidsAsesor = _myIdsX;
-    const gestReg = myH_byCorreoX.filter(h=>_esGR(h)&&_myIdsX.has(h.correo_id)).length;
+    // Bug 1 — gestiones históricas usando E_all (sin filtro fecha) + num_gestiones
+    const _myEAllRawX = E_all.filter(e=>
+      (e.agente_id===a.id || (e.asignado_a&&(e.asignado_a===a.id||e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())))
+      && _pqrAg(e)
+    );
+    const myE_allX = [...new Map(_myEAllRawX.map(e=>[e.id,e])).values()];
+    const cidsAsesor = new Set(myE.map(e=>e.id));
+    const gestReg = myE_allX.reduce((s,e)=>s+(e.num_gestiones||0),0);
     // casos_activos DINÁMICO — no leer campo estático de agentes
     const casosActivos = myE.filter(e=>['pendiente','gestion','pendiente_firma'].includes(e.estado)).length;
     // Con/Sin Respuesta — binario
