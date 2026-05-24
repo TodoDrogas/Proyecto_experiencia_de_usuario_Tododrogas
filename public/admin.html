@@ -2283,15 +2283,27 @@ async function exportarSIGI() {
     const correosSIGI = [...new Map(correos.map(c=>[c.id,c])).values()];
     const correoIds = correosSIGI.map(c => c.id).filter(id => id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
     // Medicamentos: lotes en paralelo para garantizar que todos lleguen
-    const _medIds = correoIds;
-    const _medChunks = [];
-    for(let i=0; i<_medIds.length; i+=50) _medChunks.push(_medIds.slice(i,i+50));
-    const _medResults = await Promise.all(
-      _medChunks.map(chunk =>
-        sb(`gestiones_medicamentos?correo_id=in.(${chunk.join(',')})&order=created_at.asc&limit=1000`).catch(()=>[])
-      )
-    );
-    const meds = _medResults.flat().filter(Boolean);
+    // Medicamentos vienen de historial_eventos.datos_extra->medicamentos (array)
+    // El historial ya fue cargado arriba — extraer medicamentos de ahí
+    const meds = [];
+    hist.forEach(h => {
+      try {
+        const ex = typeof h.datos_extra === 'string' ? JSON.parse(h.datos_extra) : (h.datos_extra || {});
+        const arr = ex.medicamentos;
+        if (Array.isArray(arr) && arr.length) {
+          arr.forEach(m => {
+            meds.push({
+              correo_id:           h.correo_id,
+              codigo:              m.codigo              || '',
+              descripcion:         m.descripcion         || '',
+              descripcion_escrita: m.descripcion_escrita || '',
+              cantidad:            m.cantidad            || '',
+              pbs:                 m.pbs                 || '',
+            });
+          });
+        }
+      } catch(e) {}
+    });
 
 
     // Helper condicional local para exportarSIGI
@@ -2302,6 +2314,21 @@ async function exportarSIGI() {
 
     // Historial por fecha del período
     const hist = await sb(`historial_eventos?agente_id=not.is.null&order=created_at.asc&limit=10000`+_dExH+_hExH).catch(()=>[]) || [];
+
+    // ── Datos del paciente desde historial_eventos.datos_extra (más frescos) ──
+    // Tomar la gestión más reciente con datos completos por correo_id
+    const datosGestion = {};
+    hist.forEach(h => {
+      try {
+        const ex = typeof h.datos_extra === 'string' ? JSON.parse(h.datos_extra) : (h.datos_extra || {});
+        if (ex.cedula_paciente && h.correo_id) {
+          const prev = datosGestion[h.correo_id];
+          if (!prev || (ex.nombre_paciente && !prev.nombre_paciente)) {
+            datosGestion[h.correo_id] = ex;
+          }
+        }
+      } catch(e) {}
+    });
 
     // ── Cruzar tabla_usuarios por cédula ─────────────────────────────
     const cedulas = [...new Set(correos.map(c => c.cedula_paciente||c.cedula||'').filter(Boolean))];
@@ -2344,6 +2371,7 @@ async function exportarSIGI() {
     const h1 = correosSIGI.map(c => {
       const eps  = epsCat.find(e => e.id === c.eps_id);
       const pac  = getPaciente(c);
+      const dg   = datosGestion[c.id] || {};  // datos_extra de la última gestión
       const ag   = getAgente(c);
       const histC = hist.filter(h => h.correo_id === c.id)
                         .sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
@@ -2404,14 +2432,14 @@ async function exportarSIGI() {
       return {
         '# Gestiones':             c.num_gestiones || 0,
         'Código PQR':              ticketId,                    // Col B — siempre lleno
-        'Tipo Documento':          pac?.['Tipo De Documento'] || c.tipo_documento || 'CÉDULA DE CIUDADANÍA',
+        'Tipo Documento':          dg.tipo_documento || pac?.['Tipo De Documento'] || c.tipo_documento || 'CÉDULA DE CIUDADANÍA',
         'Documento':               pac?.['Cedula Pacientes'] || pac?.['Cedula Paciente'] || c.cedula_paciente || c.cedula || '',
-        'Nombre y Apellidos':      pac?.['Nombre Paciente']  || c.from_name || c.nombre || '',
-        'Dirección':               pac?.['Direccion'] || c.direccion_paciente || '',
+        'Nombre y Apellidos':      dg.nombre_paciente || pac?.['Nombre Paciente'] || c.from_name || c.nombre || '',
+        'Dirección':               dg.direccion || pac?.['Direccion'] || c.direccion_paciente || '',
         'Email':                   c.from_email || c.correo || '',
         'Teléfono':                (()=>{
           const INVALIDOS = new Set(['S/D','NT','NA','N/A','0','1','-','']);
-          const t = (pac?.['Telefono']||'').toString().trim();
+          const t = (dg.telefono || pac?.['Telefono']||'').toString().trim();
           const valido = t.length >= 7 && !INVALIDOS.has(t.toUpperCase()) && /\d{6,}/.test(t.replace(/[\s\-().]/g,''));
           const tc = (c.telefono_contacto||'').toString().trim();
           const tcValido = tc.length >= 7 && !INVALIDOS.has(tc.toUpperCase()) && /\d{6,}/.test(tc.replace(/[\s\-().]/g,''));
@@ -2434,8 +2462,8 @@ async function exportarSIGI() {
         'Fecha Resp. Usuario':     fGest,                       // Col W = igual a V
         'Respuesta Asignación':    pgReal?.descripcion || '',
         'Fecha PQRSFD Cerrada':    fCierre,                     // Col Y
-        'Departamento':            pac?.['Departamento'] || c.departamento_paciente || '',
-        'Ciudad':                  pac?.['Ciudad']       || c.ciudad_paciente || '',
+        'Departamento':            (dg.departamento || pac?.['Departamento'] || c.departamento_paciente || '').toUpperCase() || '',
+        'Ciudad':                  (dg.ciudad || pac?.['Ciudad'] || c.ciudad_paciente || '').toUpperCase() || '',
         'Código Medicamento':      '',   // datos en hoja MEDICAMENTOS
         'Descripción Medicamento': '',
         'Descripción Escrita':     '',
