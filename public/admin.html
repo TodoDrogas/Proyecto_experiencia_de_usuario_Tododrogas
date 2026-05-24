@@ -4149,8 +4149,32 @@ async function eliminarMasivoInformacion(ids) {
   };
   if(modal) { modal.style.display = 'flex'; _upd(); }
 
-  // Helper: borrar UN correo con todas sus dependencias
+  // Helper: borrar archivos físicos del Storage para un correo
+  const _borrarStorage = async (id) => {
+    try {
+      const prefixes = [`adjuntos/${id}`, `inline/${id}`, `firmas/${id}`, `evidencias/${id}`, `saliente/${id}`];
+      for(const prefix of prefixes) {
+        const listRes = await fetch(`${SB_URL}/storage/v1/object/list/adjuntos-pqr`, {
+          method: 'POST',
+          headers: {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+          body: JSON.stringify({ prefix, limit: 100 })
+        });
+        if(!listRes.ok) continue;
+        const files = await listRes.json();
+        if(!files?.length) continue;
+        const paths = files.map(f => `${prefix}/${f.name}`);
+        await fetch(`${SB_URL}/storage/v1/object/adjuntos-pqr`, {
+          method: 'DELETE',
+          headers: {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+          body: JSON.stringify({ prefixes: paths })
+        });
+      }
+    } catch(err) { console.warn('[borrarStorage]', id, err.message); }
+  };
+
+  // Helper: borrar UN correo con todas sus dependencias incluido Storage
   const _borrarUno = async (id) => {
+    await _borrarStorage(id);
     await sb(`adjuntos?correo_id=eq.${id}`, 'DELETE');
     await sb(`historial_eventos?correo_id=eq.${id}`, 'DELETE');
     await sb(`gestiones_medicamentos?correo_id=eq.${id}`, 'DELETE');
@@ -4168,6 +4192,8 @@ async function eliminarMasivoInformacion(ids) {
 
     // Intentar primero en lote (más rápido)
     try {
+      // Borrar archivos físicos del Storage para cada correo del lote
+      await Promise.all(lote.map(id => _borrarStorage(id)));
       await sb(`adjuntos?correo_id=in.(${inClause})`, 'DELETE');
       await sb(`historial_eventos?correo_id=in.(${inClause})`, 'DELETE');
       await sb(`gestiones_medicamentos?correo_id=in.(${inClause})`, 'DELETE');
