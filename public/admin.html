@@ -3085,6 +3085,21 @@ async function loadEmails(horasVentana = 0) {
       state._idsConGest = new Set();
       if(ids.length > 0) {
         const loteSize = 400;
+        // Query separada por correo_respondido — evita corte por volumen mezclado
+        for(let i = 0; i < ids.length; i += loteSize) {
+          const lote = ids.slice(i, i + loteSize);
+          let _off = 0;
+          while(true) {
+            const evSnap = await sb(
+              `historial_eventos?correo_id=in.(${lote.join(',')})&evento=eq.correo_respondido&select=correo_id&limit=1000&offset=${_off}`
+            ) || [];
+            evSnap.forEach(h => { if(h.correo_id) state._idsConResp.add(h.correo_id); });
+            if(evSnap.length < 1000) break;
+            _off += 1000;
+            if(_off >= 50000) break;
+          }
+        }
+        // Query para conGestionIds
         for(let i = 0; i < ids.length; i += loteSize) {
           const lote = ids.slice(i, i + loteSize);
           let _off = 0;
@@ -3094,7 +3109,6 @@ async function loadEmails(horasVentana = 0) {
             ) || [];
             evSnap.forEach(h => {
               if(!h.correo_id) return;
-              if(h.evento === 'correo_respondido') state._idsConResp.add(h.correo_id);
               if(!_EXCL_BADGE.has(h.evento)) state._idsConGest.add(h.correo_id);
             });
             if(evSnap.length < 1000) break;
@@ -3260,9 +3274,12 @@ function updateFolderCounts() {
   if(_infoBar && state.folder === 'informacion') _infoBar.style.display = _infoCount > 0 ? 'flex' : 'none';
   const urgEl = document.getElementById('fc-urgente');
   if(urgEl) urgEl.textContent = _all.filter(e=>_pqr(e)&&(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma'&&e.estado!=='informacion').length;
-  // fc-sin_respuesta — usa _activosConResp (cargado al inicio) enriquecido con _agDatos.respSet si está disponible
-  const _respSetFC = _agDatos?.respSet?.size > 0 ? _agDatos.respSet : (state._activosConResp || new Set());
-  const _idsConRespFC = new Set([...( state._activosConResp || new Set()), ..._respSetFC]);
+  // fc-sin_respuesta — unir todas las fuentes disponibles para máxima cobertura
+  const _idsConRespFC = new Set([
+    ...(state._idsConResp || new Set()),
+    ...(state._activosConResp || new Set()),
+    ...(_agDatos?.respSet || new Set()),
+  ]);
   const srEl = document.getElementById('fc-sin_respuesta');
   if(srEl) {
     const _allActivos = state._activosAgentes || state.allEmails || state.emails;
@@ -3282,9 +3299,12 @@ function renderFolderAgents() {
   // Solo renderizar cuando loadTicketsActivosAgentes haya cargado su propia data
   if (!state._activosAgentes) return;
   const all = state._activosAgentes;
-  // Unir _activosConResp (siempre disponible) con _agDatos.respSet (disponible tras visitar Asesores)
-  const _respSetFolders = _agDatos?.respSet?.size > 0 ? _agDatos.respSet : new Set();
-  const _idsConResp = new Set([...(state._activosConResp || new Set()), ..._respSetFolders]);
+  // Unir todas las fuentes disponibles para máxima cobertura de respuestas
+  const _idsConResp = new Set([
+    ...(state._idsConResp || new Set()),
+    ...(state._activosConResp || new Set()),
+    ...(_agDatos?.respSet || new Set()),
+  ]);
   const _idsConGest = state._activosConGest || state._idsConGest || new Set();
   el.innerHTML = activos.map((a,i)=>{
     const mis   = all.filter(e=>(e.agente_id===a.id||(e.asignado_a&&(e.asignado_a===a.id||e.asignado_a.trim().toLowerCase()===a.nombre.trim().toLowerCase())))&&e.origen!=='saliente'&&e.origen!=='borrador'&&e.estado!=='enviado'&&e.estado!=='borrador');
