@@ -10200,6 +10200,23 @@ async function exportAgentesExcel(){
   // Helper nombre EPS
   const _epsNom = c => c.eps_id ? (_epsMap[c.eps_id]||'') : '';
 
+  // ── Fetch propio de todos los tickets — usado en h1 y h2 ─────────────
+  const _allTickets = [];
+  try {
+    const _PAGE = 1000, _fields2 = 'id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,ciudad_paciente,eps_id,estado,origen,canal_contacto,received_at,fecha_resolucion,agente_id,asignado_a,is_draft,num_gestiones';
+    let _off2 = 0;
+    while(true) {
+      const _pg = await sb(
+        `correos?agente_id=not.is.null&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&estado=neq.informacion&is_draft=is.false&select=${_fields2}&order=received_at.asc&limit=${_PAGE}&offset=${_off2}`
+      ).catch(()=>[]) || [];
+      if(!_pg.length) break;
+      _allTickets.push(..._pg);
+      if(_pg.length < _PAGE) break;
+      _off2 += _PAGE;
+      if(_off2 >= 100000) break;
+    }
+  } catch(e) { console.warn('[exportExcel] fetch tickets:', e.message); }
+
   // ── Hoja 1: Resumen por asesor ──────────────────────────────────────
   // Bug 5 — fallback a tipo_pqr cuando nombre_solicitud está vacío
   const _nomSolX = e => {
@@ -10323,24 +10340,7 @@ async function exportAgentesExcel(){
     return `EXT-${ymd}-${c.id.slice(-4).toUpperCase()}`;
   };
 
-  // ── Hoja 2: Detalle Tickets — fetch propio completo, no depende de E en memoria ──
-  // E puede estar filtrado por período — necesitamos todos los tickets gestionados
-  const _allTickets = [];
-  try {
-    const _PAGE = 1000, _fields2 = 'id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,ciudad_paciente,eps_id,estado,origen,canal_contacto,received_at,fecha_resolucion,agente_id,is_draft,num_gestiones';
-    let _off2 = 0;
-    while(true) {
-      const _pg = await sb(
-        `correos?agente_id=not.is.null&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&estado=neq.informacion&is_draft=is.false&select=${_fields2}&order=received_at.asc&limit=${_PAGE}&offset=${_off2}`
-      ).catch(()=>[]) || [];
-      if(!_pg.length) break;
-      _allTickets.push(..._pg);
-      if(_pg.length < _PAGE) break;
-      _off2 += _PAGE;
-      if(_off2 >= 100000) break;
-    }
-  } catch(e) { console.warn('[exportExcel] fetch tickets:', e.message); }
-
+  // ── Hoja 2: Detalle Tickets — usa _allTickets ya cargado arriba ──────
   const _E_uniq = [...new Map(_allTickets.map(c=>[c.id,c])).values()]
     .sort((a,b)=>new Date(a.received_at)-new Date(b.received_at));
   const _MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
