@@ -6,415 +6,542 @@
 <title>Admin WhatsApp · Tododrogas</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="config.js" onerror="console.warn('config.js not found')"></script>
+<script>(function(){var t=localStorage.getItem('admin_wa_tema')||'default';if(t!=='default')document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
 :root{
   --ink:#0a0e1a;--ink2:#3a4258;--ink3:#8892a4;
-  --bg:#f2f4f8;--bg2:#e8ebf2;--surface:#fff;--surface2:#f7f8fb;--border:#dde1eb;
-  --blue:#2563eb;--blue-d:#1d4ed8;--blue-l:#eff4ff;
+  --bg:#f0f2f7;--bg2:#e4e8f0;--surface:#ffffff;--surface2:#f7f8fb;
+  --border:#dde1eb;--border2:#c8cfe0;
+  --blue:#2563eb;--blue-d:#1d4ed8;--blue-l:#eff4ff;--blue-m:#3b82f6;
   --green:#16a34a;--green-l:#dcfce7;
-  --wa:#25d366;--wa-d:#128c7e;--wa-l:#e7fce8;
+  --wa:#25d366;--wa-d:#128c7e;--wa-l:#e7fce8;--wa-out:#d9fdd3;
   --nova:#6366f1;--nova-l:#eef2ff;
   --yellow:#ca8a04;--yellow-l:#fef9c3;
   --red:#dc2626;--red-l:#fee2e2;
   --orange:#ea580c;--orange-l:#fff7ed;
   --purple:#7c3aed;--purple-l:#f5f3ff;
-  --shadow:0 1px 3px rgba(10,14,26,.08),0 4px 12px rgba(10,14,26,.04);
-  --shadow-l:0 2px 8px rgba(10,14,26,.12),0 8px 24px rgba(10,14,26,.08);
-  --r:12px;--r2:8px;
+  --teal:#0891b2;--teal-l:#cffafe;
+  --pink:#db2777;--pink-l:#fce7f3;
+  --sidebar-w:220px;
+  --topbar-h:56px;
+  --shadow-card:0 4px 0 rgba(0,0,0,0.07),0 8px 24px rgba(0,0,0,0.06);
+  --shadow-card-hover:0 6px 0 rgba(0,0,0,0.1),0 12px 32px rgba(0,0,0,0.1);
+  --r:14px;--r2:10px;--r3:8px;
 }
+
+/* TEMAS */
+html[data-theme="dark"]{--ink:#e8ecf5;--ink2:#9aa3bd;--ink3:#5a6484;--bg:#0f1117;--bg2:#1a1d27;--surface:#1e2130;--surface2:#252836;--border:#2d3144;--border2:#3a4060}
+html[data-theme="purple"]{--blue:#7c3aed;--blue-l:#ede9fe;--bg:#f5f3ff;--surface:#faf5ff;--border:#ddd6fe;--ink:#1e1b4b;--ink2:#3730a3;--ink3:#6d28d9}
+html[data-theme="ocean"]{--blue:#0891b2;--blue-l:#cffafe;--bg:#f0fdfe;--surface:#ecfeff;--border:#a5f3fc;--ink:#0c1a1f;--ink2:#155e75;--ink3:#0e7490}
+html[data-theme="forest"]{--blue:#15803d;--blue-l:#dcfce7;--bg:#f7fee7;--surface:#f0fdf4;--border:#bbf7d0;--ink:#052e16;--ink2:#166534;--ink3:#15803d}
+html[data-theme="rose"]{--blue:#e11d48;--blue-l:#ffe4e6;--bg:#fef2f2;--surface:#fff1f2;--border:#fecdd3;--ink:#1c0a0a;--ink2:#9f1239;--ink3:#be123c}
+html[data-theme="arctic"]{--blue:#38bdf8;--blue-l:#e0f2fe;--bg:#e0f2fe;--surface:#f0f9ff;--border:#bae6fd;--ink:#0c4a6e;--ink2:#075985;--ink3:#0369a1}
+html[data-theme="sunset"]{--blue:#f97316;--blue-l:#ffedd5;--bg:#fffbf5;--surface:#fff7ed;--border:#fed7aa;--ink:#431407;--ink2:#9a3412;--ink3:#c2410c}
+
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-height:100dvh;display:flex;flex-direction:column}
+body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 
-/* TOPBAR */
-.topbar{background:var(--ink);color:#fff;height:52px;display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:200;flex-shrink:0}
-.tb-brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;letter-spacing:-.3px}
-.tb-brand svg{opacity:.8}
-.tb-pill{background:rgba(37,211,102,.15);color:#25d366;border:1px solid rgba(37,211,102,.3);border-radius:99px;font-size:10px;font-weight:600;padding:2px 8px}
+/* ── TOPBAR ── */
+.topbar{background:#0d1117;color:#fff;height:var(--topbar-h);display:flex;align-items:center;padding:0 20px;gap:12px;position:fixed;top:0;left:0;right:0;z-index:300;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.06)}
+.tb-logo{height:28px;object-fit:contain}
+.tb-pill{background:rgba(37,211,102,.15);color:#25d366;border:1px solid rgba(37,211,102,.3);border-radius:99px;font-size:10px;font-weight:600;padding:2px 8px;letter-spacing:.3px}
 .tb-admin-badge{background:rgba(124,58,237,.2);color:#a78bfa;border:1px solid rgba(124,58,237,.3);border-radius:99px;font-size:10px;font-weight:600;padding:2px 8px}
-.tb-nav{display:flex;gap:2px;margin-left:auto}
-.tb-nav-btn{background:none;border:none;color:rgba(255,255,255,.5);padding:6px 12px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;font-family:'Poppins',sans-serif;transition:all .15s}
-.tb-nav-btn:hover,.tb-nav-btn.active{background:rgba(255,255,255,.1);color:#fff}
-.tb-right{display:flex;align-items:center;gap:10px;margin-left:12px}
+.tb-spacer{flex:1}
+.tb-btn{display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.06);color:#fff;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .2s}
+.tb-btn:hover{background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.3)}
+.tb-btn.active-global{background:rgba(34,197,94,0.2);border-color:rgba(34,197,94,0.5);color:#4ade80}
+.tb-user{display:flex;align-items:center;gap:8px}
+.tb-av{width:30px;height:30px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0}
+.tb-name{font-size:12px;font-weight:600;color:#fff}
 .btn-logout{background:none;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);padding:4px 10px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .15s}
-.btn-logout:hover{border-color:var(--red);color:#fca5a5}
+.btn-logout:hover{border-color:#ef4444;color:#fca5a5}
 
-/* MAIN */
-.main{flex:1;padding:20px;max-width:1400px;width:100%;margin:0 auto}
+/* ── LAYOUT ── */
+.layout{display:flex;padding-top:var(--topbar-h);height:100dvh}
 
-/* SECTION */
+/* ── SIDEBAR ── */
+.sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;position:fixed;top:var(--topbar-h);left:0;bottom:0;z-index:200}
+.sidebar-brand{padding:20px 16px 12px;border-bottom:1px solid var(--border)}
+.sidebar-brand-title{font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:1px}
+.sidebar-brand-sub{font-size:12px;font-weight:600;color:var(--ink);margin-top:2px}
+.nav-section{padding:12px 8px 4px}
+.nav-label{font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:1px;padding:0 8px;margin-bottom:4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--r3);cursor:pointer;font-size:12px;font-weight:500;color:var(--ink2);transition:all .15s;margin-bottom:2px}
+.nav-item:hover{background:var(--bg);color:var(--ink)}
+.nav-item.active{background:var(--blue-l);color:var(--blue);font-weight:700}
+.nav-item svg{flex-shrink:0;opacity:.7}
+.nav-item.active svg{opacity:1}
+.nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;min-width:16px;text-align:center}
+.nav-badge.green{background:var(--green)}
+.nav-badge.orange{background:var(--orange)}
+.sidebar-footer{margin-top:auto;padding:12px 8px;border-top:1px solid var(--border)}
+
+/* ── MAIN CONTENT ── */
+.main{flex:1;margin-left:var(--sidebar-w);overflow-y:auto;padding:24px;min-height:0}
 .section{display:none}
 .section.active{display:block}
+.page-title{font-size:18px;font-weight:700;color:var(--ink);margin-bottom:4px}
+.page-sub{font-size:12px;color:var(--ink3);margin-bottom:20px}
 
-/* CARDS STATS */
-.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
-.stat-card{background:var(--surface);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);border:1px solid var(--border)}
-.stat-card .label{font-size:11px;color:var(--ink3);font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
-.stat-card .value{font-size:28px;font-weight:700;line-height:1}
-.stat-card .sub{font-size:11px;color:var(--ink3);margin-top:4px}
-.stat-card.c-green .value{color:var(--green)}
-.stat-card.c-blue .value{color:var(--blue)}
-.stat-card.c-orange .value{color:var(--orange)}
-.stat-card.c-purple .value{color:var(--purple)}
-.stat-card.c-red .value{color:var(--red)}
-.stat-card.c-nova .value{color:var(--nova)}
+/* ── KPI CARDS 3D ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:24px}
+.kpi-card{background:var(--surface);border-radius:var(--r);padding:18px 16px 14px;border-left:4px solid var(--blue);border-top:0.5px solid rgba(0,0,0,0.07);border-right:0.5px solid rgba(0,0,0,0.07);border-bottom:0.5px solid rgba(0,0,0,0.07);box-shadow:var(--shadow-card);position:relative;overflow:hidden;transition:transform .15s,box-shadow .15s;cursor:default}
+.kpi-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-card-hover)}
+.kpi-card::after{content:'';position:absolute;top:0;right:0;width:56px;height:56px;border-radius:0 var(--r) 0 100%;opacity:0.07}
+.kpi-val{font-size:28px;font-weight:700;color:var(--ink);line-height:1;font-family:'Poppins',sans-serif;letter-spacing:-.5px;margin-bottom:4px}
+.kpi-label{font-size:9px;font-weight:700;color:var(--ink3);letter-spacing:1px;text-transform:uppercase;margin-bottom:2px}
+.kpi-sub{font-size:10px;color:var(--ink3);line-height:1.4}
+.kpi-bar{height:3px;border-radius:2px;margin-top:10px;opacity:0.3}
+.kpi-icon{font-size:18px;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;position:absolute;top:16px;right:14px}
 
-/* PANEL */
-.panel{background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;margin-bottom:20px}
+/* KPI colors */
+.kpi-blue{border-left-color:#3b82f6!important}.kpi-blue::after,.kpi-blue .kpi-bar{background:#3b82f6}.kpi-blue .kpi-icon{background:#eff6ff}
+.kpi-green{border-left-color:#22c55e!important}.kpi-green::after,.kpi-green .kpi-bar{background:#22c55e}.kpi-green .kpi-icon{background:#f0fdf4}
+.kpi-amber{border-left-color:#f59e0b!important}.kpi-amber::after,.kpi-amber .kpi-bar{background:#f59e0b}.kpi-amber .kpi-icon{background:#fffbeb}
+.kpi-red{border-left-color:#ef4444!important}.kpi-red::after,.kpi-red .kpi-bar{background:#ef4444}.kpi-red .kpi-icon{background:#fef2f2}
+.kpi-purple{border-left-color:#8b5cf6!important}.kpi-purple::after,.kpi-purple .kpi-bar{background:#8b5cf6}.kpi-purple .kpi-icon{background:#f5f3ff}
+.kpi-teal{border-left-color:#14b8a6!important}.kpi-teal::after,.kpi-teal .kpi-bar{background:#14b8a6}.kpi-teal .kpi-icon{background:#f0fdfa}
+.kpi-pink{border-left-color:#ec4899!important}.kpi-pink::after,.kpi-pink .kpi-bar{background:#ec4899}.kpi-pink .kpi-icon{background:#fdf2f8}
+.kpi-nova{border-left-color:#6366f1!important}.kpi-nova::after,.kpi-nova .kpi-bar{background:#6366f1}.kpi-nova .kpi-icon{background:#eef2ff}
+
+/* ── PANEL ── */
+.panel{background:var(--surface);border-radius:var(--r);box-shadow:var(--shadow-card);border:1px solid var(--border);overflow:hidden;margin-bottom:20px}
 .panel-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;justify-content:space-between}
-.panel-hdr h3{font-size:13px;font-weight:600}
+.panel-hdr h3{font-size:13px;font-weight:700;color:var(--ink)}
 .panel-body{padding:16px 18px}
 
-/* TABLE */
+/* ── TABLE ── */
 .tbl{width:100%;border-collapse:collapse;font-size:12px}
-.tbl th{font-size:11px;font-weight:500;color:var(--ink3);padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap}
-.tbl td{padding:10px 10px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--ink)}
+.tbl th{font-size:10px;font-weight:700;color:var(--ink3);padding:9px 12px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;text-transform:uppercase;letter-spacing:.4px;background:var(--surface2)}
+.tbl td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle;color:var(--ink)}
 .tbl tr:last-child td{border-bottom:none}
 .tbl tr:hover td{background:var(--bg)}
-.tbl .mono{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink3)}
+.mono{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink3)}
 
-/* BADGES */
+/* ── BADGES ── */
 .badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px}
 .badge-nova{background:var(--nova-l);color:var(--nova)}
 .badge-escalado{background:#fef3c7;color:#92400e}
 .badge-cerrado{background:var(--green-l);color:var(--green)}
 .badge-esperando{background:var(--blue-l);color:var(--blue)}
 .badge-online{background:var(--green-l);color:var(--green)}
+.badge-pausa{background:var(--red-l);color:var(--red)}
 .badge-offline{background:var(--bg2);color:var(--ink3)}
 
-/* BTN */
-.btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:'Poppins',sans-serif;transition:all .15s}
-.btn-primary{background:var(--blue);color:#fff}
-.btn-primary:hover{background:var(--blue-d)}
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r3);font-size:12px;font-weight:500;cursor:pointer;border:none;font-family:'Poppins',sans-serif;transition:all .15s}
+.btn-primary{background:var(--blue);color:#fff}.btn-primary:hover{background:var(--blue-d)}
 .btn-sm{padding:4px 10px;font-size:11px}
-.btn-ghost{background:none;border:1px solid var(--border);color:var(--ink2)}
-.btn-ghost:hover{background:var(--bg);border-color:var(--ink3)}
-.btn-danger{background:var(--red-l);color:var(--red);border:1px solid rgba(220,38,38,.2)}
-.btn-danger:hover{background:var(--red);color:#fff}
-.btn-success{background:var(--green-l);color:var(--green);border:1px solid rgba(22,163,74,.2)}
-.btn-success:hover{background:var(--green);color:#fff}
-.btn-wa{background:var(--wa);color:#fff}
-.btn-wa:hover{background:var(--wa-d)}
+.btn-ghost{background:none;border:1px solid var(--border);color:var(--ink2)}.btn-ghost:hover{background:var(--bg)}
+.btn-danger{background:var(--red-l);color:var(--red);border:1px solid rgba(220,38,38,.2)}.btn-danger:hover{background:var(--red);color:#fff}
+.btn-success{background:var(--green-l);color:var(--green);border:1px solid rgba(22,163,74,.2)}.btn-success:hover{background:var(--green);color:#fff}
+.btn-wa{background:var(--wa);color:#fff}.btn-wa:hover{background:var(--wa-d)}
 
-/* SEARCH / FILTERS */
-.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.search-box{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;flex:1;min-width:180px}
+/* ── SEARCH ── */
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.search-box{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r3);padding:7px 12px;flex:1;min-width:180px}
 .search-box input{border:none;outline:none;font-size:12px;font-family:'Poppins',sans-serif;background:transparent;width:100%;color:var(--ink)}
-.filter-select{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;font-family:'Poppins',sans-serif;background:var(--surface);color:var(--ink);cursor:pointer;outline:none}
+.filter-select{border:1px solid var(--border);border-radius:var(--r3);padding:7px 10px;font-size:12px;font-family:'Poppins',sans-serif;background:var(--surface);color:var(--ink);cursor:pointer;outline:none}
 
-/* AGENTE ROW */
+/* ── AGENTE ROW ── */
+.ag-av{width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
 .ag-row{display:flex;align-items:center;gap:10px}
-.ag-av{width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;flex-shrink:0}
 
-/* MODAL */
-.modal-bg{display:none;position:fixed;inset:0;background:rgba(10,14,26,.5);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+/* ── MODAL ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(10,14,26,.5);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
 .modal-bg.open{display:flex}
-.modal{background:var(--surface);border-radius:var(--r);padding:24px;width:100%;max-width:480px;box-shadow:var(--shadow-l)}
-.modal h3{font-size:15px;font-weight:600;margin-bottom:16px}
+.modal{background:var(--surface);border-radius:var(--r);padding:24px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal h3{font-size:15px;font-weight:700;margin-bottom:16px;color:var(--ink)}
 .modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
 .form-group{margin-bottom:14px}
-.form-group label{display:block;font-size:11px;font-weight:500;color:var(--ink3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
-.form-group select,.form-group input,.form-group textarea{width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;background:var(--surface2)}
+.form-group label{display:block;font-size:10px;font-weight:700;color:var(--ink3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+.form-group select,.form-group input,.form-group textarea{width:100%;border:1px solid var(--border);border-radius:var(--r3);padding:9px 12px;font-size:13px;font-family:'Poppins',sans-serif;color:var(--ink);outline:none;background:var(--surface2)}
 .form-group select:focus,.form-group input:focus{border-color:var(--blue)}
 
-/* TOAST */
-.toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;z-index:999;transform:translateY(60px);opacity:0;transition:all .25s;pointer-events:none}
-.toast.show{transform:translateY(0);opacity:1}
-.toast.ok{background:var(--green)}
-.toast.err{background:var(--red)}
-
-/* CHAT VIEW EN MODAL */
-.chat-msgs{max-height:300px;overflow-y:auto;padding:12px;background:var(--bg);border-radius:8px;display:flex;flex-direction:column;gap:6px}
+/* ── CHAT BUBBLE ── */
+.chat-msgs{max-height:300px;overflow-y:auto;padding:12px;background:var(--bg);border-radius:var(--r3);display:flex;flex-direction:column;gap:6px}
 .chat-bubble{max-width:80%;padding:8px 12px;border-radius:10px;font-size:12px;line-height:1.5}
-.chat-bubble.user{background:#fff;align-self:flex-start;border:1px solid var(--border)}
+.chat-bubble.user{background:var(--surface);align-self:flex-start;border:1px solid var(--border)}
 .chat-bubble.agent{background:var(--wa-out);align-self:flex-end}
 .chat-bubble.nova{background:var(--nova-l);align-self:flex-start;border:1px solid rgba(99,102,241,.2)}
 .chat-bubble .ts{font-size:10px;color:var(--ink3);margin-top:3px}
 
-/* GRID 2 cols */
+/* ── GRID ── */
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:700px){.grid-2{grid-template-columns:1fr}}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+@media(max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
 
-/* PROGRESS */
+/* ── PROGRESS ── */
 .progress-bar{height:6px;background:var(--bg2);border-radius:99px;overflow:hidden;margin-top:6px}
 .progress-fill{height:100%;border-radius:99px;background:var(--blue);transition:width .3s}
 
-/* EMPTY */
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--ink);color:#fff;padding:10px 16px;border-radius:var(--r3);font-size:12px;font-weight:500;z-index:999;transform:translateY(60px);opacity:0;transition:all .25s;pointer-events:none;font-family:'Poppins',sans-serif}
+.toast.show{transform:translateY(0);opacity:1}
+.toast.ok{background:var(--green)}
+.toast.err{background:var(--red)}
+
+/* ── EMPTY ── */
 .empty{text-align:center;padding:40px;color:var(--ink3);font-size:13px}
 
-/* TAGS */
-.tag{display:inline-block;font-size:10px;font-weight:500;padding:1px 6px;border-radius:4px;background:var(--bg2);color:var(--ink3)}
+/* ── AGENTE CARD ── */
+.ag-card{background:var(--surface);border-radius:var(--r2);padding:14px 16px;border:1px solid var(--border);box-shadow:var(--shadow-card);display:flex;align-items:center;gap:12px;margin-bottom:10px;transition:transform .15s}
+.ag-card:hover{transform:translateY(-1px)}
+.ag-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.ag-status-dot.online{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.2)}
+.ag-status-dot.pausa{background:#ef4444;box-shadow:0 0 0 3px rgba(239,68,68,.2)}
+.ag-status-dot.offline{background:#9ca3af}
 
-/* RECURRENTE */
-.recurrente-badge{background:var(--orange-l);color:var(--orange);font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px}
+/* ── TEMA MODAL ── */
+#modalTema{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+#modalTema.open{display:flex}
+.tema-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.tema-btn{padding:10px;border-radius:10px;cursor:pointer;font-size:11px;font-weight:700;text-align:center;transition:transform .1s;border:2px solid transparent}
+.tema-btn:hover{transform:scale(1.04)}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 </style>
 </head>
 <body>
 
 <!-- TOPBAR -->
 <div class="topbar">
-  <div class="tb-brand">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.555 4.122 1.528 5.855L.057 23.012a.75.75 0 0 0 .931.931l5.157-1.471A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75A9.745 9.745 0 0 1 6.38 20.07l-.37-.22-3.827 1.091 1.091-3.827-.22-.37A9.745 9.745 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z" fill="currentColor" opacity=".3"/></svg>
-    Tododrogas
-  </div>
+  <img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Tododrogas" class="tb-logo" style="filter:brightness(10) saturate(0)">
   <span class="tb-pill">WhatsApp</span>
   <span class="tb-admin-badge">⚙ Admin</span>
-  <nav class="tb-nav">
-    <button class="tb-nav-btn active" onclick="showSection('dashboard',this)">Dashboard</button>
-    <button class="tb-nav-btn" onclick="showSection('conversaciones',this)">Conversaciones</button>
-    <button class="tb-nav-btn" onclick="showSection('agentes',this)">Agentes</button>
-    <button class="tb-nav-btn" onclick="showSection('reportes',this)">Reportes</button>
-    <button class="tb-nav-btn" onclick="showSection('config',this)">Configuración</button>
-  </nav>
-  <div class="tb-right">
-    <button class="btn-logout" onclick="logout()">Salir</button>
+  <div class="tb-spacer"></div>
+  <button class="tb-btn" id="btnGlobalView" onclick="toggleGlobal()">🌐 Vista Global</button>
+  <button class="tb-btn" onclick="document.getElementById('modalTema').classList.add('open')">🎨</button>
+  <div class="tb-user">
+    <div class="tb-av" id="adminAv">A</div>
+    <span class="tb-name" id="adminName">Admin</span>
   </div>
+  <button class="btn-logout" onclick="logout()">Salir</button>
 </div>
 
-<!-- MAIN -->
-<div class="main">
+<!-- LAYOUT -->
+<div class="layout">
 
-  <!-- ═══════════════════ DASHBOARD ═══════════════════ -->
-  <div class="section active" id="sec-dashboard">
-    <div class="stats-grid" id="statsGrid">
-      <div class="stat-card c-blue"><div class="label">Total hoy</div><div class="value" id="st-hoy">—</div><div class="sub">conversaciones</div></div>
-      <div class="stat-card c-green"><div class="label">Activas</div><div class="value" id="st-activas">—</div><div class="sub">en este momento</div></div>
-      <div class="stat-card c-orange"><div class="label">Escaladas</div><div class="value" id="st-escaladas">—</div><div class="sub">esperando agente</div></div>
-      <div class="stat-card c-nova"><div class="label">Nova TD</div><div class="value" id="st-nova">—</div><div class="sub">atendiendo</div></div>
-      <div class="stat-card c-purple"><div class="label">Resueltas Nova</div><div class="value" id="st-nova-pct">—</div><div class="sub">sin agente humano</div></div>
-      <div class="stat-card c-red"><div class="label">Recurrentes</div><div class="value" id="st-recurrentes">—</div><div class="sub">más de 2 contactos</div></div>
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="sidebar-brand-title">Panel de control</div>
+      <div class="sidebar-brand-sub">WhatsApp · Nova TD</div>
     </div>
+    <div class="nav-section">
+      <div class="nav-label">Principal</div>
+      <div class="nav-item active" onclick="showSection('dashboard',this)" id="nav-dashboard">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="showSection('conversaciones',this)" id="nav-conversaciones">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Conversaciones
+        <span class="nav-badge orange" id="nb-escaladas">0</span>
+      </div>
+      <div class="nav-item" onclick="showSection('agentes',this)" id="nav-agentes">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Agentes
+        <span class="nav-badge green" id="nb-online">0</span>
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Análisis</div>
+      <div class="nav-item" onclick="showSection('reportes',this)" id="nav-reportes">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Reportes
+      </div>
+      <div class="nav-item" onclick="showSection('satisfaccion',this)" id="nav-satisfaccion">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+        Satisfacción
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Sistema</div>
+      <div class="nav-item" onclick="showSection('config',this)" id="nav-config">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Configuración
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div style="font-size:10px;color:var(--ink3);text-align:center">
+        <div style="font-weight:600;color:var(--ink2)">Tododrogas</div>
+        WhatsApp Admin v2.0
+      </div>
+    </div>
+  </aside>
 
-    <div class="grid-2">
-      <!-- Agentes en línea -->
-      <div class="panel">
-        <div class="panel-hdr">
-          <h3>👥 Agentes en línea</h3>
-          <button class="btn btn-sm btn-ghost" onclick="loadAgentes()">↻ Actualizar</button>
+  <!-- MAIN -->
+  <main class="main">
+
+    <!-- ═══ DASHBOARD ═══ -->
+    <div class="section active" id="sec-dashboard">
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub" id="dashSub">Cargando datos en tiempo real...</div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-icon">💬</div>
+          <div class="kpi-label">Total hoy</div>
+          <div class="kpi-val" id="st-hoy">—</div>
+          <div class="kpi-sub">conversaciones</div>
+          <div class="kpi-bar"></div>
         </div>
-        <div class="panel-body" id="agentesOnlineList"><div class="empty">Cargando...</div></div>
+        <div class="kpi-card kpi-green">
+          <div class="kpi-icon">⚡</div>
+          <div class="kpi-label">Activas</div>
+          <div class="kpi-val" id="st-activas">—</div>
+          <div class="kpi-sub">en este momento</div>
+          <div class="kpi-bar"></div>
+        </div>
+        <div class="kpi-card kpi-amber">
+          <div class="kpi-icon">👤</div>
+          <div class="kpi-label">Escaladas</div>
+          <div class="kpi-val" id="st-escaladas">—</div>
+          <div class="kpi-sub">esperando agente</div>
+          <div class="kpi-bar"></div>
+        </div>
+        <div class="kpi-card kpi-nova">
+          <div class="kpi-icon">🤖</div>
+          <div class="kpi-label">Nova TD</div>
+          <div class="kpi-val" id="st-nova">—</div>
+          <div class="kpi-sub">atendiendo ahora</div>
+          <div class="kpi-bar"></div>
+        </div>
+        <div class="kpi-card kpi-purple">
+          <div class="kpi-icon">📊</div>
+          <div class="kpi-label">Eficiencia Nova</div>
+          <div class="kpi-val" id="st-nova-pct">—</div>
+          <div class="kpi-sub">resuelto sin agente</div>
+          <div class="kpi-bar"></div>
+        </div>
+        <div class="kpi-card kpi-teal">
+          <div class="kpi-icon">✅</div>
+          <div class="kpi-label">Cerradas hoy</div>
+          <div class="kpi-val" id="st-cerradas">—</div>
+          <div class="kpi-sub">conversaciones</div>
+          <div class="kpi-bar"></div>
+        </div>
+        <div class="kpi-card kpi-pink">
+          <div class="kpi-icon">😊</div>
+          <div class="kpi-label">Satisfacción</div>
+          <div class="kpi-val" id="st-satisfaccion">—</div>
+          <div class="kpi-sub" id="st-satisfaccion-sub">encuestas</div>
+          <div class="kpi-bar"></div>
+        </div>
+        <div class="kpi-card kpi-red">
+          <div class="kpi-icon">🔄</div>
+          <div class="kpi-label">Agentes pausados</div>
+          <div class="kpi-val" id="st-pausados">—</div>
+          <div class="kpi-sub">en este momento</div>
+          <div class="kpi-bar"></div>
+        </div>
       </div>
 
-      <!-- Conversaciones recientes -->
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-hdr">
+            <h3>👥 Agentes en línea</h3>
+            <button class="btn btn-sm btn-ghost" onclick="loadDashboard()">↻</button>
+          </div>
+          <div class="panel-body" id="agentesOnlineList"><div class="empty">Cargando...</div></div>
+        </div>
+        <div class="panel">
+          <div class="panel-hdr">
+            <h3>💬 Conversaciones recientes</h3>
+            <button class="btn btn-sm btn-ghost" onclick="loadDashboard()">↻</button>
+          </div>
+          <div class="panel-body" style="padding:0">
+            <table class="tbl" id="recentTbl">
+              <thead><tr><th>Usuario</th><th>Estado</th><th>Agente</th><th>Hace</th></tr></thead>
+              <tbody id="recentBody"><tr><td colspan="4" class="empty">Cargando...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-hdr"><h3>🤖 Eficiencia Nova TD</h3></div>
+        <div class="panel-body">
+          <div class="grid-2">
+            <div>
+              <div style="font-size:12px;color:var(--ink3);margin-bottom:4px">Resuelto por Nova (sin agente)</div>
+              <div style="font-size:24px;font-weight:700;color:var(--nova)" id="novaEficiencia">—%</div>
+              <div class="progress-bar"><div class="progress-fill" id="novaBar" style="width:0%;background:var(--nova)"></div></div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:var(--ink3);margin-bottom:4px">Escalado a agente humano</div>
+              <div style="font-size:24px;font-weight:700;color:var(--orange)" id="novaEscalado">—%</div>
+              <div class="progress-bar"><div class="progress-fill" id="novaEscBar" style="width:0%;background:var(--orange)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ CONVERSACIONES ═══ -->
+    <div class="section" id="sec-conversaciones">
+      <div class="page-title">Conversaciones</div>
+      <div class="page-sub">Gestión y monitoreo de todas las conversaciones</div>
+      <div class="toolbar">
+        <div class="search-box">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="convSearch" placeholder="Buscar nombre, teléfono, cédula..." oninput="filterConvs()">
+        </div>
+        <select class="filter-select" id="convFiltroEstado" onchange="filterConvs()">
+          <option value="">Todos los estados</option>
+          <option value="nova">Nova TD</option>
+          <option value="escalado">Escalado</option>
+          <option value="esperando">Esperando</option>
+          <option value="cerrado">Cerrado</option>
+        </select>
+        <select class="filter-select" id="convFiltroAgente" onchange="filterConvs()">
+          <option value="">Todos los agentes</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="loadConversaciones()">↻ Actualizar</button>
+      </div>
       <div class="panel">
         <div class="panel-hdr">
-          <h3>💬 Conversaciones recientes</h3>
-          <button class="btn btn-sm btn-ghost" onclick="loadDashboard()">↻</button>
+          <h3>Conversaciones</h3>
+          <span style="font-size:11px;color:var(--ink3)" id="convFooter">—</span>
         </div>
-        <div class="panel-body" style="padding:0">
-          <table class="tbl" id="recentTbl">
-            <thead><tr><th>Usuario</th><th>Estado</th><th>Agente</th><th>Última act.</th></tr></thead>
-            <tbody id="recentBody"><tr><td colspan="4" class="empty">Cargando...</td></tr></tbody>
+        <div style="overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th>Usuario</th><th>Teléfono</th><th>EPS</th><th>Estado</th><th>Agente</th><th>Msgs</th><th>Última act.</th><th>Acciones</th></tr></thead>
+            <tbody id="convBody"><tr><td colspan="8" class="empty">Cargando...</td></tr></tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- Eficiencia Nova -->
-    <div class="panel">
-      <div class="panel-hdr"><h3>🤖 Eficiencia Nova TD</h3></div>
-      <div class="panel-body">
-        <div class="grid-2">
-          <div>
-            <div style="font-size:12px;color:var(--ink3);margin-bottom:4px">Resuelto por Nova (sin agente)</div>
-            <div style="font-size:22px;font-weight:700;color:var(--nova)" id="novaEficiencia">—%</div>
-            <div class="progress-bar"><div class="progress-fill" id="novaBar" style="width:0%;background:var(--nova)"></div></div>
-          </div>
-          <div>
-            <div style="font-size:12px;color:var(--ink3);margin-bottom:4px">Escalado a agente humano</div>
-            <div style="font-size:22px;font-weight:700;color:var(--orange)" id="novaEscalado">—%</div>
-            <div class="progress-bar"><div class="progress-fill" id="novaEscBar" style="width:0%;background:var(--orange)"></div></div>
-          </div>
-        </div>
+    <!-- ═══ AGENTES ═══ -->
+    <div class="section" id="sec-agentes">
+      <div class="page-title">Agentes</div>
+      <div class="page-sub">Estado y gestión del equipo de atención</div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi-card kpi-green"><div class="kpi-icon">🟢</div><div class="kpi-label">En línea</div><div class="kpi-val" id="ag-online">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-red"><div class="kpi-icon">⏸</div><div class="kpi-label">En pausa</div><div class="kpi-val" id="ag-pausa">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-amber"><div class="kpi-icon">💬</div><div class="kpi-label">Chats activos</div><div class="kpi-val" id="ag-chats">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-blue"><div class="kpi-icon">✅</div><div class="kpi-label">Cerradas hoy</div><div class="kpi-val" id="ag-cerradas">—</div><div class="kpi-bar"></div></div>
       </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════ CONVERSACIONES ═══════════════════ -->
-  <div class="section" id="sec-conversaciones">
-    <div class="panel">
-      <div class="panel-hdr">
-        <h3>💬 Todas las conversaciones</h3>
-        <div class="toolbar">
-          <div class="search-box">
-            <svg width="13" height="13" fill="none" stroke="var(--ink3)" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-            <input type="text" id="convSearch" placeholder="Buscar por nombre, teléfono..." oninput="filterConvs()">
-          </div>
-          <select class="filter-select" id="convFiltroEstado" onchange="filterConvs()">
-            <option value="">Todos los estados</option>
-            <option value="nova">Nova TD</option>
-            <option value="escalado">Escaladas</option>
-            <option value="esperando">Esperando</option>
-            <option value="cerrado">Cerradas</option>
-          </select>
-          <select class="filter-select" id="convFiltroAgente" onchange="filterConvs()">
-            <option value="">Todos los agentes</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="loadConversaciones()">↻ Actualizar</button>
-        </div>
-      </div>
-      <div style="padding:0">
-        <table class="tbl">
-          <thead><tr><th>Usuario</th><th>Teléfono</th><th>EPS</th><th>Estado</th><th>Agente</th><th>Mensajes</th><th>Última act.</th><th>Acciones</th></tr></thead>
-          <tbody id="convBody"><tr><td colspan="8" class="empty">Cargando...</td></tr></tbody>
-        </table>
-      </div>
-      <div style="padding:10px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--ink3)" id="convFooter"></div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════ AGENTES ═══════════════════ -->
-  <div class="section" id="sec-agentes">
-    <div class="panel">
-      <div class="panel-hdr">
-        <h3>👥 Gestión de agentes</h3>
-        <button class="btn btn-primary btn-sm" onclick="loadAgentes()">↻ Actualizar</button>
-      </div>
-      <div style="padding:0">
-        <table class="tbl">
-          <thead><tr><th>Agente</th><th>Cédula</th><th>Estado</th><th>Chats activos</th><th>Cerrados hoy</th><th>Acciones</th></tr></thead>
-          <tbody id="agentesBody"><tr><td colspan="6" class="empty">Cargando...</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════ REPORTES ═══════════════════ -->
-  <div class="section" id="sec-reportes">
-    <div class="grid-2">
       <div class="panel">
-        <div class="panel-hdr"><h3>📊 Exportar datos</h3></div>
+        <div class="panel-hdr">
+          <h3>Equipo de agentes</h3>
+          <button class="btn btn-sm btn-ghost" onclick="loadAgentes()">↻ Actualizar</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th>Agente</th><th>Cédula</th><th>Estado</th><th>Chats activos</th><th>Cerrados hoy</th><th>Pausa</th><th>Acciones</th></tr></thead>
+            <tbody id="agentesBody"><tr><td colspan="7" class="empty">Cargando...</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ REPORTES ═══ -->
+    <div class="section" id="sec-reportes">
+      <div class="page-title">Reportes</div>
+      <div class="page-sub">Análisis y exportación de datos</div>
+      <div class="panel">
+        <div class="panel-hdr"><h3>📥 Exportar datos</h3></div>
         <div class="panel-body">
-          <div class="form-group">
-            <label>Desde</label>
-            <input type="date" id="repDesde">
+          <div class="grid-3">
+            <div class="form-group"><label>Desde</label><input type="date" id="repDesde"></div>
+            <div class="form-group"><label>Hasta</label><input type="date" id="repHasta"></div>
+            <div class="form-group"><label>Estado</label>
+              <select id="repEstado">
+                <option value="">Todos</option>
+                <option value="cerrado">Cerrado</option>
+                <option value="escalado">Escalado</option>
+                <option value="nova">Nova TD</option>
+              </select>
+            </div>
           </div>
-          <div class="form-group">
-            <label>Hasta</label>
-            <input type="date" id="repHasta">
-          </div>
-          <div class="form-group">
-            <label>Estado</label>
-            <select id="repEstado">
-              <option value="">Todos</option>
-              <option value="cerrado">Cerradas</option>
-              <option value="escalado">Escaladas</option>
-              <option value="nova">Nova TD</option>
-            </select>
-          </div>
-          <button class="btn btn-primary" onclick="exportarCSV()" style="width:100%;justify-content:center">
-            📥 Exportar CSV
-          </button>
+          <button class="btn btn-primary" onclick="exportarCSV()">⬇ Exportar CSV</button>
         </div>
       </div>
       <div class="panel">
-        <div class="panel-hdr"><h3>📈 Resumen del período</h3></div>
-        <div class="panel-body" id="resumenPeriodo">
-          <div class="empty">Selecciona un rango de fechas y exporta para ver el resumen</div>
+        <div class="panel-hdr"><h3>📊 Top tipificaciones</h3></div>
+        <div class="panel-body" id="topTipifs"><div class="empty">Cargando...</div></div>
+      </div>
+      <div id="resumenPeriodo"></div>
+    </div>
+
+    <!-- ═══ SATISFACCIÓN ═══ -->
+    <div class="section" id="sec-satisfaccion">
+      <div class="page-title">Satisfacción del Servicio</div>
+      <div class="page-sub">Calificaciones de usuarios por canal</div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="kpi-card kpi-green"><div class="kpi-icon">😊</div><div class="kpi-label">Buena</div><div class="kpi-val" id="sat-buena">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-amber"><div class="kpi-icon">😐</div><div class="kpi-label">Regular</div><div class="kpi-val" id="sat-regular">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-red"><div class="kpi-icon">😞</div><div class="kpi-label">Mala</div><div class="kpi-val" id="sat-mala">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-blue"><div class="kpi-icon">📋</div><div class="kpi-label">Sin respuesta</div><div class="kpi-val" id="sat-sin">—</div><div class="kpi-bar"></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-hdr"><h3>Calificaciones recientes — WhatsApp</h3><button class="btn btn-sm btn-ghost" onclick="loadSatisfaccion()">↻</button></div>
+        <div style="overflow-x:auto">
+          <table class="tbl">
+            <thead><tr><th>Fecha</th><th>Usuario</th><th>EPS</th><th>Agente</th><th>Calificación</th></tr></thead>
+            <tbody id="satBody"><tr><td colspan="5" class="empty">Cargando...</td></tr></tbody>
+          </table>
         </div>
       </div>
     </div>
 
-    <!-- Top tipificaciones -->
-    <div class="panel">
-      <div class="panel-hdr"><h3>🏷️ Top motivos de contacto</h3></div>
-      <div class="panel-body" id="topTipifs"><div class="empty">Cargando...</div></div>
-    </div>
-  </div>
-
-  <!-- ═══════════════════ CONFIGURACIÓN ═══════════════════ -->
-  <div class="section" id="sec-config">
-    <div class="grid-2">
+    <!-- ═══ CONFIG ═══ -->
+    <div class="section" id="sec-config">
+      <div class="page-title">Configuración</div>
+      <div class="page-sub">Parámetros del sistema</div>
       <div class="panel">
-        <div class="panel-hdr"><h3>⚙️ Reglas de sesión</h3></div>
+        <div class="panel-hdr"><h3>⚙ Configuración general</h3></div>
         <div class="panel-body">
-          <div class="form-group">
-            <label>Cierre automático por inactividad (horas)</label>
-            <input type="number" id="cfg-cierre" value="24" min="1" max="72">
-          </div>
-          <div class="form-group">
-            <label>Archivar conversaciones cerradas (días)</label>
-            <input type="number" id="cfg-archivo" value="30" min="7" max="180">
-          </div>
-          <div class="form-group">
-            <label>Eliminar archivadas (días)</label>
-            <input type="number" id="cfg-eliminar" value="90" min="30" max="365">
-          </div>
-          <button class="btn btn-primary" onclick="guardarConfig()" style="width:100%;justify-content:center">
-            💾 Guardar cambios
-          </button>
-        </div>
-      </div>
-      <div class="panel">
-        <div class="panel-hdr"><h3>🤖 Reglas de escalamiento Nova</h3></div>
-        <div class="panel-body">
-          <div class="form-group">
-            <label>Intentos para medicamentos</label>
-            <input type="number" id="cfg-int-med" value="1" min="1" max="5">
-            <div style="font-size:10px;color:var(--ink3);margin-top:3px">Escala inmediato (Nova no tiene datos de inventario)</div>
-          </div>
-          <div class="form-group">
-            <label>Intentos para PQRSFD</label>
-            <input type="number" id="cfg-int-pqr" value="3" min="1" max="5">
-          </div>
-          <div class="form-group">
-            <label>Intentos por defecto</label>
-            <input type="number" id="cfg-int-def" value="2" min="1" max="5">
-          </div>
-          <button class="btn btn-primary" onclick="guardarConfig()" style="width:100%;justify-content:center">
-            💾 Guardar cambios
-          </button>
+          <p style="color:var(--ink3);font-size:13px">Próximamente: configuración de Nova TD, respuestas rápidas, horarios de atención y más.</p>
         </div>
       </div>
     </div>
 
-    <!-- Mensajes predeterminados -->
-    <div class="panel">
-      <div class="panel-hdr"><h3>💬 Mensajes predeterminados del agente</h3></div>
-      <div class="panel-body" id="rrsConfig">
-        <div class="empty">Edición de respuestas rápidas — próximamente</div>
-      </div>
-    </div>
-  </div>
+  </main>
+</div>
 
-</div><!-- /main -->
-
-<!-- MODAL: Ver conversación -->
+<!-- MODAL VER CONVERSACIÓN -->
 <div class="modal-bg" id="modalConv">
-  <div class="modal" style="max-width:600px">
-    <h3 id="modalConvTitulo">Conversación</h3>
-    <div id="modalConvInfo" style="margin-bottom:12px;font-size:12px;color:var(--ink3)"></div>
-    <div class="chat-msgs" id="modalConvMsgs"></div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="cerrarModal('modalConv')">Cerrar</button>
-    </div>
+  <div class="modal" style="max-width:560px">
+    <h3 id="convModalTitulo">Conversación</h3>
+    <div class="chat-msgs" id="convMsgs"></div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="cerrarModal('modalConv')">Cerrar</button></div>
   </div>
 </div>
 
-<!-- MODAL: Reasignar -->
-<div class="modal-bg" id="modalReasignar">
-  <div class="modal">
-    <h3>🔄 Reasignar conversación</h3>
-    <div id="reasignarInfo" style="font-size:12px;color:var(--ink3);margin-bottom:12px"></div>
-    <div class="form-group">
-      <label>Asignar a</label>
-      <select id="reasignarAgente"></select>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="cerrarModal('modalReasignar')">Cancelar</button>
-      <button class="btn btn-primary" onclick="confirmarReasignar()">Reasignar</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL: Confirmar acción -->
+<!-- MODAL CONFIRMAR -->
 <div class="modal-bg" id="modalConfirm">
-  <div class="modal">
-    <h3 id="confirmTitulo">¿Confirmar acción?</h3>
-    <p id="confirmMsg" style="font-size:13px;color:var(--ink2);margin-bottom:8px"></p>
+  <div class="modal" style="max-width:400px">
+    <h3 id="confirmTitulo">Confirmar acción</h3>
+    <p id="confirmMsg" style="font-size:13px;color:var(--ink2);margin-bottom:4px"></p>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="cerrarModal('modalConfirm')">Cancelar</button>
-      <button class="btn btn-danger" id="confirmBtn" onclick="">Confirmar</button>
+      <button class="btn btn-danger" id="confirmBtn">Confirmar</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL TEMAS -->
+<div id="modalTema">
+  <div style="background:var(--surface);border-radius:16px;padding:24px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)" onclick="event.stopPropagation()">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <div style="font-size:15px;font-weight:700;color:var(--ink);font-family:'Poppins',sans-serif">🎨 Elige tu tema</div>
+      <button onclick="document.getElementById('modalTema').classList.remove('open')" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--ink3);line-height:1">✕</button>
+    </div>
+    <div class="tema-grid">
+      <div class="tema-btn" onclick="setTema('default')" style="background:#f8fafc;border-color:#2563eb;color:#0f172a">🔵 Default</div>
+      <div class="tema-btn" onclick="setTema('dark')" style="background:#1e293b;border-color:#475569;color:#f1f5f9">🌙 Oscuro</div>
+      <div class="tema-btn" onclick="setTema('purple')" style="background:#faf5ff;border-color:#7c3aed;color:#1e1b4b">💜 Púrpura</div>
+      <div class="tema-btn" onclick="setTema('ocean')" style="background:#ecfeff;border-color:#0891b2;color:#0c1a1f">🌊 Océano</div>
+      <div class="tema-btn" onclick="setTema('arctic')" style="background:#e0f2fe;border-color:#38bdf8;color:#0c4a6e">🩵 Ártico</div>
+      <div class="tema-btn" onclick="setTema('rose')" style="background:#fff1f2;border-color:#e11d48;color:#1c0a0a">🌹 Rosa</div>
+      <div class="tema-btn" onclick="setTema('forest')" style="background:#f0fdf4;border-color:#15803d;color:#052e16">🌿 Bosque</div>
+      <div class="tema-btn" onclick="setTema('sunset')" style="background:#fff7ed;border-color:#f97316;color:#431407">🌅 Atardecer</div>
+    </div>
+    <p style="font-size:11px;color:var(--ink3);margin-top:14px;text-align:center;font-family:'Poppins',sans-serif">Se guarda automáticamente</p>
   </div>
 </div>
 
@@ -422,16 +549,17 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-
 <div class="toast" id="toast"></div>
 
 <script>
-const SB_URL  = window.SUPABASE_URL  || '';
-const SB_KEY  = window.SUPABASE_KEY  || '';
-
-// ── AUTH ─────────────────────────────────────────
+const SB_URL = window.SUPABASE_URL || '';
+const SB_KEY = window.SUPABASE_KEY || '';
 const ADMIN_NAME = sessionStorage.getItem('pqr_name') || 'Admin';
-const ADMIN_ROLE = sessionStorage.getItem('pqr_role') || '';
+let _vistaGlobal = false;
+
+document.getElementById('adminName').textContent = ADMIN_NAME;
+document.getElementById('adminAv').textContent = (ADMIN_NAME||'A').charAt(0).toUpperCase();
+
 function logout(){ sessionStorage.clear(); window.location.href='login.html'; }
 
-// ── SB HELPER ────────────────────────────────────
-async function sb(path, method='GET', body=null){
+async function sb(path,method='GET',body=null){
   const h={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
   if(method!=='GET') h['Prefer']='return=representation';
   const r=await fetch(`${SB_URL}/rest/v1/${path}`,{method,headers:h,body:body?JSON.stringify(body):undefined});
@@ -440,102 +568,123 @@ async function sb(path, method='GET', body=null){
   try{return await r.json();}catch{return null;}
 }
 
-// ── HELPERS ──────────────────────────────────────
 function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function fmtFecha(ts){if(!ts)return'—';const d=new Date(ts);return d.toLocaleDateString('es-CO',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});}
 function fmtHace(ts){if(!ts)return'—';const d=Math.floor((Date.now()-new Date(ts))/60000);if(d<1)return'ahora';if(d<60)return d+'m';if(d<1440)return Math.floor(d/60)+'h';return Math.floor(d/1440)+'d';}
+function fmtFecha(ts){if(!ts)return'—';return new Date(ts).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'2-digit'});}
 function parseHist(h){try{return Array.isArray(h)?h:(typeof h==='string'?JSON.parse(h):[]);}catch{return[];}}
-function estadoBadge(e){const m={nova:'badge-nova',escalado:'badge-escalado',cerrado:'badge-cerrado',esperando:'badge-esperando'};return`<span class="badge ${m[e]||'badge-nova'}">${e||'nova'}</span>`;}
+function estadoBadge(e){const m={nova:'badge-nova',escalado:'badge-escalado',cerrado:'badge-cerrado',esperando:'badge-esperando',esperando_encuesta:'badge-esperando'};return`<span class="badge ${m[e]||'badge-nova'}">${e||'nova'}</span>`;}
 function toast(msg,tipo=''){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(tipo?' '+tipo:'');setTimeout(()=>t.className='toast',2800);}
+function cerrarModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+document.getElementById('modalTema').addEventListener('click',e=>{if(e.target===document.getElementById('modalTema'))document.getElementById('modalTema').classList.remove('open');});
 
-// ── STATE ─────────────────────────────────────────
-const A={
-  sesiones:[],agentes:[],
-  convFiltradas:[],
-  reasignarTel:null,
-};
+// ── TEMA ──────────────────────────────────────────
+function setTema(t){
+  if(t==='default') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme',t);
+  localStorage.setItem('admin_wa_tema',t);
+  document.getElementById('modalTema').classList.remove('open');
+}
+
+// ── VISTA GLOBAL ─────────────────────────────────
+function toggleGlobal(){
+  _vistaGlobal=!_vistaGlobal;
+  const btn=document.getElementById('btnGlobalView');
+  btn.classList.toggle('active-global',_vistaGlobal);
+  btn.textContent=_vistaGlobal?'👤 Mi vista':'🌐 Vista Global';
+  toast(_vistaGlobal?'Vista global activada':'Vista personal activada','ok');
+  loadConversaciones();
+}
 
 // ── NAVEGACIÓN ────────────────────────────────────
-function showSection(id, btn){
+function showSection(id,el){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('sec-'+id).classList.add('active');
-  document.querySelectorAll('.tb-nav-btn').forEach(b=>b.classList.remove('active'));
-  if(btn) btn.classList.add('active');
-  // Cargar datos de la sección
+  if(el) el.classList.add('active');
   if(id==='dashboard') loadDashboard();
   if(id==='conversaciones') loadConversaciones();
   if(id==='agentes') loadAgentes();
   if(id==='reportes') loadReportes();
+  if(id==='satisfaccion') loadSatisfaccion();
 }
 
 // ── DASHBOARD ─────────────────────────────────────
+const A={sesiones:[],agentes:[]};
+
 async function loadDashboard(){
   try{
-    const [sesiones, agentes] = await Promise.all([
-      sb('wa_sesiones?select=*&order=updated_at.desc&limit=500'),
+    const [sesiones,agentes,calWa] = await Promise.all([
+      sb('wa_sesiones?select=*&order=updated_at.desc&limit=1000'),
       sb('agentes?select=*&order=nombre.asc'),
+      sb('wa_sesiones?calificacion=not.is.null&select=calificacion&limit=500'),
     ]);
-    A.sesiones = sesiones || [];
-    A.agentes  = agentes  || [];
+    A.sesiones=sesiones||[];A.agentes=agentes||[];
+    const hoy=new Date();hoy.setHours(0,0,0,0);const hoyStr=hoy.toISOString();
+    const sesHoy=A.sesiones.filter(s=>s.updated_at>=hoyStr);
+    const activas=A.sesiones.filter(s=>s.estado!=='cerrado');
+    const escaladas=A.sesiones.filter(s=>s.estado==='escalado');
+    const nova=A.sesiones.filter(s=>s.estado==='nova');
+    const cerradas=A.sesiones.filter(s=>s.estado==='cerrado');
+    const cerradasHoy=cerradas.filter(s=>s.updated_at>=hoyStr);
+    const novaRes=cerradas.filter(s=>!s.agente_id);
+    const novaPct=cerradas.length?Math.round(novaRes.length/cerradas.length*100):0;
+    const escPct=cerradas.length?Math.round((cerradas.length-novaRes.length)/cerradas.length*100):0;
+    const pausados=A.agentes.filter(a=>a.pausado).length;
 
-    const hoy = new Date(); hoy.setHours(0,0,0,0);
-    const hoyStr = hoy.toISOString();
-    const sesHoy = A.sesiones.filter(s=>s.updated_at>=hoyStr);
-    const activas = A.sesiones.filter(s=>s.estado!=='cerrado');
-    const escaladas = A.sesiones.filter(s=>s.estado==='escalado');
-    const nova = A.sesiones.filter(s=>s.estado==='nova');
-    const cerradas = A.sesiones.filter(s=>s.estado==='cerrado');
-    const novaResueltas = cerradas.filter(s=>!s.agente_id);
-    const novaPct = cerradas.length ? Math.round(novaResueltas.length/cerradas.length*100) : 0;
-    const escPct  = cerradas.length ? Math.round((cerradas.length-novaResueltas.length)/cerradas.length*100) : 0;
+    // Satisfacción WA
+    const cals=(calWa||[]).map(r=>r.calificacion).filter(v=>v>0);
+    const satStr=cals.length?`${Math.round(cals.filter(v=>v===3).length/cals.length*100)}% Buena`:'Sin datos';
 
-    // Recurrentes: usuarios que aparecen más de una vez en historial (simulado por teléfono duplicado en sesiones)
-    const recurrentes = A.sesiones.filter(s=>{
-      const contactos = A.sesiones.filter(x=>x.telefono===s.telefono).length;
-      return contactos>1;
-    }).length;
+    document.getElementById('st-hoy').textContent=sesHoy.length;
+    document.getElementById('st-activas').textContent=activas.length;
+    document.getElementById('st-escaladas').textContent=escaladas.length;
+    document.getElementById('st-nova').textContent=nova.length;
+    document.getElementById('st-nova-pct').textContent=novaPct+'%';
+    document.getElementById('st-cerradas').textContent=cerradasHoy.length;
+    document.getElementById('st-satisfaccion').textContent=satStr;
+    document.getElementById('st-pausados').textContent=pausados;
+    document.getElementById('novaEficiencia').textContent=novaPct+'%';
+    document.getElementById('novaEscalado').textContent=escPct+'%';
+    document.getElementById('novaBar').style.width=novaPct+'%';
+    document.getElementById('novaEscBar').style.width=escPct+'%';
+    document.getElementById('dashSub').textContent=`Actualizado: ${new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})} · ${A.sesiones.length} sesiones totales`;
 
-    document.getElementById('st-hoy').textContent       = sesHoy.length;
-    document.getElementById('st-activas').textContent   = activas.length;
-    document.getElementById('st-escaladas').textContent = escaladas.length;
-    document.getElementById('st-nova').textContent      = nova.length;
-    document.getElementById('st-nova-pct').textContent  = novaPct+'%';
-    document.getElementById('st-recurrentes').textContent = recurrentes;
-    document.getElementById('novaEficiencia').textContent = novaPct+'%';
-    document.getElementById('novaEscalado').textContent   = escPct+'%';
-    document.getElementById('novaBar').style.width        = novaPct+'%';
-    document.getElementById('novaEscBar').style.width     = escPct+'%';
+    // Sidebar badges
+    document.getElementById('nb-escaladas').textContent=escaladas.length;
+    document.getElementById('nb-online').textContent=A.agentes.filter(a=>a.en_linea&&!a.pausado).length;
 
-    // Agentes en línea
     renderAgentesOnline();
 
     // Recientes
-    const recientes = A.sesiones.slice(0,10);
-    document.getElementById('recentBody').innerHTML = recientes.map(s=>`
+    document.getElementById('recentBody').innerHTML=A.sesiones.slice(0,10).map(s=>`
       <tr>
         <td><div class="ag-row"><div class="ag-av" style="width:26px;height:26px;font-size:11px">${(s.nombre||'?').charAt(0)}</div><span style="font-size:12px">${escH(s.nombre||'Sin nombre')}</span></div></td>
         <td>${estadoBadge(s.estado)}</td>
         <td style="font-size:11px;color:var(--ink3)">${escH(s.agente_nombre||'—')}</td>
         <td style="font-size:11px;color:var(--ink3)">${fmtHace(s.updated_at)}</td>
-      </tr>
-    `).join('');
-
-  }catch(e){ toast('Error cargando dashboard: '+e.message,'err'); }
+      </tr>`).join('');
+  }catch(e){toast('Error dashboard: '+e.message,'err');}
 }
 
 function renderAgentesOnline(){
-  const el = document.getElementById('agentesOnlineList');
-  const online = A.agentes.filter(a=>a.activo);
-  if(!online.length){ el.innerHTML='<div class="empty">Ningún agente en línea</div>'; return; }
-  el.innerHTML = online.map(a=>{
-    const chats = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado!=='cerrado').length;
-    return`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-      <div class="ag-av">${(a.nombre||'?').charAt(0)}</div>
+  const el=document.getElementById('agentesOnlineList');
+  const agentes=A.agentes.filter(a=>a.activo||a.en_linea);
+  if(!agentes.length){el.innerHTML='<div class="empty">Ningún agente activo</div>';return;}
+  el.innerHTML=agentes.map(a=>{
+    const chats=A.sesiones.filter(s=>s.agente_id===a.id&&s.estado!=='cerrado').length;
+    const isPausado=a.pausado;
+    const isOnline=a.en_linea&&!isPausado;
+    return`<div class="ag-card">
+      <div class="ag-av" style="background:${isOnline?'var(--green)':isPausado?'var(--red)':'var(--ink3)'}">${(a.nombre||'?').charAt(0)}</div>
       <div style="flex:1">
-        <div style="font-size:13px;font-weight:500">${escH(a.nombre)}</div>
-        <div style="font-size:11px;color:var(--ink3)">${chats} chat${chats!==1?'s':''} activo${chats!==1?'s':''}</div>
+        <div style="font-size:13px;font-weight:600;color:var(--ink)">${escH(a.nombre)}</div>
+        <div style="font-size:10px;color:var(--ink3)">${chats} conv. activa${chats!==1?'s':''}</div>
       </div>
-      <span class="badge badge-online">● En línea</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div class="ag-status-dot ${isOnline?'online':isPausado?'pausa':'offline'}"></div>
+        <span style="font-size:10px;font-weight:600;color:${isOnline?'var(--green)':isPausado?'var(--red)':'var(--ink3)'}">${isOnline?'En línea':isPausado?'En pausa':'Ausente'}</span>
+      </div>
     </div>`;
   }).join('');
 }
@@ -543,268 +692,213 @@ function renderAgentesOnline(){
 // ── CONVERSACIONES ────────────────────────────────
 async function loadConversaciones(){
   try{
-    const data = await sb('wa_sesiones?select=*&order=updated_at.desc&limit=500');
-    A.sesiones = data||[];
-    // Llenar filtro de agentes
-    const agentesUnicos = [...new Set(A.sesiones.filter(s=>s.agente_nombre).map(s=>s.agente_nombre))];
-    const sel = document.getElementById('convFiltroAgente');
-    sel.innerHTML = '<option value="">Todos los agentes</option>' +
-      agentesUnicos.map(a=>`<option value="${escH(a)}">${escH(a)}</option>`).join('');
+    const data=await sb('wa_sesiones?select=*&order=updated_at.desc&limit=1000');
+    A.sesiones=data||[];
+    const agentesUnicos=[...new Set(A.sesiones.filter(s=>s.agente_nombre).map(s=>s.agente_nombre))];
+    const sel=document.getElementById('convFiltroAgente');
+    sel.innerHTML='<option value="">Todos los agentes</option>'+agentesUnicos.map(a=>`<option value="${escH(a)}">${escH(a)}</option>`).join('');
     filterConvs();
-  }catch(e){ toast('Error: '+e.message,'err'); }
+  }catch(e){toast('Error: '+e.message,'err');}
 }
 
 function filterConvs(){
-  const q     = (document.getElementById('convSearch')?.value||'').toLowerCase();
-  const est   = document.getElementById('convFiltroEstado')?.value||'';
-  const agn   = document.getElementById('convFiltroAgente')?.value||'';
-  let list    = [...A.sesiones];
-  if(est) list = list.filter(s=>s.estado===est);
-  if(agn) list = list.filter(s=>s.agente_nombre===agn);
-  if(q)   list = list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q)||(s.cedula||'').includes(q));
-  A.convFiltradas = list;
-  document.getElementById('convFooter').textContent = `${list.length} conversación${list.length!==1?'es':''}`;
-  document.getElementById('convBody').innerHTML = list.length ? list.map(s=>{
-    const hist = parseHist(s.history);
+  const q=(document.getElementById('convSearch')?.value||'').toLowerCase();
+  const est=document.getElementById('convFiltroEstado')?.value||'';
+  const agn=document.getElementById('convFiltroAgente')?.value||'';
+  let list=[...A.sesiones];
+  if(est) list=list.filter(s=>s.estado===est);
+  if(agn) list=list.filter(s=>s.agente_nombre===agn);
+  if(q)   list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q)||(s.cedula||'').includes(q));
+  document.getElementById('convFooter').textContent=`${list.length} conversación${list.length!==1?'es':''}`;
+  document.getElementById('convBody').innerHTML=list.length?list.map(s=>{
+    const hist=parseHist(s.history);
     return`<tr>
-      <td><div class="ag-row">
-        <div class="ag-av" style="width:26px;height:26px;font-size:11px">${(s.nombre||'?').charAt(0)}</div>
-        <div><div style="font-size:12px;font-weight:500">${escH(s.nombre||'Sin nombre')}</div>
-        ${s.cedula?`<div class="mono">${escH(s.cedula)}</div>`:''}
-        </div></div></td>
+      <td><div class="ag-row"><div class="ag-av" style="width:26px;height:26px;font-size:11px">${(s.nombre||'?').charAt(0)}</div>
+        <div><div style="font-size:12px;font-weight:500">${escH(s.nombre||'Sin nombre')}</div>${s.cedula?`<div class="mono">${escH(s.cedula)}</div>`:''}</div></div></td>
       <td class="mono">${escH(s.telefono)}</td>
       <td style="font-size:11px">${escH(s.eps||'—')}</td>
       <td>${estadoBadge(s.estado)}</td>
       <td style="font-size:11px;color:var(--ink3)">${escH(s.agente_nombre||'—')}</td>
       <td style="font-size:11px;text-align:center">${hist.length}</td>
       <td style="font-size:11px;color:var(--ink3)">${fmtHace(s.updated_at)}</td>
-      <td>
-        <div style="display:flex;gap:4px;flex-wrap:wrap">
-          <button class="btn btn-sm btn-ghost" onclick='verConv(${JSON.stringify(s.telefono)})'>👁 Ver</button>
-          ${s.estado!=='cerrado'?`<button class="btn btn-sm btn-ghost" onclick='abrirReasignar(${JSON.stringify(s.telefono)})'>🔄</button>`:''}
-          ${s.estado!=='cerrado'?`<button class="btn btn-sm btn-danger" onclick='confirmarCerrar(${JSON.stringify(s.telefono)})'>✕</button>`:''}
-          ${s.estado==='cerrado'?`<button class="btn btn-sm btn-success" onclick='reabrirConv(${JSON.stringify(s.telefono)})'>↩ Reabrir</button>`:''}
-        </div>
-      </td>
+      <td><div style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-ghost" onclick='verConv(${JSON.stringify(s.telefono)})'>👁 Ver</button>
+        ${s.estado!=='cerrado'?`<button class="btn btn-sm btn-danger" onclick='confirmarCerrar(${JSON.stringify(s.telefono)})'>✕</button>`:''}
+        ${s.estado==='cerrado'?`<button class="btn btn-sm btn-success" onclick='reabrirConv(${JSON.stringify(s.telefono)})'>↩</button>`:''}
+      </div></td>
     </tr>`;
-  }).join('') : `<tr><td colspan="8" class="empty">Sin conversaciones</td></tr>`;
+  }).join(''):'<tr><td colspan="8" class="empty">Sin conversaciones</td></tr>';
 }
 
-// Ver conversación completa
-async function verConv(tel){
-  const ses = A.sesiones.find(s=>s.telefono===tel);
-  if(!ses) return;
-  const hist = parseHist(ses.history);
-  document.getElementById('modalConvTitulo').textContent = (ses.nombre||tel)+' · '+tel;
-  document.getElementById('modalConvInfo').innerHTML = `
-    <span class="badge ${ses.estado==='cerrado'?'badge-cerrado':'badge-escalado'}">${ses.estado}</span>
-    ${ses.agente_nombre?` · Agente: <strong>${escH(ses.agente_nombre)}</strong>`:''}
-    ${ses.eps?` · EPS: ${escH(ses.eps)}`:''}
-    ${ses.resumen_nova?`<div style="margin-top:8px;padding:8px;background:var(--nova-l);border-radius:6px;font-size:11px;border-left:3px solid var(--nova)">📋 <strong>Resumen Nova:</strong> ${escH(ses.resumen_nova)}</div>`:''}
-  `;
-  document.getElementById('modalConvMsgs').innerHTML = hist.length ? hist.map(m=>`
-    <div class="chat-bubble ${m.role==='user'?'user':m.role==='nova'?'nova':'agent'}">
-      ${m.role==='nova'?'<div style="font-size:10px;font-weight:600;color:var(--nova);margin-bottom:2px">Nova TD</div>':''}
-      ${m.role==='assistant'?`<div style="font-size:10px;font-weight:600;color:var(--wa-d);margin-bottom:2px">${escH(m.agente||'Agente')}</div>`:''}
-      ${escH(m.content||'')}
-      <div class="ts">${fmtFecha(m.ts)}</div>
-    </div>
-  `).join('') : '<div class="empty">Sin mensajes</div>';
-  // Scroll al final
-  setTimeout(()=>{const c=document.getElementById('modalConvMsgs');c.scrollTop=c.scrollHeight;},100);
+function verConv(tel){
+  const ses=A.sesiones.find(s=>s.telefono===tel);if(!ses)return;
+  const hist=parseHist(ses.history);
+  document.getElementById('convModalTitulo').textContent=`${ses.nombre||tel} · ${ses.telefono}`;
+  document.getElementById('convMsgs').innerHTML=hist.map(m=>{
+    const cls=m.role==='user'?'user':m.role==='nova'?'nova':'agent';
+    return`<div class="chat-bubble ${cls}"><div>${escH(m.content||'')}</div><div class="ts">${m.ts||m.timestamp||''}</div></div>`;
+  }).join('')||'<div class="empty">Sin mensajes</div>';
   document.getElementById('modalConv').classList.add('open');
 }
 
-// Reasignar
-async function abrirReasignar(tel){
-  A.reasignarTel = tel;
-  const ses = A.sesiones.find(s=>s.telefono===tel);
-  document.getElementById('reasignarInfo').textContent = `Conversación de ${ses?.nombre||tel}. Agente actual: ${ses?.agente_nombre||'Sin agente'}`;
-  const agentes = await sb('agentes?select=id,nombre,activo&order=nombre.asc');
-  document.getElementById('reasignarAgente').innerHTML = (agentes||[]).map(a=>
-    `<option value="${escH(a.id)}" data-nombre="${escH(a.nombre)}">${escH(a.nombre)}${a.activo?' ●':''}</option>`
-  ).join('');
-  document.getElementById('modalReasignar').classList.add('open');
-}
-
-async function confirmarReasignar(){
-  const sel = document.getElementById('reasignarAgente');
-  const aId = sel.value;
-  const aNom = sel.options[sel.selectedIndex]?.dataset?.nombre||'';
-  if(!aId||!A.reasignarTel) return;
-  try{
-    const ses = A.sesiones.find(s=>s.telefono===A.reasignarTel);
-    const hist = parseHist(ses?.history);
-    hist.push({role:'system',content:`🔄 Reasignado de ${ses?.agente_nombre||'Sin agente'} a ${aNom} — ${new Date().toLocaleString('es-CO')}`,ts:new Date().toISOString()});
-    await sb(`wa_sesiones?telefono=eq.${encodeURIComponent(A.reasignarTel)}`,'PATCH',{
-      agente_id:aId, agente_nombre:aNom,
-      history:JSON.stringify(hist),
-      updated_at:new Date().toISOString()
-    });
-    toast(`✅ Reasignado a ${aNom}`,'ok');
-    cerrarModal('modalReasignar');
-    loadConversaciones();
-  }catch(e){ toast('Error: '+e.message,'err'); }
-}
-
-// Cerrar conversación (admin)
-let _cerrarTel = null;
+let _cerrarTel=null;
 function confirmarCerrar(tel){
-  _cerrarTel = tel;
-  const ses = A.sesiones.find(s=>s.telefono===tel);
-  document.getElementById('confirmTitulo').textContent = 'Cerrar conversación';
-  document.getElementById('confirmMsg').textContent = `¿Cerrar la conversación de ${ses?.nombre||tel}? Se marcará como cerrada.`;
-  document.getElementById('confirmBtn').onclick = ejecutarCerrar;
+  _cerrarTel=tel;
+  const ses=A.sesiones.find(s=>s.telefono===tel);
+  document.getElementById('confirmTitulo').textContent='Cerrar conversación';
+  document.getElementById('confirmMsg').textContent=`¿Cerrar la conversación de ${ses?.nombre||tel}?`;
+  document.getElementById('confirmBtn').onclick=ejecutarCerrar;
   document.getElementById('modalConfirm').classList.add('open');
 }
 async function ejecutarCerrar(){
-  if(!_cerrarTel) return;
+  if(!_cerrarTel)return;
   try{
-    await sb(`wa_sesiones?telefono=eq.${encodeURIComponent(_cerrarTel)}`,'PATCH',{
-      estado:'cerrado',
-      observacion_cierre:'Cerrada por administrador',
-      updated_at:new Date().toISOString()
-    });
-    toast('Conversación cerrada','ok');
-    cerrarModal('modalConfirm');
-    loadConversaciones();
-  }catch(e){ toast('Error: '+e.message,'err'); }
+    await sb(`wa_sesiones?telefono=eq.${encodeURIComponent(_cerrarTel)}`,'PATCH',{estado:'cerrado',observacion_cierre:'Cerrada por administrador',updated_at:new Date().toISOString()});
+    toast('Conversación cerrada','ok');cerrarModal('modalConfirm');loadConversaciones();
+  }catch(e){toast('Error: '+e.message,'err');}
 }
-
-// Reabrir conversación
 async function reabrirConv(tel){
   try{
-    await sb(`wa_sesiones?telefono=eq.${encodeURIComponent(tel)}`,'PATCH',{
-      estado:'escalado',
-      observacion_cierre:null,
-      updated_at:new Date().toISOString()
-    });
-    toast('Conversación reabierta','ok');
-    loadConversaciones();
-  }catch(e){ toast('Error: '+e.message,'err'); }
+    await sb(`wa_sesiones?telefono=eq.${encodeURIComponent(tel)}`,'PATCH',{estado:'escalado',observacion_cierre:null,updated_at:new Date().toISOString()});
+    toast('Conversación reabierta','ok');loadConversaciones();
+  }catch(e){toast('Error: '+e.message,'err');}
 }
 
 // ── AGENTES ───────────────────────────────────────
 async function loadAgentes(){
   try{
-    const [agentes, sesiones] = await Promise.all([
+    const [agentes,sesiones,logs]=await Promise.all([
       sb('agentes?select=*&order=nombre.asc'),
-      sb('wa_sesiones?select=agente_id,agente_nombre,estado,updated_at&order=updated_at.desc&limit=500'),
+      sb('wa_sesiones?select=agente_id,agente_nombre,estado,updated_at&order=updated_at.desc&limit=1000'),
+      sb('logs_agentes?select=agente_id,evento,created_at&order=created_at.desc&limit=500'),
     ]);
-    A.agentes  = agentes||[];
-    A.sesiones = sesiones||[];
-    const hoy = new Date(); hoy.setHours(0,0,0,0);
-    document.getElementById('agentesBody').innerHTML = A.agentes.map(a=>{
-      const activos  = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado!=='cerrado').length;
-      const hoyOk    = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='cerrado'&&new Date(s.updated_at)>=hoy).length;
+    A.agentes=agentes||[];A.sesiones=sesiones||[];
+    const hoy=new Date();hoy.setHours(0,0,0,0);
+    const online=A.agentes.filter(a=>a.en_linea&&!a.pausado).length;
+    const pausa=A.agentes.filter(a=>a.pausado).length;
+    const chatsActivos=A.sesiones.filter(s=>s.estado!=='cerrado'&&s.agente_id).length;
+    const cerradasHoy=A.sesiones.filter(s=>s.estado==='cerrado'&&new Date(s.updated_at)>=hoy).length;
+    document.getElementById('ag-online').textContent=online;
+    document.getElementById('ag-pausa').textContent=pausa;
+    document.getElementById('ag-chats').textContent=chatsActivos;
+    document.getElementById('ag-cerradas').textContent=cerradasHoy;
+
+    document.getElementById('agentesBody').innerHTML=A.agentes.map(a=>{
+      const activos=A.sesiones.filter(s=>s.agente_id===a.id&&s.estado!=='cerrado').length;
+      const hoyOk=A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='cerrado'&&new Date(s.updated_at)>=hoy).length;
+      const isPausado=a.pausado;
+      const isOnline=a.en_linea&&!isPausado;
+      // Calcular tiempo de pausa
+      let tiempoPausa='—';
+      if(isPausado&&a.pausado_at){
+        const seg=Math.floor((Date.now()-new Date(a.pausado_at))/1000);
+        const m=Math.floor(seg/60),s=seg%60;
+        tiempoPausa=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      }
       return`<tr>
         <td><div class="ag-row">
-          <div class="ag-av">${(a.nombre||'?').charAt(0)}</div>
-          <div><div style="font-size:13px;font-weight:500">${escH(a.nombre)}</div>
-          <div style="font-size:11px;color:var(--ink3)">${escH(a.rol||'agente')}</div></div>
+          <div class="ag-av" style="background:${isOnline?'var(--green)':isPausado?'var(--red)':'var(--ink3)'}">${(a.nombre||'?').charAt(0)}</div>
+          <div><div style="font-size:13px;font-weight:600">${escH(a.nombre)}</div><div style="font-size:10px;color:var(--ink3)">${escH(a.rol||'agente')}</div></div>
         </div></td>
         <td class="mono">${escH(a.cedula||'—')}</td>
-        <td>${a.activo?'<span class="badge badge-online">● En línea</span>':'<span class="badge badge-offline">Ausente</span>'}</td>
-        <td style="text-align:center;font-weight:600">${activos}</td>
-        <td style="text-align:center;color:var(--green);font-weight:600">${hoyOk}</td>
-        <td>
-          <div style="display:flex;gap:4px">
-            <button class="btn btn-sm ${a.activo?'btn-danger':'btn-success'}" onclick='toggleAgente("${escH(a.id)}",${!a.activo})'>
-              ${a.activo?'⏸ Pausar':'▶ Activar'}
-            </button>
-          </div>
-        </td>
+        <td>${isOnline?'<span class="badge badge-online">🟢 En línea</span>':isPausado?'<span class="badge badge-pausa">⏸ En pausa</span>':'<span class="badge badge-offline">Ausente</span>'}</td>
+        <td style="text-align:center;font-weight:700;color:${activos>5?'var(--red)':activos>2?'var(--orange)':'var(--green)'}">${activos}</td>
+        <td style="text-align:center;font-weight:600;color:var(--green)">${hoyOk}</td>
+        <td style="font-size:11px;font-family:'DM Mono',monospace;color:${isPausado?'var(--red)':'var(--ink3)'}">${tiempoPausa}</td>
+        <td><div style="display:flex;gap:4px">
+          <button class="btn btn-sm ${isPausado?'btn-success':'btn-danger'}" onclick='toggleAgente("${escH(a.id)}",${!isPausado})'>
+            ${isPausado?'▶ Activar':'⏸ Pausar'}
+          </button>
+        </div></td>
       </tr>`;
     }).join('');
     renderAgentesOnline();
-  }catch(e){ toast('Error: '+e.message,'err'); }
+  }catch(e){toast('Error agentes: '+e.message,'err');}
 }
 
-async function toggleAgente(id, activo){
+async function toggleAgente(id,pausar){
   try{
-    await sb(`agentes?id=eq.${id}`,'PATCH',{activo, updated_at:new Date().toISOString()});
-    toast(activo?'Agente activado':'Agente pausado', activo?'ok':'');
+    await sb(`agentes?id=eq.${id}`,'PATCH',{pausado:pausar,pausado_at:pausar?new Date().toISOString():null,updated_at:new Date().toISOString()});
+    toast(pausar?'Agente pausado':'Agente activado',pausar?'':'ok');
     loadAgentes();
-  }catch(e){ toast('Error: '+e.message,'err'); }
+  }catch(e){toast('Error: '+e.message,'err');}
 }
 
 // ── REPORTES ──────────────────────────────────────
 async function loadReportes(){
   try{
-    const data = await sb('wa_sesiones?select=tipificacion,estado,agente_nombre&limit=1000');
-    const tipifs = {};
-    (data||[]).forEach(s=>{
-      const t = s.tipificacion||'Sin tipificar';
-      tipifs[t]=(tipifs[t]||0)+1;
-    });
-    const sorted = Object.entries(tipifs).sort((a,b)=>b[1]-a[1]);
-    const total  = sorted.reduce((s,x)=>s+x[1],0);
-    document.getElementById('topTipifs').innerHTML = sorted.length ? sorted.map(([t,n])=>`
+    const data=await sb('wa_sesiones?select=tipificacion,estado,agente_nombre&limit=2000');
+    const tipifs={};
+    (data||[]).forEach(s=>{const t=s.tipificacion||'Sin tipificar';tipifs[t]=(tipifs[t]||0)+1;});
+    const sorted=Object.entries(tipifs).sort((a,b)=>b[1]-a[1]);
+    const total=sorted.reduce((s,x)=>s+x[1],0);
+    document.getElementById('topTipifs').innerHTML=sorted.length?sorted.map(([t,n])=>`
       <div style="margin-bottom:12px">
         <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
           <span>${escH(t)}</span><span style="font-weight:600">${n} <span style="color:var(--ink3);font-weight:400">(${Math.round(n/total*100)}%)</span></span>
         </div>
         <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(n/total*100)}%"></div></div>
-      </div>
-    `).join('') : '<div class="empty">Sin datos</div>';
-  }catch(e){ toast('Error: '+e.message,'err'); }
+      </div>`).join(''):'<div class="empty">Sin datos</div>';
+  }catch(e){toast('Error: '+e.message,'err');}
 }
 
 async function exportarCSV(){
-  const desde = document.getElementById('repDesde').value;
-  const hasta = document.getElementById('repHasta').value;
-  const est   = document.getElementById('repEstado').value;
-  let path = 'wa_sesiones?select=telefono,nombre,cedula,eps,ciudad,estado,agente_nombre,tipificacion,observacion_cierre,resumen_nova,updated_at&order=updated_at.desc&limit=2000';
+  const desde=document.getElementById('repDesde').value;
+  const hasta=document.getElementById('repHasta').value;
+  const est=document.getElementById('repEstado').value;
+  let path='wa_sesiones?select=telefono,nombre,cedula,eps,ciudad,estado,agente_nombre,tipificacion,observacion_cierre,resumen_nova,calificacion,calificacion_texto,updated_at&order=updated_at.desc&limit=5000';
   if(desde) path+=`&updated_at=gte.${desde}T00:00:00`;
   if(hasta) path+=`&updated_at=lte.${hasta}T23:59:59`;
-  if(est)   path+=`&estado=eq.${est}`;
+  if(est) path+=`&estado=eq.${est}`;
   try{
-    const data = await sb(path);
-    if(!data?.length){ toast('Sin datos para exportar','err'); return; }
-    const cols = Object.keys(data[0]);
-    const csv  = [cols.join(','), ...data.map(r=>cols.map(c=>'"'+(r[c]||'').toString().replace(/"/g,'""')+'"').join(','))].join('\n');
-    const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
-    const a    = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `wa-sesiones-${desde||'all'}-${hasta||'all'}.csv`;
-    a.click();
+    const data=await sb(path);
+    if(!data?.length){toast('Sin datos para exportar','err');return;}
+    const cols=Object.keys(data[0]);
+    const csv=[cols.join(','),...data.map(r=>cols.map(c=>'"'+(r[c]||'').toString().replace(/"/g,'""')+'"').join(','))].join('\n');
+    const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`wa-sesiones-${desde||'all'}-${hasta||'all'}.csv`;a.click();
     toast(`✅ ${data.length} registros exportados`,'ok');
-    document.getElementById('resumenPeriodo').innerHTML = `
-      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
-        <div class="stat-card c-blue"><div class="label">Total</div><div class="value">${data.length}</div></div>
-        <div class="stat-card c-green"><div class="label">Cerradas</div><div class="value">${data.filter(s=>s.estado==='cerrado').length}</div></div>
-        <div class="stat-card c-orange"><div class="label">Escaladas</div><div class="value">${data.filter(s=>s.estado==='escalado').length}</div></div>
-      </div>
-    `;
-  }catch(e){ toast('Error exportando: '+e.message,'err'); }
+  }catch(e){toast('Error exportando: '+e.message,'err');}
 }
 
-// ── CONFIG ────────────────────────────────────────
-function guardarConfig(){
-  toast('✅ Configuración guardada (próximamente se sincronizará con el servidor)','ok');
+// ── SATISFACCIÓN ──────────────────────────────────
+async function loadSatisfaccion(){
+  try{
+    const data=await sb('wa_sesiones?calificacion=not.is.null&select=telefono,nombre,eps,agente_nombre,calificacion,calificacion_texto,updated_at&order=updated_at.desc&limit=500');
+    const cals=(data||[]).filter(s=>s.calificacion>0);
+    const buena=cals.filter(s=>s.calificacion===3).length;
+    const reg=cals.filter(s=>s.calificacion===2).length;
+    const mala=cals.filter(s=>s.calificacion===1).length;
+    const sinResp=(data||[]).filter(s=>!s.calificacion||s.calificacion===0).length;
+    document.getElementById('sat-buena').textContent=buena;
+    document.getElementById('sat-regular').textContent=reg;
+    document.getElementById('sat-mala').textContent=mala;
+    document.getElementById('sat-sin').textContent=sinResp;
+    document.getElementById('satBody').innerHTML=cals.length?cals.slice(0,50).map(s=>`
+      <tr>
+        <td style="font-size:11px">${fmtFecha(s.updated_at)}</td>
+        <td><div class="ag-row"><div class="ag-av" style="width:24px;height:24px;font-size:10px">${(s.nombre||'?').charAt(0)}</div><span style="font-size:12px">${escH(s.nombre||s.telefono||'—')}</span></div></td>
+        <td style="font-size:11px">${escH(s.eps||'—')}</td>
+        <td style="font-size:11px">${escH(s.agente_nombre||'—')}</td>
+        <td><span class="badge ${s.calificacion===3?'badge-cerrado':s.calificacion===2?'badge-escalado':'badge-nova'}">${s.calificacion===3?'😊 Buena':s.calificacion===2?'😐 Regular':'😞 Mala'}</span></td>
+      </tr>`).join(''):'<tr><td colspan="5" class="empty">Sin calificaciones</td></tr>';
+  }catch(e){toast('Error satisfacción: '+e.message,'err');}
 }
-
-// ── MODAL ─────────────────────────────────────────
-function cerrarModal(id){ document.getElementById(id).classList.remove('open'); }
-document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
 
 // ── INIT ──────────────────────────────────────────
 (async()=>{
-  // Verificar fecha default en reportes
-  const hoy = new Date().toISOString().split('T')[0];
-  const hace30 = new Date(Date.now()-30*864e5).toISOString().split('T')[0];
-  document.getElementById('repDesde').value = hace30;
-  document.getElementById('repHasta').value = hoy;
-
+  const hoy=new Date().toISOString().split('T')[0];
+  const hace30=new Date(Date.now()-30*864e5).toISOString().split('T')[0];
+  document.getElementById('repDesde').value=hace30;
+  document.getElementById('repHasta').value=hoy;
   await loadDashboard();
-
-  // Auto-refresh cada 30 segundos
   setInterval(()=>{
-    const secActiva = document.querySelector('.section.active')?.id;
-    if(secActiva==='sec-dashboard') loadDashboard();
-    if(secActiva==='sec-conversaciones') loadConversaciones();
-    if(secActiva==='sec-agentes') loadAgentes();
-  }, 30000);
+    const sec=document.querySelector('.section.active')?.id;
+    if(sec==='sec-dashboard') loadDashboard();
+    if(sec==='sec-conversaciones') loadConversaciones();
+    if(sec==='sec-agentes') loadAgentes();
+  },30000);
 })();
 </script>
 </body>
