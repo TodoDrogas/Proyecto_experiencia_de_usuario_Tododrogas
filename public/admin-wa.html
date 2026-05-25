@@ -558,8 +558,35 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-
   </main>
 </div>
 
-<!-- MODAL VER CONVERSACIÓN -->
-<div class="modal-bg" id="modalConv">
+<!-- MODAL DETALLE CONVERSACIÓN -->
+<div class="modal-bg" id="modalDetalle">
+  <div class="modal" style="max-width:820px;width:96%;padding:0;overflow:hidden;max-height:90vh;display:flex;flex-direction:column">
+    <!-- Header -->
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div id="detAv" style="width:36px;height:36px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:700">?</div>
+        <div>
+          <div id="detNombre" style="font-size:14px;font-weight:700;color:var(--ink)">—</div>
+          <div id="detTel" style="font-size:11px;color:var(--ink3);font-family:'DM Mono',monospace">—</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="detEstadoBadge"></span>
+        <button onclick="cerrarModal('modalDetalle')" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--ink3);line-height:1;padding:4px">✕</button>
+      </div>
+    </div>
+    <!-- Body: chat + info -->
+    <div style="display:flex;flex:1;overflow:hidden">
+      <!-- Chat histórico -->
+      <div style="flex:1;overflow-y:auto;padding:16px;background:var(--bg);display:flex;flex-direction:column;gap:8px" id="detChat"></div>
+      <!-- Panel derecho: info + resumen -->
+      <div style="width:240px;flex-shrink:0;border-left:1px solid var(--border);overflow-y:auto;padding:16px;background:var(--surface)">
+        <div style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Información</div>
+        <div id="detInfo"></div>
+      </div>
+    </div>
+  </div>
+</div>
   <div class="modal" style="max-width:560px">
     <h3 id="convModalTitulo">Conversación</h3>
     <div class="chat-msgs" id="convMsgs"></div>
@@ -660,7 +687,70 @@ function toggleGlobal(){
   }
 }
 
-// ── VISTA GLOBAL TIEMPO REAL ──────────────────────
+// ── DETALLE CONVERSACIÓN ──────────────────────────────────────────
+function abrirDetalle(telefono){
+  const s = A.sesiones.find(x=>x.telefono===telefono);
+  if(!s) return;
+  const hist  = parseHist(s.history);
+  const color = {nova:'#6366f1',escalado:'#f59e0b',esperando:'#3b82f6',cerrado:'#22c55e'}[s.estado]||'#6366f1';
+  const etiq  = {nova:'🤖 Nova TD',escalado:'👤 Escalado',esperando:'⏳ Esperando',cerrado:'✅ Cerrado'}[s.estado]||s.estado;
+  const agente= A.agentes.find(a=>a.id===s.agente_id);
+
+  // Header
+  document.getElementById('detAv').textContent = (s.nombre||'?').charAt(0).toUpperCase();
+  document.getElementById('detAv').style.background = color;
+  document.getElementById('detNombre').textContent = s.nombre||'Sin nombre';
+  document.getElementById('detTel').textContent = s.telefono;
+  document.getElementById('detEstadoBadge').innerHTML = `<span style="font-size:11px;font-weight:600;color:${color};background:${color}18;padding:3px 10px;border-radius:99px">${etiq}</span>`;
+
+  // Chat histórico
+  document.getElementById('detChat').innerHTML = hist.length ? hist.map(m=>{
+    const isUser  = m.role==='user';
+    const isNova  = m.role==='nova';
+    const isAgent = m.role==='assistant'||m.role==='agent';
+    const bg   = isUser?'var(--surface)':isNova?'var(--nova-l)':'var(--wa-out, #d9fdd3)';
+    const align= isUser?'flex-start':'flex-end';
+    const label= isUser?`👤 ${escH(s.nombre||'Usuario')}`:isNova?'🤖 Nova TD':`👨‍💼 ${escH(m.agente||'Agente')}`;
+    const lblColor = isUser?'var(--ink3)':isNova?'var(--nova)':'var(--green)';
+    return`<div style="display:flex;flex-direction:column;align-items:${align};gap:2px;max-width:75%;${isUser?'':'align-self:flex-end'}">
+      <div style="font-size:9px;color:${lblColor};font-weight:600;padding:0 4px">${label}</div>
+      <div style="background:${bg};border-radius:10px;padding:8px 12px;font-size:12px;line-height:1.5;color:var(--ink);border:1px solid rgba(0,0,0,0.06)">
+        ${escH(m.content||'')}
+      </div>
+      <div style="font-size:9px;color:var(--ink3);padding:0 4px">${m.ts?new Date(m.ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):''}</div>
+    </div>`;
+  }).join('') : '<div class="empty">Sin mensajes</div>';
+
+  // Scroll al final del chat
+  setTimeout(()=>{ const c=document.getElementById('detChat'); if(c) c.scrollTop=c.scrollHeight; },100);
+
+  // Panel de info
+  const infoRows = [
+    ['EPS',        s.eps||'—'],
+    ['Ciudad',     s.ciudad||'—'],
+    ['Cédula',     s.cedula||'—'],
+    ['Estado',     etiq],
+    ['Mensajes',   `${hist.filter(m=>m.role==='user').length} usuario · ${hist.length} total`],
+    ['Agente',     agente?.nombre||s.agente_nombre||'Sin asignar'],
+    ['Tipificación', s.tipificacion||'Sin tipificar'],
+    ['Última act.', fmtHace(s.updated_at)],
+  ];
+  let infoHtml = infoRows.map(([lbl,val])=>`
+    <div style="margin-bottom:10px">
+      <div style="font-size:9px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">${lbl}</div>
+      <div style="font-size:12px;color:var(--ink);font-weight:500">${escH(String(val))}</div>
+    </div>`).join('');
+
+  if(s.resumen_nova){
+    infoHtml += `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:9px;font-weight:700;color:var(--nova);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">📋 Resumen Nova</div>
+      <div style="font-size:11px;color:var(--ink2);line-height:1.5;background:var(--nova-l);padding:8px;border-radius:6px;border-left:3px solid var(--nova)">${escH(s.resumen_nova)}</div>
+    </div>`;
+  }
+  document.getElementById('detInfo').innerHTML = infoHtml;
+
+  document.getElementById('modalDetalle').classList.add('open');
+}
 let _globalInterval = null;
 async function loadVistaGlobal(){
   try{
@@ -749,7 +839,7 @@ function renderGlobal(){
       <div style="width:16px;height:16px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:700;flex-shrink:0">${(agente.nombre||'?').charAt(0)}</div>
       <span style="font-size:10px;font-weight:600;color:${color}">${escH(agente.nombre)} está atendiendo este caso</span>
     </div>` : s.estado==='nova'?`<div style="font-size:10px;color:var(--nova);margin-top:6px;padding:4px 8px;background:var(--nova-l);border-radius:6px">🤖 Nova TD está atendiendo</div>`:'';
-    return`<div style="background:var(--surface);border-radius:12px;padding:14px;border:1px solid var(--border);border-top:3px solid ${color};box-shadow:var(--shadow-card);transition:transform .15s;cursor:pointer" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+    return`<div onclick="abrirDetalle('${escH(s.telefono)}')" style="background:var(--surface);border-radius:12px;padding:14px;border:1px solid var(--border);border-top:3px solid ${color};box-shadow:var(--shadow-card);transition:transform .15s;cursor:pointer" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
           <div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0">${(s.nombre||'?').charAt(0)}</div>
