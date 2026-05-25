@@ -476,16 +476,17 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <select class="filter-select" id="globalFiltroEstado" onchange="renderGlobal()">
-            <option value="">Todos</option>
+            <option value="">Todos los estados</option>
             <option value="nova">Nova TD</option>
             <option value="escalado">Escalado</option>
             <option value="esperando">Esperando</option>
             <option value="cerrado">Cerrado</option>
           </select>
-          <button class="btn btn-ghost btn-sm" onclick="loadVistaGlobal()">↻ Actualizar</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadVistaGlobal()">↻</button>
         </div>
       </div>
-      <!-- KPIs en tiempo real -->
+
+      <!-- KPIs -->
       <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
         <div class="kpi-card kpi-green"><div class="kpi-label">Activas</div><div class="kpi-val" id="g-activas">—</div><div class="kpi-bar"></div></div>
         <div class="kpi-card kpi-nova"><div class="kpi-label">Nova TD</div><div class="kpi-val" id="g-nova">—</div><div class="kpi-bar"></div></div>
@@ -493,8 +494,32 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-
         <div class="kpi-card kpi-blue"><div class="kpi-label">Agentes online</div><div class="kpi-val" id="g-agents">—</div><div class="kpi-bar"></div></div>
         <div class="kpi-card kpi-red"><div class="kpi-label">En pausa</div><div class="kpi-val" id="g-pausa">—</div><div class="kpi-bar"></div></div>
       </div>
-      <!-- Grid de conversaciones -->
-      <div id="globalGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px"></div>
+
+      <!-- Layout: agentes izq + conversaciones der -->
+      <div style="display:flex;gap:16px;height:calc(100vh - 320px);min-height:400px">
+
+        <!-- Panel izquierdo: agentes -->
+        <div style="width:240px;flex-shrink:0;background:var(--surface);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow-card);overflow-y:auto">
+          <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:var(--surface);z-index:1">
+            Agentes
+          </div>
+          <!-- Opción "Todas" -->
+          <div id="ag-btn-todas" onclick="filtrarPorAgente(null,this)" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:var(--blue-l);border-left:3px solid var(--blue);border-bottom:1px solid var(--border)">
+            <div style="width:30px;height:30px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700;flex-shrink:0">🌐</div>
+            <div style="flex:1">
+              <div style="font-size:12px;font-weight:700;color:var(--blue)">Todas</div>
+              <div style="font-size:10px;color:var(--ink3)" id="ag-btn-todas-cnt">— conversaciones</div>
+            </div>
+          </div>
+          <div id="globalAgentList"></div>
+        </div>
+
+        <!-- Panel derecho: conversaciones -->
+        <div style="flex:1;overflow-y:auto">
+          <div id="globalGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;align-content:start"></div>
+        </div>
+
+      </div>
     </div>
 
     <!-- ═══ SATISFACCIÓN ═══ -->
@@ -652,32 +677,82 @@ async function loadVistaGlobal(){
   }catch(e){toast('Error vista global: '+e.message,'err');}
 }
 
-function renderGlobal(){
-  const filtro = document.getElementById('globalFiltroEstado')?.value||'';
-  const activas  = A.sesiones.filter(s=>s.estado!=='cerrado');
-  const nova     = A.sesiones.filter(s=>s.estado==='nova');
-  const escaladas= A.sesiones.filter(s=>s.estado==='escalado');
-  const online   = A.agentes.filter(a=>a.en_linea&&!a.pausado);
-  const pausa    = A.agentes.filter(a=>a.pausado);
-  document.getElementById('g-activas').textContent  = activas.length;
-  document.getElementById('g-nova').textContent     = nova.length;
-  document.getElementById('g-escaladas').textContent= escaladas.length;
-  document.getElementById('g-agents').textContent   = online.length;
-  document.getElementById('g-pausa').textContent    = pausa.length;
-  document.getElementById('globalSub').textContent  = `Actualizado: ${new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})} · ${A.sesiones.length} sesiones`;
+let _agenteSelGlobal = null; // null = todas
 
-  let list = filtro ? A.sesiones.filter(s=>s.estado===filtro) : A.sesiones.filter(s=>s.estado!=='cerrado');
-  const colores={nova:'#6366f1',escalado:'#f59e0b',esperando:'#3b82f6',cerrado:'#22c55e',esperando_encuesta:'#3b82f6'};
-  const etiquetas={nova:'🤖 Nova TD',escalado:'👤 Escalado',esperando:'⏳ Esperando',cerrado:'✅ Cerrado',esperando_encuesta:'📋 Encuesta'};
+function filtrarPorAgente(agenteId, el){
+  _agenteSelGlobal = agenteId;
+  // Resaltar selección
+  document.querySelectorAll('#globalAgentList .ag-global-btn, #ag-btn-todas').forEach(b=>{
+    b.style.background = '';
+    b.style.borderLeft = '3px solid transparent';
+    b.querySelector?.('.ag-label')?.style && (b.querySelector('.ag-label').style.color='var(--ink)');
+  });
+  if(el){
+    el.style.background = 'var(--blue-l)';
+    el.style.borderLeft = '3px solid var(--blue)';
+  }
+  renderGlobal();
+}
+
+function renderGlobal(){
+  const filtroEstado = document.getElementById('globalFiltroEstado')?.value||'';
+  const activas   = A.sesiones.filter(s=>s.estado!=='cerrado');
+  const nova      = A.sesiones.filter(s=>s.estado==='nova');
+  const escaladas = A.sesiones.filter(s=>s.estado==='escalado');
+  const online    = A.agentes.filter(a=>a.en_linea&&!a.pausado);
+  const pausa     = A.agentes.filter(a=>a.pausado);
+
+  document.getElementById('g-activas').textContent   = activas.length;
+  document.getElementById('g-nova').textContent      = nova.length;
+  document.getElementById('g-escaladas').textContent = escaladas.length;
+  document.getElementById('g-agents').textContent    = online.length;
+  document.getElementById('g-pausa').textContent     = pausa.length;
+  document.getElementById('globalSub').textContent   = `Actualizado: ${new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})} · ${A.sesiones.length} sesiones`;
+  document.getElementById('ag-btn-todas-cnt').textContent = `${A.sesiones.length} conversaciones`;
+
+  // ── Renderizar panel de agentes ──────────────────────────────────
+  const agentesConSesiones = A.agentes.filter(a=>a.activo||a.en_linea||A.sesiones.some(s=>s.agente_id===a.id));
+  document.getElementById('globalAgentList').innerHTML = agentesConSesiones.map(a=>{
+    const convs = A.sesiones.filter(s=>s.agente_id===a.id);
+    const activ = convs.filter(s=>s.estado!=='cerrado').length;
+    const isPausa = a.pausado;
+    const isOnline = a.en_linea&&!isPausa;
+    const dotColor = isOnline?'#22c55e':isPausa?'#ef4444':'#9ca3af';
+    const isSelected = _agenteSelGlobal===a.id;
+    return`<div class="ag-global-btn" onclick="filtrarPorAgente('${a.id}',this)" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid ${isSelected?'var(--blue)':'transparent'};background:${isSelected?'var(--blue-l)':'transparent'};transition:all .15s" onmouseover="if('${a.id}'!==_agenteSelGlobal)this.style.background='var(--bg)'" onmouseout="if('${a.id}'!==_agenteSelGlobal)this.style.background='transparent'">
+      <div style="position:relative;flex-shrink:0">
+        <div style="width:30px;height:30px;border-radius:50%;background:${isOnline?'var(--green)':isPausa?'var(--red)':'var(--ink3)'};display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:700">${(a.nombre||'?').charAt(0)}</div>
+        <div style="position:absolute;bottom:0;right:0;width:8px;height:8px;border-radius:50%;background:${dotColor};border:1.5px solid var(--surface)"></div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="ag-label" style="font-size:11px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(a.nombre)}</div>
+        <div style="font-size:10px;color:var(--ink3)">${activ} activ${activ!==1?'as':'a'} · ${convs.length} total</div>
+      </div>
+      ${isPausa?'<span style="font-size:9px;background:var(--red-l);color:var(--red);padding:1px 5px;border-radius:4px;font-weight:600">Pausa</span>':''}
+    </div>`;
+  }).join('') || '<div style="padding:16px;text-align:center;font-size:12px;color:var(--ink3)">Sin agentes</div>';
+
+  // ── Filtrar conversaciones ────────────────────────────────────────
+  let list = [...A.sesiones];
+  if(_agenteSelGlobal) list = list.filter(s=>s.agente_id===_agenteSelGlobal);
+  if(filtroEstado) list = list.filter(s=>s.estado===filtroEstado);
+
+  const colores   = {nova:'#6366f1',escalado:'#f59e0b',esperando:'#3b82f6',cerrado:'#22c55e',esperando_encuesta:'#3b82f6'};
+  const etiquetas = {nova:'🤖 Nova TD',escalado:'👤 Escalado',esperando:'⏳ Esperando',cerrado:'✅ Cerrado',esperando_encuesta:'📋 Encuesta'};
 
   document.getElementById('globalGrid').innerHTML = list.length ? list.map(s=>{
-    const hist = parseHist(s.history);
-    const ult  = hist[hist.length-1];
-    const color= colores[s.estado]||'#6366f1';
-    return`<div style="background:var(--surface);border-radius:12px;padding:14px;border:1px solid var(--border);border-top:3px solid ${color};box-shadow:var(--shadow-card);transition:transform .15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+    const hist  = parseHist(s.history);
+    const ult   = hist[hist.length-1];
+    const color = colores[s.estado]||'#6366f1';
+    const agente = A.agentes.find(a=>a.id===s.agente_id);
+    const etiqAgente = agente ? `<div style="display:flex;align-items:center;gap:5px;margin-top:6px;padding:4px 8px;background:${color}12;border-radius:6px;border:1px solid ${color}30">
+      <div style="width:16px;height:16px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:700;flex-shrink:0">${(agente.nombre||'?').charAt(0)}</div>
+      <span style="font-size:10px;font-weight:600;color:${color}">${escH(agente.nombre)} está atendiendo este caso</span>
+    </div>` : s.estado==='nova'?`<div style="font-size:10px;color:var(--nova);margin-top:6px;padding:4px 8px;background:var(--nova-l);border-radius:6px">🤖 Nova TD está atendiendo</div>`:'';
+    return`<div style="background:var(--surface);border-radius:12px;padding:14px;border:1px solid var(--border);border-top:3px solid ${color};box-shadow:var(--shadow-card);transition:transform .15s;cursor:pointer" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px">
-          <div style="width:30px;height:30px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${(s.nombre||'?').charAt(0)}</div>
+          <div style="width:28px;height:28px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0">${(s.nombre||'?').charAt(0)}</div>
           <div>
             <div style="font-size:12px;font-weight:700;color:var(--ink)">${escH(s.nombre||'Sin nombre')}</div>
             <div style="font-size:10px;color:var(--ink3);font-family:'DM Mono',monospace">${s.telefono}</div>
@@ -685,14 +760,14 @@ function renderGlobal(){
         </div>
         <span style="font-size:10px;font-weight:600;color:${color};background:${color}18;padding:2px 8px;border-radius:99px">${etiquetas[s.estado]||s.estado}</span>
       </div>
-      ${s.eps?`<div style="font-size:10px;color:var(--ink3);margin-bottom:6px">📋 ${escH(s.eps)}</div>`:''}
-      ${ult?`<div style="font-size:11px;color:var(--ink2);background:var(--bg);padding:6px 8px;border-radius:6px;line-height:1.4;max-height:44px;overflow:hidden">${escH((ult.content||'').substring(0,80))}${(ult.content||'').length>80?'…':''}</div>`:''}
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
-        <div style="font-size:10px;color:var(--ink3)">${s.agente_nombre?`👤 ${escH(s.agente_nombre)}`:'Sin agente'}</div>
-        <div style="font-size:10px;color:var(--ink3)">${fmtHace(s.updated_at)}</div>
+      ${s.eps?`<div style="font-size:10px;color:var(--ink3);margin-bottom:4px">📋 ${escH(s.eps)}</div>`:''}
+      ${ult?`<div style="font-size:11px;color:var(--ink2);background:var(--bg);padding:6px 8px;border-radius:6px;line-height:1.4;max-height:40px;overflow:hidden">${escH((ult.content||'').substring(0,70))}${(ult.content||'').length>70?'…':''}</div>`:''}
+      ${etiqAgente}
+      <div style="display:flex;justify-content:flex-end;margin-top:6px">
+        <span style="font-size:10px;color:var(--ink3)">${fmtHace(s.updated_at)}</span>
       </div>
     </div>`;
-  }).join('') : '<div class="empty" style="grid-column:1/-1">No hay conversaciones activas</div>';
+  }).join('') : '<div class="empty" style="grid-column:1/-1;padding:40px">No hay conversaciones</div>';
 }
 
 // Limpiar interval al cambiar sección
