@@ -283,6 +283,10 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
   <div id="motivTopbar" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:0 16px;overflow:hidden"><span id="motivSaludo" style="font-size:11px;font-weight:700;color:rgba(255,255,255,.92);white-space:nowrap;flex-shrink:0"></span><span style="color:rgba(255,255,255,.4);flex-shrink:0">|</span><span id="motivFrase" style="font-size:11px;color:rgba(255,255,255,.88);font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span></div>
   <div class="topbar-right">
     <button id="btnMisMetricas" onclick="abrirMetricasAgente()" style="background:#16a34a;border:none;color:#fff;padding:5px 14px;border-radius:7px;font-size:12px;font-family:'Poppins',sans-serif;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:6px"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>Mis métricas</button>
+    <button id="btnEstadoLinea" onclick="toggleEstadoLinea()" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1.5px solid rgba(34,197,94,0.4);background:rgba(34,197,94,0.12);color:#4ade80;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .2s">
+      <span id="dotEstado" style="width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block"></span>
+      <span id="lblEstado">En línea</span>
+    </button>
     <button class="topbar-sync" id="syncBtn" onclick="syncAll()">
       <svg id="syncIcon" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/><path d="M20.49 15a9 9 0 01-14.85 3.36L1 14"/></svg>
       Actualizar
@@ -958,7 +962,7 @@ async function loadEmails() {
     let data = [], offset = 0;
     const PAGE = 500;
     while(true) {
-      const page = await sb(`correos?or=(agente_id.eq.${AGENT_ID},asignado_a.eq.${encodeURIComponent(AGENT_NAME)})&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&order=received_at.desc&limit=${PAGE}&offset=${offset}`);
+      const page = await sb(`correos?or=(agente_id.eq.${AGENT_ID},asignado_a.eq.${encodeURIComponent(AGENT_NAME)})&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&order=received_at.desc&limit=${PAGE}&offset=${offset}`);
       if(!page || page.length === 0) break;
       data = data.concat(page);
       if(page.length < PAGE) break;
@@ -971,35 +975,21 @@ async function loadEmails() {
     if(_ids.length > 0) {
       try {
         const _EXCL = new Set(['sync_correos','pqr_recibida','encuesta_recibida','audio_procesado','nova_td_generado','asignado_manual','asignado_automatico','reabierto','informacion','pendiente_firma','firma_confirmada']);
+        // FIX: paginar en bloques de 200 IDs para cubrir todos los tickets sin cortar
         const _BLOCK = 200;
-
-        // 1) correo_respondido — query filtrada, no mezclada — evita corte por volumen
         for(let _bi = 0; _bi < _ids.length; _bi += _BLOCK) {
           const _chunk = _ids.slice(_bi, _bi + _BLOCK);
           let _off = 0;
           while(true) {
-            const _snap = await sb(
-              `historial_eventos?correo_id=in.(${_chunk.join(',')})&evento=eq.correo_respondido&select=correo_id&limit=1000&offset=${_off}`
-            ) || [];
-            _snap.forEach(h => { if(h.correo_id) state.respondidosIds.add(h.correo_id); });
-            if(_snap.length < 1000) break;
-            _off += 1000;
-          }
-        }
-
-        // 2) conGestionIds — todos los eventos no excluidos
-        for(let _bi = 0; _bi < _ids.length; _bi += _BLOCK) {
-          const _chunk = _ids.slice(_bi, _bi + _BLOCK);
-          let _off = 0;
-          while(true) {
-            const _snap = await sb(
+            const _histSnap = await sb(
               `historial_eventos?correo_id=in.(${_chunk.join(',')})&select=correo_id,evento&limit=1000&offset=${_off}`
             ) || [];
-            _snap.forEach(h => {
+            _histSnap.forEach(h => {
               if(!h.correo_id) return;
               if(!_EXCL.has(h.evento)) state.conGestionIds.add(h.correo_id);
+              if(h.evento === 'correo_respondido') state.respondidosIds.add(h.correo_id);
             });
-            if(_snap.length < 1000) break;
+            if(_histSnap.length < 1000) break;
             _off += 1000;
           }
         }
@@ -1057,10 +1047,10 @@ function updateFolderCounts() {
   // Urgentes
   const urg = state.emails.filter(e=>(e.prioridad==='alta'||e.es_urgente===true)&&e.estado!=='solucionado'&&e.estado!=='pendiente_firma').length;
   document.getElementById('fc-urgente').textContent=urg;
-  // Sin Respuesta — incluye solucionados, todo correo debe tener al menos una respuesta
+  // Sin Respuesta
   const sinResp = state.emails.filter(e=>
     e.origen!=='saliente'&&e.origen!=='borrador'&&
-    e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='informacion'&&
+    e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='solucionado'&&
     !state.respondidosIds.has(e.id)
   ).length;
   const elSR = document.getElementById('fc-sin_respuesta');
@@ -1102,7 +1092,7 @@ function renderEmailList() {
   } else if(state.folder==='sin_respuesta') {
     list = list.filter(e=>
       e.origen!=='saliente'&&e.origen!=='borrador'&&
-      e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='informacion'&&
+      e.estado!=='enviado'&&e.estado!=='borrador'&&e.estado!=='solucionado'&&
       !state.respondidosIds.has(e.id)
     );
   } else if(state.folder==='todos') {
@@ -3071,53 +3061,7 @@ async function saveGestion() {
     // ── Toast ──
     const label = esPrimera ? 'Gestión #1 registrada ✓' : `Gestión #${numGest+1} registrada ✓`;
     if(_gestionForSolucionado){
-      // ═══ OPERACIÓN 5: Enviar encuesta por correo ═══
-      try {
-        const remitente = email?.remitente||email?.from_email||'';
-        if(remitente && remitente.includes('@')){
-          const baseUrl = 'https://tododrogas.online/encuesta.php';
-          const encuestaHtml = `
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:1px solid #e0e0e0">
-  <tr><td align="center" style="padding:20px 0 4px 0;font-family:Arial,sans-serif;font-size:11px;color:#888888;letter-spacing:1.5px;text-transform:uppercase">ENCUESTA DE SATISFACCIÓN</td></tr>
-  <tr><td align="center" style="padding:4px 0;font-family:Arial,sans-serif;font-size:13px;color:#000000">Atendido por <strong>${AGENT_NAME||'nuestro equipo'}</strong></td></tr>
-  <tr><td align="center" style="padding:4px 0 20px 0;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;color:#0f172a">¿Cómo califica la atención recibida?</td></tr>
-  <tr><td align="center" style="padding:0 0 20px 0">
-    <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto">
-      <tr>
-        <td style="padding:0 5px">
-          <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${baseUrl}?id=${id}&cal=1&ag=${encodeURIComponent(AGENT_NAME||'')}" style="height:40px;v-text-anchor:middle;width:110px;" arcsize="50%" strokecolor="#fca5a5" fillcolor="#fef2f2"><w:anchorlock/><center style="color:#991b1b;font-family:Arial,sans-serif;font-size:13px;font-weight:bold">😞 Mala</center></v:roundrect><![endif]-->
-          <!--[if !mso]><!--><a href="${baseUrl}?id=${id}&cal=1&ag=${encodeURIComponent(AGENT_NAME||'')}" style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:50px;color:#991b1b;display:inline-block;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:110px;-webkit-text-size-adjust:none;mso-hide:all">😞 Mala</a><!--<![endif]-->
-        </td>
-        <td style="padding:0 5px">
-          <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${baseUrl}?id=${id}&cal=2&ag=${encodeURIComponent(AGENT_NAME||'')}" style="height:40px;v-text-anchor:middle;width:110px;" arcsize="50%" strokecolor="#fcd34d" fillcolor="#fffbeb"><w:anchorlock/><center style="color:#92400e;font-family:Arial,sans-serif;font-size:13px;font-weight:bold">😐 Regular</center></v:roundrect><![endif]-->
-          <!--[if !mso]><!--><a href="${baseUrl}?id=${id}&cal=2&ag=${encodeURIComponent(AGENT_NAME||'')}" style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:50px;color:#92400e;display:inline-block;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:110px;-webkit-text-size-adjust:none;mso-hide:all">😐 Regular</a><!--<![endif]-->
-        </td>
-        <td style="padding:0 5px">
-          <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${baseUrl}?id=${id}&cal=3&ag=${encodeURIComponent(AGENT_NAME||'')}" style="height:40px;v-text-anchor:middle;width:110px;" arcsize="50%" strokecolor="#86efac" fillcolor="#f0fdf4"><w:anchorlock/><center style="color:#166534;font-family:Arial,sans-serif;font-size:13px;font-weight:bold">😊 Buena</center></v:roundrect><![endif]-->
-          <!--[if !mso]><!--><a href="${baseUrl}?id=${id}&cal=3&ag=${encodeURIComponent(AGENT_NAME||'')}" style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:50px;color:#166534;display:inline-block;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:110px;-webkit-text-size-adjust:none;mso-hide:all">😊 Buena</a><!--<![endif]-->
-        </td>
-      </tr>
-    </table>
-  </td></tr>
-  <tr><td align="center" style="padding:4px 0 16px 0;font-family:Arial,sans-serif;font-size:10px;color:#cbd5e1">Tododrogas · Experiencia del Servicio</td></tr>
-</table>`;
-          const token  = await getGraphToken();
-          const userId = window.GRAPH_USER_ID||'';
-          const msgPayload = {
-            subject: `Re: ${email?.asunto||'Su caso ha sido atendido'}`,
-            body: { contentType:'HTML', content: encuestaHtml },
-            toRecipients:[{emailAddress:{address:remitente}}],
-          };
-          await fetch(`https://graph.microsoft.com/v1.0/users/${userId}/sendMail`,{
-            method:'POST',
-            headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-            body: JSON.stringify({message:msgPayload, saveToSentItems:false})
-          });
-          await sb(`correos?id=eq.${id}`,'PATCH',{encuesta_enviada_at:new Date().toISOString()});
-        }
-      } catch(e){ console.warn('[encuesta-correo]',e.message); }
-
-      showToast('Ticket solucionado — encuesta enviada ✓','success');
+      showToast('Ticket solucionado ✓','success');
       setTimeout(function(){if(typeof showCelebracion==='function')showCelebracion();},400);
     } else showToast(`${label}${meds.length?' + '+meds.length+' med.':''}`, 'success');
 
@@ -3349,71 +3293,6 @@ async function toggleReply(modo) {
     _attachAdd(this.files); this.value='';
   });
   document.getElementById('replyEditor').focus();
-
-  // ── Al reenviar: precargar adjuntos del correo original ──────────────
-  if (modo === 'forward') {
-    (async () => {
-      try {
-        const correoId = email.id;
-        const msgId    = email.message_id || email.raw?.id || email.raw?.internetMessageId || '';
-        const userId   = window.GRAPH_USER_ID || '';
-
-        // 1. Intentar desde Supabase primero (adjuntos entrantes guardados)
-        let adjsSB = [];
-        try {
-          const _rawAdjs = await sb(`adjuntos?correo_id=eq.${correoId}&direccion=eq.entrante&es_inline=eq.false&select=nombre,storage_url,tamano_bytes,tipo_contenido`) || [];
-          // Deduplicar por nombre (puede haber duplicados si el sync corrió varias veces)
-          const _seen = new Map();
-          for (const a of _rawAdjs) { if (a.nombre && !_seen.has(a.nombre)) _seen.set(a.nombre, a); }
-          adjsSB = [..._seen.values()];
-        } catch(e) { /* silencioso */ }
-
-        if (adjsSB.length > 0) {
-          for (const a of adjsSB) {
-            if (!a.storage_url || !a.nombre) continue;
-            try {
-              const res = await fetch(a.storage_url);
-              if (!res.ok) continue;
-              const blob = await res.blob();
-              const file = new File([blob], a.nombre, { type: a.tipo_contenido || blob.type || 'application/octet-stream' });
-              if (!_attachedFiles.has(file.name)) {
-                _attachedFiles.set(file.name, { file, id: 'a' + (++_attachCounter) });
-              }
-            } catch(e) { console.warn('[forward-adj] storage fetch error:', a.nombre, e.message); }
-          }
-          _attachRender();
-          return; // Si encontró en Supabase no necesita ir a Graph
-        }
-
-        // 2. Fallback: Graph API
-        if (!msgId || !userId) return;
-        const token = await getGraphToken();
-        if (!token) return;
-        const rAdj = await fetch(
-          `https://graph.microsoft.com/v1.0/users/${userId}/messages/${encodeURIComponent(msgId)}/attachments?$select=id,name,contentType,size,isInline`,
-          { headers: { 'Authorization': 'Bearer ' + token } }
-        );
-        if (!rAdj.ok) return;
-        const aData = await rAdj.json();
-        const visibles = (aData.value || []).filter(a => !a.isInline);
-        for (const a of visibles) {
-          try {
-            const proxyUrl = '/adj-proxy.php?url=' + encodeURIComponent(
-              `https://graph.microsoft.com/v1.0/users/${userId}/messages/${msgId}/attachments/${a.id}/$value`
-            );
-            const res = await fetch(proxyUrl);
-            if (!res.ok) continue;
-            const blob = await res.blob();
-            const file = new File([blob], a.name, { type: a.contentType || blob.type || 'application/octet-stream' });
-            if (!_attachedFiles.has(file.name)) {
-              _attachedFiles.set(file.name, { file, id: 'a' + (++_attachCounter) });
-            }
-          } catch(e) { console.warn('[forward-adj] graph fetch error:', a.name, e.message); }
-        }
-        _attachRender();
-      } catch(e) { console.warn('[forward-adj] error general:', e.message); }
-    })();
-  }
   // Activar autocompletado en campos Para y CC
   // Activar autocompletado (sin delay — los inputs ya existen en el DOM)
   _acInit(document.getElementById('replyTo'));
@@ -3630,38 +3509,7 @@ async function sendReply() {
       attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:base64});
     }
 
-    const _encuestaHtml = (()=>{
-      const correoId_enc = id;
-      const agNom = encodeURIComponent(AGENT_NAME||'');
-      const base  = 'https://tododrogas.online/encuesta.php';
-      return `
-<table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:1px solid #e0e0e0">
-  <tr><td align="center" style="padding:20px 0 4px 0;font-family:Arial,sans-serif;font-size:11px;color:#888888;letter-spacing:1.5px;text-transform:uppercase">ENCUESTA DE SATISFACCIÓN</td></tr>
-  <tr><td align="center" style="padding:4px 0;font-family:Arial,sans-serif;font-size:13px;color:#000000">Atendido por <strong>${AGENT_NAME||'nuestro equipo'}</strong></td></tr>
-  <tr><td align="center" style="padding:4px 0 20px 0;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;color:#0f172a">¿Cómo califica la atención recibida?</td></tr>
-  <tr><td align="center" style="padding:0 0 20px 0">
-    <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto">
-      <tr>
-        <td style="padding:0 5px">
-          <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${base}?id=${correoId_enc}&cal=1&ag=${agNom}" style="height:40px;v-text-anchor:middle;width:110px;" arcsize="50%" strokecolor="#fca5a5" fillcolor="#fef2f2"><w:anchorlock/><center style="color:#991b1b;font-family:Arial,sans-serif;font-size:13px;font-weight:bold">😞 Mala</center></v:roundrect><![endif]-->
-          <!--[if !mso]><!--><a href="${base}?id=${correoId_enc}&cal=1&ag=${agNom}" style="background:#fef2f2;border:1.5px solid #fca5a5;border-radius:50px;color:#991b1b;display:inline-block;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:110px;-webkit-text-size-adjust:none;mso-hide:all">😞 Mala</a><!--<![endif]-->
-        </td>
-        <td style="padding:0 5px">
-          <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${base}?id=${correoId_enc}&cal=2&ag=${agNom}" style="height:40px;v-text-anchor:middle;width:110px;" arcsize="50%" strokecolor="#fcd34d" fillcolor="#fffbeb"><w:anchorlock/><center style="color:#92400e;font-family:Arial,sans-serif;font-size:13px;font-weight:bold">😐 Regular</center></v:roundrect><![endif]-->
-          <!--[if !mso]><!--><a href="${base}?id=${correoId_enc}&cal=2&ag=${agNom}" style="background:#fffbeb;border:1.5px solid #fcd34d;border-radius:50px;color:#92400e;display:inline-block;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:110px;-webkit-text-size-adjust:none;mso-hide:all">😐 Regular</a><!--<![endif]-->
-        </td>
-        <td style="padding:0 5px">
-          <!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${base}?id=${correoId_enc}&cal=3&ag=${agNom}" style="height:40px;v-text-anchor:middle;width:110px;" arcsize="50%" strokecolor="#86efac" fillcolor="#f0fdf4"><w:anchorlock/><center style="color:#166534;font-family:Arial,sans-serif;font-size:13px;font-weight:bold">😊 Buena</center></v:roundrect><![endif]-->
-          <!--[if !mso]><!--><a href="${base}?id=${correoId_enc}&cal=3&ag=${agNom}" style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:50px;color:#166534;display:inline-block;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;line-height:40px;text-align:center;text-decoration:none;width:110px;-webkit-text-size-adjust:none;mso-hide:all">😊 Buena</a><!--<![endif]-->
-        </td>
-      </tr>
-    </table>
-  </td></tr>
-  <tr><td align="center" style="padding:4px 0 16px 0;font-family:Arial,sans-serif;font-size:10px;color:#cbd5e1">Tododrogas · Experiencia del Servicio</td></tr>
-</table>`;
-    })();
-
-    const _bodyFull = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${_encuestaHtml}${hiloHTML}</div>`;
+    const _bodyFull = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`;
 
     // ── Resolver el message_id vigente en Graph ──────────────────────────
     // Estrategia en orden de confiabilidad:
@@ -3877,8 +3725,6 @@ async function sendReply() {
           subject_enviado: subject || ('RE: '+(email?.asunto||'')),
         })
       }); }catch{}
-      // ── Marcar encuesta enviada en correo entrante ──
-      try{ await sb(`correos?id=eq.${id}`,'PATCH',{encuesta_enviada_at:new Date().toISOString()}); }catch{}
       // ── Actualizar etiquetas en memoria ──
       state.respondidosIds.add(id);
       state.conGestionIds.add(id);
@@ -5886,6 +5732,61 @@ async function crDescargarEML() {
 }
 
 function logout(){sessionStorage.clear();window.location.href='login.html';}
+
+// ── ESTADO EN LÍNEA / PAUSA (sincronizado con WA) ─────────────────
+let _agentePausado = false;
+async function toggleEstadoLinea(){
+  _agentePausado = !_agentePausado;
+  const btn  = document.getElementById('btnEstadoLinea');
+  const dot  = document.getElementById('dotEstado');
+  const lbl  = document.getElementById('lblEstado');
+  if(_agentePausado){
+    btn.style.borderColor = 'rgba(239,68,68,0.4)';
+    btn.style.background  = 'rgba(239,68,68,0.12)';
+    btn.style.color       = '#fca5a5';
+    dot.style.background  = '#ef4444';
+    lbl.textContent       = 'En pausa';
+    showToast('⏸ En pausa — WhatsApp tampoco te asignará casos','warn');
+  } else {
+    btn.style.borderColor = 'rgba(34,197,94,0.4)';
+    btn.style.background  = 'rgba(34,197,94,0.12)';
+    btn.style.color       = '#4ade80';
+    dot.style.background  = '#22c55e';
+    lbl.textContent       = 'En línea';
+    showToast('🟢 En línea — disponible en correos y WhatsApp','ok');
+  }
+  // Sincronizar con tabla agentes en Supabase
+  try{
+    const AGENT_ID_SIGI = sessionStorage.getItem('pqr_agent_id')||'';
+    if(AGENT_ID_SIGI){
+      await fetch(`${window.SUPABASE_URL}/rest/v1/agentes?id=eq.${AGENT_ID_SIGI}`,{
+        method:'PATCH',
+        headers:{'apikey':window.SUPABASE_KEY,'Authorization':'Bearer '+window.SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+        body:JSON.stringify({pausado:_agentePausado,en_linea:!_agentePausado,pausado_at:_agentePausado?new Date().toISOString():null,ultima_actividad:new Date().toISOString()})
+      });
+    }
+  }catch(e){console.warn('[estado-linea]',e.message);}
+}
+
+// Inicializar estado al cargar
+(async()=>{
+  try{
+    const AGENT_ID_SIGI = sessionStorage.getItem('pqr_agent_id')||'';
+    if(AGENT_ID_SIGI){
+      await fetch(`${window.SUPABASE_URL}/rest/v1/agentes?id=eq.${AGENT_ID_SIGI}`,{
+        method:'PATCH',
+        headers:{'apikey':window.SUPABASE_KEY,'Authorization':'Bearer '+window.SUPABASE_KEY,'Content-Type':'application/json','Prefer':'return=minimal'},
+        body:JSON.stringify({en_linea:true,pausado:false,ultima_actividad:new Date().toISOString()})
+      });
+    }
+  }catch(e){}
+  window.addEventListener('beforeunload',async()=>{
+    try{
+      const AGENT_ID_SIGI = sessionStorage.getItem('pqr_agent_id')||'';
+      if(AGENT_ID_SIGI) navigator.sendBeacon(`${window.SUPABASE_URL}/rest/v1/agentes?id=eq.${AGENT_ID_SIGI}`,JSON.stringify({en_linea:false,pausado:false}));
+    }catch(e){}
+  });
+})();
 async function getGraphToken(){
   // Las credenciales Azure viven solo en api-token.php (servidor)
   // El browser NO envía ninguna credencial — solo solicita el token
@@ -6524,7 +6425,7 @@ async function exportarMisMetricas() {
     Total_Asignados:      CP.length,
     En_Gestion:           CP.filter(function(x){return x.estado==='gestion';}).length,
     Con_Respuesta:        idsConResp.size,
-    Sin_Respuesta:        CP.filter(function(x){ return !idsConResp.has(x.id) && x.estado!=='informacion' && x.estado!=='borrador' && x.estado!=='enviado'; }).length,
+    Sin_Respuesta:        [...idsConGest].filter(function(id){return !idsConResp.has(id);}).length,
     Pendiente_Firma:      CP.filter(function(x){return x.estado==='pendiente_firma';}).length,
     Cerrados:             sol,
     Pct_Resolucion:       CP.length>0?Math.round(sol/CP.length*100)+'%':'0%',
@@ -6665,7 +6566,7 @@ async function cargarMetricasAgente() {
     var _agQ = 'correos?or=(agente_id.eq.'+AGENT_ID+',asignado_a.eq.'+encodeURIComponent(AGENT_NAME)+')' +
       '&received_at=gte.' + desde + 'T00:00:00-05:00' +
       '&received_at=lte.' + hasta + 'T23:59:59-05:00' +
-      '&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.informacion&estado=neq.borrador&is_draft=is.false' +
+      '&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&canal_contacto=neq.whatsapp' +
       '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,'+
         'estado,num_gestiones,received_at,fecha_resolucion,eps_id,ciudad_paciente,'+
         'tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto,origen,prioridad,horas_sla' +
@@ -6757,9 +6658,10 @@ async function cargarMetricasAgente() {
   // En Gestión = correos del período con ese estado actual
   var _cardGest = correosPeriodo.filter(function(x){return x.estado==='gestion';}).length;
   var _cardConResp  = _idsConRespP.size;
-  // Sin Respuesta — incluye solucionados, todo correo debe tener al menos una respuesta
+  // Sin Respuesta = activos del período (excluye solucionado/gestionado como el badge del panel) sin correo_respondido
   var _cardSinResp  = correosPeriodo.filter(function(x){
     return !_idsConRespP.has(x.id) &&
+           x.estado!=='solucionado' && x.estado!=='gestionado' &&
            x.estado!=='informacion' && x.estado!=='borrador' && x.estado!=='enviado';
   }).length;
   // Pte. Firma = correos del período con ese estado actual
