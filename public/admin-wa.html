@@ -467,6 +467,36 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-
       <div id="resumenPeriodo"></div>
     </div>
 
+    <!-- ═══ VISTA GLOBAL ═══ -->
+    <div class="section" id="sec-global">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div class="page-title">🌐 Vista Global — Tiempo Real</div>
+          <div class="page-sub" id="globalSub">Todas las conversaciones activas</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="filter-select" id="globalFiltroEstado" onchange="renderGlobal()">
+            <option value="">Todos</option>
+            <option value="nova">Nova TD</option>
+            <option value="escalado">Escalado</option>
+            <option value="esperando">Esperando</option>
+            <option value="cerrado">Cerrado</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="loadVistaGlobal()">↻ Actualizar</button>
+        </div>
+      </div>
+      <!-- KPIs en tiempo real -->
+      <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
+        <div class="kpi-card kpi-green"><div class="kpi-label">Activas</div><div class="kpi-val" id="g-activas">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-nova"><div class="kpi-label">Nova TD</div><div class="kpi-val" id="g-nova">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-amber"><div class="kpi-label">Escaladas</div><div class="kpi-val" id="g-escaladas">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-blue"><div class="kpi-label">Agentes online</div><div class="kpi-val" id="g-agents">—</div><div class="kpi-bar"></div></div>
+        <div class="kpi-card kpi-red"><div class="kpi-label">En pausa</div><div class="kpi-val" id="g-pausa">—</div><div class="kpi-bar"></div></div>
+      </div>
+      <!-- Grid de conversaciones -->
+      <div id="globalGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px"></div>
+    </div>
+
     <!-- ═══ SATISFACCIÓN ═══ -->
     <div class="section" id="sec-satisfaccion">
       <div class="page-title">Satisfacción del Servicio</div>
@@ -592,16 +622,89 @@ function toggleGlobal(){
   const btn=document.getElementById('btnGlobalView');
   btn.classList.toggle('active-global',_vistaGlobal);
   btn.textContent=_vistaGlobal?'👤 Mi vista':'🌐 Vista Global';
-  toast(_vistaGlobal?'Vista global activada':'Vista personal activada','ok');
-  loadConversaciones();
+  if(_vistaGlobal){
+    // Mostrar sección vista global
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.getElementById('sec-global').classList.add('active');
+    loadVistaGlobal();
+    toast('Vista global en tiempo real activada','ok');
+  } else {
+    showSection('dashboard',document.getElementById('nav-dashboard'));
+    toast('Vista personal activada','ok');
+  }
 }
 
-// ── NAVEGACIÓN ────────────────────────────────────
+// ── VISTA GLOBAL TIEMPO REAL ──────────────────────
+let _globalInterval = null;
+async function loadVistaGlobal(){
+  try{
+    const [sesiones,agentes] = await Promise.all([
+      sb('wa_sesiones?select=*&order=updated_at.desc&limit=500'),
+      sb('agentes?select=id,nombre,pausado,en_linea,carga_actual&order=nombre.asc'),
+    ]);
+    A.sesiones  = sesiones||[];
+    A.agentes   = agentes||[];
+    renderGlobal();
+    // Auto-refresh cada 8s
+    if(_globalInterval) clearInterval(_globalInterval);
+    _globalInterval = setInterval(loadVistaGlobal, 8000);
+  }catch(e){toast('Error vista global: '+e.message,'err');}
+}
+
+function renderGlobal(){
+  const filtro = document.getElementById('globalFiltroEstado')?.value||'';
+  const activas  = A.sesiones.filter(s=>s.estado!=='cerrado');
+  const nova     = A.sesiones.filter(s=>s.estado==='nova');
+  const escaladas= A.sesiones.filter(s=>s.estado==='escalado');
+  const online   = A.agentes.filter(a=>a.en_linea&&!a.pausado);
+  const pausa    = A.agentes.filter(a=>a.pausado);
+  document.getElementById('g-activas').textContent  = activas.length;
+  document.getElementById('g-nova').textContent     = nova.length;
+  document.getElementById('g-escaladas').textContent= escaladas.length;
+  document.getElementById('g-agents').textContent   = online.length;
+  document.getElementById('g-pausa').textContent    = pausa.length;
+  document.getElementById('globalSub').textContent  = `Actualizado: ${new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})} · ${A.sesiones.length} sesiones`;
+
+  let list = filtro ? A.sesiones.filter(s=>s.estado===filtro) : A.sesiones.filter(s=>s.estado!=='cerrado');
+  const colores={nova:'#6366f1',escalado:'#f59e0b',esperando:'#3b82f6',cerrado:'#22c55e',esperando_encuesta:'#3b82f6'};
+  const etiquetas={nova:'🤖 Nova TD',escalado:'👤 Escalado',esperando:'⏳ Esperando',cerrado:'✅ Cerrado',esperando_encuesta:'📋 Encuesta'};
+
+  document.getElementById('globalGrid').innerHTML = list.length ? list.map(s=>{
+    const hist = parseHist(s.history);
+    const ult  = hist[hist.length-1];
+    const color= colores[s.estado]||'#6366f1';
+    return`<div style="background:var(--surface);border-radius:12px;padding:14px;border:1px solid var(--border);border-top:3px solid ${color};box-shadow:var(--shadow-card);transition:transform .15s" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform=''">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:30px;height:30px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0">${(s.nombre||'?').charAt(0)}</div>
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--ink)">${escH(s.nombre||'Sin nombre')}</div>
+            <div style="font-size:10px;color:var(--ink3);font-family:'DM Mono',monospace">${s.telefono}</div>
+          </div>
+        </div>
+        <span style="font-size:10px;font-weight:600;color:${color};background:${color}18;padding:2px 8px;border-radius:99px">${etiquetas[s.estado]||s.estado}</span>
+      </div>
+      ${s.eps?`<div style="font-size:10px;color:var(--ink3);margin-bottom:6px">📋 ${escH(s.eps)}</div>`:''}
+      ${ult?`<div style="font-size:11px;color:var(--ink2);background:var(--bg);padding:6px 8px;border-radius:6px;line-height:1.4;max-height:44px;overflow:hidden">${escH((ult.content||'').substring(0,80))}${(ult.content||'').length>80?'…':''}</div>`:''}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px">
+        <div style="font-size:10px;color:var(--ink3)">${s.agente_nombre?`👤 ${escH(s.agente_nombre)}`:'Sin agente'}</div>
+        <div style="font-size:10px;color:var(--ink3)">${fmtHace(s.updated_at)}</div>
+      </div>
+    </div>`;
+  }).join('') : '<div class="empty" style="grid-column:1/-1">No hay conversaciones activas</div>';
+}
+
+// Limpiar interval al cambiar sección
 function showSection(id,el){
+  if(_globalInterval){ clearInterval(_globalInterval); _globalInterval=null; }
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('sec-'+id).classList.add('active');
   if(el) el.classList.add('active');
+  _vistaGlobal = false;
+  document.getElementById('btnGlobalView').classList.remove('active-global');
+  document.getElementById('btnGlobalView').textContent='🌐 Vista Global';
   if(id==='dashboard') loadDashboard();
   if(id==='conversaciones') loadConversaciones();
   if(id==='agentes') loadAgentes();
