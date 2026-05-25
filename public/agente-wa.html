@@ -130,7 +130,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .btn-ico:hover{background:var(--bg);border-color:var(--ink3)}
 
 /* MENSAJES */
-.chat-msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-height:0}
+.chat-msgs{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:4px;min-height:0;position:relative}
 .chat-msgs::-webkit-scrollbar{width:5px}
 .chat-msgs::-webkit-scrollbar-thumb{background:#c1c8d4;border-radius:4px}
 .day-sep{text-align:center;margin:8px 0}
@@ -258,7 +258,8 @@ html[data-theme="sunset"] .chat-msgs{background:#fff4e6!important}
 <!-- TOPBAR -->
 <div class="topbar">
   <a href="agente.html" class="tb-brand">
-    <img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Tododrogas" style="height:26px;object-fit:contain;filter:brightness(0) invert(1)">
+    <img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Tododrogas" style="height:26px;object-fit:contain;filter:brightness(0) invert(1)" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+    <span style="display:none;color:#fff;font-size:14px;font-weight:800;letter-spacing:-.3px">Tododrogas</span>
     <div class="tb-dot"></div>
   </a>
   <div class="tb-divider"></div>
@@ -269,6 +270,9 @@ html[data-theme="sunset"] .chat-msgs{background:#fff4e6!important}
   <div class="tb-right">
     <button onclick="document.getElementById('modalTemaWa').style.display='flex'" title="Cambiar tema" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer">
       🎨
+    </button>
+    <button id="btnGlobal" onclick="toggleVista()" title="Vista global / mi vista" style="display:none;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer">
+      🌐 Global
     </button>
     <button id="btnPausa" onclick="togglePausa()" title="Pausar/Activar atención" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .2s">
       <svg id="iconPausa" width="11" height="11" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
@@ -384,7 +388,19 @@ html[data-theme="sunset"] .chat-msgs{background:#fff4e6!important}
   <div class="rr-panel" id="rrPanel"></div>
 </div>
 
-<!-- MODAL CERRAR -->
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+<!-- MODAL TRANSFERIR -->
+<div class="modal-bd" id="modalTransferir">
+  <div class="modal-box" style="max-width:400px;width:95%">
+    <div class="modal-ttl">↔ Transferir conversación</div>
+    <p style="font-size:12px;color:var(--ink3);margin-bottom:12px">Selecciona el agente al que deseas transferir esta conversación.</p>
+    <div id="transLista"></div>
+    <div class="modal-acts">
+      <button class="btn-mc" onclick="document.getElementById('modalTransferir').classList.remove('open')">Cancelar</button>
+    </div>
+  </div>
+</div>
 <div class="modal-bd" id="modalCerrar">
   <div class="modal-box" style="max-width:560px;width:95%;max-height:90vh;overflow-y:auto">
     <div class="modal-ttl" id="gWaTitulo">Añadir gestión — #1 (registro completo)</div>
@@ -580,15 +596,33 @@ const RR=[
 
   document.getElementById('agentNameLabel').textContent=AGENT_NAME;
   document.getElementById('agentAv').textContent=(AGENT_NAME||'A').charAt(0).toUpperCase();
+  // Mostrar botón global solo para admin
+  try{
+    const agData = await sb(`agentes?id=eq.${AGENT_ID}&select=rol`)||[];
+    if(agData[0]?.rol==='administrador'){
+      const btnG = document.getElementById('btnGlobal');
+      if(btnG) btnG.style.display='flex';
+    }
+  }catch{}
   await loadSesiones();
   startPolling();
   if(Notification.permission==='default') Notification.requestPermission();
+  // Login log + marcar en línea
+  logEvento('login');
+  try{ await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{en_linea:true,pausado:false,ultima_actividad:new Date().toISOString()}); }catch{}
+  // Autoasignación cada 15s
+  setInterval(autoAsignar, 15000);
+  // Logout log al cerrar
+  window.addEventListener('beforeunload',()=>{ logEvento('logout'); });
 })();
 
 // ── CARGAR SESIONES ──────────────────────────────
 async function loadSesiones(){
   try{
-    const data=await sb('wa_sesiones?select=*&order=updated_at.desc&limit=200')||[];
+    const query = _vistaGlobal
+      ? 'wa_sesiones?select=*&order=updated_at.desc&limit=200'
+      : `wa_sesiones?agente_id=eq.${AGENT_ID}&select=*&order=updated_at.desc&limit=200`;
+    const data=await sb(query)||[];
     S.sesiones=data;
     updateCtrs();renderLista();
   }catch(e){
@@ -863,6 +897,115 @@ async function enviar(){
   finally{if(btn)btn.disabled=false;if(ta)ta.focus();}
 }
 
+// ── TRANSFERIR A AGENTE ───────────────────────────────────────────
+let _transferTel = '';
+async function abrirTransferir(tel){
+  _transferTel = tel;
+  // Cargar lista de agentes activos
+  const agentes = await sb(`agentes?activo=is.true&select=id,nombre,carga_actual,pausado&order=nombre.asc`)||[];
+  const lista = agentes.filter(a=>a.id!==AGENT_ID&&!a.pausado);
+  const modal = document.getElementById('modalTransferir');
+  document.getElementById('transLista').innerHTML = lista.length
+    ? lista.map(a=>`
+      <div onclick="confirmarTransferir('${a.id}','${escH(a.nombre)}')" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:8px;cursor:pointer;background:var(--bg2);border:1px solid var(--border);margin-bottom:6px;transition:all .15s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700">${a.nombre.charAt(0)}</div>
+          <span style="font-size:12px;font-weight:600;color:var(--ink)">${escH(a.nombre)}</span>
+        </div>
+        <span style="font-size:10px;color:var(--ink3)">${a.carga_actual||0} conv.</span>
+      </div>`).join('')
+    : '<div style="text-align:center;color:var(--ink3);font-size:12px;padding:16px">No hay agentes disponibles</div>';
+  modal.classList.add('open');
+}
+
+async function confirmarTransferir(agenteId, agenteNombre){
+  try{
+    await sb(`wa_sesiones?telefono=eq.${enc(_transferTel)}`,'PATCH',{
+      agente_id:        agenteId,
+      agente_nombre:    agenteNombre,
+      transferido_de:   AGENT_ID,
+      transferido_at:   new Date().toISOString(),
+      updated_at:       new Date().toISOString()
+    });
+    document.getElementById('modalTransferir').classList.remove('open');
+    toast(`✅ Transferido a ${agenteNombre}`,'ok');
+    await loadSesiones();
+    S.selTel=null;S.selSesion=null;
+    document.getElementById('infoPanel').innerHTML='';
+    document.getElementById('chatArea').innerHTML='';
+  }catch(e){ toast('Error: '+e.message,'err'); }
+}
+
+// ── LOGS AGENTE ───────────────────────────────────────────────────
+async function logEvento(evento){
+  try{
+    await sb('logs_agentes','POST',{
+      agente_id:     AGENT_ID,
+      agente_nombre: AGENT_NAME,
+      evento,
+      created_at:    new Date().toISOString()
+    });
+  }catch(e){ console.warn('[log]',e.message); }
+}
+
+// ── TIMER PAUSA ───────────────────────────────────────────────────
+let _pausaInicio = null;
+let _pausaTimer  = null;
+function iniciarTimerPausa(){
+  _pausaInicio = Date.now();
+  _pausaTimer  = setInterval(()=>{
+    const el = document.getElementById('tiempoPausa');
+    if(!el) return;
+    const seg = Math.floor((Date.now()-_pausaInicio)/1000);
+    const m = Math.floor(seg/60), s = seg%60;
+    el.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  },1000);
+}
+function detenerTimerPausa(){
+  if(_pausaTimer){ clearInterval(_pausaTimer); _pausaTimer=null; }
+  _pausaInicio = null;
+}
+
+// ── AUTOASIGNACIÓN ────────────────────────────────────────────────
+async function autoAsignar(){
+  if(_pausado) return; // no asignar si está pausado
+  try{
+    // Buscar sesiones escaladas sin agente asignado
+    const sinAsignar = await sb('wa_sesiones?estado=eq.escalado&agente_id=is.null&select=telefono&limit=1')||[];
+    if(!sinAsignar.length) return;
+    const tel = sinAsignar[0].telefono;
+    await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{
+      agente_id:     AGENT_ID,
+      agente_nombre: AGENT_NAME,
+      updated_at:    new Date().toISOString()
+    });
+    // Actualizar carga del agente
+    const ag = await sb(`agentes?id=eq.${AGENT_ID}&select=carga_actual`)||[];
+    const carga = (ag[0]?.carga_actual||0)+1;
+    await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{carga_actual:carga,ultima_actividad:new Date().toISOString()});
+    toast(`⚡ Nueva conversación asignada automáticamente`,'ok');
+  }catch(e){ console.warn('[autoasignar]',e.message); }
+}
+
+// ── VISTA GLOBAL / MI VISTA ──────────────────────────────────────
+let _vistaGlobal = false;
+function toggleVista(){
+  _vistaGlobal = !_vistaGlobal;
+  const btn = document.getElementById('btnGlobal');
+  if(_vistaGlobal){
+    btn.style.background  = 'rgba(34,197,94,0.25)';
+    btn.style.borderColor = 'rgba(34,197,94,0.6)';
+    btn.innerHTML = '🌐 Global';
+    toast('Vista global activada — ves todas las conversaciones','ok');
+  } else {
+    btn.style.background  = 'rgba(255,255,255,0.08)';
+    btn.style.borderColor = 'rgba(255,255,255,0.2)';
+    btn.innerHTML = '👤 Mi vista';
+    toast('Vista personal — solo tus conversaciones','ok');
+  }
+  loadSesiones();
+}
+
 // ── TEMAS ─────────────────────────────────────────────────────────
 function setTemaWa(t){
   document.documentElement.setAttribute('data-theme', t==='default'?'':t);
@@ -889,7 +1032,8 @@ async function togglePausa(){
     lbl.textContent = 'En pausa';
     icon.innerHTML  = '<path d="M8 5v14l11-7z"/>';
     toast('⏸ Estás en pausa — no recibirás asignaciones automáticas','warn');
-    // Marcar agente como pausado en Supabase
+    iniciarTimerPausa();
+    logEvento('pausa');
     try{ await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{pausado:true,pausado_at:new Date().toISOString()}); }catch{}
   } else {
     btn.style.background  = 'rgba(255,255,255,0.08)';
@@ -897,8 +1041,11 @@ async function togglePausa(){
     lbl.textContent = 'Pausar';
     icon.innerHTML  = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
     toast('▶ Reactivado — recibirás asignaciones normalmente','ok');
-    try{ await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{pausado:false,pausado_at:null}); }catch{}
+    detenerTimerPausa();
+    logEvento('reactivar');
+    try{ await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{pausado:false,pausado_at:null,en_linea:true,ultima_actividad:new Date().toISOString()}); }catch{}
   }
+  renderInfo();
 }
 let _gWaEpsData = []; // cache EPS cargadas
 let _gWaTutela  = null;
@@ -1254,7 +1401,37 @@ function renderInfo(){
   const nom=s.nombre||s.telefono||'Desconocido';
   const hist=parseHist(s.history);
   const mc=hist.filter(m=>m.role==='user').length;
+
+  // Estado del agente
+  const estadoAgente = _pausado
+    ? `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#fef2f2;border-radius:8px;border:1px solid #fca5a5;margin-bottom:10px">
+        <div style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>
+        <span style="font-size:11px;font-weight:700;color:#991b1b">En pausa</span>
+        <span style="font-size:10px;color:#ef4444;margin-left:auto" id="tiempoPausa">--</span>
+       </div>`
+    : `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac;margin-bottom:10px">
+        <div style="width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite;flex-shrink:0"></div>
+        <span style="font-size:11px;font-weight:700;color:#166534">En línea</span>
+       </div>`;
+
+  // Frase motivadora aleatoria
+  const frases = [
+    '💪 Cada conversación es una oportunidad de hacer la diferencia.',
+    '🌟 Tu atención hoy puede cambiar el día de alguien.',
+    '❤️ La empatía es el mejor medicamento.',
+    '🚀 Vas muy bien, sigue así.',
+    '😊 Tu actitud positiva se transmite al usuario.',
+    '🎯 Enfocado y con energía — ¡tú puedes!',
+    '🌈 Gracias por tu dedicación al servicio.',
+    '💡 Una buena atención vale más que mil palabras.',
+  ];
+  const frase = frases[Math.floor(Math.random()*frases.length)];
+
   p.innerHTML=`
+    <div class="info-sec" style="padding:10px 14px">
+      ${estadoAgente}
+      <div style="font-size:10px;color:var(--ink3);font-style:italic;line-height:1.4;padding:6px 8px;background:var(--bg2);border-radius:6px;border-left:3px solid var(--blue)">${frase}</div>
+    </div>
     <div class="info-sec">
       <div class="info-sec-title">Contacto</div>
       <div class="info-row"><div class="info-lbl">Nombre</div><div class="info-val">${escH(nom)}</div></div>
@@ -1271,21 +1448,21 @@ function renderInfo(){
       ${s.tipificacion?`<div class="info-row"><div class="info-lbl">Tipificación</div><div class="info-val">${escH(s.tipificacion)}</div></div>`:''}
     </div>
     <div class="info-sec">
-      <div class="info-sec-title">Tipificación</div>
-      ${TIPIFS.map(t=>`<div class="tipif-item${s.tipificacion===t.label?' sel':''}" onclick="tipificar('${escH(t.label)}')"><div class="tipif-dot" style="background:${t.color}"></div>${t.label}</div>`).join('')}
-    </div>
-    <div class="info-sec">
       <div class="info-sec-title">Acciones</div>
       ${s.estado!=='cerrado'?`<button onclick="abrirCerrar()" style="width:100%;background:var(--green-l);border:1px solid var(--green);color:var(--green);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;margin-bottom:6px">✓ Cerrar conversación</button>`:''}
-      ${(s.estado==='escalado'||s.estado==='esperando')&&s.agente_id!==AGENT_ID?`<button onclick="tomar('${s.telefono}')" style="width:100%;background:var(--orange-l);border:1px solid var(--orange);color:var(--orange);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer">👤 Tomar conversación</button>`:''}
-    </div>`;
-}
+      ${(s.estado==='escalado'||s.estado==='esperando')&&s.agente_id!==AGENT_ID?`<button onclick="tomar('${s.telefono}')" style="width:100%;background:var(--orange-l);border:1px solid var(--orange);color:var(--orange);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;margin-bottom:6px">👤 Tomar conversación</button>`:''}
+      ${s.estado!=='cerrado'&&s.agente_id===AGENT_ID?`<button onclick="abrirTransferir('${s.telefono}')" style="width:100%;background:var(--blue-l);border:1px solid var(--blue);color:var(--blue);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer">↔ Transferir a agente</button>`:''}
+    </div>`;}
+
 
 // ── POLLING ──────────────────────────────────────
 function startPolling(){
   S.polling=setInterval(async()=>{
     try{
-      const data=await sb('wa_sesiones?select=*&order=updated_at.desc&limit=200')||[];
+      const query = _vistaGlobal
+        ? 'wa_sesiones?select=*&order=updated_at.desc&limit=200'
+        : `wa_sesiones?agente_id=eq.${AGENT_ID}&select=*&order=updated_at.desc&limit=200`;
+      const data=await sb(query)||[];
       const prevE=S.sesiones.filter(s=>s.estado==='escalado').length;
       S.sesiones=data;
       const newE=data.filter(s=>s.estado==='escalado').length;
@@ -1389,7 +1566,7 @@ function toast(msg,type=''){
   </div>
   <div class="fc-labels">
     <div class="fc-label" id="fc-pendientes">
-      📧 <span>Pendientes</span> <span class="lval" id="fc-val-pend">—</span>
+      💬 <span>Chats WA</span> <span class="lval" id="fc-val-pend">—</span>
     </div>
     <div class="fc-label urgente" id="fc-sinresp">
       🔴 <span>Sin responder</span> <span class="lval" id="fc-val-sinresp">—</span>
