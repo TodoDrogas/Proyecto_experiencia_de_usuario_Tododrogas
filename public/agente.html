@@ -271,6 +271,18 @@ html[data-theme="sunset"]     { --blue:#f97316!important;--blue-l:#ffedd5!import
 html[data-theme="sunset"] body,html[data-theme="sunset"] .folders-panel,html[data-theme="sunset"] .email-list-panel,html[data-theme="sunset"] .mgmt-right,html[data-theme="sunset"] .email-detail-outer{background:var(--bg)!important;color:var(--ink)!important}
 html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,html[data-theme="sunset"] .gestion-modal-wide,html[data-theme="sunset"] .tl-modal{background:var(--surface)!important;color:var(--ink)!important}
 
+
+/* ── NAV PESTAÑAS AGENTE ── */
+.topbar-nav{display:flex;gap:2px;margin-left:8px}
+.topbar-nav-btn{background:none;border:none;color:rgba(255,255,255,.55);font-size:clamp(10px,1vw,12px);font-family:'Poppins',sans-serif;font-weight:600;padding:5px clamp(8px,1vw,13px);border-radius:7px;cursor:pointer;transition:all .15s;letter-spacing:.2px;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.topbar-nav-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+.topbar-nav-btn.active{background:rgba(37,99,235,.3);color:#60a5fa}
+/* ── PAGES ── */
+.agent-page{display:none;flex:1;min-height:0;overflow:hidden}
+.agent-page.active{display:flex}
+#agent-page-correos{flex-direction:row}
+#agent-page-whatsapp{flex-direction:column}
+#agent-page-pbx{flex-direction:column;align-items:center;justify-content:center;background:var(--bg)}
 </style>
 </head>
 <body>
@@ -279,8 +291,21 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 <div class="topbar">
   <img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/LOGO_Tododrogas_Color%201%20(3).png" alt="Tododrogas" style="height:28px;object-fit:contain">
   <div class="topbar-divider"></div>
-  <div class="topbar-title">Panel Agente</div>
-  <div id="motivTopbar" style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:0 16px;overflow:hidden"><span id="motivSaludo" style="font-size:11px;font-weight:700;color:rgba(255,255,255,.92);white-space:nowrap;flex-shrink:0"></span><span style="color:rgba(255,255,255,.4);flex-shrink:0">|</span><span id="motivFrase" style="font-size:11px;color:rgba(255,255,255,.88);font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span></div>
+  <nav class="topbar-nav">
+    <button class="topbar-nav-btn active" id="btn-correo" onclick="showAgentePage('correos',this)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      Gestión Correo
+    </button>
+    <button class="topbar-nav-btn" id="btn-whatsapp" onclick="showAgentePage('whatsapp',this)">
+      <svg width="13" height="13" fill="currentColor" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+      Gestión WhatsApp
+      <span id="wa-nav-badge" style="display:none;background:#ef4444;color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:99px;min-width:16px;text-align:center">0</span>
+    </button>
+    <button class="topbar-nav-btn" id="btn-pbx" onclick="showAgentePage('pbx',this)">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.68A2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14v2.92z"/></svg>
+      Gestión PBX
+    </button>
+  </nav>
   <div class="topbar-right">
     <button id="btnMisMetricas" onclick="abrirMetricasAgente()" style="background:#16a34a;border:none;color:#fff;padding:5px 14px;border-radius:7px;font-size:12px;font-family:'Poppins',sans-serif;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:6px"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>Mis métricas</button>
     <button id="btnEstadoLinea" onclick="toggleEstadoLinea()" style="display:flex;align-items:center;gap:5px;padding:5px 12px;border-radius:6px;border:1.5px solid rgba(34,197,94,0.4);background:rgba(34,197,94,0.12);color:#4ade80;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .2s">
@@ -6984,155 +7009,7 @@ async function enviarCorreoNuevoAg() {
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     FLOTANTE WHATSAPP — indicador cruzado de canal
-     Bloque independiente, no toca ninguna función existente
-═══════════════════════════════════════════════════════ -->
-<style>
-#flotante-wa{
-  position:fixed;bottom:24px;left:24px;z-index:9999;
-  display:flex;flex-direction:column;align-items:center;gap:6px;
-  cursor:pointer;user-select:none;
-}
-#flotante-wa .fw-btn{
-  position:relative;width:52px;height:52px;border-radius:14px;
-  background:linear-gradient(135deg,#128c7e,#25d366);
-  box-shadow:0 4px 16px rgba(37,211,102,.35);
-  display:flex;align-items:center;justify-content:center;
-  transition:transform .2s,box-shadow .2s;border:none;cursor:pointer;
-  outline:none;flex-shrink:0;
-}
-#flotante-wa .fw-btn:hover{transform:scale(1.06);box-shadow:0 6px 20px rgba(37,211,102,.5);}
-#flotante-wa .fw-badge{
-  position:absolute;top:-7px;right:-7px;
-  min-width:18px;height:18px;border-radius:99px;
-  background:#dc2626;color:#fff;
-  font-size:10px;font-weight:700;font-family:'Poppins',sans-serif;
-  display:flex;align-items:center;justify-content:center;
-  padding:0 4px;border:2px solid #fff;
-  opacity:0;transition:opacity .3s;
-}
-#flotante-wa .fw-badge.visible{opacity:1;}
 
-/* Etiquetas debajo del ícono */
-#flotante-wa .fw-labels{
-  display:flex;flex-direction:column;gap:3px;width:100%;
-}
-#flotante-wa .fw-label{
-  background:rgba(10,14,26,.82);color:#fff;
-  font-size:10px;font-weight:500;font-family:'Poppins',sans-serif;
-  padding:3px 8px;border-radius:5px;white-space:nowrap;
-  display:flex;align-items:center;justify-content:space-between;gap:6px;
-  border-left:3px solid #25d366;min-width:120px;
-}
-#flotante-wa .fw-label.alerta{border-left-color:#ef4444;}
-#flotante-wa .fw-label .lval{
-  font-weight:700;font-size:11px;
-  background:rgba(255,255,255,.15);
-  padding:1px 5px;border-radius:4px;
-}
-
-/* Sin titilado — solo cambio de color cuando hay alertas */
-#flotante-wa.urgente .fw-btn{
-  background:linear-gradient(135deg,#065f46,#16a34a);
-  box-shadow:0 4px 20px rgba(22,163,74,.5);
-}
-</style>
-
-<div id="flotante-wa" onclick="irAWhatsApp()" title="Ir a WhatsApp">
-  <div class="fw-btn">
-    <!-- Ícono WhatsApp SVG puro -->
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
-      <path d="M12 0C5.373 0 0 5.373 0 12c0 2.125.555 4.122 1.528 5.855L.057 23.012a.75.75 0 0 0 .931.931l5.157-1.471A11.943 11.943 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75A9.745 9.745 0 0 1 6.38 20.07l-.37-.22-3.827 1.091 1.091-3.827-.22-.37A9.745 9.745 0 0 1 2.25 12C2.25 6.615 6.615 2.25 12 2.25S21.75 6.615 21.75 12 17.385 21.75 12 21.75z" opacity=".35"/>
-    </svg>
-    <span class="fw-badge" id="fw-badge">0</span>
-  </div>
-  <div class="fw-labels">
-    <div class="fw-label" id="fw-activos">
-      💬 <span>Chats activos</span> <span class="lval" id="fw-val-activos">—</span>
-    </div>
-    <div class="fw-label alerta" id="fw-sinresp">
-      ⏰ <span>Sin responder</span> <span class="lval" id="fw-val-sinresp">—</span>
-    </div>
-  </div>
-</div>
-
-<script>
-(function(){
-  const WA_URL   = 'agente-wa.html';
-  const INTERVALO = 30000;
-  const MINUTOS_ALERTA = 5;
-  let fwUrgente = false;
-
-  window.irAWhatsApp = function(){
-    window.location.href = WA_URL;
-  };
-
-  async function fetchWA(){
-    if(!AGENT_ID || !SB_URL || !SB_KEY) return;
-    try{
-      const h = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
-
-      // Chats activos asignados al agente
-      const r = await fetch(
-        `${SB_URL}/rest/v1/wa_sesiones?agente_id=eq.${encodeURIComponent(AGENT_ID)}&estado=neq.cerrado&select=telefono,estado,updated_at,unread_count`,
-        {headers:h}
-      );
-      const activos = r.ok ? await r.json() : [];
-
-      // Detectar chats sin respuesta +5min
-      const ahora = Date.now();
-      const sinResp = activos.filter(s=>{
-        const mins = Math.floor((ahora - new Date(s.updated_at).getTime()) / 60000);
-        return mins >= MINUTOS_ALERTA;
-      });
-
-      const total    = activos.length;
-      const nSinResp = sinResp.length;
-      const hayAlerta = nSinResp > 0;
-
-      // Actualizar etiquetas
-      const elActivos  = document.getElementById('fw-val-activos');
-      const elSinResp  = document.getElementById('fw-val-sinresp');
-      const elBadge    = document.getElementById('fw-badge');
-      const cont       = document.getElementById('flotante-wa');
-      const lblSinResp = document.getElementById('fw-sinresp');
-
-      if(elActivos)  elActivos.textContent  = total;
-      if(elSinResp)  elSinResp.textContent  = nSinResp;
-
-      // Badge total
-      if(total > 0){
-        elBadge.textContent = total;
-        elBadge.classList.add('visible');
-      } else {
-        elBadge.classList.remove('visible');
-      }
-
-      // Resaltar sin respuesta
-      if(lblSinResp) lblSinResp.style.background = nSinResp > 0
-        ? 'rgba(185,28,28,.85)' : 'rgba(10,14,26,.82)';
-
-      // Cambio de color silencioso — sin animación ni toast
-      if(hayAlerta && !fwUrgente){
-        cont.classList.add('urgente');
-        fwUrgente = true;
-      } else if(!hayAlerta && fwUrgente){
-        cont.classList.remove('urgente');
-        fwUrgente = false;
-      }
-
-    }catch(e){
-      console.warn('flotante-wa error:', e.message);
-    }
-  }
-
-  setTimeout(fetchWA, 3000);
-  setInterval(fetchWA, INTERVALO);
-})();
-</script>
-<!-- ══════════════════════════════ FIN FLOTANTE WA ══ -->
 
 <!-- MOTIV_BLOCK -->
 <!-- MOTIV_BLOCK -->
@@ -7246,7 +7123,8 @@ var CC=['#1d4ed8','#facc15','#16a34a','#e11d48','#7c3aed','#0891b2','#ea580c','#
 function bank(){var h=new Date().getHours();if(h>=5&&h<12)return{b:FD,k:'mfd',lbl:'☀️ Buenos días'};if(h>=12&&h<19)return{b:FT,k:'mft',lbl:'🌤️ Buenas tardes'};return{b:FN,k:'mfn',lbl:'🌙 Buenas noches'};}
 function week(){var d=new Date(),j=new Date(d.getFullYear(),0,1);return d.getFullYear()+'W'+Math.ceil(((d-j)/864e5+j.getDay()+1)/7);}
 function pick(){var inf=bank(),b=inf.b,k=inf.k,used=[];try{var r=JSON.parse(localStorage.getItem(k)||'{}');if(r.w===week())used=r.u||[];}catch(e){}if(used.length>=b.length)used=[];var av=b.map(function(_,i){return i;}).filter(function(i){return used.indexOf(i)<0;});var idx=av[Math.floor(Math.random()*av.length)];used.push(idx);try{localStorage.setItem(k,JSON.stringify({w:week(),u:used}));}catch(e){}return b[idx];}
-function initW(){var inf=bank(),nm=(window.AGENT_NAME||'').split(' ')[0]||'Agente';var s=document.getElementById('motivSaludo'),f=document.getElementById('motivFrase');if(s)s.textContent=inf.lbl+', '+nm;if(f)f.textContent=pick();}
+function initW(){var inf=bank(),nm=(window.AGENT_NAME||'').split(' ')[0]||'Agente';var s=// motivSaludo removido
+  if(s)s.textContent=inf.lbl+', '+nm;if(f)f.textContent=pick();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initW);else initW();
 var rs=[false,false,false];
 function showRec(){var nm=(window.AGENT_NAME||'Agente').split(' ')[0],ini=(window.AGENT_NAME||'A').charAt(0).toUpperCase();document.getElementById('motivAv').textContent=ini;document.getElementById('motivGreeting').textContent='Hola, '+nm;document.getElementById('motivQuote').textContent=QR[Math.floor(Math.random()*QR.length)];rs=[false,false,false];[0,1,2].forEach(function(i){document.querySelectorAll('.mcheck')[i].classList.remove('done');var cb=document.getElementById('mcb'+i);if(cb){var sv=cb.querySelector('svg');if(sv)sv.style.opacity='0';}});document.getElementById('motivPFill').style.width='0%';document.getElementById('motivPFill').style.background='#1d4ed8';document.getElementById('motivPText').textContent='0 de 3 confirmados';document.getElementById('motivBtn').disabled=true;document.getElementById('motivBtn').textContent='Confirma todos los puntos para continuar';document.getElementById('motivHint').classList.remove('hidden');document.getElementById('motivConfetti').style.display='none';document.getElementById('motivOverlay').style.display='flex';}
@@ -7367,5 +7245,75 @@ document.getElementById('celBtnS').onclick=function(){document.getElementById('c
   </div>
 </div>
 
+
+<script>
+// ── Navegación de pages del agente ──
+function showAgentePage(page, btn) {
+  document.querySelectorAll('.agent-page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.topbar-nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('agent-page-' + page).classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  // Lazy load del iframe de WhatsApp
+  if (page === 'whatsapp') {
+    const iframe = document.getElementById('iframe-agente-wa');
+    if (iframe && (!iframe.src || iframe.src === 'about:blank' || iframe.src === window.location.href)) {
+      iframe.src = 'agente-wa.html?embed=1';
+    }
+  }
+}
+
+// Badge WA en el botón del topbar
+(function pollWaBadge() {
+  const agId = typeof AGENT_ID !== 'undefined' ? AGENT_ID : null;
+  if (!agId || typeof SB_URL === 'undefined') { setTimeout(pollWaBadge, 5000); return; }
+
+  async function updateBadge() {
+    try {
+      const h = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
+      const r = await fetch(
+        SB_URL + '/rest/v1/wa_sesiones?agente_id=eq.' + encodeURIComponent(agId) + '&estado=neq.cerrado&select=telefono,updated_at',
+        { headers: h }
+      );
+      const activos = r.ok ? await r.json() : [];
+      const badge = document.getElementById('wa-nav-badge');
+      if (!badge) return;
+      const sinResp = activos.filter(s => Math.floor((Date.now() - new Date(s.updated_at)) / 60000) >= 5).length;
+      if (activos.length > 0) {
+        badge.textContent = sinResp > 0 ? sinResp + '⚠' : activos.length;
+        badge.style.display = 'inline-block';
+        badge.style.background = sinResp > 0 ? '#ef4444' : '#22c55e';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch(e) {}
+  }
+  updateBadge();
+  setInterval(updateBadge, 30000);
+})();
+</script>
 </body>
 </html>
+</div><!-- /app-body -->
+</div><!-- /agent-page-correos -->
+
+<!-- PAGE: GESTIÓN WHATSAPP -->
+<div id="agent-page-whatsapp" class="agent-page">
+  <iframe
+    id="iframe-agente-wa"
+    src="agente-wa.html?embed=1"
+    style="width:100%;height:100%;border:none;display:block"
+    allow="same-origin"
+  ></iframe>
+</div>
+
+<!-- PAGE: GESTIÓN PBX -->
+<div id="agent-page-pbx" class="agent-page">
+  <div style="text-align:center;color:var(--ink3);font-family:'Poppins',sans-serif">
+    <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.3;margin-bottom:16px"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.68A2 2 0 012 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14v2.92z"/></svg>
+    <div style="font-size:16px;font-weight:700;color:var(--ink2)">Gestión PBX</div>
+    <div style="font-size:12px;margin-top:6px">Próximamente</div>
+  </div>
+</div>
+
+
