@@ -6889,30 +6889,33 @@ async function enviarCorreoNuevoAg() {
     _cnAgFiles.forEach(({file,id})=>{ if(file.size<=INLINE) inlineFiles.push({file,id}); else largeFiles.push({file,id}); });
     const attachments=[];
     for(const {file} of inlineFiles){ const b64=await _fileToBase64(file); attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:b64}); }
+    // Crear registro en Supabase primero para obtener UUID y usarlo en la encuesta
+    let _cnAgId = null;
+    try {
+      const _sbRes = await fetch(`${SB_URL}/rest/v1/correos`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},
+        body:JSON.stringify({from_email:userId,from_name:AGENT_NAME||'Agente',agente_id:AGENT_ID||null,subject,body_content:body,body_type:'html',origen:'saliente',estado:'enviado',received_at:new Date().toISOString(),sent_at:new Date().toISOString(),canal_contacto:'correo'})});
+      const _sbData = await _sbRes.json();
+      _cnAgId = _sbData?.[0]?.id || null;
+    } catch(e2){console.warn('[cn-ag-sb-pre]',e2.message);}
     const _encuestaAgNuevo = encodeURIComponent(window.AGENT_NAME||'');
-    const _encuestaHTMLNuevo = `
+    const _encuestaHTMLNuevo = _cnAgId ? `
 <div style="margin-top:32px;padding-top:24px;border-top:1px solid #e2e8f0;text-align:center;font-family:Arial,sans-serif">
   <p style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">ENCUESTA DE SATISFACCIÓN</p>
   <p style="font-size:13px;color:#374151;margin-bottom:4px">Atendido por <strong>${window.AGENT_NAME||'Equipo PQRSFD'}</strong></p>
   <p style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:16px">¿Cómo califica la atención recibida?</p>
   <div>
-    <a href="https://tododrogas.online/encuesta.php?id=nuevo&cal=1&ag=${_encuestaAgNuevo}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fee2e2;color:#dc2626;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😞 Mala</a>
-    <a href="https://tododrogas.online/encuesta.php?id=nuevo&cal=2&ag=${_encuestaAgNuevo}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fef9c3;color:#ca8a04;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😐 Regular</a>
-    <a href="https://tododrogas.online/encuesta.php?id=nuevo&cal=3&ag=${_encuestaAgNuevo}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#dcfce7;color:#16a34a;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😊 Buena</a>
+    <a href="https://tododrogas.online/encuesta.php?id=${_cnAgId}&cal=1&ag=${_encuestaAgNuevo}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fee2e2;color:#dc2626;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😞 Mala</a>
+    <a href="https://tododrogas.online/encuesta.php?id=${_cnAgId}&cal=2&ag=${_encuestaAgNuevo}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fef9c3;color:#ca8a04;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😐 Regular</a>
+    <a href="https://tododrogas.online/encuesta.php?id=${_cnAgId}&cal=3&ag=${_encuestaAgNuevo}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#dcfce7;color:#16a34a;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😊 Buena</a>
   </div>
   <p style="margin-top:18px;font-size:11px;color:#aaa">Tododrogas · Experiencia del Servicio</p>
-</div>`;
+</div>` : '';
     const fullBody=`<div style="font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;color:#000">${body}${_encuestaHTMLNuevo}</div>`;
     const payload={subject,body:{contentType:'HTML',content:fullBody},toRecipients:toInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}))};
     if(ccInput) payload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
     if(attachments.length) payload.attachments=attachments;
     const r=largeFiles.length>0?await _sendMailWithLargeAttachments(token,userId,payload,largeFiles):await _sendMailDirect(token,userId,payload);
     if(!r.ok&&r.status!==202) throw new Error('Graph '+r.status+': '+(await r.text()).substring(0,100));
-    // Guardar como saliente — origen:saliente NO afecta métricas
-    try {
-      await fetch(`${SB_URL}/rest/v1/correos`,{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-        body:JSON.stringify({from_email:userId,from_name:AGENT_NAME||'Agente',agente_id:AGENT_ID||null,subject,body_content:body,body_type:'html',origen:'saliente',estado:'enviado',received_at:new Date().toISOString(),sent_at:new Date().toISOString(),canal_contacto:'correo'})});
-    } catch(e2){console.warn('[cn-ag-sb]',e2.message);}
     showToast('Correo enviado ✓','success');
     cerrarCorreoNuevoAg();
   } catch(e){
