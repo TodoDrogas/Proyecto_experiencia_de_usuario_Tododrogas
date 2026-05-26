@@ -325,8 +325,12 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
       <div class="fdot fdot-esc"></div>Escaladas
       <span class="filter-cnt" id="fc-escalado">0</span>
     </div>
+    <div class="filter-item" onclick="setFiltro('activo',this)">
+      <div class="fdot" style="background:#22c55e"></div>Activas
+      <span class="filter-cnt" id="fc-activo">0</span>
+    </div>
     <div class="filter-item" onclick="setFiltro('esperando',this)">
-      <div class="fdot fdot-esp"></div>Esperando
+      <div class="fdot fdot-esp"></div>Esp. respuesta
       <span class="filter-cnt" id="fc-esperando">0</span>
     </div>
     <div class="filter-item" onclick="setFiltro('cerrado',this)">
@@ -634,9 +638,11 @@ async function loadSesiones(){
 function updateCtrs(){
   const s=S.sesiones;
   const escaladas=s.filter(x=>x.estado==='escalado').length;
+  const activas=s.filter(x=>x.estado==='activo').length;
   const esperando=s.filter(x=>x.estado==='esperando').length;
   const cerradas=s.filter(x=>x.estado==='cerrado').length;
   document.getElementById('fc-escalado').textContent=escaladas;
+  const fcAct=document.getElementById('fc-activo');if(fcAct)fcAct.textContent=activas;
   document.getElementById('fc-esperando').textContent=esperando;
   document.getElementById('fc-cerrado').textContent=cerradas;
   document.getElementById('stat-total').textContent=s.length;
@@ -742,9 +748,9 @@ async function refreshChat(tel){
 function renderHdr(ses){
   const nom=ses.nombre||ses.telefono||'Desconocido';
   const ini=nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-  const stLbl={nova:'🤖 Nova TD respondiendo',escalado:'👤 Esperando agente',esperando:'⏳ Usuario esperando',cerrado:'✅ Cerrada'};
-  const stCol={nova:'color:var(--nova)',escalado:'color:var(--orange)',esperando:'color:var(--red)',cerrado:'color:var(--ink3)'};
-  const esEsc=ses.estado==='escalado'||ses.estado==='esperando';
+  const stLbl={nova:'🤖 Nova TD respondiendo',escalado:'👤 Sin asesor',activo:'✅ En atención',esperando:'⏳ Usuario esperando',cerrado:'✅ Cerrada'};
+  const stCol={nova:'color:var(--nova)',escalado:'color:var(--orange)',activo:'color:var(--green)',esperando:'color:var(--red)',cerrado:'color:var(--ink3)'};
+  const esEsc=ses.estado==='escalado'||ses.estado==='activo'||ses.estado==='esperando';
   const esCer=ses.estado==='cerrado';
   const esMio=ses.agente_id===AGENT_ID;
   document.getElementById('chatHdr').innerHTML=`
@@ -794,12 +800,14 @@ function renderMsgs(hist){
     }
   });
   el.innerHTML=html;el.scrollTop=el.scrollHeight;
+  // Mostrar saludo sugerido
+  setTimeout(renderSaludoSugerido,100);
 }
 
 // ── RENDER INPUT ─────────────────────────────────
 function renderInput(ses){
   const el=document.getElementById('inputArea');
-  const puedeResp=(ses.estado==='escalado'||ses.estado==='esperando')&&ses.agente_id===AGENT_ID;
+  const puedeResp=(ses.estado==='escalado'||ses.estado==='activo'||ses.estado==='esperando')&&ses.agente_id===AGENT_ID;
   const esCer=ses.estado==='cerrado';
   if(esCer){
     el.className='input-blocked';
@@ -1374,22 +1382,50 @@ function toggleRR(){
   rrOpen=!rrOpen;
   const p=document.getElementById('rrPanel');
   if(rrOpen){
-    p.innerHTML=`<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink3);margin-bottom:8px">⚡ Respuestas rápidas</div>`+
-      RR.map(r=>`<div class="rr-item" onclick="usarRR(${JSON.stringify(r.b)})"><div class="rr-title">${escH(r.t)}</div><div class="rr-body">${escH(r.b.replace('{{ag}}',AGENT_NAME))}</div></div>`).join('');
+    if(!RR||!RR.length){
+      p.innerHTML='<div style="text-align:center;padding:20px;color:var(--ink3);font-size:12px">Sin respuestas rápidas configuradas</div>';
+      p.classList.add('open');
+      return;
+    }
+    p.innerHTML=
+      '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ink3);margin-bottom:10px;padding:0 2px">⚡ Respuestas rápidas — clic para usar</div>'+
+      RR.map((r,i)=>{
+        const preview=r.b.replace('{{ag}}',AGENT_NAME);
+        return `<div class="rr-item" data-rr-idx="${i}" title="Clic para insertar en el chat">
+          <div class="rr-title">⚡ ${escH(r.t)}</div>
+          <div class="rr-body">${escH(preview.length>80?preview.substring(0,80)+'…':preview)}</div>
+        </div>`;
+      }).join('');
+    // Agregar eventos con addEventListener (evita problemas de escaping)
+    p.querySelectorAll('[data-rr-idx]').forEach(el=>{
+      el.addEventListener('click',()=>{
+        const idx=parseInt(el.dataset.rrIdx);
+        if(RR[idx]) usarRR(RR[idx].b);
+      });
+    });
     p.classList.add('open');
-  } else p.classList.remove('open');
+  } else {
+    p.classList.remove('open');
+    p.innerHTML='';
+  }
 }
-function usarRR(b){
-  const txt = b.replace('{{ag}}', AGENT_NAME);
-  // Cerrar panel primero
+function usarRR(txt){
+  txt = txt.replace('{{ag}}', AGENT_NAME);
+  // Cerrar panel
   rrOpen=false;
   const panel = document.getElementById('rrPanel');
-  if(panel) panel.classList.remove('open');
-  // Esperar un tick para que el textarea sea visible
+  if(panel){ panel.classList.remove('open'); panel.innerHTML=''; }
+  // Insertar en textarea con pequeño delay
   setTimeout(()=>{
     const ta=document.getElementById('msgTa');
-    if(ta){ ta.value=txt; autoH(ta); ta.focus(); }
-  }, 50);
+    if(ta){
+      ta.value=txt;
+      autoH(ta);
+      ta.focus();
+      // Mover cursor al final
+      ta.selectionStart = ta.selectionEnd = ta.value.length;
+    }
+  }, 80);
 }
 
 // ── INFO PANEL ───────────────────────────────────
@@ -1489,170 +1525,67 @@ function toast(msg,type=''){
 }
 </script>
 
-<!-- ═══════════════════════════════════════════════════════
-     FLOTANTE CORREOS — indicador cruzado de canal
-     Bloque independiente, no toca ninguna función existente
-═══════════════════════════════════════════════════════ -->
-<style>
-#flotante-correo{
-  position:fixed;bottom:24px;left:24px;z-index:9999;
-  display:flex;flex-direction:column;align-items:center;gap:6px;
-  cursor:pointer;user-select:none;
-}
-#flotante-correo .fc-btn{
-  position:relative;width:52px;height:52px;border-radius:14px;
-  background:linear-gradient(135deg,#1565c0,#1e88e5);
-  box-shadow:0 4px 16px rgba(21,101,192,.4);
-  display:flex;align-items:center;justify-content:center;
-  transition:transform .2s,box-shadow .2s;border:none;cursor:pointer;
-  outline:none;flex-shrink:0;
-}
-#flotante-correo .fc-btn:hover{transform:scale(1.06);box-shadow:0 6px 20px rgba(21,101,192,.55);}
-#flotante-correo .fc-badge{
-  position:absolute;top:-7px;right:-7px;
-  min-width:18px;height:18px;border-radius:99px;
-  background:var(--red,#dc2626);color:#fff;
-  font-size:10px;font-weight:700;font-family:'Poppins',sans-serif;
-  display:flex;align-items:center;justify-content:center;
-  padding:0 4px;border:2px solid #fff;
-  opacity:0;transition:opacity .3s;
-}
-#flotante-correo .fc-badge.visible{opacity:1;}
 
-/* Etiquetas debajo del ícono */
-#flotante-correo .fc-labels{
-  display:flex;flex-direction:column;gap:3px;width:100%;
-}
-#flotante-correo .fc-label{
-  background:rgba(10,14,26,.82);color:#fff;
-  font-size:10px;font-weight:500;font-family:'Poppins',sans-serif;
-  padding:3px 8px;border-radius:5px;white-space:nowrap;
-  display:flex;align-items:center;justify-content:space-between;gap:6px;
-  border-left:3px solid #1e88e5;min-width:120px;
-}
-#flotante-correo .fc-label.urgente{border-left-color:#ef4444;}
-#flotante-correo .fc-label .lval{
-  font-weight:700;font-size:11px;
-  background:rgba(255,255,255,.15);
-  padding:1px 5px;border-radius:4px;
+
+// ── SALUDO INTELIGENTE SUGERIDO ───────────────────────────────────────
+function renderSaludoSugerido(){
+  const ses=S.selSesion;
+  if(!ses||!ses.saludo_sugerido||ses.estado==='cerrado'||ses.estado==='nova') return;
+  if(ses.agente_id!==AGENT_ID) return;
+  if(ses.primera_respuesta_at) return;
+  if(document.getElementById('saludoBanner')) return;
+  const chatEl=document.getElementById('chatMsgs');
+  if(!chatEl) return;
+  const banner=document.createElement('div');
+  banner.id='saludoBanner';
+  banner.style.cssText='background:var(--surface);border-top:2px solid var(--blue);padding:10px 12px;border-radius:0 0 10px 10px;box-shadow:0 -4px 16px rgba(0,0,0,.08)';
+  banner.innerHTML=`
+    <div style="font-size:9px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">💬 Saludo sugerido por Nova TD</div>
+    <div style="font-size:12px;color:var(--ink);line-height:1.5;background:var(--bg);padding:8px 10px;border-radius:8px;border-left:3px solid var(--blue);margin-bottom:8px;white-space:pre-line" id="saludoTexto">${escH(ses.saludo_sugerido)}</div>
+    <div style="display:flex;gap:6px">
+      <button onclick="enviarSaludoSugerido()" style="flex:1;background:var(--blue);color:#fff;border:none;border-radius:6px;padding:7px;font-size:11px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Enviar saludo
+      </button>
+      <button onclick="editarSaludoSugerido()" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;color:var(--ink2)">✏ Editar</button>
+      <button onclick="cerrarSaludoBanner()" style="background:none;border:none;font-size:14px;cursor:pointer;color:var(--ink3);padding:4px 6px">✕</button>
+    </div>`;
+  const parent=chatEl.parentElement||chatEl;
+  parent.appendChild(banner);
 }
 
-/* Alerta urgente — ícono titila */
-@keyframes fc-pulso{
-  0%,100%{opacity:1;transform:scale(1);}
-  50%{opacity:.55;transform:scale(.93);}
+function enviarSaludoSugerido(){
+  const ses=S.selSesion;
+  if(!ses||!ses.saludo_sugerido) return;
+  cerrarSaludoBanner();
+  const ta=document.getElementById('msgTa');
+  if(ta){ ta.value=ses.saludo_sugerido; autoH(ta); }
+  enviarMsg();
 }
-#flotante-correo.alerta .fc-btn{
-  animation:fc-pulso 1s ease-in-out infinite;
-  background:linear-gradient(135deg,#b91c1c,#ef4444);
-  box-shadow:0 4px 20px rgba(185,28,28,.6);
+
+function editarSaludoSugerido(){
+  const ses=S.selSesion;
+  if(!ses||!ses.saludo_sugerido) return;
+  const ta=document.getElementById('msgTa');
+  if(ta){ ta.value=ses.saludo_sugerido; autoH(ta); ta.focus(); ta.selectionStart=ta.selectionEnd=ta.value.length; }
+  cerrarSaludoBanner();
 }
-</style>
 
-<div id="flotante-correo" onclick="irACorreos()" title="Ir a Gestión de Correos">
-  <div class="fc-btn">
-    <!-- Ícono correo/Outlook SVG puro -->
-    <svg width="34" height="34" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="3" y="7" width="21" height="34" rx="3" fill="#0d47a1"/>
-      <text x="13.5" y="30" text-anchor="middle" font-size="20" font-weight="800" fill="white" font-family="Arial,sans-serif">O</text>
-      <rect x="17" y="13" width="28" height="23" rx="3" fill="#42a5f5"/>
-      <polyline points="17,13 31,24 45,13" fill="none" stroke="#0d47a1" stroke-width="2.5" stroke-linejoin="round"/>
-      <line x1="17" y1="36" x2="45" y2="36" stroke="#0d47a1" stroke-width="1"/>
-    </svg>
-    <span class="fc-badge" id="fc-badge">0</span>
-  </div>
-  <div class="fc-labels">
-    <div class="fc-label" id="fc-pendientes">
-      💬 <span>Chats WA</span> <span class="lval" id="fc-val-pend">—</span>
-    </div>
-    <div class="fc-label urgente" id="fc-sinresp">
-      🔴 <span>Sin responder</span> <span class="lval" id="fc-val-sinresp">—</span>
-    </div>
-  </div>
-</div>
+function cerrarSaludoBanner(){
+  const b=document.getElementById('saludoBanner');
+  if(b) b.remove();
+}
 
-<script>
-(function(){
-  // ── Configuración ──────────────────────────────
-  const CORREO_URL = 'agente.html'; // URL del módulo de correos
-  const INTERVALO  = 30000;         // cada 30 segundos
-  let fcAlerta = false;
+// ── postMessage tema desde agente padre ──────────────────────────────
+window.addEventListener('message',function(e){
+  if(!e.data||e.data.type!=='setTema') return;
+  const t=e.data.tema||'default';
+  if(t==='default') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme',t);
+  const id=sessionStorage.getItem('pqr_agent_id')||'x';
+  localStorage.setItem('ag_tema_wa_'+id,t);
+});
 
-  // ── Ir a correos ───────────────────────────────
-  window.irACorreos = function(){
-    window.location.href = CORREO_URL;
-  };
-
-  // ── Consultar correos del agente ───────────────
-  async function fetchCorreos(){
-    if(!AGENT_ID || !SB_URL || !SB_KEY) return;
-    try{
-      const h = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
-
-      // Pendientes asignados al agente — solo pendiente y sin_responder
-      const rPend = await fetch(
-        `${SB_URL}/rest/v1/correos?agente_id=eq.${encodeURIComponent(AGENT_ID)}&estado=in.(pendiente,sin_responder)&is_draft=is.false&select=id,es_urgente,estado,updated_at`,
-        {headers:h}
-      );
-      const pendientes = rPend.ok ? await rPend.json() : [];
-
-      // Sin asignar (para que el agente sepa que hay nuevos)
-      const rSinAsig = await fetch(
-        `${SB_URL}/rest/v1/correos?agente_id=is.null&estado=eq.pendiente&is_draft=is.false&select=id`,
-        {headers:h}
-      );
-      const sinAsignar = rSinAsig.ok ? await rSinAsig.json() : [];
-
-      const total    = pendientes.length;
-      const urgentes = pendientes.filter(c=>c.es_urgente).length;
-      const sinResp  = pendientes.filter(c=>c.estado==='sin_responder'||c.estado==='pendiente').length;
-      const pend     = pendientes.filter(c=>c.estado==='pendiente').length;
-
-      // Actualizar badge
-      const badge   = document.getElementById('fc-badge');
-      const cont    = document.getElementById('flotante-correo');
-
-      // Actualizar etiquetas siempre visibles
-      const elPend    = document.getElementById('fc-val-pend');
-      const elSinResp = document.getElementById('fc-val-sinresp');
-      const elLblPend = document.getElementById('fc-pendientes');
-      const elLblSinR = document.getElementById('fc-sinresp');
-
-      if(elPend)    elPend.textContent    = pend;
-      if(elSinResp) elSinResp.textContent = sinResp;
-
-      // Resaltar si hay pendientes
-      if(elLblPend) elLblPend.style.background = pend > 0 ? 'rgba(21,101,192,.85)' : 'rgba(10,14,26,.85)';
-      if(elLblSinR) elLblSinR.style.background = sinResp > 0 ? 'rgba(185,28,28,.85)' : 'rgba(10,14,26,.85)';
-
-      const hayAlerta = urgentes > 0;
-      if(total > 0){
-        badge.textContent = total;
-        badge.classList.add('visible');
-      } else {
-        badge.classList.remove('visible');
-      }
-
-      // Alerta urgente — ícono titila
-      if(hayAlerta && !fcAlerta){
-        cont.classList.add('alerta');
-        fcAlerta = true;
-        toast('🔴 Tienes correos urgentes sin responder','err');
-      } else if(!hayAlerta && fcAlerta){
-        cont.classList.remove('alerta');
-        fcAlerta = false;
-      }
-
-    }catch(e){
-      console.warn('flotante-correo error:', e.message);
-    }
-  }
-
-  // ── Iniciar ────────────────────────────────────
-  setTimeout(fetchCorreos, 2000); // primera carga 2s después de que todo cargue
-  setInterval(fetchCorreos, INTERVALO);
-})();
-</script>
 <!-- ═══════════════════════════════════ FIN FLOTANTE ═══ -->
 
 </body>
