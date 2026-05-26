@@ -45,6 +45,19 @@ const NOVA_TOKEN        = process.env.NOVA_TOKEN || '';
 const OPENAI_KEY        = process.env.OPENAI_API_KEY || '';
 const PORT              = process.env.PORT || 3000;
 
+
+// ── Nombre seguro para mensajes ──────────────────────────────────────────
+function nombreSeguro(nombre) {
+  if (!nombre || nombre.trim().length < 3) return null;
+  // Descartar si es solo números o parece teléfono
+  if (/^[\d\s+\-()]+$/.test(nombre.trim())) return null;
+  return nombre.trim();
+}
+function tratamiento(nombre) {
+  const n = nombreSeguro(nombre);
+  return n ? `*${n}*` : 'señor/a usuario/a';
+}
+
 // ── RATE LIMITING ──────────────────────────────────────────────────────────
 const ratemap = new Map();
 function rateLimit(telefono) {
@@ -236,7 +249,7 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
   await supabase.from('wa_sesiones').update({ history: hist }).eq('telefono', telefono);
 
   // Responder al usuario
-  const msg = `${emojis[calNum]} ¡Gracias por calificarnos! Su opinión es muy valiosa para Tododrogas.\n\nRegistramos su atención como *${textos[calNum]}*. ¡Fue un placer servirle, hasta pronto! 🌟`;
+  const msg = `${emojis[calNum]} Gracias por calificarnos. Hemos registrado su atención como *${textos[calNum]}*.\n\nGracias por contactarnos. *Tododrogas, siempre a su servicio.*`;
   await enviarMeta(telefono, msg);
 
   await logConv(telefono, sesion.agente_id, sesion.agente_nombre, 'cerrado', null, {
@@ -271,7 +284,7 @@ async function cronInactividad() {
         // 2 min sin respuesta → preguntar si continúa
         if (minsSinAct >= 2 && !s.inactividad_aviso_at) {
           await enviarMeta(s.telefono,
-            `¿Continúa en línea, ${s.nombre || 'estimado/a'}? 😊\n\nEstamos aquí para ayudarle. Si tiene alguna consulta, con gusto le atendemos.\n\nSi ya no necesita asistencia, escriba *SALIR* para cerrar la conversación.`
+            `¿${tratamiento(s.nombre)}, continúa en línea?\n\nEstamos disponibles para atenderle. Si tiene alguna consulta, con gusto le ayudamos.\n\nSi ya no necesita asistencia, escriba *SALIR* para cerrar la conversación.`
           );
           await supabase.from('wa_sesiones').update({
             inactividad_aviso_at: ahoraISO,
@@ -316,7 +329,7 @@ async function cronInactividad() {
         // 2 min en "esperando" sin aviso previo → preguntar si continúa
         if (s.estado === 'esperando' && minsSinAct >= 2 && !s.inactividad_aviso_at) {
           await enviarMeta(s.telefono,
-            `¿Continúa en línea, ${s.nombre || 'estimado/a'}? 😊\n\n*${s.agente_nombre || 'Su asesor'}* sigue aquí para ayudarle.\n\nSi ya resolvió su consulta, puede escribir *LISTO* para cerrar la atención.`
+            `¿${tratamiento(s.nombre)}, continúa en línea?\n\n*${s.agente_nombre || 'Su asesor'}* continúa disponible para atenderle.\n\nSi ya resolvió su consulta, puede escribir *LISTO* para cerrar la atención.`
           );
           await supabase.from('wa_sesiones').update({
             inactividad_aviso_at: ahoraISO,
@@ -331,7 +344,7 @@ async function cronInactividad() {
           const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
           if (minsDesdeAviso >= 28) {
             await enviarMeta(s.telefono,
-              `Cerramos la conversación por inactividad. ¡Fue un gusto servirle en *Tododrogas*! 😊\n\n¿Nos regala un momento para calificarnos?\n\nResponda con:\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n¡Tododrogas siempre contigo! 🌟`
+              `Cerramos la conversación por inactividad.\n\nAntes de finalizar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\nGracias por contactarnos. *Tododrogas, siempre a su servicio.*`
             );
             // Reducir carga del agente
             if (s.agente_id) {
@@ -443,7 +456,7 @@ app.post('/webhook/meta', async (req, res) => {
       if (['SALIR', 'LISTO', 'ADIOS', 'ADIÓS', 'CHAO'].includes(bodyUp) &&
           ['nova', 'escalado', 'activo', 'esperando'].includes(sesion.estado)) {
         await enviarMeta(telefono,
-          `¡Hasta pronto, ${sesion.nombre || 'estimado/a'}! 😊\n\nFue un placer atenderle en *Tododrogas*. ¿Nos regala un momento para calificarnos?\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena`
+          `Gracias por contactarnos, ${tratamiento(sesion.nombre)}.\n\nAntes de cerrar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n*Tododrogas, siempre a su servicio.*`
         );
         if (sesion.agente_id) {
           const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', sesion.agente_id).single();
@@ -530,7 +543,7 @@ app.post('/webhook/meta', async (req, res) => {
             const agente = await autoAsignarAgente(telefono, sesActual);
             if (agente) {
               await enviarMeta(telefono,
-                `¡Su atención es nuestra prioridad! 💛 Ya mismo le conecto con *${agente.nombre}*, un asesor especializado que revisará su caso con toda la dedicación que merece.\n\n¡Tododrogas siempre contigo! 🥰`
+                `En este momento le estamos conectando con un asesor especializado que revisará su caso. Por favor espere un momento.\n\n*Tododrogas, siempre a su servicio.*`
               );
             } else {
               await supabase.from('wa_sesiones')
