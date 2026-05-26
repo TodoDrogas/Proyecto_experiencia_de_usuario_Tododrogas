@@ -976,7 +976,7 @@ let _gestionForSolucionado = false;
   await loadEmails();
   setInterval(()=>loadEmails(), 60000);
   // Pre-cargar racha del día desde Supabase (para que deploy no pierda cierres de hoy)
-  _iniciarRachaHoy();
+  setTimeout(()=>{ if(typeof _iniciarRachaHoy==='function') _iniciarRachaHoy(); }, 500);
 })();
 
 // ──────────────────────────────────────────────
@@ -7125,8 +7125,7 @@ var CC=['#1d4ed8','#facc15','#16a34a','#e11d48','#7c3aed','#0891b2','#ea580c','#
 function bank(){var h=new Date().getHours();if(h>=5&&h<12)return{b:FD,k:'mfd',lbl:'☀️ Buenos días'};if(h>=12&&h<19)return{b:FT,k:'mft',lbl:'🌤️ Buenas tardes'};return{b:FN,k:'mfn',lbl:'🌙 Buenas noches'};}
 function week(){var d=new Date(),j=new Date(d.getFullYear(),0,1);return d.getFullYear()+'W'+Math.ceil(((d-j)/864e5+j.getDay()+1)/7);}
 function pick(){var inf=bank(),b=inf.b,k=inf.k,used=[];try{var r=JSON.parse(localStorage.getItem(k)||'{}');if(r.w===week())used=r.u||[];}catch(e){}if(used.length>=b.length)used=[];var av=b.map(function(_,i){return i;}).filter(function(i){return used.indexOf(i)<0;});var idx=av[Math.floor(Math.random()*av.length)];used.push(idx);try{localStorage.setItem(k,JSON.stringify({w:week(),u:used}));}catch(e){}return b[idx];}
-function initW(){var inf=bank(),nm=(window.AGENT_NAME||'').split(' ')[0]||'Agente';var s=// motivSaludo removido
-  if(s)s.textContent=inf.lbl+', '+nm;if(f)f.textContent=pick();}
+function initW(){var inf=bank(),nm=(window.AGENT_NAME||'').split(' ')[0]||'Agente';var s=document.getElementById('motivSaludo');var f=document.getElementById('motivFrase');if(s)s.textContent=inf.lbl+', '+nm;if(f)f.textContent=pick();}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initW);else initW();
 var rs=[false,false,false];
 function showRec(){var nm=(window.AGENT_NAME||'Agente').split(' ')[0],ini=(window.AGENT_NAME||'A').charAt(0).toUpperCase();document.getElementById('motivAv').textContent=ini;document.getElementById('motivGreeting').textContent='Hola, '+nm;document.getElementById('motivQuote').textContent=QR[Math.floor(Math.random()*QR.length)];rs=[false,false,false];[0,1,2].forEach(function(i){document.querySelectorAll('.mcheck')[i].classList.remove('done');var cb=document.getElementById('mcb'+i);if(cb){var sv=cb.querySelector('svg');if(sv)sv.style.opacity='0';}});document.getElementById('motivPFill').style.width='0%';document.getElementById('motivPFill').style.background='#1d4ed8';document.getElementById('motivPText').textContent='0 de 3 confirmados';document.getElementById('motivBtn').disabled=true;document.getElementById('motivBtn').textContent='Confirma todos los puntos para continuar';document.getElementById('motivHint').classList.remove('hidden');document.getElementById('motivConfetti').style.display='none';document.getElementById('motivOverlay').style.display='flex';}
