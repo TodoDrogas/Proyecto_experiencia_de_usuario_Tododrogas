@@ -611,7 +611,9 @@ if ($urgencia) {
     $resumen = generarResumen($histGPT, $nombre, $eps);
     escalar($telefono, $resumen);
     cerrarNovaSesion($telefono, 'urgencia_medica', $intentos+1);
-    echo json_encode(['respuesta'=>"¡Su atención es nuestra prioridad! 💛 Ya mismo le conecto con un asesor especializado que revisará su caso con toda la dedicación que merece. ¡Tododrogas siempre contigo! 🥰",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+    echo json_encode(['respuesta'=>"En este momento le estamos conectando con un asesor especializado que revisará su caso. Por favor espere un momento.
+
+*Tododrogas, siempre a su servicio.*",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
     exit;
 }
 
@@ -621,7 +623,9 @@ if ($pideAsesor) {
     $resumen = generarResumen($histGPT, $nombre, $eps);
     escalar($telefono, $resumen);
     cerrarNovaSesion($telefono, 'solicitud_asesor', $intentos+1);
-    echo json_encode(['respuesta'=>"¡Con mucho gusto, *$pn*! Su caso merece atención personalizada 💛 Le conecto ahora mismo con uno de nuestros asesores especializados. ¡Tododrogas siempre a su lado! 🥰",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+    echo json_encode(['respuesta'=>"Con gusto, *$pn*. En este momento le conectamos con un asesor especializado. Por favor espere un momento.
+
+*Tododrogas, siempre a su servicio.*",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
     exit;
 }
 
@@ -632,7 +636,9 @@ if ($enojado) {
         // Nivel 3 — escalar automáticamente
         $resumen = generarResumen($histGPT, $nombre, $eps);
         escalar($telefono, $resumen.'  [URGENTE: usuario molesto]');
-        echo json_encode(['respuesta'=>"Lamentamos profundamente los inconvenientes que ha tenido, *$pn*. Usted merece la mejor atención y nos comprometemos a dársela. 🙏 Le conecto ahora mismo con un asesor especializado. ¡Tododrogas siempre contigo! 🥰",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+        echo json_encode(['respuesta'=>"Lamentamos los inconvenientes presentados, *$pn*. En este momento le conectamos con un asesor especializado que atenderá su caso de forma prioritaria.
+
+*Tododrogas, siempre a su servicio.*",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
         exit;
     } elseif ($intentos >= 1) {
         // Nivel 2 — ofrecer con énfasis
@@ -667,7 +673,9 @@ if ($respondeSiAsesor && $intentos >= 1) {
     $histGPT[] = ['role'=>'user','content'=>$mensaje];
     $resumen = generarResumen($histGPT, $nombre, $eps);
     escalar($telefono, $resumen);
-    echo json_encode(['respuesta'=>"¡Perfecto, *$pn*! Usted merece la mejor atención y estamos aquí para dársela 🌟 Le transfiero de inmediato con un asesor especializado. ¡Tododrogas siempre contigo! 🥰",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+    echo json_encode(['respuesta'=>"Perfecto, *$pn*. En este momento le conectamos con un asesor especializado. Por favor espere un momento.
+
+*Tododrogas, siempre a su servicio.*",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
     exit;
 }
 
@@ -699,7 +707,9 @@ if (in_array($msgTrim, ['A','ASESOR'])) {
     $resumen = generarResumen($histGPT, $nombre, $eps);
     escalar($telefono, $resumen);
     cerrarNovaSesion($telefono, 'solicitud_asesor', $intentos+1);
-    echo json_encode(['respuesta'=>"¡Con mucho gusto, *$pn*! Su caso merece atención personalizada 💛 Le conecto ahora mismo con uno de nuestros asesores especializados. ¡Tododrogas siempre a su lado! 🥰",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+    echo json_encode(['respuesta'=>"Con gusto, *$pn*. En este momento le conectamos con un asesor especializado. Por favor espere un momento.
+
+*Tododrogas, siempre a su servicio.*",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
     exit;
 }
 
@@ -810,7 +820,9 @@ if ($esOfreceAsesor) {
         $resumen = generarResumen($histGPT, $nombre, $eps);
         escalar($telefono, $resumen);
         cerrarNovaSesion($telefono, 'solicitud_asesor', $intentos+1);
-        echo json_encode(['respuesta'=>"¡Perfecto, *$pn*! Usted merece la mejor atención y estamos aquí para dársela 🌟 Le transfiero de inmediato con un asesor especializado. ¡Tododrogas siempre contigo! 🥰",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
+        echo json_encode(['respuesta'=>"Perfecto, *$pn*. En este momento le conectamos con un asesor especializado. Por favor espere un momento.
+
+*Tododrogas, siempre a su servicio.*",'accion'=>'ESCALADO','resumen'=>$resumen,'fase'=>'escalado','intentos'=>$intentos]);
         exit;
     }
     // Respondió No — mostrar menú completo y esperar selección
