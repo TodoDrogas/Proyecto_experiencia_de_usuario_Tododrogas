@@ -3509,7 +3509,21 @@ async function sendReply() {
       attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:base64});
     }
 
-    const _bodyFull = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`;
+    const _encuestaAg = encodeURIComponent(window.AGENT_NAME||'');
+    const _encuestaHTML = `
+<div style="margin-top:32px;padding-top:24px;border-top:1px solid #e2e8f0;text-align:center;font-family:Arial,sans-serif">
+  <p style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">ENCUESTA DE SATISFACCIÓN</p>
+  <p style="font-size:13px;color:#374151;margin-bottom:4px">Atendido por <strong>${window.AGENT_NAME||'Equipo PQRSFD'}</strong></p>
+  <p style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:16px">¿Cómo califica la atención recibida?</p>
+  <div>
+    <a href="https://tododrogas.online/encuesta.php?id=${id}&cal=1&ag=${_encuestaAg}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fee2e2;color:#dc2626;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😞 Mala</a>
+    <a href="https://tododrogas.online/encuesta.php?id=${id}&cal=2&ag=${_encuestaAg}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fef9c3;color:#ca8a04;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😐 Regular</a>
+    <a href="https://tododrogas.online/encuesta.php?id=${id}&cal=3&ag=${_encuestaAg}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#dcfce7;color:#16a34a;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😊 Buena</a>
+  </div>
+  <p style="margin-top:18px;font-size:11px;color:#aaa">Tododrogas · Experiencia del Servicio</p>
+</div>`;
+
+    const _bodyFull = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}${_encuestaHTML}</div>`;
 
     // ── Resolver el message_id vigente en Graph ──────────────────────────
     // Estrategia en orden de confiabilidad:
@@ -5429,7 +5443,21 @@ async function crSendReply() {
       }
     }
 
-    const fullBody = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}</div>`;
+    const _encuestaAgCr = encodeURIComponent(window.AGENT_NAME||'');
+    const _correoIdCr = _crCorreoIdOrigen || '';
+    const _encuestaHTMLCr = _correoIdCr ? `
+<div style="margin-top:32px;padding-top:24px;border-top:1px solid #e2e8f0;text-align:center;font-family:Arial,sans-serif">
+  <p style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">ENCUESTA DE SATISFACCIÓN</p>
+  <p style="font-size:13px;color:#374151;margin-bottom:4px">Atendido por <strong>${window.AGENT_NAME||'Equipo PQRSFD'}</strong></p>
+  <p style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:16px">¿Cómo califica la atención recibida?</p>
+  <div>
+    <a href="https://tododrogas.online/encuesta.php?id=${_correoIdCr}&cal=1&ag=${_encuestaAgCr}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fee2e2;color:#dc2626;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😞 Mala</a>
+    <a href="https://tododrogas.online/encuesta.php?id=${_correoIdCr}&cal=2&ag=${_encuestaAgCr}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fef9c3;color:#ca8a04;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😐 Regular</a>
+    <a href="https://tododrogas.online/encuesta.php?id=${_correoIdCr}&cal=3&ag=${_encuestaAgCr}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#dcfce7;color:#16a34a;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😊 Buena</a>
+  </div>
+  <p style="margin-top:18px;font-size:11px;color:#aaa">Tododrogas · Experiencia del Servicio</p>
+</div>` : '';
+    const fullBody = `<div style="font-family:'Franklin Gothic Book','Franklin Gothic Medium',Arial,sans-serif;font-size:13px;color:#000000;background:#ffffff">${body}${hiloHTML}${_encuestaHTMLCr}</div>`;
 
     let r;
     // ── Usar /reply o /replyAll o /forward con internet_message_id del padre
@@ -6861,7 +6889,20 @@ async function enviarCorreoNuevoAg() {
     _cnAgFiles.forEach(({file,id})=>{ if(file.size<=INLINE) inlineFiles.push({file,id}); else largeFiles.push({file,id}); });
     const attachments=[];
     for(const {file} of inlineFiles){ const b64=await _fileToBase64(file); attachments.push({'@odata.type':'#microsoft.graph.fileAttachment',name:file.name,contentType:file.type||'application/octet-stream',contentBytes:b64}); }
-    const fullBody=`<div style="font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;color:#000">${body}</div>`;
+    const _encuestaAgNuevo = encodeURIComponent(window.AGENT_NAME||'');
+    const _encuestaHTMLNuevo = `
+<div style="margin-top:32px;padding-top:24px;border-top:1px solid #e2e8f0;text-align:center;font-family:Arial,sans-serif">
+  <p style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#94a3b8;margin-bottom:6px">ENCUESTA DE SATISFACCIÓN</p>
+  <p style="font-size:13px;color:#374151;margin-bottom:4px">Atendido por <strong>${window.AGENT_NAME||'Equipo PQRSFD'}</strong></p>
+  <p style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:16px">¿Cómo califica la atención recibida?</p>
+  <div>
+    <a href="https://tododrogas.online/encuesta.php?id=nuevo&cal=1&ag=${_encuestaAgNuevo}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fee2e2;color:#dc2626;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😞 Mala</a>
+    <a href="https://tododrogas.online/encuesta.php?id=nuevo&cal=2&ag=${_encuestaAgNuevo}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#fef9c3;color:#ca8a04;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😐 Regular</a>
+    <a href="https://tododrogas.online/encuesta.php?id=nuevo&cal=3&ag=${_encuestaAgNuevo}" style="display:inline-block;margin:0 6px;padding:10px 22px;background:#dcfce7;color:#16a34a;border-radius:99px;text-decoration:none;font-weight:700;font-size:13px">😊 Buena</a>
+  </div>
+  <p style="margin-top:18px;font-size:11px;color:#aaa">Tododrogas · Experiencia del Servicio</p>
+</div>`;
+    const fullBody=`<div style="font-family:'Franklin Gothic Book',Arial,sans-serif;font-size:13px;color:#000">${body}${_encuestaHTMLNuevo}</div>`;
     const payload={subject,body:{contentType:'HTML',content:fullBody},toRecipients:toInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}))};
     if(ccInput) payload.ccRecipients=ccInput.split(';').map(s=>s.trim()).filter(Boolean).map(a=>({emailAddress:{address:a}}));
     if(attachments.length) payload.attachments=attachments;
