@@ -2308,21 +2308,31 @@ async function exportarSIGI() {
     // Historial por fecha del período
     const hist = await sb(`historial_eventos?agente_id=not.is.null&order=created_at.asc&limit=10000`+_dExH+_hExH).catch(()=>[]) || [];
 
-    // Cargar respuestas completas desde tabla respuestas (texto sin truncar)
-    const _respChunks = [];
-    for(let i=0; i<correoIds.length; i+=50) _respChunks.push(correoIds.slice(i,i+50));
-    const _respRaw = (await Promise.all(
-      _respChunks.map(chunk =>
-        sb(`respuestas?correo_id=in.(${chunk.join(',')})&enviado=is.true&select=correo_id,contenido,created_at&order=created_at.asc&limit=5000`).catch(()=>[])
-      )
-    )).flat().filter(Boolean);
-    // Indexar primera respuesta enviada por correo_id
+    // Cargar correos salientes para obtener respuesta completa via conversation_id
+    const _convIds = [...new Set(correosSIGI.map(c => c.conversation_id).filter(Boolean))];
     const respuestaMap = {};
-    _respRaw.forEach(r => {
-      if(r.correo_id && !respuestaMap[r.correo_id]) {
-        respuestaMap[r.correo_id] = (r.contenido||'').replace(/<[^>]*>/g,'').trim();
-      }
-    });
+    if(_convIds.length) {
+      const _convChunks = [];
+      for(let i=0; i<_convIds.length; i+=50) _convChunks.push(_convIds.slice(i,i+50));
+      const _salientesRaw = (await Promise.all(
+        _convChunks.map(chunk =>
+          sb(`correos?conversation_id=in.(${chunk.map(id=>`"${id}"`).join(',')})&origen=eq.saliente&select=conversation_id,body_content,created_at&order=created_at.asc&limit=5000`).catch(()=>[])
+        )
+      )).flat().filter(Boolean);
+      // Indexar primera respuesta saliente por conversation_id
+      const _salienteByConv = {};
+      _salientesRaw.forEach(r => {
+        if(r.conversation_id && !_salienteByConv[r.conversation_id]) {
+          _salienteByConv[r.conversation_id] = (r.body_content||'').replace(/<[^>]*>/g,'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
+        }
+      });
+      // Mapear a correo_id
+      correosSIGI.forEach(c => {
+        if(c.conversation_id && _salienteByConv[c.conversation_id]) {
+          respuestaMap[c.id] = _salienteByConv[c.conversation_id];
+        }
+      });
+    }
 
     // ── Datos del paciente desde historial_eventos.datos_extra (más frescos) ──
     // Tomar la gestión más reciente con datos completos por correo_id
@@ -2510,6 +2520,9 @@ async function exportarSIGI() {
         'Fecha Respuesta':         fGest,
         'Fecha Resp. Usuario':     fGest,
         'Respuesta Asignación':    _up((()=>{
+          // Primero buscar en correo saliente (texto completo)
+          if(respuestaMap[c.id]) return respuestaMap[c.id];
+          // Fallback: historial correo_respondido
           const evResp = histC.find(h => h.evento === 'correo_respondido');
           if(evResp) {
             try {
