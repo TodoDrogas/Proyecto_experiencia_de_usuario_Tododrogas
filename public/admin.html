@@ -2316,14 +2316,14 @@ async function exportarSIGI() {
       for(let i=0; i<_convIds.length; i+=50) _convChunks.push(_convIds.slice(i,i+50));
       const _salientesRaw = (await Promise.all(
         _convChunks.map(chunk =>
-          sb(`correos?conversation_id=in.(${chunk.map(id=>`"${id}"`).join(',')})&origen=eq.saliente&select=conversation_id,body_content,created_at&order=created_at.asc&limit=5000`).catch(()=>[])
+          sb(`correos?conversation_id=in.(${chunk.join(',')})&origen=eq.saliente&select=conversation_id,body_content,created_at&order=created_at.asc&limit=5000`).catch(()=>[])
         )
       )).flat().filter(Boolean);
       // Indexar primera respuesta saliente por conversation_id
       const _salienteByConv = {};
       _salientesRaw.forEach(r => {
         if(r.conversation_id && !_salienteByConv[r.conversation_id]) {
-          _salienteByConv[r.conversation_id] = (r.body_content||'').replace(/<[^>]*>/g,'').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
+          _salienteByConv[r.conversation_id] = (r.body_content||'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ').trim();
         }
       });
       // Mapear a correo_id
@@ -2488,9 +2488,26 @@ async function exportarSIGI() {
 
       // Helper para forzar mayúsculas en texto sin afectar la BD
       const _up = v => v ? v.toString().toUpperCase().trim() : '';
+      const _fh = v => v ? new Date(v).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}) : '';
+
+      // ── Tiempos para columnas finales ──
+      const evAsigT   = histC.find(h => h.evento==='asignado_manual'||h.evento==='asignacion_automatica');
+      const evGestT   = histC.find(h => !ES.includes(h.evento));
+      const evRespT   = histC.find(h => h.evento==='correo_respondido');
+      const evFirmaT  = histC.find(h => h.evento==='pendiente_firma');
+      const evCierreT = histC.find(h => h.evento==='firma_confirmada'||h.evento==='solucionado');
+
+      // ── Mes en español ──
+      const _meses = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+      const _mes = c.created_at ? _meses[new Date(c.created_at).getMonth()] : '';
+
       return {
+        'Mes':                     _mes,
+        'Fecha Solicitud':         fSol,
+        'ID Único':                c.id || '',
+        'Código PQRSFD':           ticketId,
+        'Asunto':                  _up(c.subject || ''),
         '# Gestiones':             c.num_gestiones || 0,
-        'Código PQR':              ticketId,
         'Tipo Documento':          _up(dg.tipo_documento || pac?.['Tipo De Documento'] || c.tipo_documento || 'CÉDULA DE CIUDADANÍA'),
         'Documento':               _up(pac?.['Cedula Pacientes'] || pac?.['Cedula Paciente'] || c.cedula_paciente || c.cedula || ''),
         'Nombre y Apellidos':      _up(dg.nombre_paciente || pac?.['Nombre Paciente'] || c.nombre || ''),
@@ -2507,9 +2524,7 @@ async function exportarSIGI() {
         'NIT EPS':                 eps?.nit || '',
         'EPS':                     _up(eps?.nombre || ''),
         'Origen':                  _up(c.origen || ''),
-        'Fecha Solicitud':         fSol,
         'Fecha Realización':       fAsig,
-        'Código Solicitud':        ticketId,
         'Nombre Solicitud':        _up(c.nombre_solicitud || c.tipo_pqr || ''),
         'Detalle Solicitud':       _up(c.detalle_solicitud || ''),
         'Estado Solicitud':        _up(c.estado || ''),
@@ -2517,8 +2532,6 @@ async function exportarSIGI() {
         'Fecha Asig. Usuario':     fAsig,
         'Doc. Usuario Asignado':   agEmail,
         'Nombre Usuario Asignado': _up(agNombre),
-        'Fecha Respuesta':         fGest,
-        'Fecha Resp. Usuario':     fGest,
         'Respuesta Asignación':    _up((()=>{
           // Primero buscar en correo saliente (texto completo)
           if(respuestaMap[c.id]) return respuestaMap[c.id];
@@ -2538,15 +2551,23 @@ async function exportarSIGI() {
         'Observación':             _up(obsTexto),
         'Tiene Tutela':            c.tiene_tutela === true ? 'SI' : 'NO',
         'Categoría':               _up(c.categoria_sigi || c.categoria_ia || ''),
+        'Hora_Recibido':           _fh(c.created_at),
+        'Hora_Asignacion':         _fh(evAsigT?.created_at),
+        'Hora_Primera_Gestion':    _fh(evGestT?.created_at),
+        'Hora_Primera_Respuesta':  _fh(evRespT?.created_at),
+        'Hora_Pte_Firma':          _fh(evFirmaT?.created_at),
+        'Hora_Cierre':             _fh(evCierreT?.created_at || c.fecha_resolucion),
       };
     });
 
     const ws1 = XLSX.utils.json_to_sheet(h1.length ? h1 : [{'Sin datos':'No hay casos con gestiones en el período'}]);
     ws1['!cols'] = [
-      {wch:10},{wch:20},{wch:18},{wch:14},{wch:28},{wch:22},{wch:30},{wch:14},{wch:13},
+      {wch:10},{wch:14},{wch:38},{wch:20},{wch:40},{wch:10},
+      {wch:18},{wch:14},{wch:28},{wch:22},{wch:30},{wch:14},{wch:13},
       {wch:32},{wch:20},{wch:13},{wch:14},{wch:20},{wch:20},{wch:34},{wch:14},{wch:14},
-      {wch:14},{wch:30},{wch:28},{wch:14},{wch:14},{wch:34},{wch:14},{wch:16},{wch:16},
+      {wch:14},{wch:30},{wch:28},{wch:50},{wch:14},{wch:16},{wch:16},
       {wch:14},{wch:44},{wch:10},{wch:18},
+      {wch:18},{wch:18},{wch:18},{wch:18},{wch:18},{wch:18},
     ];
     ws1['!freeze'] = {xSplit:0, ySplit:1};
 
@@ -2607,6 +2628,7 @@ async function exportarSIGI() {
 
       const _u = v => v ? v.toString().toUpperCase().trim() : '';
       return {
+        'ID Único':          c?.id || '',
         'Código PQRSFD':    ticketId,
         'Código Medicamento': _u(m.codigo || ''),
         'Medicamento':       _u(m.descripcion || ''),
@@ -2622,7 +2644,7 @@ async function exportarSIGI() {
     const ws2 = XLSX.utils.json_to_sheet(
       h2.length ? h2 : [{'Sin datos':'Sin medicamentos en el período — el agente debe añadir medicamentos al ticket para que aparezcan aquí'}]
     );
-    ws2['!cols'] = [{wch:20},{wch:18},{wch:36},{wch:8},{wch:10},{wch:16},{wch:28},{wch:30},{wch:14}];
+    ws2['!cols'] = [{wch:38},{wch:20},{wch:18},{wch:36},{wch:8},{wch:10},{wch:16},{wch:28},{wch:30},{wch:14}];
     _styleSheet(ws2, 9);
     XLSX.utils.book_append_sheet(wb, ws2, 'MEDICAMENTOS');
 
