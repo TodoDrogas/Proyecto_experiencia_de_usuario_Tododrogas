@@ -2493,7 +2493,16 @@ async function exportarSIGI() {
         'Nombre Usuario Asignado': _up(agNombre),
         'Fecha Respuesta':         fGest,
         'Fecha Resp. Usuario':     fGest,
-        'Respuesta Asignación':    _up(pgReal?.descripcion || ''),
+        'Respuesta Asignación':    _up((()=>{
+          const evResp = histC.find(h => h.evento === 'correo_respondido');
+          if (evResp) {
+            try {
+              const ex = JSON.parse(evResp.datos_extra||'{}');
+              return ex.observaciones || evResp.descripcion || '';
+            } catch { return evResp.descripcion || ''; }
+          }
+          return '';
+        })()),
         'Fecha PQRSFD Cerrada':    fCierre,
         'Departamento':            _up(dg.departamento || pac?.['Departamento'] || c.departamento_paciente || ''),
         'Ciudad':                  _up(dg.ciudad || pac?.['Ciudad'] || c.ciudad_paciente || ''),
