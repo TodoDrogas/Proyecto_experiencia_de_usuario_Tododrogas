@@ -2509,7 +2509,19 @@ async function exportarSIGI() {
         'Nombre Usuario Asignado': _up(agNombre),
         'Fecha Respuesta':         fGest,
         'Fecha Resp. Usuario':     fGest,
-        'Respuesta Asignación':    _up(respuestaMap[c.id] || ''),
+        'Respuesta Asignación':    _up((()=>{
+          // Primero buscar en tabla respuestas (texto completo)
+          if(respuestaMap[c.id]) return respuestaMap[c.id];
+          // Fallback: historial correo_respondido
+          const evResp = histC.find(h => h.evento === 'correo_respondido');
+          if(evResp) {
+            try {
+              const ex = JSON.parse(evResp.datos_extra||'{}');
+              return ex.observaciones || evResp.descripcion || '';
+            } catch { return evResp.descripcion || ''; }
+          }
+          return '';
+        })()),
         'Fecha PQRSFD Cerrada':    fCierre,
         'Departamento':            _up(dg.departamento || pac?.['Departamento'] || c.departamento_paciente || ''),
         'Ciudad':                  _up(dg.ciudad || pac?.['Ciudad'] || c.ciudad_paciente || ''),
@@ -4563,11 +4575,22 @@ function gFiltrarEPS(q) {
     }).catch(()=>{});
     return;
   }
-  const matches = q.length < 1
-    ? epsList
+
+  // Orden personalizado del desplegable EPS
+  const _EPS_ORDER = ['900604350','900226715','900294794','900156264','800130907','900857186','N/A'];
+  const _epsSort = (a, b) => {
+    const ai = _EPS_ORDER.indexOf(a.nit||'');
+    const bi = _EPS_ORDER.indexOf(b.nit||'');
+    if(ai === -1 && bi === -1) return (a.nombre||'').localeCompare(b.nombre||'');
+    if(ai === -1) return 1;
+    if(bi === -1) return -1;
+    return ai - bi;
+  };
+  const matches = (q.length < 1
+    ? [...epsList]
     : epsList.filter(e =>
         e.nombre.toLowerCase().includes(q.toLowerCase()) || (e.nit||'').includes(q)
-      );
+      )).sort(_epsSort);
   if(!matches.length) { dd.style.display='none'; return; }
   dd.style.display = 'block';
   dd.innerHTML = matches.map(e =>
