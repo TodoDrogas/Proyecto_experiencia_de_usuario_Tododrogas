@@ -1992,11 +1992,21 @@ function gFiltrarEPS(q) {
     }).catch(()=>{});
     return;
   }
-  const matches = q.length < 1
-    ? epsList
+
+  const _EPS_ORDER = ['900604350','900226715','900294794','900156264','800130907','900857186','N/A'];
+  const _epsSort = (a, b) => {
+    const ai = _EPS_ORDER.indexOf(a.nit||'');
+    const bi = _EPS_ORDER.indexOf(b.nit||'');
+    if(ai === -1 && bi === -1) return (a.nombre||'').localeCompare(b.nombre||'');
+    if(ai === -1) return 1;
+    if(bi === -1) return -1;
+    return ai - bi;
+  };
+  const matches = (q.length < 1
+    ? [...epsList]
     : epsList.filter(e =>
         e.nombre.toLowerCase().includes(q.toLowerCase()) || (e.nit||'').includes(q)
-      );
+      )).sort(_epsSort);
   if(!matches.length) { dd.style.display='none'; return; }
   dd.style.display = 'block';
   dd.innerHTML = matches.map(e =>
