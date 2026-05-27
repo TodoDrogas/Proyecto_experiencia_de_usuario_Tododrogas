@@ -2308,6 +2308,22 @@ async function exportarSIGI() {
     // Historial por fecha del período
     const hist = await sb(`historial_eventos?agente_id=not.is.null&order=created_at.asc&limit=10000`+_dExH+_hExH).catch(()=>[]) || [];
 
+    // Cargar respuestas completas desde tabla respuestas (texto sin truncar)
+    const _respChunks = [];
+    for(let i=0; i<correoIds.length; i+=50) _respChunks.push(correoIds.slice(i,i+50));
+    const _respRaw = (await Promise.all(
+      _respChunks.map(chunk =>
+        sb(`respuestas?correo_id=in.(${chunk.join(',')})&enviado=is.true&select=correo_id,contenido,created_at&order=created_at.asc&limit=5000`).catch(()=>[])
+      )
+    )).flat().filter(Boolean);
+    // Indexar primera respuesta enviada por correo_id
+    const respuestaMap = {};
+    _respRaw.forEach(r => {
+      if(r.correo_id && !respuestaMap[r.correo_id]) {
+        respuestaMap[r.correo_id] = (r.contenido||'').replace(/<[^>]*>/g,'').trim();
+      }
+    });
+
     // ── Datos del paciente desde historial_eventos.datos_extra (más frescos) ──
     // Tomar la gestión más reciente con datos completos por correo_id
     const datosGestion = {};
@@ -2457,7 +2473,7 @@ async function exportarSIGI() {
       const pgRealAg = histC.find(h => !ES.includes(h.evento) && h.agente_id);
       const agPrimeraGestion = pgRealAg ? (agById[pgRealAg.agente_id] || null) : null;
       const agFinal  = agPrimeraGestion || ag;
-      const agEmail  = agFinal?.email  || agFinal?.nombre || c.asignado_a || 'Sin asignar';
+      const agEmail  = agFinal?.cedula || agFinal?.email  || c.asignado_a || 'Sin asignar';
       const agNombre = agFinal?.nombre || c.asignado_a || 'Sin asignar';
 
       // Helper para forzar mayúsculas en texto sin afectar la BD
@@ -2493,16 +2509,7 @@ async function exportarSIGI() {
         'Nombre Usuario Asignado': _up(agNombre),
         'Fecha Respuesta':         fGest,
         'Fecha Resp. Usuario':     fGest,
-        'Respuesta Asignación':    _up((()=>{
-          const evResp = histC.find(h => h.evento === 'correo_respondido');
-          if (evResp) {
-            try {
-              const ex = JSON.parse(evResp.datos_extra||'{}');
-              return ex.observaciones || evResp.descripcion || '';
-            } catch { return evResp.descripcion || ''; }
-          }
-          return '';
-        })()),
+        'Respuesta Asignación':    _up(respuestaMap[c.id] || ''),
         'Fecha PQRSFD Cerrada':    fCierre,
         'Departamento':            _up(dg.departamento || pac?.['Departamento'] || c.departamento_paciente || ''),
         'Ciudad':                  _up(dg.ciudad || pac?.['Ciudad'] || c.ciudad_paciente || ''),
@@ -6003,9 +6010,9 @@ async function sendReply() {
       const todosLosArchivos=[...inlineFiles,...largeFiles];
       // Reenvío de admin: evento neutro que no alimenta métricas de agentes
       if (_esReenvio) {
-        await addHistorialEvent(id,email,'reenvio_admin',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Reenvío manual por admin: '+body.replace(/<[^>]*>/g,'').substring(0,100),correo_id_saliente:null});
+        await addHistorialEvent(id,email,'reenvio_admin',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Reenvío manual por admin: '+body.replace(/<[^>]*>/g,'').substring(0,500),correo_id_saliente:null});
       } else {
-        await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,100),correo_id_saliente:null});
+        await addHistorialEvent(id,email,'correo_respondido',{por:'admin',adjuntos:totalAdj,adjuntos_nombres:[..._attachedFiles.keys()],observaciones:'Respuesta enviada: '+body.replace(/<[^>]*>/g,'').substring(0,500),correo_id_saliente:null});
         // Marcar el correo original como respondido (solo en respuesta, no en reenvío)
         try { await sb(`correos?id=eq.${id}`,'PATCH',{tiene_respuesta:true}); } catch(eR){console.warn('[tiene_respuesta]',eR.message);}
       }
