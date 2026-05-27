@@ -2427,13 +2427,30 @@ async function exportarSIGI() {
       const fGest   = pgReal?.created_at ? new Date(pgReal.created_at).toLocaleDateString('es-CO') : '';
       const fCierre = c.fecha_resolucion ? new Date(c.fecha_resolucion).toLocaleDateString('es-CO'): '';
 
-      // Nombres de agentes conocidos para filtrar del texto de observaciones
-      const _agNombres = agentesRaw.map(a => (a.nombre||'').trim().toUpperCase()).filter(Boolean);
+      // Construir set de nombres de agentes en todas sus variantes
+      // La BD guarda nombre como "Andrea Chaparro" pero el historial puede tener "CHAPARO MAZO ANDREA MARIA"
+      // Por eso también extraemos nombres desde eventos de asignación del historial del correo
+      const _agNombresSet = new Set(agentesRaw.map(a => (a.nombre||'').trim().toUpperCase()).filter(Boolean));
+      // Agregar nombres que aparezcan en eventos de asignación (descripcion de esos eventos)
+      histC.filter(h => h.evento === 'asignado_manual' || h.evento === 'asignacion_automatica')
+           .forEach(h => { if(h.descripcion) _agNombresSet.add(h.descripcion.trim().toUpperCase()); });
+
+      // Un fragmento es "solo nombre de asesor" si cumple:
+      // - Está en el set de agentes conocidos, O
+      // - Es solo letras mayúsculas/tildes y espacios (sin dígitos ni palabras de acción)
+      const _PALABRAS_GESTION = /(SE |TICKET|RESPUESTA|ENVIADA|VALIDACI|GESTIÓN|GESTION|ENTREGA|SOLICIT|MEDICAMENT|FIRMA|CIERRE|PENDIENTE|EVIDENCIA|TRASLADO|DISPENSA|CORREO|AUTORIZA|FACTURA|FORMULA|MIPRES|ENVIADO|DISPONIBLE|MUNICIPIO|MEDICAMENTOS|USUARIO|COMUNICACI)/i;
+      function _esNombreAsesor(frag) {
+        const u = frag.trim().toUpperCase();
+        if (_agNombresSet.has(u)) return true;
+        // Solo letras (incluye tildes/ñ), espacios — sin dígitos ni palabras clave de gestión
+        if (/^[A-ZÁÉÍÓÚÑÜA-Z\s]+$/.test(u) && !_PALABRAS_GESTION.test(u) && u.length < 60) return true;
+        return false;
+      }
+
       function _limpiarObs(texto) {
-        // Divide por ' | ', quita fragmentos que sean solo nombre de agente, une de nuevo
         return texto.split(' | ')
           .map(p => p.trim())
-          .filter(p => p && !_agNombres.includes(p.toUpperCase()))
+          .filter(p => p && !_esNombreAsesor(p))
           .join(' | ');
       }
 
