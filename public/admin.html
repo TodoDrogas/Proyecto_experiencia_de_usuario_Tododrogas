@@ -2427,24 +2427,26 @@ async function exportarSIGI() {
       const fGest   = pgReal?.created_at ? new Date(pgReal.created_at).toLocaleDateString('es-CO') : '';
       const fCierre = c.fecha_resolucion ? new Date(c.fecha_resolucion).toLocaleDateString('es-CO'): '';
 
+      // Nombres de agentes conocidos para filtrar del texto de observaciones
+      const _agNombres = agentesRaw.map(a => (a.nombre||'').trim().toUpperCase()).filter(Boolean);
+      function _limpiarObs(texto) {
+        // Divide por ' | ', quita fragmentos que sean solo nombre de agente, une de nuevo
+        return texto.split(' | ')
+          .map(p => p.trim())
+          .filter(p => p && !_agNombres.includes(p.toUpperCase()))
+          .join(' | ');
+      }
+
       const obsTexto = histC
         .filter(h => !ES.includes(h.evento))
         .map(h => {
           try {
             const ex = JSON.parse(h.datos_extra||'{}');
-            // Preferir observaciones del datos_extra (texto real del agente)
-            if (ex.observaciones) return ex.observaciones;
-            // Si solo hay descripcion, excluir si es igual al nombre del agente
-            // (historial guarda agente_nombre como fallback de descripcion)
-            const desc = h.descripcion || '';
-            const agNom = (ag?.nombre || '').trim().toLowerCase();
-            if (agNom && desc.trim().toLowerCase() === agNom) return '';
-            // Excluir también si la descripcion empieza con el nombre del agente seguido de |
-            if (agNom && desc.trim().toLowerCase().startsWith(agNom + ' |')) {
-              return desc.trim().substring(agNom.length + 3).trim();
-            }
-            return desc;
-          } catch { return h.descripcion || ''; }
+            if (ex.observaciones) return _limpiarObs(ex.observaciones);
+            const desc = (h.descripcion || '').trim();
+            if (!desc) return '';
+            return _limpiarObs(desc);
+          } catch { return _limpiarObs(h.descripcion || ''); }
         })
         .filter(Boolean).join(' | ');
 
@@ -2489,16 +2491,7 @@ async function exportarSIGI() {
         'Fecha PQRSFD Cerrada':    fCierre,                     // Col Y
         'Departamento':            (dg.departamento || pac?.['Departamento'] || c.departamento_paciente || '').toUpperCase() || '',
         'Ciudad':                  (dg.ciudad || pac?.['Ciudad'] || c.ciudad_paciente || '').toUpperCase() || '',
-        'Código Medicamento':      '',   // datos en hoja MEDICAMENTOS
-        'Descripción Medicamento': '',
-        'Descripción Escrita':     '',
-        'Cantidad':                '',
-        'PBS':                     '',
         'Observación':             obsTexto,
-        'Gestión Compra':          c.gestion_compra || '',
-        'Usuario Gestión Compra':  c.usuario_gestion_compra || '',
-        'Gestión Us. Integrales':  c.gestion_usuarios_integ || '',
-        'Usuarios Integrales':     c.usuarios_integrales || '',
         'Tiene Tutela':            c.tiene_tutela === true ? 'SI' : 'NO', // Col f siempre SI/NO
         'Categoría':               c.categoria_sigi || c.categoria_ia || '',
       };
@@ -2509,8 +2502,7 @@ async function exportarSIGI() {
       {wch:10},{wch:20},{wch:18},{wch:14},{wch:28},{wch:22},{wch:30},{wch:14},{wch:13},
       {wch:32},{wch:20},{wch:13},{wch:14},{wch:20},{wch:20},{wch:34},{wch:14},{wch:14},
       {wch:14},{wch:30},{wch:28},{wch:14},{wch:14},{wch:34},{wch:14},{wch:16},{wch:16},
-      {wch:14},{wch:28},{wch:22},{wch:10},{wch:10},{wch:34},{wch:18},{wch:18},{wch:18},
-      {wch:18},{wch:10},{wch:18},
+      {wch:14},{wch:44},{wch:10},{wch:18},
     ];
     ws1['!freeze'] = {xSplit:0, ySplit:1};
 
