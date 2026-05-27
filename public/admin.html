@@ -811,10 +811,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <div class="page-title">Analytics PQRS</div>
             <div style="font-size:11px;color:var(--ink3)">Tododrogas · actualizado <span id="metLastUpdate">—</span></div>
           </div>
-          <button onclick="exportarExcel()" style="display:flex;align-items:center;gap:7px;background:#16a34a;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;box-shadow:0 2px 8px rgba(22,163,74,.2);transition:background .15s" onmouseover="this.style.background='#15803d'" onmouseout="this.style.background='#16a34a'">
-            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Exportar Power BI (.xlsx)
-          </button>
+
         </div>
         <div class="metrics-tabs">
           <button class="mtab active" onclick="showMTab('web',this)">🖥️ Navegador</button>
@@ -2456,18 +2453,23 @@ async function exportarSIGI() {
 
       const medsC = meds.filter(m => m.correo_id === c.id);
 
-      // ── Agente siempre lleno ──────────────────────────────────────
-      const agEmail  = ag?.email  || ag?.nombre || c.asignado_a || 'Sin asignar';
-      const agNombre = ag?.nombre || c.asignado_a || 'Sin asignar';
+      // ── Agente: usar el de la primera gestión real del historial ──
+      const pgRealAg = histC.find(h => !ES.includes(h.evento) && h.agente_id);
+      const agPrimeraGestion = pgRealAg ? (agById[pgRealAg.agente_id] || null) : null;
+      const agFinal  = agPrimeraGestion || ag;
+      const agEmail  = agFinal?.email  || agFinal?.nombre || c.asignado_a || 'Sin asignar';
+      const agNombre = agFinal?.nombre || c.asignado_a || 'Sin asignar';
 
+      // Helper para forzar mayúsculas en texto sin afectar la BD
+      const _up = v => v ? v.toString().toUpperCase().trim() : '';
       return {
         '# Gestiones':             c.num_gestiones || 0,
-        'Código PQR':              ticketId,                    // Col B — siempre lleno
-        'Tipo Documento':          dg.tipo_documento || pac?.['Tipo De Documento'] || c.tipo_documento || 'CÉDULA DE CIUDADANÍA',
-        'Documento':               pac?.['Cedula Pacientes'] || pac?.['Cedula Paciente'] || c.cedula_paciente || c.cedula || '',
-        'Nombre y Apellidos':      dg.nombre_paciente || pac?.['Nombre Paciente'] || c.from_name || c.nombre || '',
-        'Dirección':               dg.direccion || pac?.['Direccion'] || c.direccion_paciente || '',
-        'Email':                   c.from_email || c.correo || '',
+        'Código PQR':              ticketId,
+        'Tipo Documento':          _up(dg.tipo_documento || pac?.['Tipo De Documento'] || c.tipo_documento || 'CÉDULA DE CIUDADANÍA'),
+        'Documento':               _up(pac?.['Cedula Pacientes'] || pac?.['Cedula Paciente'] || c.cedula_paciente || c.cedula || ''),
+        'Nombre y Apellidos':      _up(dg.nombre_paciente || pac?.['Nombre Paciente'] || c.nombre || ''),
+        'Dirección':               _up(dg.direccion || pac?.['Direccion'] || c.direccion_paciente || ''),
+        'Email':                   (c.from_email || c.correo || '').toLowerCase(),
         'Teléfono':                (()=>{
           const INVALIDOS = new Set(['S/D','NT','NA','N/A','0','1','-','']);
           const t = (dg.telefono || pac?.['Telefono']||'').toString().trim();
@@ -2477,27 +2479,27 @@ async function exportarSIGI() {
           return valido ? t : (tcValido ? tc : '');
         })(),
         'NIT EPS':                 eps?.nit || '',
-        'EPS':                     eps?.nombre || '',
-        'Origen':                  c.origen || '',
+        'EPS':                     _up(eps?.nombre || ''),
+        'Origen':                  _up(c.origen || ''),
         'Fecha Solicitud':         fSol,
-        'Fecha Realización':       fAsig,                       // Col M = fecha asignación
-        'Código Solicitud':        ticketId,                    // Col N = igual a Col B
-        'Nombre Solicitud':        c.nombre_solicitud || c.tipo_pqr || '',
-        'Detalle Solicitud':       c.detalle_solicitud || '',
-        'Estado Solicitud':        c.estado || '',
+        'Fecha Realización':       fAsig,
+        'Código Solicitud':        ticketId,
+        'Nombre Solicitud':        _up(c.nombre_solicitud || c.tipo_pqr || ''),
+        'Detalle Solicitud':       _up(c.detalle_solicitud || ''),
+        'Estado Solicitud':        _up(c.estado || ''),
         'Fecha Asignación':        fAsig,
         'Fecha Asig. Usuario':     fAsig,
-        'Doc. Usuario Asignado':   agEmail,                     // Col T siempre lleno
-        'Nombre Usuario Asignado': agNombre,                    // Col U siempre lleno
-        'Fecha Respuesta':         fGest,                       // Col V = primera gestión real
-        'Fecha Resp. Usuario':     fGest,                       // Col W = igual a V
-        'Respuesta Asignación':    pgReal?.descripcion || '',
-        'Fecha PQRSFD Cerrada':    fCierre,                     // Col Y
-        'Departamento':            (dg.departamento || pac?.['Departamento'] || c.departamento_paciente || '').toUpperCase() || '',
-        'Ciudad':                  (dg.ciudad || pac?.['Ciudad'] || c.ciudad_paciente || '').toUpperCase() || '',
-        'Observación':             obsTexto,
-        'Tiene Tutela':            c.tiene_tutela === true ? 'SI' : 'NO', // Col f siempre SI/NO
-        'Categoría':               c.categoria_sigi || c.categoria_ia || '',
+        'Doc. Usuario Asignado':   agEmail,
+        'Nombre Usuario Asignado': _up(agNombre),
+        'Fecha Respuesta':         fGest,
+        'Fecha Resp. Usuario':     fGest,
+        'Respuesta Asignación':    _up(pgReal?.descripcion || ''),
+        'Fecha PQRSFD Cerrada':    fCierre,
+        'Departamento':            _up(dg.departamento || pac?.['Departamento'] || c.departamento_paciente || ''),
+        'Ciudad':                  _up(dg.ciudad || pac?.['Ciudad'] || c.ciudad_paciente || ''),
+        'Observación':             _up(obsTexto),
+        'Tiene Tutela':            c.tiene_tutela === true ? 'SI' : 'NO',
+        'Categoría':               _up(c.categoria_sigi || c.categoria_ia || ''),
       };
     });
 
@@ -2565,16 +2567,17 @@ async function exportarSIGI() {
         }
       }
 
+      const _u = v => v ? v.toString().toUpperCase().trim() : '';
       return {
         'Código PQRSFD':    ticketId,
-        'Código Medicamento': m.codigo || '',
-        'Medicamento':       m.descripcion || '',               // protagonista
-        'PBS':               m.pbs || '',
+        'Código Medicamento': _u(m.codigo || ''),
+        'Medicamento':       _u(m.descripcion || ''),
+        'PBS':               _u(m.pbs || ''),
         'Cantidad':          m.cantidad || '',
-        'Tipo solicitud':    c?.tipo_pqr || c?.nombre_solicitud || '',
-        'Nombre Usuario':    ag?.nombre || c?.asignado_a || 'Sin asignar',
-        'Cédula':            ag?.email  || ag?.nombre   || c?.asignado_a || 'Sin asignar',
-        'Estado del ticket': c?.estado  || '',
+        'Tipo solicitud':    _u(c?.tipo_pqr || c?.nombre_solicitud || ''),
+        'Nombre Usuario':    _u(ag?.nombre || c?.asignado_a || 'Sin asignar'),
+        'Cédula':            ag?.email || ag?.nombre || c?.asignado_a || 'Sin asignar',
+        'Estado del ticket': _u(c?.estado || ''),
       };
     });
 
@@ -2887,10 +2890,10 @@ async function exportarExcel() {
         'Fecha':fo?fo.toLocaleDateString('es-CO'):'','Hora':fo?fo.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'',
         'Fecha_Hora':fo?fo.toLocaleString('es-CO'):'',
         'Dia_Semana':fo?['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][fo.getDay()]:'',
-        'Agente_ID':meta.agente_id||'','Agente_Nombre':meta.agente_nombre||ev.agente_nombre||'','Agente_Email':ag?ag.email||'':'',
-        'Accion':ev.evento||ev.accion||'','Observaciones':meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'','Por':meta.por||'',
-        'Asunto_Correo':email?.asunto||ev.subject||'','Remitente':email?.remitente||ev.from_email||'','Remitente_Nombre':email?.remitente_nombre||'',
-        'Estado_Ticket':email?.estado||'','Prioridad':email?.prioridad||'',
+        'Agente_ID':meta.agente_id||'','Agente_Nombre':(meta.agente_nombre||ev.agente_nombre||'').toUpperCase(),'Agente_Email':ag?ag.email||'':'',
+        'Accion':(ev.evento||ev.accion||'').toUpperCase(),'Observaciones':(meta.observaciones||ev.descripcion||ev.detalle||ev.observaciones||'').toUpperCase(),'Por':(meta.por||'').toUpperCase(),
+        'Asunto_Correo':(email?.asunto||ev.subject||'').toUpperCase(),'Remitente':email?.remitente||ev.from_email||'','Remitente_Nombre':(email?.remitente_nombre||'').toUpperCase(),
+        'Estado_Ticket':(email?.estado||'').toUpperCase(),'Prioridad':(email?.prioridad||'').toUpperCase(),
         'Fecha_Recepcion':email?.fecha?new Date(email.fecha).toLocaleDateString('es-CO'):'',
         'Adjuntos':email?.has_attachments?'Sí':'No'
       };
@@ -2912,8 +2915,8 @@ async function exportarExcel() {
         'Remitente_Email':email.remitente||'','Remitente_Nombre':email.remitente_nombre||'',
         'Fecha_Recepcion':fR?fR.toLocaleDateString('es-CO'):'','Hora_Recepcion':fR?fR.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):'',
         'Dia_Semana':fR?['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'][fR.getDay()]:'',
-        'Estado':email.estado||'','Prioridad':email.prioridad||'',
-        'Agente_ID':email.asignado_a||'','Agente_Nombre':ag?ag.nombre||'':'','Agente_Email':ag?ag.email||'':'',
+        'Estado':(email.estado||'').toUpperCase(),'Prioridad':(email.prioridad||'').toUpperCase(),
+        'Agente_ID':email.asignado_a||'','Agente_Nombre':ag?(ag.nombre||'').toUpperCase():'','Agente_Email':ag?ag.email||'':'',
         'Total_Gestiones':gest.length,
         'Fecha_Primera_Gestion':pg?pg.toLocaleDateString('es-CO'):'','Hora_Primera_Gestion':pg?pg.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):'',
         'Fecha_Ultima_Gestion':ug?ug.toLocaleDateString('es-CO'):'','Hora_Ultima_Gestion':ug?ug.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}):'',
@@ -2940,7 +2943,7 @@ async function exportarExcel() {
       }).filter(v=>v!==null);
       const prom=tiempos.length?Math.round(tiempos.reduce((a,b)=>a+b,0)/tiempos.length):'';
       return {
-        'Agente_ID':ag.id||'','Agente_Nombre':ag.nombre||'','Agente_Email':ag.email||'','Estado':ag.activo?'Activo':'Inactivo',
+        'Agente_ID':ag.id||'','Agente_Nombre':(ag.nombre||'').toUpperCase(),'Agente_Email':ag.email||'','Estado':ag.activo?'ACTIVO':'INACTIVO',
         'Total_Correos':tot,'Pendientes':pend,'En_Gestion':gest,'Solucionados':sol,'Gestiones_Registradas':gA.length,
         'Prom_Min_Primera_Resp':prom,'Pct_Resolucion':tot>0?Math.round(sol/tot*100)+'%':'0%'
       };
