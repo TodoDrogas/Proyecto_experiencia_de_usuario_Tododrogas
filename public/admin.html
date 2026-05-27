@@ -2305,12 +2305,33 @@ async function exportarSIGI() {
     const _dExH = desde ? `&created_at=gte.${desde}T00:00:00-05:00` : '';
     const _hExH = hasta ? `&created_at=lte.${hasta}T23:59:59-05:00` : '';
 
-    // Historial por fecha del período
-    const hist = await sb(`historial_eventos?order=created_at.asc&limit=10000`+_dExH+_hExH).catch(()=>[]) || [];
+    // Historial por correo_id — sin filtro de fecha para cubrir todos los eventos
+    const _histChunks = [];
+    for(let i=0; i<correoIds.length; i+=50) _histChunks.push(correoIds.slice(i,i+50));
+    const hist = (await Promise.all(
+      _histChunks.map(chunk =>
+        sb(`historial_eventos?correo_id=in.(${chunk.join(',')})&order=created_at.asc&limit=5000`).catch(()=>[])
+      )
+    )).flat().filter(Boolean);
 
-    // Cargar correos salientes para obtener respuesta completa via conversation_id
-    const _convIds = [...new Set(correosSIGI.map(c => c.conversation_id).filter(Boolean))];
+    // Cargar respuestas: primero tabla respuestas, luego salientes por conversation_id
     const respuestaMap = {};
+    // 1. Tabla respuestas (texto limpio)
+    const _rChunks = [];
+    for(let i=0; i<correoIds.length; i+=50) _rChunks.push(correoIds.slice(i,i+50));
+    const _respRows = (await Promise.all(
+      _rChunks.map(chunk =>
+        sb(`respuestas?correo_id=in.(${chunk.join(',')})&enviado=is.true&select=correo_id,contenido,created_at&order=created_at.asc&limit=5000`).catch(()=>[])
+      )
+    )).flat().filter(Boolean);
+    _respRows.forEach(r => {
+      if(r.correo_id && !respuestaMap[r.correo_id] && r.contenido) {
+        const txt = r.contenido.replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&[a-zA-Z]+;/gi,' ').replace(/\s+/g,' ').trim();
+        if(txt) respuestaMap[r.correo_id] = txt;
+      }
+    });
+    // 2. Salientes por conversation_id para los que no tienen en respuestas
+    const _convIds = [...new Set(correosSIGI.filter(c=>!respuestaMap[c.id]).map(c => c.conversation_id).filter(Boolean))];
     if(_convIds.length) {
       const _convChunks = [];
       for(let i=0; i<_convIds.length; i+=50) _convChunks.push(_convIds.slice(i,i+50));
@@ -2319,16 +2340,14 @@ async function exportarSIGI() {
           sb(`correos?conversation_id=in.(${chunk.join(',')})&origen=eq.saliente&select=conversation_id,body_content,created_at&order=created_at.asc&limit=5000`).catch(()=>[])
         )
       )).flat().filter(Boolean);
-      // Indexar primera respuesta saliente por conversation_id
       const _salienteByConv = {};
       _salientesRaw.forEach(r => {
-        if(r.conversation_id && !_salienteByConv[r.conversation_id]) {
-          _salienteByConv[r.conversation_id] = (r.body_content||'').replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&[a-z]+;/gi,' ').replace(/\s+/g,' ').trim();
+        if(r.conversation_id && !_salienteByConv[r.conversation_id] && r.body_content) {
+          _salienteByConv[r.conversation_id] = r.body_content.replace(/<[^>]*>/g,' ').replace(/&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/&[a-zA-Z]+;/gi,' ').replace(/\s+/g,' ').trim();
         }
       });
-      // Mapear a correo_id
       correosSIGI.forEach(c => {
-        if(c.conversation_id && _salienteByConv[c.conversation_id]) {
+        if(!respuestaMap[c.id] && c.conversation_id && _salienteByConv[c.conversation_id]) {
           respuestaMap[c.id] = _salienteByConv[c.conversation_id];
         }
       });
@@ -2491,11 +2510,11 @@ async function exportarSIGI() {
       const _fh = v => v ? new Date(v).toLocaleString('es-CO',{dateStyle:'short',timeStyle:'short'}) : '';
 
       // ── Tiempos para columnas finales ──
-      const evAsigT   = histC.find(h => h.evento==='asignado_manual'||h.evento==='asignacion_automatica');
+      const evAsigT   = histC.find(h => h.evento==='asignado_manual'||h.evento==='asignacion_automatica'||h.evento==='asignado_automatico');
       const evGestT   = histC.find(h => !ES.includes(h.evento));
       const evRespT   = histC.find(h => h.evento==='correo_respondido');
       const evFirmaT  = histC.find(h => h.evento==='pendiente_firma');
-      const evCierreT = histC.find(h => h.evento==='firma_confirmada'||h.evento==='solucionado');
+      const evCierreT = histC.find(h => h.evento==='firma_confirmada'||h.evento==='solucionado'||h.evento==='cerrado_automatico'||h.evento==='gestionado');
 
       // ── Mes en español ──
       const _meses = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
@@ -2527,8 +2546,6 @@ async function exportarSIGI() {
         'Nombre Solicitud':        _up(c.nombre_solicitud || c.tipo_pqr || ''),
         'Detalle Solicitud':       _up(c.detalle_solicitud || ''),
         'Estado Solicitud':        _up(c.estado || ''),
-        'Fecha Asignación':        fAsig,
-        'Fecha Asig. Usuario':     fAsig,
         'Doc. Usuario Asignado':   agEmail,
         'Nombre Usuario Asignado': _up(agNombre),
         'Respuesta Asignación':    _up((()=>{
@@ -2550,7 +2567,7 @@ async function exportarSIGI() {
         'Observación':             _up(obsTexto),
         'Tiene Tutela':            c.tiene_tutela === true ? 'SI' : 'NO',
         'Categoría':               _up(c.categoria_sigi || c.categoria_ia || ''),
-        'Hora_Recibido':           _fh(c.created_at),
+        'Hora_Recibido':           _fh(c.received_at || c.created_at),
         'Hora_Asignacion':         _fh(evAsigT?.created_at),
         'Hora_Primera_Gestion':    _fh(evGestT?.created_at),
         'Hora_Primera_Respuesta':  _fh(evRespT?.created_at),
