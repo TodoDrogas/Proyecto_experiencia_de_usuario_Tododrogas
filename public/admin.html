@@ -2763,19 +2763,20 @@ async function exportarSIGI() {
       }
       return palabras.map(w => w[0] + w.slice(1).toLowerCase()).join(' ');
     }
+    const _up2 = v => v ? v.toString().toUpperCase().trim() : '';
     const _hSatSIGI = correosSIGI.filter(e=>e.calificacion>0).map(e=>({
       Mes:                e.received_at||e.created_at ? _mesesSat[new Date(e.received_at||e.created_at).getMonth()] : '',
       ID_Unico:           e.id||'',
       Fecha_Correo:       e.received_at||e.created_at ? new Date(e.received_at||e.created_at).toLocaleDateString('es-CO') : '',
       Fecha_Calificacion: e.fecha_calificacion ? new Date(e.fecha_calificacion).toLocaleDateString('es-CO') : '',
       Canal:              'CORREO ELECTRÓNICO',
-      Agente:             _normAgente(agById[e.agente_id]?.nombre || e.asignado_a || ''),
+      Agente:             _up2(_normAgente(agById[e.agente_id]?.nombre || e.asignado_a || '')),
       Cedula_Paciente:    e.cedula_paciente||e.cedula||'',
-      Email_Paciente:     e.from_email||e.correo||'',
-      EPS:                epsCat.find(ep=>ep.id===e.eps_id)?.nombre||'',
+      Email_Paciente:     (e.from_email||e.correo||'').toLowerCase(),
+      EPS:                _up2(epsCat.find(ep=>ep.id===e.eps_id)?.nombre||''),
       Calificacion:       e.calificacion||'',
-      Calificacion_Texto: e.calificacion_texto||'Sin calificación',
-      Asunto:             e.subject||'',
+      Calificacion_Texto: _up2(e.calificacion_texto||'SIN CALIFICACIÓN'),
+      Asunto:             _up2(e.subject||''),
     }));
     const _wsSatSIGI = XLSX.utils.json_to_sheet(_hSatSIGI.length?_hSatSIGI:[{'Sin datos':'No hay calificaciones en el período'}]);
     _wsSatSIGI['!cols']=[{wch:12},{wch:38},{wch:14},{wch:16},{wch:20},{wch:28},{wch:14},{wch:28},{wch:32},{wch:12},{wch:18},{wch:40}];
@@ -2790,11 +2791,11 @@ async function exportarSIGI() {
       Fecha:              s.updated_at ? new Date(s.updated_at).toLocaleDateString('es-CO') : '',
       ID:                 `WA-${(s.telefono||'').replace('+','')}`,
       Canal:              'WHATSAPP',
-      Agente:             _normAgente(s.agente_nombre||''),
-      EPS:                s.eps||'',
+      Agente:             _up2(_normAgente(s.agente_nombre||'')),
+      EPS:                _up2(s.eps||''),
       Calificacion:       s.calificacion||'',
-      Calificacion_Texto: s.calificacion_texto||'Sin calificación',
-      Tipificacion:       s.tipificacion||'',
+      Calificacion_Texto: _up2(s.calificacion_texto||'SIN CALIFICACIÓN'),
+      Tipificacion:       _up2(s.tipificacion||''),
       Celular_Usuario:    s.telefono||'',
     }));
     const _wsSatWa = XLSX.utils.json_to_sheet(_hSatWa.length?_hSatWa:[{'Sin datos':'No hay calificaciones WhatsApp en el período'}]);
