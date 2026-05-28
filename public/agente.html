@@ -468,7 +468,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 .gm-dropdown .gm-dd-item:hover{background:var(--blue-l);color:var(--blue);font-weight:600}
 .gm-dropdown .gm-dd-item .gm-dd-sub{font-size:10px;color:var(--ink3);margin-top:1px}
 </style>
-<div class="modal-backdrop" id="modalGestion" onclick="if(event.target===this)closeModal('modalGestion')">
+<div class="modal-backdrop" id="modalGestion">
   <div class="gestion-modal-wide" onclick="event.stopPropagation()">
     <div class="gm-header">
       <h3 id="gModalTitulo">Añadir gestión</h3>
@@ -480,7 +480,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
       <div id="secObsFixed" style="margin-bottom:12px">
         <div class="gm-field">
           <label class="gm-label">Observaciones <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
-          <textarea class="gm-input" id="gestionObs" rows="3" placeholder="DESCRIBE LA GESTIÓN REALIZADA..." style="resize:vertical;min-height:80px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></textarea>
+          <textarea class="gm-input" id="gestionObs" rows="3" placeholder="DESCRIBE LA GESTIÓN REALIZADA..." style="resize:vertical;min-height:80px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase();gValidarCampo('gestionObs','textarea')"></textarea>
         </div>
       </div>
 
@@ -2430,11 +2430,11 @@ function gAgregarMed() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
       <div class="gm-field">
         <label class="gm-label">Código</label>
-        <input class="gm-input" id="gMedCod_${idx}" type="text" placeholder="Código del med." style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase();gBuscarMedicamento(this.value,${idx})">
+        <input class="gm-input" id="gMedCod_${idx}" type="text" placeholder="Código del med." style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase();gBuscarMedicamento(this.value,${idx});gActualizarMedVisual(${idx})">
       </div>
       <div class="gm-field">
-        <label class="gm-label">PBS</label>
-        <select class="gm-input" id="gMedPbs_${idx}">
+        <label class="gm-label">PBS <span class="gm-req-med-${idx}" style="color:var(--red);display:none">*</span></label>
+        <select class="gm-input" id="gMedPbs_${idx}" onchange="gActualizarMedVisual(${idx})">
           <option value="">—</option>
           <option value="SI">Sí</option>
           <option value="NO">No</option>
@@ -2442,10 +2442,10 @@ function gAgregarMed() {
         </select>
       </div>
       <div class="gm-field" style="grid-column:1/-1">
-        <label class="gm-label">Descripción (buscar por nombre)</label>
+        <label class="gm-label">Descripción (buscar por nombre) <span class="gm-req-med-${idx}" style="color:var(--red);display:none">*</span></label>
         <div class="gm-search-wrap" style="position:relative">
           <input class="gm-input" id="gMedDesc_${idx}" type="text" placeholder="Escriba el nombre del medicamento…"
-            oninput="this.value=this.value.toUpperCase();gBuscarMedicamentoNombre(this.value,${idx})"
+            oninput="this.value=this.value.toUpperCase();gBuscarMedicamentoNombre(this.value,${idx});gActualizarMedVisual(${idx})"
             style="text-transform:uppercase;padding-right:28px"
             autocomplete="off"
             onfocus="if(this.value.length>=2)gBuscarMedicamentoNombre(this.value,${idx})"
@@ -2457,11 +2457,11 @@ function gAgregarMed() {
       </div>
       <div class="gm-field" style="grid-column:1/-1">
         <label class="gm-label">Descripción escrita / artículo</label>
-        <input class="gm-input" id="gMedDescEsc_${idx}" type="text" placeholder="DESCRIPCIÓN LIBRE" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+        <input class="gm-input" id="gMedDescEsc_${idx}" type="text" placeholder="DESCRIPCIÓN LIBRE" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase();gActualizarMedVisual(${idx})">
       </div>
       <div class="gm-field">
-        <label class="gm-label">Cantidad</label>
-        <input class="gm-input" id="gMedCant_${idx}" type="number" min="0" placeholder="0">
+        <label class="gm-label">Cantidad <span class="gm-req-med-${idx}" style="color:var(--red);display:none">*</span></label>
+        <input class="gm-input" id="gMedCant_${idx}" type="number" min="0" placeholder="0" oninput="gActualizarMedVisual(${idx})">
       </div>
     </div>`;
   document.getElementById('gMedLista').appendChild(wrap);
@@ -2547,6 +2547,7 @@ function gSelectMedicamento(nombre, codigo, pbs, idx) {
     }
   }
   if (dd) dd.style.display='none';
+  gActualizarMedVisual(idx);
 }
 
 function gLimpiarMed(idx) {
