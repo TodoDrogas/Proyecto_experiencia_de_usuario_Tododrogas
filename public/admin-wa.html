@@ -854,77 +854,63 @@ let _agenteSelGlobal = null; // null = todas
 function filtrarPorAgente(agenteId, el){
   _agenteSelGlobal = agenteId;
 
-  // ── Actualizar selección en panel izquierdo (dentro de sec-global) ──
-
-  // ── Actualizar selección en sidebar ──
+  // Actualizar selección en sidebar
   document.querySelectorAll('.sidebar-ag-item').forEach(b=>{
     b.classList.remove('active');
     if((b.dataset.agenteId||null)===(agenteId||null)) b.classList.add('active');
   });
 
-  // ── Cargar iframe ──
   const iframe = document.getElementById('global-agent-iframe');
   const placeholder = document.getElementById('global-placeholder');
 
+  function injectAndLoad(agentId, agentNombre, url){
+    iframe.dataset.loaded = agentId;
+    iframe.onload = null;
+    iframe.src = 'about:blank';
+    iframe.addEventListener('load', function onBlank(){
+      iframe.removeEventListener('load', onBlank);
+      try{
+        iframe.contentWindow.sessionStorage.setItem('pqr_agent_id', agentId);
+        iframe.contentWindow.sessionStorage.setItem('pqr_name', agentNombre);
+      }catch(e){}
+      iframe.src = url;
+      // Ocultar input tras cargar la URL real
+      iframe.addEventListener('load', function onReady(){
+        iframe.removeEventListener('load', onReady);
+        setTimeout(()=>{
+          try{
+            const doc = iframe.contentDocument;
+            if(!doc) return;
+            if(doc.getElementById('admin-override')) return;
+            const style = doc.createElement('style');
+            style.id = 'admin-override';
+            style.textContent = '.input-area{display:none!important;}.topbar{display:none!important;}.app-body{height:100dvh!important;}';
+            doc.head.appendChild(style);
+          }catch(e){}
+        }, 300);
+      });
+    });
+  }
+
   if(!agenteId){
-    // Sin agente: mostrar placeholder
     iframe.style.display = 'none';
     iframe.src = '';
     placeholder.style.display = 'flex';
   } else if(agenteId === 'nova'){
-    // Nova TD: inyectar UUID ficticio válido para que las queries no fallen
-    // 00000000-0000-0000-0000-000000000000 no existe en BD → queries retornan vacío sin error
     placeholder.style.display = 'none';
     iframe.style.display = 'block';
     if(iframe.dataset.loaded !== 'nova'){
+      injectAndLoad('00000000-0000-0000-0000-000000000000', 'Nova TD', 'agente-wa.html?embed=1&vista_global=1');
       iframe.dataset.loaded = 'nova';
-      iframe.onload = null;
-      iframe.src = 'about:blank';
-      iframe.addEventListener('load', function onBlankNova(){
-        iframe.removeEventListener('load', onBlankNova);
-        try{
-          iframe.contentWindow.sessionStorage.setItem('pqr_agent_id', '00000000-0000-0000-0000-000000000000');
-          iframe.contentWindow.sessionStorage.setItem('pqr_name', 'Nova TD');
-        }catch(e){ console.warn('nova inject error:', e); }
-        iframe.src = 'agente-wa.html?embed=1&vista_global=1';
-      });
     }
   } else {
-    // Agente humano: cargar su vista
     const agente = A.agentes.find(a=>a.id===agenteId);
     placeholder.style.display = 'none';
     iframe.style.display = 'block';
     if(iframe.dataset.loaded !== agenteId){
-      iframe.dataset.loaded = agenteId;
-      const agentNombre = agente?.nombre || 'Agente';
-      iframe.onload = null;
-      iframe.src = 'about:blank';
-      iframe.addEventListener('load', function onBlankLoad(){
-        iframe.removeEventListener('load', onBlankLoad);
-        try{
-          iframe.contentWindow.sessionStorage.setItem('pqr_agent_id', agenteId);
-          iframe.contentWindow.sessionStorage.setItem('pqr_name', agentNombre);
-        }catch(e){ console.warn('sessionStorage inject failed:', e); }
-        iframe.src = 'agente-wa.html?embed=1';
-        // Ocultar input al cargar (admin es solo visual)
-        iframe.addEventListener('load', function hideInput(){
-          iframe.removeEventListener('load', hideInput);
-          // Pequeño delay para que el DOM del iframe esté listo
-          setTimeout(()=>{
-            try{
-              const doc = iframe.contentDocument;
-              if(!doc) return;
-              const style = doc.createElement('style');
-              style.id = 'admin-override';
-              style.textContent = `
-                .input-area { display:none !important; }
-                .topbar { display:none !important; }
-                .app-body { height:100dvh !important; }
-              `;
-              doc.head.appendChild(style);
-            }catch(e){ console.warn('inject css error:', e); }
-          }, 300);
-        });
+      injectAndLoad(agenteId, agente?.nombre||'Agente', 'agente-wa.html?embed=1');
+    }
+  }
 
   renderGlobal();
 }
