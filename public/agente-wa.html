@@ -790,10 +790,14 @@ const SB_KEY   = window.SUPABASE_KEY || 'TU_ANON_KEY';
 const WA_PHONE = '1004615859412103';
 
 // ── AUTH ─────────────────────────────────────────
-const _rawId   = sessionStorage.getItem('pqr_agent_id')||'';
+const _urlParams = new URLSearchParams(location.search);
+const _urlAgentId = _urlParams.get('agent_id')||'';
+const _rawId   = _urlAgentId || sessionStorage.getItem('pqr_agent_id')||'';
 const _uuidRe  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const AGENT_ID = _uuidRe.test(_rawId) ? _rawId : null;
-const AGENT_NAME = sessionStorage.getItem('pqr_name')||'Agente';
+const AGENT_NAME = _urlParams.get('agent_name') ? decodeURIComponent(_urlParams.get('agent_name')) : (sessionStorage.getItem('pqr_name')||'Agente');
+// Si viene de URL (modo admin), no marcar en línea ni modificar estado del agente
+const _adminView = !!_urlAgentId;
 function logout(){ sessionStorage.clear(); window.location.href='login.html'; }
 
 // ── SB HELPER ────────────────────────────────────
@@ -848,12 +852,12 @@ const RR=[
   startPolling();
   if(Notification.permission==='default') Notification.requestPermission();
   // Login log + marcar en línea
-  logEvento('login');
-  try{ await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{en_linea:true,pausado:false,ultima_actividad:new Date().toISOString()}); }catch{}
-  // Autoasignación cada 15s
-  setInterval(autoAsignar, 15000);
-  // Logout log al cerrar
-  window.addEventListener('beforeunload',()=>{ logEvento('logout'); });
+  if(!_adminView){
+    logEvento('login');
+    try{ await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{en_linea:true,pausado:false,ultima_actividad:new Date().toISOString()}); }catch{}
+    setInterval(autoAsignar, 15000);
+    window.addEventListener('beforeunload',()=>{ logEvento('logout'); });
+  }
 })();
 
 // ── CARGAR SESIONES ──────────────────────────────
