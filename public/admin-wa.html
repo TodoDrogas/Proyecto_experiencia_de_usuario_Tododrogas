@@ -124,6 +124,31 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-
 .badge-escalado{background:#fef3c7;color:#92400e}
 .badge-cerrado{background:var(--green-l);color:var(--green)}
 .badge-esperando{background:var(--blue-l);color:var(--blue)}
+.badge-pte{background:#fef3c7;color:#d97706}
+.badge-solucionado{background:var(--green-l);color:var(--green)}
+/* Etiqueta "Esperando respuesta" en header del chat (agente WA) */
+.wa-esp-tag{display:inline-flex;align-items:center;gap:4px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:6px;animation:pulseBlue 2s infinite}
+@keyframes pulseBlue{0%,100%{opacity:1}50%{opacity:.6}}
+/* Panel métricas WA en tiempo real por agente */
+.wa-rt-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.wa-rt-hdr{background:var(--bg2);padding:10px 14px;font-size:11px;font-weight:700;color:var(--ink2);display:flex;align-items:center;justify-content:space-between}
+.wa-rt-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:var(--border)}
+.wa-rt-cell{background:var(--surface);padding:10px 12px;text-align:center}
+.wa-rt-num{font-size:20px;font-weight:800;line-height:1}
+.wa-rt-lbl{font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3);margin-top:3px}
+.wa-rt-num.activas{color:var(--green)}
+.wa-rt-num.esperando{color:#3b82f6}
+.wa-rt-num.pte{color:#d97706}
+.wa-ag-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.wa-ag-row:last-child{border-bottom:none}
+.wa-ag-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0}
+.wa-ag-name{font-size:12px;font-weight:600;color:var(--ink)}
+.wa-ag-sub{font-size:10px;color:var(--ink3);margin-top:1px}
+.wa-ag-metrics{display:flex;gap:8px;margin-left:auto;flex-shrink:0}
+.wa-ag-pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;white-space:nowrap}
+.wa-ag-pill.act{background:var(--green-l);color:var(--green)}
+.wa-ag-pill.esp{background:#eff6ff;color:#1d4ed8}
+.wa-ag-pill.pte{background:#fef3c7;color:#d97706}
 .badge-online{background:var(--green-l);color:var(--green)}
 .badge-pausa{background:var(--red-l);color:var(--red)}
 .badge-offline{background:var(--bg2);color:var(--ink3)}
@@ -330,10 +355,17 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
         </div>
         <div class="kpi-card kpi-teal">
           <div class="kpi-icon">✅</div>
-          <div class="kpi-label">Cerradas hoy</div>
+          <div class="kpi-label">Solucionadas hoy</div>
           <div class="kpi-val" id="st-cerradas">—</div>
           <div class="kpi-sub">conversaciones</div>
           <div class="kpi-bar"></div>
+        </div>
+        <div class="kpi-card kpi-amber" style="border-top:3px solid #d97706">
+          <div class="kpi-icon">⚠️</div>
+          <div class="kpi-label">Pte. Gestión</div>
+          <div class="kpi-val" id="st-pte-gestion" style="color:#d97706">—</div>
+          <div class="kpi-sub">sin gestionar</div>
+          <div class="kpi-bar" style="background:#d97706"></div>
         </div>
         <div class="kpi-card kpi-pink">
           <div class="kpi-icon">😊</div>
@@ -354,10 +386,28 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
       <div class="grid-2">
         <div class="panel">
           <div class="panel-hdr">
-            <h3>👥 Agentes en línea</h3>
-            <button class="btn btn-sm btn-ghost" onclick="loadDashboard()">↻</button>
+            <h3>👥 Agentes en línea — métricas WA en tiempo real</h3>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:10px;color:var(--ink3)" id="waRtLastUpdate"></span>
+              <button class="btn btn-sm btn-ghost" onclick="loadDashboard()">↻</button>
+            </div>
           </div>
-          <div class="panel-body" id="agentesOnlineList"><div class="empty">Cargando...</div></div>
+          <!-- Totales rápidos -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)">
+            <div style="padding:10px 14px;text-align:center;border-right:1px solid var(--border)">
+              <div style="font-size:20px;font-weight:800;color:var(--green)" id="rt-total-activas">—</div>
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3)">Activas</div>
+            </div>
+            <div style="padding:10px 14px;text-align:center;border-right:1px solid var(--border)">
+              <div style="font-size:20px;font-weight:800;color:#3b82f6" id="rt-total-esp">—</div>
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3)">Esperando resp.</div>
+            </div>
+            <div style="padding:10px 14px;text-align:center">
+              <div style="font-size:20px;font-weight:800;color:#d97706" id="rt-total-pte">—</div>
+              <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink3)">Pte. Gestión</div>
+            </div>
+          </div>
+          <div class="panel-body" style="padding:0" id="agentesOnlineList"><div class="empty">Cargando...</div></div>
         </div>
         <div class="panel">
           <div class="panel-hdr">
@@ -406,7 +456,8 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
           <option value="nova">Nova TD</option>
           <option value="escalado">Escalado</option>
           <option value="esperando">Esperando</option>
-          <option value="cerrado">Cerrado</option>
+          <option value="pte_gestion">Pte. Gestión</option>
+          <option value="cerrado">Solucionado</option>
         </select>
         <select class="filter-select" id="convFiltroAgente" onchange="filterConvs()">
           <option value="">Todos los agentes</option>
@@ -671,7 +722,11 @@ function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function fmtHace(ts){if(!ts)return'—';const d=Math.floor((Date.now()-new Date(ts))/60000);if(d<1)return'ahora';if(d<60)return d+'m';if(d<1440)return Math.floor(d/60)+'h';return Math.floor(d/1440)+'d';}
 function fmtFecha(ts){if(!ts)return'—';return new Date(ts).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'2-digit'});}
 function parseHist(h){try{return Array.isArray(h)?h:(typeof h==='string'?JSON.parse(h):[]);}catch{return[];}}
-function estadoBadge(e){const m={nova:'badge-nova',escalado:'badge-escalado',cerrado:'badge-cerrado',esperando:'badge-esperando',esperando_encuesta:'badge-esperando'};return`<span class="badge ${m[e]||'badge-nova'}">${e||'nova'}</span>`;}
+function estadoBadge(e){
+  const m={nova:'badge-nova',escalado:'badge-escalado',cerrado:'badge-solucionado',esperando:'badge-esperando',esperando_encuesta:'badge-esperando',pte_gestion:'badge-pte'};
+  const lbl={nova:'Nova TD',escalado:'Escalado',cerrado:'Solucionado',esperando:'Esperando',esperando_encuesta:'Encuesta',pte_gestion:'Pte. Gestión'};
+  return`<span class="badge ${m[e]||'badge-nova'}">${lbl[e]||e||'nova'}</span>`;
+}
 function toast(msg,tipo=''){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(tipo?' '+tipo:'');setTimeout(()=>t.className='toast',2800);}
 function cerrarModal(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
@@ -703,7 +758,7 @@ function abrirDetalle(telefono){
   if(!s) return;
   const hist  = parseHist(s.history);
   const color = {nova:'#6366f1',escalado:'#f59e0b',esperando:'#3b82f6',cerrado:'#22c55e'}[s.estado]||'#6366f1';
-  const etiq  = {nova:'🤖 Nova TD',escalado:'👤 Escalado',esperando:'⏳ Esperando',cerrado:'✅ Cerrado'}[s.estado]||s.estado;
+  const etiq  = {nova:'🤖 Nova TD',escalado:'👤 Escalado',esperando:'⏳ Esperando',cerrado:'✅ Solucionado',pte_gestion:'⚠️ Pte. Gestión'}[s.estado]||s.estado;
   const agente= A.agentes.find(a=>a.id===s.agente_id);
 
   // Header
@@ -818,7 +873,9 @@ function renderGlobal(){
   const agentesConSesiones = A.agentes.filter(a=>a.activo||a.en_linea||A.sesiones.some(s=>s.agente_id===a.id));
   document.getElementById('globalAgentList').innerHTML = agentesConSesiones.map(a=>{
     const convs = A.sesiones.filter(s=>s.agente_id===a.id);
-    const activ = convs.filter(s=>s.estado!=='cerrado').length;
+    const activ   = convs.filter(s=>s.estado==='activo'||s.estado==='escalado').length;
+    const esp     = convs.filter(s=>s.estado==='esperando').length;
+    const pteG    = convs.filter(s=>s.estado==='pte_gestion').length;
     const isPausa = a.pausado;
     const isOnline = a.en_linea&&!isPausa;
     const dotColor = isOnline?'#22c55e':isPausa?'#ef4444':'#9ca3af';
@@ -830,7 +887,11 @@ function renderGlobal(){
       </div>
       <div style="flex:1;min-width:0">
         <div class="ag-label" style="font-size:11px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(a.nombre)}</div>
-        <div style="font-size:10px;color:var(--ink3)">${activ} activ${activ!==1?'as':'a'} · ${convs.length} total</div>
+        <div style="font-size:10px;color:var(--ink3);display:flex;gap:6px;flex-wrap:wrap">
+          <span style="color:var(--green)">${activ} activ${activ!==1?'as':'a'}</span>
+          ${esp?`<span style="color:#3b82f6">⏳ ${esp}</span>`:''}
+          ${pteG?`<span style="color:#d97706">⚠️ ${pteG}</span>`:''}
+        </div>
       </div>
       ${isPausa?'<span style="font-size:9px;background:var(--red-l);color:var(--red);padding:1px 5px;border-radius:4px;font-weight:600">Pausa</span>':''}
     </div>`;
@@ -841,8 +902,8 @@ function renderGlobal(){
   if(_agenteSelGlobal) list = list.filter(s=>s.agente_id===_agenteSelGlobal);
   if(filtroEstado) list = list.filter(s=>s.estado===filtroEstado);
 
-  const colores   = {nova:'#6366f1',escalado:'#f59e0b',esperando:'#3b82f6',cerrado:'#22c55e',esperando_encuesta:'#3b82f6'};
-  const etiquetas = {nova:'🤖 Nova TD',escalado:'👤 Escalado',esperando:'⏳ Esperando',cerrado:'✅ Cerrado',esperando_encuesta:'📋 Encuesta'};
+  const colores   = {nova:'#6366f1',escalado:'#f59e0b',esperando:'#3b82f6',cerrado:'#22c55e',esperando_encuesta:'#3b82f6',pte_gestion:'#d97706'};
+  const etiquetas = {nova:'🤖 Nova TD',escalado:'👤 Escalado',esperando:'⏳ Esperando',cerrado:'✅ Solucionado',esperando_encuesta:'📋 Encuesta',pte_gestion:'⚠️ Pte. Gestión'};
 
   document.getElementById('globalGrid').innerHTML = list.length ? list.map(s=>{
     const hist  = parseHist(s.history);
@@ -906,6 +967,8 @@ async function loadDashboard(){
     const nova=A.sesiones.filter(s=>s.estado==='nova');
     const cerradas=A.sesiones.filter(s=>s.estado==='cerrado');
     const cerradasHoy=cerradas.filter(s=>s.updated_at>=hoyStr);
+    const pteGestion=A.sesiones.filter(s=>s.estado==='pte_gestion');
+    const esperandoSes=A.sesiones.filter(s=>s.estado==='esperando');
     const novaRes=cerradas.filter(s=>!s.agente_id);
     const novaPct=cerradas.length?Math.round(novaRes.length/cerradas.length*100):0;
     const escPct=cerradas.length?Math.round((cerradas.length-novaRes.length)/cerradas.length*100):0;
@@ -921,6 +984,8 @@ async function loadDashboard(){
     document.getElementById('st-nova').textContent=nova.length;
     document.getElementById('st-nova-pct').textContent=novaPct+'%';
     document.getElementById('st-cerradas').textContent=cerradasHoy.length;
+    const stPte = document.getElementById('st-pte-gestion');
+    if(stPte) stPte.textContent=pteGestion.length;
     document.getElementById('st-satisfaccion').textContent=satStr;
     document.getElementById('st-pausados').textContent=pausados;
     document.getElementById('novaEficiencia').textContent=novaPct+'%';
@@ -936,6 +1001,15 @@ async function loadDashboard(){
     if(nbActivas) nbActivas.textContent = activas.length;
 
     renderAgentesOnline();
+    // Totales rápidos panel métricas WA
+    const _rtAct = A.sesiones.filter(s=>s.estado==='activo'||s.estado==='escalado').length;
+    const _rtEsp = A.sesiones.filter(s=>s.estado==='esperando').length;
+    const _rtPte = A.sesiones.filter(s=>s.estado==='pte_gestion').length;
+    const rtA=document.getElementById('rt-total-activas'); if(rtA) rtA.textContent=_rtAct;
+    const rtE=document.getElementById('rt-total-esp');     if(rtE) rtE.textContent=_rtEsp;
+    const rtP=document.getElementById('rt-total-pte');     if(rtP) rtP.textContent=_rtPte;
+    const rtU=document.getElementById('waRtLastUpdate');
+    if(rtU) rtU.textContent='Actualizado '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
 
     // Recientes
     document.getElementById('recentBody').innerHTML=A.sesiones.slice(0,10).map(s=>`
@@ -950,21 +1024,24 @@ async function loadDashboard(){
 
 function renderAgentesOnline(){
   const el=document.getElementById('agentesOnlineList');
-  const agentes=A.agentes.filter(a=>a.activo||a.en_linea);
+  const agentes=A.agentes.filter(a=>a.activo||a.en_linea||A.sesiones.some(s=>s.agente_id===a.id));
   if(!agentes.length){el.innerHTML='<div class="empty">Ningún agente activo</div>';return;}
   el.innerHTML=agentes.map(a=>{
-    const chats=A.sesiones.filter(s=>s.agente_id===a.id&&s.estado!=='cerrado').length;
     const isPausado=a.pausado;
     const isOnline=a.en_linea&&!isPausado;
-    return`<div class="ag-card">
-      <div class="ag-av" style="background:${isOnline?'var(--green)':isPausado?'var(--red)':'var(--ink3)'}">${(a.nombre||'?').charAt(0)}</div>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600;color:var(--ink)">${escH(a.nombre)}</div>
-        <div style="font-size:10px;color:var(--ink3)">${chats} conv. activa${chats!==1?'s':''}</div>
+    const activas   = A.sesiones.filter(s=>s.agente_id===a.id&&(s.estado==='activo'||s.estado==='escalado')).length;
+    const esperando = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='esperando').length;
+    const pte       = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='pte_gestion').length;
+    return`<div class="wa-ag-row">
+      <div class="wa-ag-avatar" style="background:${isOnline?'var(--green)':isPausado?'var(--red)':'var(--ink3)'}">${(a.nombre||'?').charAt(0)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="wa-ag-name">${escH(a.nombre)}</div>
+        <div class="wa-ag-sub">${isOnline?'En línea':isPausado?'En pausa':'Ausente'}</div>
       </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <div class="ag-status-dot ${isOnline?'online':isPausado?'pausa':'offline'}"></div>
-        <span style="font-size:10px;font-weight:600;color:${isOnline?'var(--green)':isPausado?'var(--red)':'var(--ink3)'}">${isOnline?'En línea':isPausado?'En pausa':'Ausente'}</span>
+      <div class="wa-ag-metrics">
+        <span class="wa-ag-pill act" title="Activas">${activas} activa${activas!==1?'s':''}</span>
+        ${esperando?`<span class="wa-ag-pill esp" title="Esperando respuesta del usuario">⏳ ${esperando} esp.</span>`:''}
+        ${pte?`<span class="wa-ag-pill pte" title="Pendientes por gestionar">⚠️ ${pte} pte.</span>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1065,8 +1142,10 @@ async function loadAgentes(){
     document.getElementById('ag-cerradas').textContent=cerradasHoy;
 
     document.getElementById('agentesBody').innerHTML=A.agentes.map(a=>{
-      const activos=A.sesiones.filter(s=>s.agente_id===a.id&&s.estado!=='cerrado').length;
-      const hoyOk=A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='cerrado'&&new Date(s.updated_at)>=hoy).length;
+      const activos =A.sesiones.filter(s=>s.agente_id===a.id&&(s.estado==='activo'||s.estado==='escalado')).length;
+      const espera  =A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='esperando').length;
+      const pteAg   =A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='pte_gestion').length;
+      const hoyOk   =A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='cerrado'&&new Date(s.updated_at)>=hoy).length;
       const isPausado=a.pausado;
       const isOnline=a.en_linea&&!isPausado;
       // Calcular tiempo de pausa
