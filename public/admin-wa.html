@@ -254,11 +254,11 @@ html[data-embed="1"] .sidebar { top: 0 !important; }
   min-height:0;
 }
 #sec-global { padding:0 !important; }
-/* Cuando Vista Global está activa, quitar padding del main */
-.main:has(#sec-global.active) { padding:0; overflow:hidden; height:calc(100dvh - var(--topbar-h)); }
-#sec-global { height:100% !important; }
-#sec-global .global-iframe-wrap { height:100%; border-radius:0; border:none; }
-#global-agent-iframe { border-radius:0 !important; }
+/* Vista Global ocupa todo sin padding */
+.main:has(#sec-global.active) { padding:0 !important; overflow:hidden !important; }
+#sec-global { height:calc(100dvh - var(--topbar-h)) !important; display:flex !important; flex-direction:column !important; }
+#sec-global .global-iframe-wrap { flex:1 !important; height:100% !important; border-radius:0 !important; border:none !important; box-shadow:none !important; }
+#global-agent-iframe { border-radius:0 !important; height:100% !important; }
 .global-iframe-placeholder {
   flex:1;display:flex;align-items:center;justify-content:center;
   flex-direction:column;gap:12px;color:var(--ink3);
@@ -757,7 +757,10 @@ function toggleGlobal(){
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('sec-global').classList.add('active');
-  document.getElementById('nav-global').classList.add('active');
+  document.getElementById('nav-global')?.classList.add('active');
+  // Forzar que el main no tenga padding ni scroll
+  const mainEl = document.querySelector('.main');
+  if(mainEl){ mainEl.style.padding='0'; mainEl.style.overflow='hidden'; }
   if(_globalInterval) clearInterval(_globalInterval);
   loadVistaGlobal();
   toast('Vista Global activa','ok');
@@ -1004,6 +1007,9 @@ function renderGlobal(){
 function showSection(id,el){
   if(_globalInterval){ clearInterval(_globalInterval); _globalInterval=null; }
   _vistaGlobal = false;
+  // Restaurar padding del main
+  const mainEl = document.querySelector('.main');
+  if(mainEl){ mainEl.style.padding=''; mainEl.style.overflow=''; }
   // Limpiar iframe
   const iframe = document.getElementById('global-agent-iframe');
   if(iframe){ iframe.src=''; iframe.dataset.loaded=''; }
