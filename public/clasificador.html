@@ -445,6 +445,8 @@ function ruleForPage(text){
     return 'DFV';
 
   // ── 5. OPF — Fórmula / Orden médica de IPS / Hospital ────────────────────
+  //    Incluye señales por nombre/NIT de IPS conocidas para capturar
+  //    PDFs escaneados donde el OCR solo extrae el encabezado institucional.
   if(t.includes('ORDEN MEDICAMENTOS P.O.S') || t.includes('ORDEN MEDICAMENTOS POS') ||
      t.includes('ESTA ORDEN ES VALIDA HASTA') ||
      t.includes('FORMULA MEDICA') || t.includes('FÓRMULA MÉDICA') ||
@@ -453,6 +455,12 @@ function ruleForPage(text){
      t.includes('MEDICAMENTOS POS') ||
      t.includes('PROMOTORA CLINICA') || t.includes('ZONA FRANCA') ||
      t.includes('LICENCIADO A:') ||
+     // IPS / hospitales conocidos — señal suficiente aunque el OCR sea escaso
+     t.includes('INSTITUTO DEL CORAZON') ||
+     t.includes('GRUPO ICOR') || t.includes('800.107.179') ||
+     t.includes('CLINICA DE INMUNOLOGIA') || t.includes('CIGE') ||
+     t.includes('PREVENTIVA Y SALUD IPS') || t.includes('900673722') ||
+     t.includes('E.S.E HOSPITAL') || t.includes('ESE HOSPITAL') ||
      (t.includes('HOSPITAL') && t.includes('DOSIS') && t.includes('VIA') && !t.includes('CUFE')))
     return 'OPF';
 
@@ -819,10 +827,22 @@ OPF — Orden Médica / Fórmula (Hospital/IPS/Clínica):
     • Texto al pie: "Declaramos que la Clínica Panamericana adoptó un sistema tecnológico..."
     • Última línea: "LICENCIADO A: [PROMOTORA CLINICA ZONA FRANCA DE URABA S.A.S. - PANAMERICANA]"
     → Si ves CUALQUIERA de estas señales → es OPF aunque el OCR esté vacío.
-  VERSIÓN C (cualquier otra IPS/hospital):
+  VERSIÓN C (Instituto del Corazón S.A.S. — grupo ICOR, NIT 800.107.179-2):
+    Membrete "grupo ICOR" + logo corazón esquina superior izquierda.
+    Encabezado: "INSTITUTO DEL CORAZON S A S / Nit: 800.107.179-2"
+    Subtítulo: "FORMULA MEDICA AMBULATORIA CONSULTA EXTERNA" o "FORMULA MEDICA AMBULATORIA PROMOCIÓN Y PREVENCIÓN"
+    Tabla con columnas: Descripción medicamento / Concentración / Forma farmacéutica / Dosis-Vía / Cantidad Formulada.
+    → Si ves logo ICOR o "INSTITUTO DEL CORAZON" o NIT 800.107.179 → OPF aunque el OCR sea escaso.
+  VERSIÓN D (Clínica de Inmunología y Genética — CIGE):
+    Logo "CIGE" + "CLÍNICA DE INMUNOLOGÍA Y GENÉTICA". Título: "FORMULA MEDICA HISTORIA CLINICA".
+    → Si ves "CIGE" o "CLINICA DE INMUNOLOGIA" → OPF.
+  VERSIÓN E (Preventiva y Salud IPS, NIT 900673722-1):
+    Logo + "PREVENTIVA Y SALUD IPS". Título "FÓRMULA MÉDICA (Medicamentos e Insumos)".
+    → Si ves "PREVENTIVA Y SALUD IPS" → OPF.
+  VERSIÓN F (cualquier otra IPS/hospital):
     Cualquier documento con título "FORMULA MEDICA", "ORDEN MEDICA", "PRESCRIPCIÓN MÉDICA"
     o "MEDICAMENTOS POS" emitido por una entidad de salud (hospital, clínica, IPS).
-  REGLA: Si ves "FORMULA MÉDICA" o "MEDICAMENTOS POS" de hospital/clínica/IPS → OPF.
+  REGLA: Si ves "FORMULA MÉDICA", logo/nombre de IPS/hospital, o NIT de IPS conocida → OPF.
 
 PDE — ADRES / Validación de derechos / MIPRES:
   Logo ADRES. "Base de Datos Única de Afiliados - BDUA". Tabla con Estado ACTIVO,
