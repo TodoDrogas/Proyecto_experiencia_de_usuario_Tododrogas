@@ -111,7 +111,7 @@ $systemPrompt = buildSystemPrompt($userData, $eps, $sedes);
 
 // ── Agregar mensaje del usuario al historial ──────────────────
 $history[] = ['role' => 'user', 'content' => strtoupper($userText)];
-if (count($history) > 20) $history = array_slice($history, -20);
+if (count($history) > 500) $history = array_slice($history, -500);
 
 // ── Llamar a GPT (OpenAI) ─────────────────────────────────────
 $raw = callGPT($systemPrompt, $history);
@@ -366,7 +366,7 @@ function getOrCreateSession(string $phone): array {
 function saveSession(string $phone, array $history, array $usuario, string $eps, array $sedes = []): void {
     $payload = json_encode([
         'telefono'   => $phone,
-        'history'    => json_encode(array_slice($history, -20)),
+        'history'    => json_encode(array_slice($history, -500)),
         'usuario'    => json_encode($usuario),
         'eps'        => $eps,
         'updated_at' => (new DateTime('now', new DateTimeZone('America/Bogota')))->format('c'),
