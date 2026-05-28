@@ -868,27 +868,40 @@ function filtrarPorAgente(agenteId, el){
     iframe.style.display = 'none';
     iframe.src = '';
     placeholder.style.display = 'flex';
+  } else if(agenteId === 'nova'){
+    // Nova TD: cargar agente-wa con filtro nova (no tiene UUID real)
+    placeholder.style.display = 'none';
+    iframe.style.display = 'block';
+    if(iframe.dataset.loaded !== 'nova'){
+      iframe.dataset.loaded = 'nova';
+      iframe.onload = null;
+      iframe.src = 'about:blank';
+      iframe.addEventListener('load', function onBlankNova(){
+        iframe.removeEventListener('load', onBlankNova);
+        try{
+          iframe.contentWindow.sessionStorage.setItem('pqr_agent_id', '');
+          iframe.contentWindow.sessionStorage.setItem('pqr_name', 'Nova TD');
+          iframe.contentWindow.sessionStorage.setItem('pqr_filtro_inicio', 'nova');
+        }catch(e){ console.warn('nova inject error:', e); }
+        iframe.src = 'agente-wa.html?embed=1&filtro=nova';
+      });
+    }
   } else {
-    // Con agente: cargar su vista
+    // Agente humano: cargar su vista
     const agente = A.agentes.find(a=>a.id===agenteId);
     placeholder.style.display = 'none';
     iframe.style.display = 'block';
-    // Carga la vista del agente inyectando sessionStorage ANTES de que corra el JS de la página
     if(iframe.dataset.loaded !== agenteId){
       iframe.dataset.loaded = agenteId;
       const agentNombre = agente?.nombre || 'Agente';
-      // Paso 1: navegar a about:blank para tener acceso al contentWindow del mismo proceso
       iframe.onload = null;
       iframe.src = 'about:blank';
-      // Paso 2: una vez en about:blank, escribir sessionStorage e ir a la URL real
       iframe.addEventListener('load', function onBlankLoad(){
         iframe.removeEventListener('load', onBlankLoad);
         try{
-          // Escribir en el sessionStorage del iframe (mismo proceso, no hay restricción CORS)
           iframe.contentWindow.sessionStorage.setItem('pqr_agent_id', agenteId);
           iframe.contentWindow.sessionStorage.setItem('pqr_name', agentNombre);
         }catch(e){ console.warn('sessionStorage inject failed:', e); }
-        // Paso 3: ahora navegar a la vista del agente — el sessionStorage ya está listo
         iframe.src = 'agente-wa.html?embed=1';
       });
     }
@@ -938,9 +951,11 @@ function renderSidebarAgentes(){
     const isNova   = a.id === 'nova';
     const bgColor  = isNova?'var(--nova)':isOnline?'var(--green)':isPausa?'var(--red)':'var(--ink3)';
     const novaActiv = isNova ? A.sesiones.filter(s=>s.estado==='nova').length : activ;
-    const avatarContent = isNova ? '🤖' : (a.nombre||'?').charAt(0);
+    const avatarContent = isNova
+      ? `<img src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/logos-config/NOVA%20TD.png" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      : escH((a.nombre||'?').charAt(0));
     return `<div class="sidebar-ag-item ${isSelected?'active':''}" data-agente-id="${escH(a.id)}" onclick="abrirVistaAgente('${escH(a.id)}',this)" ${isNova?'style="border-bottom:1px solid var(--border);margin-bottom:4px;padding-bottom:10px"':''}>
-      <div class="sidebar-ag-av" style="background:${bgColor};font-size:${isNova?'14px':'10px'}">${avatarContent}</div>
+      <div class="sidebar-ag-av" style="background:${isNova?'transparent':bgColor};font-size:10px;overflow:hidden;padding:${isNova?'0':'0'}">${avatarContent}</div>
       <div style="flex:1;min-width:0">
         <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;${isNova?'color:var(--nova);font-weight:700':''}">${escH(a.nombre)}</div>
         ${novaActiv?`<div style="font-size:9px;color:${isNova?'var(--nova)':'var(--green)'}">${novaActiv} activa${novaActiv!==1?'s':''}</div>`:''}
