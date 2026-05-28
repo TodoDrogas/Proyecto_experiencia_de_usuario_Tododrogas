@@ -229,6 +229,42 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-
 html[data-embed="1"] .topbar { display: none !important; }
 html[data-embed="1"] .layout { padding-top: 0 !important; }
 html[data-embed="1"] .sidebar { top: 0 !important; }
+
+/* ── SIDEBAR AGENT ITEMS ── */
+.sidebar-ag-item {
+  display:flex;align-items:center;gap:8px;padding:7px 12px 7px 20px;
+  cursor:pointer;font-size:11px;font-weight:500;color:var(--ink2);
+  transition:all .15s;margin-bottom:1px;border-radius:var(--r3);
+  border-left:3px solid transparent;
+}
+.sidebar-ag-item:hover { background:var(--bg);color:var(--ink); }
+.sidebar-ag-item.active { background:var(--blue-l);color:var(--blue);font-weight:700;border-left-color:var(--blue); }
+.sidebar-ag-av {
+  width:24px;height:24px;border-radius:50%;display:flex;align-items:center;
+  justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;
+}
+.sidebar-ag-dot {
+  width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-left:auto;
+}
+
+/* ── VISTA GLOBAL CON IFRAME ── */
+.global-iframe-wrap {
+  flex:1;overflow:hidden;border-radius:var(--r);border:1px solid var(--border);
+  box-shadow:var(--shadow-card);background:var(--bg2);display:flex;flex-direction:column;
+  min-height:0;
+}
+.global-iframe-placeholder {
+  flex:1;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:12px;color:var(--ink3);
+}
+#global-agent-iframe {
+  width:100%;height:100%;border:none;border-radius:0 0 var(--r) var(--r);display:none;
+}
+.global-iframe-hdr {
+  padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;
+  gap:10px;background:var(--surface);border-radius:var(--r) var(--r) 0 0;flex-shrink:0;
+}
+
 </style>
 <script>
 if(new URLSearchParams(location.search).get('embed')==='1'){
@@ -274,8 +310,13 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
       </div>
       <div class="nav-item" onclick="toggleGlobal()" id="nav-global">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        Conversaciones
+        Vista Global
         <span class="nav-badge green" id="nb-activas">0</span>
+      </div>
+      <!-- AGENTES LISTA EN SIDEBAR (se populate con JS) -->
+      <div id="sidebar-agentes-section" style="display:none">
+        <div class="nav-label" style="margin-top:4px;padding-left:8px">Agentes</div>
+        <div id="sidebar-agentes-list"></div>
       </div>
       <div class="nav-item" onclick="showSection('agentes',this)" id="nav-agentes">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -535,7 +576,7 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
     <div class="section" id="sec-global">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
         <div>
-          <div class="page-title">💬 Conversaciones en tiempo real</div>
+          <div class="page-title">🌐 Vista Global</div>
           <div class="page-sub" id="globalSub">Todas las conversaciones activas</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
@@ -578,9 +619,25 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
           <div id="globalAgentList"></div>
         </div>
 
-        <!-- Panel derecho: conversaciones -->
-        <div style="flex:1;overflow-y:auto">
-          <div id="globalGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;align-content:start"></div>
+        <!-- Panel derecho: vista WhatsApp del agente seleccionado -->
+        <div class="global-iframe-wrap">
+          <!-- Header del iframe -->
+          <div class="global-iframe-hdr" id="global-iframe-hdr">
+            <div id="global-iframe-av" style="width:30px;height:30px;border-radius:50%;background:var(--ink3);display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700;flex-shrink:0">🌐</div>
+            <div style="flex:1">
+              <div id="global-iframe-name" style="font-size:13px;font-weight:700;color:var(--ink)">Todas las conversaciones</div>
+              <div id="global-iframe-sub" style="font-size:10px;color:var(--ink3)">Selecciona un agente para ver su pantalla</div>
+            </div>
+            <div id="global-iframe-badge" style="display:none"></div>
+          </div>
+          <!-- Placeholder (cuando no hay agente seleccionado) -->
+          <div class="global-iframe-placeholder" id="global-placeholder">
+            <div style="font-size:48px">👈</div>
+            <div style="font-size:14px;font-weight:600;color:var(--ink2)">Selecciona un agente</div>
+            <div style="font-size:12px;text-align:center;max-width:240px">Haz clic en cualquier agente del panel izquierdo para ver su pantalla de WhatsApp en tiempo real</div>
+          </div>
+          <!-- IFrame del agente -->
+          <iframe id="global-agent-iframe" src="" allow="same-origin" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
         </div>
 
       </div>
@@ -749,7 +806,7 @@ function toggleGlobal(){
   document.getElementById('nav-global').classList.add('active');
   if(_globalInterval) clearInterval(_globalInterval);
   loadVistaGlobal();
-  toast('Conversaciones en tiempo real','ok');
+  toast('Vista Global activa','ok');
 }
 
 // ── DETALLE CONVERSACIÓN ──────────────────────────────────────────
@@ -840,7 +897,8 @@ let _agenteSelGlobal = null; // null = todas
 
 function filtrarPorAgente(agenteId, el){
   _agenteSelGlobal = agenteId;
-  // Resaltar selección
+
+  // ── Actualizar selección en panel izquierdo (dentro de sec-global) ──
   document.querySelectorAll('#globalAgentList .ag-global-btn, #ag-btn-todas').forEach(b=>{
     b.style.background = '';
     b.style.borderLeft = '3px solid transparent';
@@ -850,7 +908,89 @@ function filtrarPorAgente(agenteId, el){
     el.style.background = 'var(--blue-l)';
     el.style.borderLeft = '3px solid var(--blue)';
   }
+
+  // ── Actualizar selección en sidebar ──
+  document.querySelectorAll('.sidebar-ag-item').forEach(b=>{
+    b.classList.remove('active');
+    if((b.dataset.agenteId||null)===(agenteId||null)) b.classList.add('active');
+  });
+
+  // ── Cargar iframe ──
+  const iframe = document.getElementById('global-agent-iframe');
+  const placeholder = document.getElementById('global-placeholder');
+  const hdrName = document.getElementById('global-iframe-name');
+  const hdrSub  = document.getElementById('global-iframe-sub');
+  const hdrAv   = document.getElementById('global-iframe-av');
+  const hdrBadge= document.getElementById('global-iframe-badge');
+
+  if(!agenteId){
+    // Sin agente: mostrar placeholder
+    iframe.style.display = 'none';
+    iframe.src = '';
+    placeholder.style.display = 'flex';
+    hdrName.textContent = 'Todas las conversaciones';
+    hdrSub.textContent  = 'Selecciona un agente para ver su pantalla';
+    hdrAv.textContent   = '🌐';
+    hdrAv.style.background = 'var(--ink3)';
+    hdrBadge.style.display = 'none';
+  } else {
+    // Con agente: cargar su vista
+    const agente = A.agentes.find(a=>a.id===agenteId);
+    const isOnline = agente?.en_linea && !agente?.pausado;
+    const isPausa  = agente?.pausado;
+    const dotColor = isOnline?'#22c55e':isPausa?'#ef4444':'#9ca3af';
+    const statusLbl= isOnline?'Online':isPausa?'En pausa':'Offline';
+
+    hdrName.textContent = agente?.nombre || 'Agente';
+    hdrSub.textContent  = `Vista en tiempo real · ${agente?.carga_actual||0} conversaciones activas`;
+    hdrAv.textContent   = (agente?.nombre||'?').charAt(0).toUpperCase();
+    hdrAv.style.background = isOnline?'var(--green)':isPausa?'var(--red)':'var(--ink3)';
+    hdrBadge.style.display = 'flex';
+    hdrBadge.innerHTML = `<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:${dotColor}22;color:${dotColor};border:1px solid ${dotColor}44">${statusLbl}</span>`;
+
+    placeholder.style.display = 'none';
+    iframe.style.display = 'block';
+    // Carga la vista del agente embebida (pasa agente_id como query param)
+    const base = 'agente-wa.html';
+    const url  = `${base}?embed=1&agent_id=${encodeURIComponent(agenteId)}`;
+    if(iframe.dataset.loaded !== agenteId){
+      iframe.src = url;
+      iframe.dataset.loaded = agenteId;
+    }
+  }
+
   renderGlobal();
+}
+
+// ── SIDEBAR AGENTES (Vista Global) ───────────────────────────────────
+function renderSidebarAgentes(){
+  const section = document.getElementById('sidebar-agentes-section');
+  const list    = document.getElementById('sidebar-agentes-list');
+  if(!section || !list) return;
+
+  if(!_vistaGlobal){ section.style.display='none'; return; }
+  section.style.display = 'block';
+
+  const agentesConSesiones = A.agentes.filter(a=>a.activo||a.en_linea||A.sesiones.some(s=>s.agente_id===a.id));
+  if(!agentesConSesiones.length){ list.innerHTML=''; return; }
+
+  list.innerHTML = agentesConSesiones.map(a=>{
+    const convs    = A.sesiones.filter(s=>s.agente_id===a.id);
+    const activ    = convs.filter(s=>s.estado!=='cerrado').length;
+    const isOnline = a.en_linea && !a.pausado;
+    const isPausa  = a.pausado;
+    const dotColor = isOnline?'#22c55e':isPausa?'#ef4444':'#9ca3af';
+    const isSelected = _agenteSelGlobal===a.id;
+    const bgColor  = isOnline?'var(--green)':isPausa?'var(--red)':'var(--ink3)';
+    return `<div class="sidebar-ag-item ${isSelected?'active':''}" data-agente-id="${escH(a.id)}" onclick="filtrarPorAgente('${escH(a.id)}',this)">
+      <div class="sidebar-ag-av" style="background:${bgColor}">${(a.nombre||'?').charAt(0)}</div>
+      <div style="flex:1;min-width:0">
+        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${escH(a.nombre)}</div>
+        ${activ?`<div style="font-size:9px;color:var(--green)">${activ} activa${activ!==1?'s':''}</div>`:''}
+      </div>
+      <div class="sidebar-ag-dot" style="background:${dotColor}"></div>
+    </div>`;
+  }).join('');
 }
 
 function renderGlobal(){
@@ -868,6 +1008,9 @@ function renderGlobal(){
   document.getElementById('g-pausa').textContent     = pausa.length;
   document.getElementById('globalSub').textContent   = `Actualizado: ${new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})} · ${A.sesiones.length} sesiones`;
   document.getElementById('ag-btn-todas-cnt').textContent = `${A.sesiones.length} conversaciones`;
+
+  // Poblar también el sidebar
+  renderSidebarAgentes();
 
   // ── Renderizar panel de agentes ──────────────────────────────────
   const agentesConSesiones = A.agentes.filter(a=>a.activo||a.en_linea||A.sesiones.some(s=>s.agente_id===a.id));
@@ -938,6 +1081,14 @@ function renderGlobal(){
 function showSection(id,el){
   if(_globalInterval){ clearInterval(_globalInterval); _globalInterval=null; }
   _vistaGlobal = false;
+  // Ocultar sidebar de agentes de vista global
+  const sas = document.getElementById('sidebar-agentes-section');
+  if(sas) sas.style.display='none';
+  // Limpiar iframe
+  const iframe = document.getElementById('global-agent-iframe');
+  if(iframe){ iframe.src=''; iframe.dataset.loaded=''; }
+  _agenteSelGlobal = null;
+
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   document.getElementById('sec-'+id).classList.add('active');
