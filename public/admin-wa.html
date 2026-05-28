@@ -253,6 +253,9 @@ html[data-embed="1"] .sidebar { top: 0 !important; }
   box-shadow:var(--shadow-card);background:var(--bg2);display:flex;flex-direction:column;
   min-height:0;
 }
+#sec-global { padding:0 !important; }
+/* Cuando Vista Global está activa, quitar padding del main */
+.main:has(#sec-global.active) { padding:0; overflow:hidden; }
 .global-iframe-placeholder {
   flex:1;display:flex;align-items:center;justify-content:center;
   flex-direction:column;gap:12px;color:var(--ink3);
@@ -568,53 +571,26 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
     </div>
 
     <!-- ═══ VISTA GLOBAL ═══ -->
-    <div class="section" id="sec-global">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-        <div>
-          <div class="page-title">🌐 Vista Global</div>
-          <div class="page-sub" id="globalSub">Todas las conversaciones activas</div>
-        <span id="g-activas" style="display:none"></span>
-        <span id="g-nova" style="display:none"></span>
-        <span id="g-escaladas" style="display:none"></span>
-        <span id="g-agents" style="display:none"></span>
-        <span id="g-pausa" style="display:none"></span>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <select class="filter-select" id="globalFiltroEstado" onchange="renderGlobal()">
-            <option value="">Todos los estados</option>
-            <option value="nova">Nova TD</option>
-            <option value="escalado">Escalado</option>
-            <option value="esperando">Esperando</option>
-            <option value="cerrado">Cerrado</option>
-          </select>
-          <button class="btn btn-ghost btn-sm" onclick="loadVistaGlobal()">↻</button>
-        </div>
-      </div>
+    <div class="section" id="sec-global" style="height:calc(100vh - var(--topbar-h) - 48px);display:flex;flex-direction:column">
+      <!-- Hidden KPI refs para el JS -->
+      <span id="g-activas" style="display:none"></span>
+      <span id="g-nova" style="display:none"></span>
+      <span id="g-escaladas" style="display:none"></span>
+      <span id="g-agents" style="display:none"></span>
+      <span id="g-pausa" style="display:none"></span>
+      <span id="globalSub" style="display:none"></span>
+      <select id="globalFiltroEstado" style="display:none"></select>
 
-      <!-- Layout: iframe ocupa todo el ancho -->
-      <div style="display:flex;gap:16px;height:calc(100vh - 320px);min-height:400px">
-
-        <!-- Panel: vista WhatsApp del agente seleccionado -->
-        <div class="global-iframe-wrap">
-          <!-- Header del iframe -->
-          <div class="global-iframe-hdr" id="global-iframe-hdr">
-            <div id="global-iframe-av" style="width:30px;height:30px;border-radius:50%;background:var(--ink3);display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700;flex-shrink:0">🌐</div>
-            <div style="flex:1">
-              <div id="global-iframe-name" style="font-size:13px;font-weight:700;color:var(--ink)">Todas las conversaciones</div>
-              <div id="global-iframe-sub" style="font-size:10px;color:var(--ink3)">Selecciona un agente para ver su pantalla</div>
-            </div>
-            <div id="global-iframe-badge" style="display:none"></div>
-          </div>
-          <!-- Placeholder (cuando no hay agente seleccionado) -->
-          <div class="global-iframe-placeholder" id="global-placeholder">
-            <div style="font-size:48px">👈</div>
-            <div style="font-size:14px;font-weight:600;color:var(--ink2)">Selecciona un agente</div>
-            <div style="font-size:12px;text-align:center;max-width:240px">Haz clic en cualquier agente del panel izquierdo para ver su pantalla de WhatsApp en tiempo real</div>
-          </div>
-          <!-- IFrame del agente -->
-          <iframe id="global-agent-iframe" src="" allow="same-origin" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
+      <!-- iframe ocupa toda la sección -->
+      <div class="global-iframe-wrap" style="flex:1;border-radius:var(--r)">
+        <!-- Placeholder -->
+        <div class="global-iframe-placeholder" id="global-placeholder" style="border-radius:var(--r)">
+          <div style="font-size:48px">👈</div>
+          <div style="font-size:14px;font-weight:600;color:var(--ink2)">Selecciona un agente</div>
+          <div style="font-size:12px;text-align:center;max-width:240px;color:var(--ink3)">Haz clic en un agente del panel izquierdo para ver su pantalla de WhatsApp</div>
         </div>
-
+        <!-- IFrame -->
+        <iframe id="global-agent-iframe" src="" allow="same-origin" sandbox="allow-same-origin allow-scripts allow-forms allow-popups" style="border-radius:var(--r)"></iframe>
       </div>
     </div>
 
