@@ -1696,10 +1696,11 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
           <div class="gm-field">
             <label class="gm-label">¿Tiene tutela? <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
-            <div class="gm-toggle-row">
+            <div class="gm-toggle-row" id="gTutelaRow">
               <button class="gm-toggle-btn" id="gTutelaSi" onclick="gSetTutela(true)">SÍ</button>
               <button class="gm-toggle-btn" id="gTutelaNo" onclick="gSetTutela(false)">NO</button>
             </div>
+            <span id="gTutelaMsg" style="font-size:9px;color:var(--red);display:none;margin-top:2px">Campo obligatorio</span>
           </div>
         </div>
       </div>
@@ -4642,6 +4643,8 @@ function gSetTutela(val) {
   document.getElementById('gTutelaNo').className = 'gm-toggle-btn' + (val===false?' active-no':'');
   const row = document.querySelector('.gm-toggle-row');
   if(row) { row.classList.add('gm-ok'); row.classList.remove('gm-err'); }
+  const msg = document.getElementById('gTutelaMsg');
+  if(msg) msg.style.display = 'none';
 }
 
 // ── Búsqueda EPS ──────────────────────────────
@@ -5038,8 +5041,28 @@ async function gBuscarPaciente(cedula) {
           if(op.value === val) { op.selected=true; break; }
         }
       }
+      // ── Marcar verde/rojo según lo que llenó el autocomplete ──
+      const _gMkOkErr = (id, tipo) => {
+        const el = document.getElementById(id);
+        if(!el) return;
+        const v = tipo==='select' ? el.value : el.value.trim();
+        if(v) { el.classList.add('gm-ok'); el.classList.remove('gm-err'); }
+        else  { el.classList.add('gm-err'); el.classList.remove('gm-ok'); }
+      };
+      _gMkOkErr('gNombre',   'input');
+      _gMkOkErr('gDireccion','input');
+      _gMkOkErr('gTelefono', 'input');
+      _gMkOkErr('gTipoDoc',  'select');
+      gMarcarSearchOk('gDeptoSearch','gDeptoVal');
+      gMarcarSearchOk('gCiudadSearch','gCiudadVal');
+      gMarcarCampoOk('gCedula');
     } else {
       console.info('[gBuscarPaciente] No encontrado:', cedula, data.razon);
+      // Paciente no encontrado — marcar rojo los campos que siguen vacíos
+      ['gNombre','gDireccion','gTelefono'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el && !el.value.trim()) { el.classList.add('gm-err'); el.classList.remove('gm-ok'); }
+      });
     }
   } catch(e) { console.warn('[gBuscarPaciente] Error:', e.message); }
   document.getElementById('gBuscandoSpinner').style.display='none';
@@ -5532,6 +5555,25 @@ async function openGestionModal(mode) {
     }
     if(email.cedula_paciente)     document.getElementById('gCedula').value    = email.cedula_paciente;
     if(email.direccion_paciente)  document.getElementById('gDireccion').value = email.direccion_paciente;
+    // Marcar verde/rojo todos los campos precargados
+    setTimeout(() => {
+      ['gTipoDoc','gCedula','gNombre','gDireccion','gTelefono','gEmail','gOrigen','gCategoria'].forEach(id => {
+        const el = document.getElementById(id);
+        if(!el) return;
+        const v = (el.tagName==='SELECT') ? el.value : el.value.trim();
+        if(v) { el.classList.add('gm-ok'); el.classList.remove('gm-err'); }
+        else  { el.classList.add('gm-err'); el.classList.remove('gm-ok'); }
+      });
+      const epsId = document.getElementById('gEpsId')?.value;
+      const epsEl = document.getElementById('gEpsSearch');
+      if(epsEl) { if(epsId){epsEl.classList.add('gm-ok');epsEl.classList.remove('gm-err');}else{epsEl.classList.add('gm-err');epsEl.classList.remove('gm-ok');} }
+      ['gNombreSolSearch:gNombreSolVal','gDetalleSearch:gDetalleVal','gDeptoSearch:gDeptoVal','gCiudadSearch:gCiudadVal'].forEach(pair => {
+        const [sId,vId] = pair.split(':');
+        gMarcarSearchOk(sId, vId);
+      });
+      const row = document.querySelector('.gm-toggle-row');
+      if(row) { if(_gTutela!==null){row.classList.add('gm-ok');row.classList.remove('gm-err');}else{row.classList.add('gm-err');row.classList.remove('gm-ok');} }
+    }, 80);
   }
 
   // ── Reset lista medicamentos ──
