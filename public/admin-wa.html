@@ -316,11 +316,7 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
         Consultar histórico
         <span class="nav-badge orange" id="nb-escaladas">0</span>
       </div>
-      <div class="nav-item" onclick="showSection('agentes',this)" id="nav-agentes">
-        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Agentes
-        <span class="nav-badge green" id="nb-online">0</span>
-      </div>
+
     </div>
     <div class="nav-section">
       <div class="nav-label">Análisis</div>
@@ -490,6 +486,8 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="convSearch" placeholder="Buscar nombre, teléfono, cédula..." oninput="filterConvs()">
         </div>
+        <input type="date" id="convDesde" class="filter-select" onchange="filterConvs()" title="Desde">
+        <input type="date" id="convHasta" class="filter-select" onchange="filterConvs()" title="Hasta">
         <select class="filter-select" id="convFiltroEstado" onchange="filterConvs()">
           <option value="">Todos los estados</option>
           <option value="nova">Nova TD</option>
@@ -647,6 +645,7 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
           <span id="detAgente" style="font-size:11px;color:var(--ink3)"></span>
         </div>
       </div>
+      <button onclick="descargarPDFChat()" style="display:flex;align-items:center;gap:6px;background:#25d366;border:none;cursor:pointer;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;border-radius:8px;font-family:'Poppins',sans-serif;margin-right:6px" title="Descargar PDF">⬇ PDF</button>
       <button onclick="cerrarModal('modalDetalle')" style="background:none;border:none;cursor:pointer;font-size:22px;color:var(--ink3);line-height:1;padding:4px;flex-shrink:0">✕</button>
     </div>
     <!-- Body -->
@@ -1153,10 +1152,14 @@ function filterConvs(){
   const q=(document.getElementById('convSearch')?.value||'').toLowerCase();
   const est=document.getElementById('convFiltroEstado')?.value||'';
   const agn=document.getElementById('convFiltroAgente')?.value||'';
+  const desde=document.getElementById('convDesde')?.value||'';
+  const hasta=document.getElementById('convHasta')?.value||'';
   let list=[...A.sesiones];
-  if(est) list=list.filter(s=>s.estado===est);
-  if(agn) list=list.filter(s=>s.agente_nombre===agn);
-  if(q)   list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q)||(s.cedula||'').includes(q));
+  if(est)   list=list.filter(s=>s.estado===est);
+  if(agn)   list=list.filter(s=>s.agente_nombre===agn);
+  if(desde) list=list.filter(s=>s.updated_at>=desde);
+  if(hasta) list=list.filter(s=>s.updated_at<=(hasta+'T23:59:59'));
+  if(q)     list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q)||(s.cedula||'').includes(q));
   document.getElementById('convFooter').textContent=`${list.length} conversación${list.length!==1?'es':''}`;
   document.getElementById('convBody').innerHTML=list.length?list.map(s=>{
     const hist=parseHist(s.history);
@@ -1170,7 +1173,7 @@ function filterConvs(){
       <td style="font-size:11px;text-align:center">${hist.length}</td>
       <td style="font-size:11px;color:var(--ink3)">${fmtHace(s.updated_at)}</td>
       <td><div style="display:flex;gap:4px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-ghost" onclick='verConv(${JSON.stringify(s.telefono)})'>👁 Ver</button>
+        <button class="btn btn-sm" style="background:#25d366;color:#fff;border:none" onclick='descargarPDFTelefono(${JSON.stringify(s.telefono)})' title="Descargar PDF">⬇ PDF</button>
         ${s.estado!=='cerrado'?`<button class="btn btn-sm btn-danger" onclick='confirmarCerrar(${JSON.stringify(s.telefono)})'>✕</button>`:''}
         ${s.estado==='cerrado'?`<button class="btn btn-sm btn-success" onclick='reabrirConv(${JSON.stringify(s.telefono)})'>↩</button>`:''}
       </div></td>
@@ -1334,6 +1337,82 @@ async function loadSatisfaccion(){
         <td><span class="badge ${s.calificacion===3?'badge-cerrado':s.calificacion===2?'badge-escalado':'badge-nova'}">${s.calificacion===3?'😊 Buena':s.calificacion===2?'😐 Regular':'😞 Mala'}</span></td>
       </tr>`).join(''):'<tr><td colspan="5" class="empty">Sin calificaciones</td></tr>';
   }catch(e){toast('Error satisfacción: '+e.message,'err');}
+}
+
+// ── DESCARGAR PDF CONVERSACIÓN ───────────────────
+function descargarPDFTelefono(tel){
+  const s = A.sesiones.find(x=>x.telefono===tel);
+  if(!s) return;
+  const hist = parseHist(s.history);
+  const agente = A.agentes.find(a=>a.id===s.agente_id);
+  const agNombre = agente?.nombre || s.agente_nombre || 'Sin asignar';
+  const fecha = new Date(s.updated_at).toLocaleString('es-CO',{dateStyle:'long',timeStyle:'short'});
+
+  // Colores WhatsApp modo oscuro
+  const waBg       = '#0b141a';
+  const waPattern  = '#111b21';
+  const waOut      = '#005c4b';   // burbujas enviadas (agente/nova)
+  const waIn       = '#202c33';   // burbujas recibidas (usuario)
+  const waText     = '#e9edef';
+  const waText2    = '#8696a0';
+  const waHeader   = '#202c33';
+  const waGreen    = '#25d366';
+
+  const msgs = hist.map(m=>{
+    const isUser  = m.role==='user';
+    const isNova  = m.role==='nova';
+    const isAgent = m.role==='assistant'||m.role==='agent';
+    const bg    = isUser ? waIn : waOut;
+    const align = isUser ? 'flex-start' : 'flex-end';
+    const label = isUser
+      ? `<span style="color:${waGreen};font-size:11px;font-weight:700;margin-bottom:3px;display:block">${escH(s.nombre||'Usuario')}</span>`
+      : isNova
+        ? `<span style="color:#a78bfa;font-size:11px;font-weight:700;margin-bottom:3px;display:block">🤖 Nova TD</span>`
+        : `<span style="color:#4ade80;font-size:11px;font-weight:700;margin-bottom:3px;display:block">👤 ${escH(agNombre)}</span>`;
+    const ts = m.ts||m.timestamp||m.created_at||'';
+    const hora = ts ? new Date(ts).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '';
+    const txt = escH(m.content||'').replace(/\n/g,'<br>');
+    return `<div style="display:flex;justify-content:${align};margin-bottom:6px;padding:0 12px">
+      <div style="background:${bg};color:${waText};padding:8px 12px 4px;border-radius:${isUser?'8px 8px 8px 2px':'8px 8px 2px 8px'};max-width:72%;font-size:13px;line-height:1.5;box-shadow:0 1px 2px rgba(0,0,0,.3)">
+        ${label}
+        <div>${txt}</div>
+        <div style="text-align:right;font-size:10px;color:${waText2};margin-top:4px">${hora}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // SVG pattern background (hoja WhatsApp)
+  const patternSVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cpath fill='%23182229' opacity='.4' d='M20 10 Q25 0 30 10 Q35 20 40 10 Q45 0 50 10 Q55 20 60 10 L60 70 Q55 60 50 70 Q45 80 40 70 Q35 60 30 70 Q25 80 20 70 Z'/%3E%3C/svg%3E")`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Chat ${escH(s.nombre||s.telefono)}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:${waBg}; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; }
+  .wa-header { background:${waHeader}; padding:14px 20px; display:flex; align-items:center; gap:14px; border-bottom:1px solid #2a3942; }
+  .wa-av { width:44px; height:44px; border-radius:50%; background:${waGreen}; display:flex; align-items:center; justify-content:center; color:#fff; font-size:18px; font-weight:700; flex-shrink:0; }
+  .wa-header-info h2 { color:${waText}; font-size:16px; font-weight:600; }
+  .wa-header-info p { color:${waText2}; font-size:12px; margin-top:2px; }
+  .wa-chat { background:${waBg}; background-image:${patternSVG}; padding:16px 0; min-height:200px; }
+  .wa-footer { background:${waHeader}; padding:10px 20px; border-top:1px solid #2a3942; text-align:center; color:${waText2}; font-size:11px; }
+  @media print { body{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
+</style></head><body>
+<div class="wa-header">
+  <div class="wa-av">${escH((s.nombre||'?').charAt(0).toUpperCase())}</div>
+  <div class="wa-header-info">
+    <h2>${escH(s.nombre||'Sin nombre')} &nbsp;<span style="font-size:12px;color:${waText2}">· ${escH(s.telefono)}</span></h2>
+    <p>📋 ${escH(s.eps||'—')} &nbsp;·&nbsp; 👤 ${escH(agNombre)} &nbsp;·&nbsp; 🕐 ${fecha} &nbsp;·&nbsp; ${hist.length} mensajes</p>
+  </div>
+</div>
+<div class="wa-chat">${msgs}</div>
+<div class="wa-footer">Tododrogas · WhatsApp · ${escH(s.telefono)}</div>
+</body></html>`;
+
+  const win = window.open('','_blank','width=800,height=900');
+  win.document.write(html);
+  win.document.close();
+  win.onload = ()=>{ win.focus(); win.print(); };
 }
 
 // ── INIT ──────────────────────────────────────────
