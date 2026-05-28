@@ -402,6 +402,8 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
 
 <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 /* ── Etiqueta esperando respuesta en header chat ── */
+.btn-gestion-pte{background:#f97316;color:#fff;border:none;padding:10px 28px;border-radius:var(--r2);font-size:13px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;display:flex;align-items:center;gap:8px;transition:opacity .15s;margin:auto}
+.btn-gestion-pte:hover{opacity:.85}
 .wa-esp-tag{display:inline-flex;align-items:center;gap:4px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:4px;animation:pulseTag 2s infinite}
 @keyframes pulseTag{0%,100%{opacity:1}50%{opacity:.65}}
 /* ── Validación visual primera gestión WA ── */
@@ -884,7 +886,7 @@ function renderHdr(ses){
   const esEsc=ses.estado==='escalado'||ses.estado==='activo'||ses.estado==='esperando';
   const esCer=ses.estado==='cerrado';
   const esPteGestion=ses.estado==='pte_gestion';
-  const esMio=ses.agente_id===AGENT_ID;
+  const esMio=true; // el agente solo ve sus conversaciones
   document.getElementById('chatHdr').innerHTML=`
     <div class="chat-hav">${ini}</div>
     <div class="chat-hinfo">
@@ -898,9 +900,8 @@ function renderHdr(ses){
       </div>
     </div>
     <div class="chat-hactions">
-      ${esEsc&&!esMio?`<button class="btn-tomar" onclick="tomar('${ses.telefono}')"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Tomar</button>`:''}
-      ${(!esCer&&!esPteGestion)?`<button class="btn-cerrar" onclick="abrirCerrar()">Cerrar</button>`:''}
-      ${esPteGestion?`<button class="btn-cerrar" style="background:#d97706;border-color:#d97706" onclick="abrirCerrar()">📋 Añadir gestión</button>`:''}
+      <!-- asignación automática — no hay botón Tomar -->
+      ${(!esCer&&!esPteGestion&&(ses.agente_id===AGENT_ID))?`<button class="btn-cerrar" onclick="abrirCerrar()">✓ Gestión</button>`:''}
       <button class="btn-ico" onclick="toggleRR()" title="Respuestas rápidas">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
       </button>
@@ -942,97 +943,65 @@ function renderMsgs(hist){
 // ── RENDER INPUT ─────────────────────────────────
 function renderInput(ses){
   const el=document.getElementById('inputArea');
-  const puedeResp=(ses.estado==='escalado'||ses.estado==='activo'||ses.estado==='esperando')&&ses.agente_id===AGENT_ID;
+  const puedeResp=(ses.estado==='escalado'||ses.estado==='activo'||ses.estado==='esperando');
   const esCer=ses.estado==='cerrado';
   const esPte=ses.estado==='pte_gestion';
 
-  // Estado: cerrado definitivo (ya gestionado)
+  // ── Solucionado ──────────────────────────────────
   if(esCer){
     el.className='input-blocked';
-    el.innerHTML=`<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg><p>Conversación solucionada</p>`;
+    el.innerHTML=`<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg><p>Conversación solucionada</p>`;
     return;
   }
 
-  // Estado: pte_gestion — el bot cerró con el usuario pero el agente no ha gestionado
+  // ── Pendiente por gestión: solo botón naranja ────
   if(esPte){
     el.className='input-blocked';
-    el.innerHTML=`
-      <div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 20px">
-        <div style="font-size:11px;color:var(--ink3);text-align:center;line-height:1.5">
-          La conversación con el usuario ha finalizado.<br>Registra la gestión para completar el caso en el SIGI.
-        </div>
-        <button onclick="abrirCerrar()" style="background:var(--wa);color:#fff;border:none;padding:9px 22px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all .15s" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Añadir gestión y marcar como Solucionado
-        </button>
-      </div>`;
+    el.innerHTML=`<button onclick="abrirCerrar()" class="btn-gestion-pte">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Añadir gestión
+    </button>`;
     return;
   }
 
-  // Estado: Nova atendiendo
+  // ── Nova atendiendo ──────────────────────────────
   if(!puedeResp&&ses.estado==='nova'){
     el.className='input-blocked';
     el.innerHTML=`<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 9l6 6M15 9l-6 6"/></svg><p>Nova TD está atendiendo</p>`;
     return;
   }
 
-  // Estado: otro agente o no asignado
+  // ── Sin respuesta posible (escalado sin tomar aún) ──
   if(!puedeResp){
     el.className='input-blocked';
-    el.innerHTML=`<button class="btn-tomar" style="margin:auto" onclick="tomar('${ses.telefono}')"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Tomar conversación para responder</button>`;
+    el.innerHTML=`<p>Esperando asignación...</p>`;
     return;
   }
+
+  // ── Activo: textarea + botón verde cerrar ────────
   el.className='input-area';
   el.innerHTML=`
     <div class="input-wrap">
       <span class="emoji-btn" title="Emoji">😊</span>
       <textarea id="msgTa" placeholder="Escribe un mensaje..." onkeydown="onMsgKey(event)" oninput="autoH(this)" rows="1"></textarea>
     </div>
-    <button class="btn-send" id="btnSend" onclick="enviar()" title="Enviar">
-      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-    </button>`;
+    <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+      <button class="btn-send" id="btnSend" onclick="enviar()" title="Enviar">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+      </button>
+      <button onclick="abrirCerrar()" title="Añadir gestión y marcar como Solucionado"
+        style="background:var(--green-l);color:var(--green);border:1px solid var(--green);padding:5px 8px;border-radius:var(--r2);font-size:10px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;white-space:nowrap;transition:all .15s"
+        onmouseover="this.style.background='var(--green)';this.style.color='#fff'"
+        onmouseout="this.style.background='var(--green-l)';this.style.color='var(--green)'">
+        ✓ Gestión
+      </button>
+    </div>`;
 }
 
 function onMsgKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();enviar();}}
 function autoH(ta){ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,120)+'px';}
 
-// ── TOMAR ────────────────────────────────────────
-async function tomar(tel){
-  try{
-    // Verificar asignación exclusiva y obtener resumen Nova
-    const fresh=await sb(`wa_sesiones?telefono=eq.${enc(tel)}&select=agente_id,estado,nombre,resumen_nova`);
-    if(fresh&&fresh[0]&&fresh[0].agente_id&&fresh[0].agente_id!==AGENT_ID){
-      toast('⚠️ Otro agente ya tomó esta conversación','err');
-      await loadSesiones();return;
-    }
-    await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{agente_id:AGENT_ID,agente_nombre:AGENT_NAME,estado:'escalado',updated_at:new Date().toISOString()});
-    const idx=S.sesiones.findIndex(s=>s.telefono===tel);
-    if(idx>=0){S.sesiones[idx].agente_id=AGENT_ID;S.sesiones[idx].agente_nombre=AGENT_NAME;}
-    if(S.selSesion){S.selSesion.agente_id=AGENT_ID;S.selSesion.agente_nombre=AGENT_NAME;}
-    await selectConv(tel);
-    // Pre-llenar textarea SOLO con saludo — sin resumen de Nova
-    const sesData=fresh&&fresh[0]?fresh[0]:{};
-    const primerNombre=(sesData.nombre||'').split(' ')[0]||'';
-    const resumen=sesData.resumen_nova||'';
-    const ta=document.getElementById('msgTa');
-    if(ta){
-      const saludo=primerNombre
-        ?`Hola ${primerNombre}, soy ${AGENT_NAME} de Tododrogas. ¿En qué le puedo ayudar?`
-        :`Hola, soy ${AGENT_NAME} de Tododrogas. ¿En qué le puedo ayudar?`;
-      ta.value=saludo;autoH(ta);ta.focus();
-    }
-    // Mostrar resumen de Nova en panel derecho
-    if(resumen){
-      const resEl=document.getElementById('resumenNovaPanel');
-      if(resEl){
-        resEl.style.display='block';
-        resEl.innerHTML=`<div style="font-size:10px;font-weight:700;color:var(--nova);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📋 Resumen Nova</div><div style="font-size:11px;line-height:1.6;color:var(--ink2)">${escH(resumen)}</div>`;
-      }
-      toast('📋 Resumen de Nova disponible en el panel derecho','ok');
-    }
-    toast('Conversación tomada. Revisa el saludo antes de enviar.','ok');
-  }catch(e){toast('Error: '+e.message,'err');}
-}
+// tomar() eliminado — asignación automática del sistema
 
 // ── ENVIAR ───────────────────────────────────────
 async function enviar(){
@@ -1971,7 +1940,7 @@ function renderInfo(){
     <div class="info-sec">
       <div class="info-sec-title">Acciones</div>
       ${(s.estado!=='cerrado')?`<button onclick="abrirCerrar()" style="width:100%;background:${s.estado==='pte_gestion'?'#d97706':'var(--green-l)'};border:1px solid ${s.estado==='pte_gestion'?'#d97706':'var(--green)'};color:${s.estado==='pte_gestion'?'#fff':'var(--green)'};padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;margin-bottom:6px">${s.estado==='pte_gestion'?'📋 Añadir gestión para marcar como Solucionado':'✓ Cerrar conversación'}</button>`:''}
-      ${(s.estado==='escalado'||s.estado==='esperando')&&s.agente_id!==AGENT_ID?`<button onclick="tomar('${s.telefono}')" style="width:100%;background:var(--orange-l);border:1px solid var(--orange);color:var(--orange);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;margin-bottom:6px">👤 Tomar conversación</button>`:''}
+      <!-- asignación automática — no hay botón Tomar -->
       ${s.estado!=='cerrado'&&s.agente_id===AGENT_ID?`<button onclick="abrirTransferir('${s.telefono}')" style="width:100%;background:var(--blue-l);border:1px solid var(--blue);color:var(--blue);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer">↔ Transferir a agente</button>`:''}
     </div>`;}
 
