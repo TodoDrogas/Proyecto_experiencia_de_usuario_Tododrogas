@@ -869,7 +869,8 @@ function filtrarPorAgente(agenteId, el){
     iframe.src = '';
     placeholder.style.display = 'flex';
   } else if(agenteId === 'nova'){
-    // Nova TD: cargar agente-wa con filtro nova (no tiene UUID real)
+    // Nova TD: inyectar UUID ficticio válido para que las queries no fallen
+    // 00000000-0000-0000-0000-000000000000 no existe en BD → queries retornan vacío sin error
     placeholder.style.display = 'none';
     iframe.style.display = 'block';
     if(iframe.dataset.loaded !== 'nova'){
@@ -879,11 +880,10 @@ function filtrarPorAgente(agenteId, el){
       iframe.addEventListener('load', function onBlankNova(){
         iframe.removeEventListener('load', onBlankNova);
         try{
-          iframe.contentWindow.sessionStorage.setItem('pqr_agent_id', '');
+          iframe.contentWindow.sessionStorage.setItem('pqr_agent_id', '00000000-0000-0000-0000-000000000000');
           iframe.contentWindow.sessionStorage.setItem('pqr_name', 'Nova TD');
-          iframe.contentWindow.sessionStorage.setItem('pqr_filtro_inicio', 'nova');
         }catch(e){ console.warn('nova inject error:', e); }
-        iframe.src = 'agente-wa.html?embed=1&filtro=nova';
+        iframe.src = 'agente-wa.html?embed=1&vista_global=1';
       });
     }
   } else {
@@ -903,9 +903,25 @@ function filtrarPorAgente(agenteId, el){
           iframe.contentWindow.sessionStorage.setItem('pqr_name', agentNombre);
         }catch(e){ console.warn('sessionStorage inject failed:', e); }
         iframe.src = 'agente-wa.html?embed=1';
-      });
-    }
-  }
+        // Ocultar input al cargar (admin es solo visual)
+        iframe.addEventListener('load', function hideInput(){
+          iframe.removeEventListener('load', hideInput);
+          // Pequeño delay para que el DOM del iframe esté listo
+          setTimeout(()=>{
+            try{
+              const doc = iframe.contentDocument;
+              if(!doc) return;
+              const style = doc.createElement('style');
+              style.id = 'admin-override';
+              style.textContent = `
+                .input-area { display:none !important; }
+                .topbar { display:none !important; }
+                .app-body { height:100dvh !important; }
+              `;
+              doc.head.appendChild(style);
+            }catch(e){ console.warn('inject css error:', e); }
+          }, 300);
+        });
 
   renderGlobal();
 }
@@ -1024,9 +1040,9 @@ function renderGlobal(){
 function showSection(id,el){
   if(_globalInterval){ clearInterval(_globalInterval); _globalInterval=null; }
   _vistaGlobal = false;
-  // Restaurar padding del main
+  // Restaurar padding y overflow del main
   const mainEl = document.querySelector('.main');
-  if(mainEl){ mainEl.style.padding=''; mainEl.style.overflow=''; }
+  if(mainEl){ mainEl.style.padding='24px'; mainEl.style.overflow='auto'; mainEl.style.height=''; mainEl.style.display=''; mainEl.style.flexDirection=''; }
   // Limpiar iframe
   const iframe = document.getElementById('global-agent-iframe');
   if(iframe){ iframe.src=''; iframe.dataset.loaded=''; }
