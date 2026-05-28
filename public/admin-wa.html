@@ -600,26 +600,10 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
         <div class="kpi-card kpi-red"><div class="kpi-label">En pausa</div><div class="kpi-val" id="g-pausa">—</div><div class="kpi-bar"></div></div>
       </div>
 
-      <!-- Layout: agentes izq + conversaciones der -->
+      <!-- Layout: iframe ocupa todo el ancho -->
       <div style="display:flex;gap:16px;height:calc(100vh - 320px);min-height:400px">
 
-        <!-- Panel izquierdo: agentes -->
-        <div style="width:240px;flex-shrink:0;background:var(--surface);border-radius:var(--r);border:1px solid var(--border);box-shadow:var(--shadow-card);overflow-y:auto">
-          <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:var(--surface);z-index:1">
-            Agentes
-          </div>
-          <!-- Opción "Todas" -->
-          <div id="ag-btn-todas" onclick="filtrarPorAgente(null,this)" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;background:var(--blue-l);border-left:3px solid var(--blue);border-bottom:1px solid var(--border)">
-            <div style="width:30px;height:30px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;font-weight:700;flex-shrink:0">🌐</div>
-            <div style="flex:1">
-              <div style="font-size:12px;font-weight:700;color:var(--blue)">Todas</div>
-              <div style="font-size:10px;color:var(--ink3)" id="ag-btn-todas-cnt">— conversaciones</div>
-            </div>
-          </div>
-          <div id="globalAgentList"></div>
-        </div>
-
-        <!-- Panel derecho: vista WhatsApp del agente seleccionado -->
+        <!-- Panel: vista WhatsApp del agente seleccionado -->
         <div class="global-iframe-wrap">
           <!-- Header del iframe -->
           <div class="global-iframe-hdr" id="global-iframe-hdr">
@@ -899,15 +883,6 @@ function filtrarPorAgente(agenteId, el){
   _agenteSelGlobal = agenteId;
 
   // ── Actualizar selección en panel izquierdo (dentro de sec-global) ──
-  document.querySelectorAll('#globalAgentList .ag-global-btn, #ag-btn-todas').forEach(b=>{
-    b.style.background = '';
-    b.style.borderLeft = '3px solid transparent';
-    b.querySelector?.('.ag-label')?.style && (b.querySelector('.ag-label').style.color='var(--ink)');
-  });
-  if(el){
-    el.style.background = 'var(--blue-l)';
-    el.style.borderLeft = '3px solid var(--blue)';
-  }
 
   // ── Actualizar selección en sidebar ──
   document.querySelectorAll('.sidebar-ag-item').forEach(b=>{
@@ -1007,38 +982,9 @@ function renderGlobal(){
   document.getElementById('g-agents').textContent    = online.length;
   document.getElementById('g-pausa').textContent     = pausa.length;
   document.getElementById('globalSub').textContent   = `Actualizado: ${new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})} · ${A.sesiones.length} sesiones`;
-  document.getElementById('ag-btn-todas-cnt').textContent = `${A.sesiones.length} conversaciones`;
 
   // Poblar también el sidebar
   renderSidebarAgentes();
-
-  // ── Renderizar panel de agentes ──────────────────────────────────
-  const agentesConSesiones = A.agentes.filter(a=>a.activo||a.en_linea||A.sesiones.some(s=>s.agente_id===a.id));
-  document.getElementById('globalAgentList').innerHTML = agentesConSesiones.map(a=>{
-    const convs = A.sesiones.filter(s=>s.agente_id===a.id);
-    const activ   = convs.filter(s=>s.estado==='activo'||s.estado==='escalado').length;
-    const esp     = convs.filter(s=>s.estado==='esperando').length;
-    const pteG    = convs.filter(s=>s.estado==='pte_gestion').length;
-    const isPausa = a.pausado;
-    const isOnline = a.en_linea&&!isPausa;
-    const dotColor = isOnline?'#22c55e':isPausa?'#ef4444':'#9ca3af';
-    const isSelected = _agenteSelGlobal===a.id;
-    return`<div class="ag-global-btn" onclick="filtrarPorAgente('${a.id}',this)" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);border-left:3px solid ${isSelected?'var(--blue)':'transparent'};background:${isSelected?'var(--blue-l)':'transparent'};transition:all .15s" onmouseover="if('${a.id}'!==_agenteSelGlobal)this.style.background='var(--bg)'" onmouseout="if('${a.id}'!==_agenteSelGlobal)this.style.background='transparent'">
-      <div style="position:relative;flex-shrink:0">
-        <div style="width:30px;height:30px;border-radius:50%;background:${isOnline?'var(--green)':isPausa?'var(--red)':'var(--ink3)'};display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;font-weight:700">${(a.nombre||'?').charAt(0)}</div>
-        <div style="position:absolute;bottom:0;right:0;width:8px;height:8px;border-radius:50%;background:${dotColor};border:1.5px solid var(--surface)"></div>
-      </div>
-      <div style="flex:1;min-width:0">
-        <div class="ag-label" style="font-size:11px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escH(a.nombre)}</div>
-        <div style="font-size:10px;color:var(--ink3);display:flex;gap:6px;flex-wrap:wrap">
-          <span style="color:var(--green)">${activ} activ${activ!==1?'as':'a'}</span>
-          ${esp?`<span style="color:#3b82f6">⏳ ${esp}</span>`:''}
-          ${pteG?`<span style="color:#d97706">⚠️ ${pteG}</span>`:''}
-        </div>
-      </div>
-      ${isPausa?'<span style="font-size:9px;background:var(--red-l);color:var(--red);padding:1px 5px;border-radius:4px;font-weight:600">Pausa</span>':''}
-    </div>`;
-  }).join('') || '<div style="padding:16px;text-align:center;font-size:12px;color:var(--ink3)">Sin agentes</div>';
 
   // ── Filtrar conversaciones ────────────────────────────────────────
   let list = [...A.sesiones];
