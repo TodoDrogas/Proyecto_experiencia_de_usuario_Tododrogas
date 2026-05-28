@@ -298,6 +298,11 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
       <div class="sidebar-brand-sub">WhatsApp · Nova TD</div>
     </div>
     <div class="nav-section">
+      <!-- AGENTES FIJOS ARRIBA (se pueblan con JS al cargar) -->
+      <div class="nav-label">Agentes</div>
+      <div id="sidebar-agentes-list"></div>
+    </div>
+    <div class="nav-section">
       <div class="nav-label">Principal</div>
       <div class="nav-item active" onclick="showSection('dashboard',this)" id="nav-dashboard">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -307,16 +312,6 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Consultar histórico
         <span class="nav-badge orange" id="nb-escaladas">0</span>
-      </div>
-      <div class="nav-item" onclick="toggleGlobal()" id="nav-global">
-        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        Vista Global
-        <span class="nav-badge green" id="nb-activas">0</span>
-      </div>
-      <!-- AGENTES LISTA EN SIDEBAR (se populate con JS) -->
-      <div id="sidebar-agentes-section" style="display:none">
-        <div class="nav-label" style="margin-top:4px;padding-left:8px">Agentes</div>
-        <div id="sidebar-agentes-list"></div>
       </div>
       <div class="nav-item" onclick="showSection('agentes',this)" id="nav-agentes">
         <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -945,14 +940,30 @@ function filtrarPorAgente(agenteId, el){
   renderGlobal();
 }
 
-// ── SIDEBAR AGENTES (Vista Global) ───────────────────────────────────
-function renderSidebarAgentes(){
-  const section = document.getElementById('sidebar-agentes-section');
-  const list    = document.getElementById('sidebar-agentes-list');
-  if(!section || !list) return;
+// ── ABRIR VISTA GLOBAL DESDE SIDEBAR ────────────────────────────────
+function abrirVistaAgente(agenteId, el){
+  // Si la Vista Global no está activa, activarla primero
+  if(!_vistaGlobal){
+    _vistaGlobal = true;
+    document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.getElementById('sec-global').classList.add('active');
+    if(_globalInterval) clearInterval(_globalInterval);
+    // Cargar datos si no están, luego filtrar
+    if(A.agentes.length){
+      filtrarPorAgente(agenteId, el);
+    } else {
+      loadVistaGlobal().then(()=>filtrarPorAgente(agenteId, el));
+    }
+  } else {
+    filtrarPorAgente(agenteId, el);
+  }
+}
 
-  if(!_vistaGlobal){ section.style.display='none'; return; }
-  section.style.display = 'block';
+// ── SIDEBAR AGENTES (siempre visible) ────────────────────────────────
+function renderSidebarAgentes(){
+  const list = document.getElementById('sidebar-agentes-list');
+  if(!list) return;
 
   const agentesConSesiones = A.agentes.filter(a=>a.activo||a.en_linea||A.sesiones.some(s=>s.agente_id===a.id));
   if(!agentesConSesiones.length){ list.innerHTML=''; return; }
@@ -965,7 +976,7 @@ function renderSidebarAgentes(){
     const dotColor = isOnline?'#22c55e':isPausa?'#ef4444':'#9ca3af';
     const isSelected = _agenteSelGlobal===a.id;
     const bgColor  = isOnline?'var(--green)':isPausa?'var(--red)':'var(--ink3)';
-    return `<div class="sidebar-ag-item ${isSelected?'active':''}" data-agente-id="${escH(a.id)}" onclick="filtrarPorAgente('${escH(a.id)}',this)">
+    return `<div class="sidebar-ag-item ${isSelected?'active':''}" data-agente-id="${escH(a.id)}" onclick="abrirVistaAgente('${escH(a.id)}',this)">
       <div class="sidebar-ag-av" style="background:${bgColor}">${(a.nombre||'?').charAt(0)}</div>
       <div style="flex:1;min-width:0">
         <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${escH(a.nombre)}</div>
@@ -1035,9 +1046,6 @@ function renderGlobal(){
 function showSection(id,el){
   if(_globalInterval){ clearInterval(_globalInterval); _globalInterval=null; }
   _vistaGlobal = false;
-  // Ocultar sidebar de agentes de vista global
-  const sas = document.getElementById('sidebar-agentes-section');
-  if(sas) sas.style.display='none';
   // Limpiar iframe
   const iframe = document.getElementById('global-agent-iframe');
   if(iframe){ iframe.src=''; iframe.dataset.loaded=''; }
@@ -1065,6 +1073,7 @@ async function loadDashboard(){
       sb('wa_sesiones?calificacion=not.is.null&select=calificacion&limit=500'),
     ]);
     A.sesiones=sesiones||[];A.agentes=agentes||[];
+    renderSidebarAgentes();
     const hoy=new Date();hoy.setHours(0,0,0,0);const hoyStr=hoy.toISOString();
     const sesHoy=A.sesiones.filter(s=>s.updated_at>=hoyStr);
     const activas=A.sesiones.filter(s=>s.estado!=='cerrado');
