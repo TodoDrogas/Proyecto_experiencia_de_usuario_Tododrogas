@@ -96,6 +96,24 @@ async function enviarMeta(telefono, mensaje) {
   return res.json();
 }
 
+// ── GUARDAR MENSAJE NOVA EN HISTORY ─────────────────────────────────────────
+async function pushHistoryNova(telefono, mensaje, rol = 'nova') {
+  try {
+    const { data } = await supabase
+      .from('wa_sesiones')
+      .select('history')
+      .eq('telefono', telefono)
+      .single();
+    const hist = Array.isArray(data?.history) ? data.history : [];
+    hist.push({ role: rol, content: mensaje, ts: new Date().toISOString() });
+    await supabase.from('wa_sesiones')
+      .update({ history: hist, updated_at: new Date().toISOString() })
+      .eq('telefono', telefono);
+  } catch(e) {
+    console.error('pushHistoryNova error:', e.message);
+  }
+}
+
 // ── LOG CONVERSACIÓN (métricas SIGI) ─────────────────────────────────────
 async function logConv(telefono, agenteId, agenteNombre, evento, duracionSeg = null, metadata = {}) {
   try {
@@ -283,9 +301,9 @@ async function cronInactividad() {
       if (s.estado === 'nova') {
         // 2 min sin respuesta → preguntar si continúa
         if (minsSinAct >= 2 && !s.inactividad_aviso_at) {
-          await enviarMeta(s.telefono,
-            `¿${tratamiento(s.nombre)}, continúa en línea?\n\nEstamos disponibles para atenderle. Si tiene alguna consulta, con gusto le ayudamos.\n\nSi ya no necesita asistencia, escriba *SALIR* para cerrar la conversación.`
-          );
+          const _msgInac1 = `¿${tratamiento(s.nombre)}, continúa en línea?\n\nEstamos disponibles para atenderle. Si tiene alguna consulta, con gusto le ayudamos.\n\nSi ya no necesita asistencia, escriba *SALIR* para cerrar la conversación.`;
+          await enviarMeta(s.telefono, _msgInac1);
+          await pushHistoryNova(s.telefono, _msgInac1, 'nova');
           await supabase.from('wa_sesiones').update({
             inactividad_aviso_at: ahoraISO,
             updated_at: ahoraISO
@@ -297,9 +315,9 @@ async function cronInactividad() {
         if (minsSinAct >= 30 && s.inactividad_aviso_at) {
           const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
           if (minsDesdeAviso >= 28) {
-            await enviarMeta(s.telefono,
-              `Cerramos la conversación por inactividad. ¡Fue un gusto poder acompañarle! 😊\n\nAntes de despedirnos, ¿nos regala un momento para calificarnos?\n\nResponda con:\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n¡Tododrogas siempre a su servicio! 🌟`
-            );
+            const _msgEnc1 = `Cerramos la conversación por inactividad. ¡Fue un gusto poder acompañarle! 😊\n\nAntes de despedirnos, ¿nos regala un momento para calificarnos?\n\nResponda con:\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n¡Tododrogas siempre a su servicio! 🌟`;
+            await enviarMeta(s.telefono, _msgEnc1);
+            await pushHistoryNova(s.telefono, _msgEnc1, 'nova');
             await supabase.from('wa_sesiones').update({
               estado:             'esperando_encuesta',
               encuesta_enviada_at: ahoraISO,
@@ -328,9 +346,9 @@ async function cronInactividad() {
 
         // 2 min en "esperando" sin aviso previo → preguntar si continúa
         if (s.estado === 'esperando' && minsSinAct >= 2 && !s.inactividad_aviso_at) {
-          await enviarMeta(s.telefono,
-            `¿${tratamiento(s.nombre)}, continúa en línea?\n\n*${s.agente_nombre || 'Su asesor'}* continúa disponible para atenderle.\n\nSi ya resolvió su consulta, puede escribir *LISTO* para cerrar la atención.`
-          );
+          const _msgInac2 = `¿${tratamiento(s.nombre)}, continúa en línea?\n\n*${s.agente_nombre || 'Su asesor'}* continúa disponible para atenderle.\n\nSi ya resolvió su consulta, puede escribir *LISTO* para cerrar la atención.`;
+          await enviarMeta(s.telefono, _msgInac2);
+          await pushHistoryNova(s.telefono, _msgInac2, 'nova');
           await supabase.from('wa_sesiones').update({
             inactividad_aviso_at: ahoraISO,
             updated_at: ahoraISO
@@ -343,9 +361,9 @@ async function cronInactividad() {
         if (minsSinAct >= 30 && s.inactividad_aviso_at) {
           const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
           if (minsDesdeAviso >= 28) {
-            await enviarMeta(s.telefono,
-              `Cerramos la conversación por inactividad.\n\nAntes de finalizar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\nGracias por contactarnos. *Tododrogas, siempre a su servicio.*`
-            );
+            const _msgEnc2 = `Cerramos la conversación por inactividad.\n\nAntes de finalizar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\nGracias por contactarnos. *Tododrogas, siempre a su servicio.*`;
+            await enviarMeta(s.telefono, _msgEnc2);
+            await pushHistoryNova(s.telefono, _msgEnc2, 'nova');
             // Reducir carga del agente
             if (s.agente_id) {
               const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', s.agente_id).single();
@@ -455,9 +473,13 @@ app.post('/webhook/meta', async (req, res) => {
       const bodyUp = body.trim().toUpperCase();
       if (['SALIR', 'LISTO', 'ADIOS', 'ADIÓS', 'CHAO'].includes(bodyUp) &&
           ['nova', 'escalado', 'activo', 'esperando'].includes(sesion.estado)) {
-        await enviarMeta(telefono,
-          `Gracias por contactarnos, ${tratamiento(sesion.nombre)}.\n\nAntes de cerrar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n*Tododrogas, siempre a su servicio.*`
-        );
+        const _msgSalir = `Gracias por contactarnos, ${tratamiento(sesion.nombre)}.\n\nAntes de cerrar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n*Tododrogas, siempre a su servicio.*`;
+        // Primero guardar el mensaje del usuario en history
+        const _histSalir = Array.isArray(sesion.history) ? sesion.history : [];
+        _histSalir.push(nuevoMsg);
+        await supabase.from('wa_sesiones').update({ history: _histSalir }).eq('telefono', telefono);
+        await enviarMeta(telefono, _msgSalir);
+        await pushHistoryNova(telefono, _msgSalir, 'nova');
         if (sesion.agente_id) {
           const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', sesion.agente_id).single();
           if (ag) await supabase.from('agentes').update({
