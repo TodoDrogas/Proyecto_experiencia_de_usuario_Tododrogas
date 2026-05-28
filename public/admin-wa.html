@@ -863,32 +863,24 @@ function filtrarPorAgente(agenteId, el){
   const iframe = document.getElementById('global-agent-iframe');
   const placeholder = document.getElementById('global-placeholder');
 
-  function injectAndLoad(agentId, agentNombre, url){
+  function loadAgentIframe(agentId, agentNombre, extraParams){
     iframe.dataset.loaded = agentId;
-    iframe.onload = null;
-    iframe.src = 'about:blank';
-    iframe.addEventListener('load', function onBlank(){
-      iframe.removeEventListener('load', onBlank);
-      try{
-        iframe.contentWindow.sessionStorage.setItem('pqr_agent_id', agentId);
-        iframe.contentWindow.sessionStorage.setItem('pqr_name', agentNombre);
-      }catch(e){}
-      iframe.src = url;
-      // Ocultar input tras cargar la URL real
-      iframe.addEventListener('load', function onReady(){
-        iframe.removeEventListener('load', onReady);
-        setTimeout(()=>{
-          try{
-            const doc = iframe.contentDocument;
-            if(!doc) return;
-            if(doc.getElementById('admin-override')) return;
-            const style = doc.createElement('style');
-            style.id = 'admin-override';
-            style.textContent = '.input-area{display:none!important;}.topbar{display:none!important;}.app-body{height:100dvh!important;}';
-            doc.head.appendChild(style);
-          }catch(e){}
-        }, 300);
-      });
+    // Pasar credenciales por URL — NO tocar sessionStorage del agente real
+    const nombre = encodeURIComponent(agentNombre);
+    const url = `agente-wa.html?embed=1&agent_id=${encodeURIComponent(agentId)}&agent_name=${nombre}${extraParams||''}`;
+    iframe.src = url;
+    iframe.addEventListener('load', function onReady(){
+      iframe.removeEventListener('load', onReady);
+      setTimeout(()=>{
+        try{
+          const doc = iframe.contentDocument;
+          if(!doc || doc.getElementById('admin-override')) return;
+          const style = doc.createElement('style');
+          style.id = 'admin-override';
+          style.textContent = '.input-area{display:none!important;}.topbar{display:none!important;}.app-body{height:100dvh!important;}';
+          doc.head.appendChild(style);
+        }catch(e){}
+      }, 400);
     });
   }
 
@@ -900,7 +892,7 @@ function filtrarPorAgente(agenteId, el){
     placeholder.style.display = 'none';
     iframe.style.display = 'block';
     if(iframe.dataset.loaded !== 'nova'){
-      injectAndLoad('00000000-0000-0000-0000-000000000000', 'Nova TD', 'agente-wa.html?embed=1&vista_global=1');
+      loadAgentIframe('00000000-0000-0000-0000-000000000000', 'Nova TD', '&vista_global=1');
       iframe.dataset.loaded = 'nova';
     }
   } else {
@@ -908,7 +900,7 @@ function filtrarPorAgente(agenteId, el){
     placeholder.style.display = 'none';
     iframe.style.display = 'block';
     if(iframe.dataset.loaded !== agenteId){
-      injectAndLoad(agenteId, agente?.nombre||'Agente', 'agente-wa.html?embed=1');
+      loadAgentIframe(agenteId, agente?.nombre||'Agente', '');
     }
   }
 
