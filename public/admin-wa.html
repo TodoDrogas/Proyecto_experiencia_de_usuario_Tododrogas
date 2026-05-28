@@ -923,23 +923,29 @@ function renderSidebarAgentes(){
   if(!list) return;
 
   const agentesConSesiones = A.agentes.filter(a=>a.activo||a.en_linea||A.sesiones.some(s=>s.agente_id===a.id));
-  if(!agentesConSesiones.length){ list.innerHTML=''; return; }
 
-  list.innerHTML = agentesConSesiones.map(a=>{
+  // Nova TD siempre de primera
+  const novaTD = { id: 'nova', nombre: 'Nova TD', en_linea: true, pausado: false, carga_actual: A.sesiones.filter(s=>s.estado==='nova').length };
+  const listaFinal = [novaTD, ...agentesConSesiones];
+
+  list.innerHTML = listaFinal.map(a=>{
     const convs    = A.sesiones.filter(s=>s.agente_id===a.id);
     const activ    = convs.filter(s=>s.estado!=='cerrado').length;
     const isOnline = a.en_linea && !a.pausado;
     const isPausa  = a.pausado;
     const dotColor = isOnline?'#22c55e':isPausa?'#ef4444':'#9ca3af';
     const isSelected = _agenteSelGlobal===a.id;
-    const bgColor  = isOnline?'var(--green)':isPausa?'var(--red)':'var(--ink3)';
-    return `<div class="sidebar-ag-item ${isSelected?'active':''}" data-agente-id="${escH(a.id)}" onclick="abrirVistaAgente('${escH(a.id)}',this)">
-      <div class="sidebar-ag-av" style="background:${bgColor}">${(a.nombre||'?').charAt(0)}</div>
+    const isNova   = a.id === 'nova';
+    const bgColor  = isNova?'var(--nova)':isOnline?'var(--green)':isPausa?'var(--red)':'var(--ink3)';
+    const novaActiv = isNova ? A.sesiones.filter(s=>s.estado==='nova').length : activ;
+    const avatarContent = isNova ? '🤖' : (a.nombre||'?').charAt(0);
+    return `<div class="sidebar-ag-item ${isSelected?'active':''}" data-agente-id="${escH(a.id)}" onclick="abrirVistaAgente('${escH(a.id)}',this)" ${isNova?'style="border-bottom:1px solid var(--border);margin-bottom:4px;padding-bottom:10px"':''}>
+      <div class="sidebar-ag-av" style="background:${bgColor};font-size:${isNova?'14px':'10px'}">${avatarContent}</div>
       <div style="flex:1;min-width:0">
-        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px">${escH(a.nombre)}</div>
-        ${activ?`<div style="font-size:9px;color:var(--green)">${activ} activa${activ!==1?'s':''}</div>`:''}
+        <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px;${isNova?'color:var(--nova);font-weight:700':''}">${escH(a.nombre)}</div>
+        ${novaActiv?`<div style="font-size:9px;color:${isNova?'var(--nova)':'var(--green)'}">${novaActiv} activa${novaActiv!==1?'s':''}</div>`:''}
       </div>
-      <div class="sidebar-ag-dot" style="background:${dotColor}"></div>
+      <div class="sidebar-ag-dot" style="background:${isNova?'var(--nova)':dotColor}"></div>
     </div>`;
   }).join('');
 }
