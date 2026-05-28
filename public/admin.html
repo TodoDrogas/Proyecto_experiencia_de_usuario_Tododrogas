@@ -2266,7 +2266,7 @@ async function exportarSIGI() {
         `fecha_resolucion,created_at,num_gestiones,tiene_tutela,categoria_sigi,categoria_ia,` +
         `nombre_solicitud,detalle_solicitud,tipo_pqr,gestion_compra,usuario_gestion_compra,` +
         `gestion_usuarios_integ,usuarios_integrales,departamento_paciente,ciudad_paciente,` +
-        `calificacion,calificacion_texto,encuesta_enviada_at,fecha_calificacion` +
+        `calificacion,calificacion_texto,encuesta_enviada_at,fecha_calificacion,conversation_id` +
         `&order=created_at.asc&limit=1000&offset=${_off}`
       ) || [];
       if(!page.length) break;
@@ -2337,7 +2337,7 @@ async function exportarSIGI() {
       for(let i=0; i<_convIds.length; i+=50) _convChunks.push(_convIds.slice(i,i+50));
       const _salientesRaw = (await Promise.all(
         _convChunks.map(chunk =>
-          sb(`correos?conversation_id=in.(${chunk.join(',')})&origen=eq.saliente&select=conversation_id,body_content,created_at&order=created_at.asc&limit=5000`).catch(()=>[])
+          sb(`correos?conversation_id=in.(${chunk.map(id=>'"'+id+'"').join(',')})&origen=eq.saliente&select=conversation_id,body_content,created_at&order=created_at.asc&limit=5000`).catch(()=>[])
         )
       )).flat().filter(Boolean);
       const _salienteByConv = {};
