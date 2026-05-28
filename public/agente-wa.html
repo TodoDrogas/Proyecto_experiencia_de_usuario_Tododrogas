@@ -101,6 +101,10 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .cb-esc{background:var(--orange-l);color:var(--orange)}
 .cb-esp{background:var(--red-l);color:var(--red)}
 .cb-cer{background:var(--green-l);color:var(--green)}
+.cb-pte{background:#fef3c7;color:#d97706}
+.itag-pte{background:#fef3c7;color:#d97706;border:1px solid #fde68a}
+.fdot-pte{background:#d97706}
+.s-pte_gestion .conv-av-dot{background:#d97706;animation:pulseR 1.5s infinite}
 .unread-cnt{background:var(--wa);color:#fff;font-size:10px;font-weight:700;min-width:18px;height:18px;border-radius:99px;display:flex;align-items:center;justify-content:center;padding:0 4px;font-family:'DM Mono',monospace}
 .timer{font-size:10px;font-weight:700;font-family:'DM Mono',monospace;padding:2px 7px;border-radius:99px;flex-shrink:0}
 .t-ok{background:var(--green-l);color:var(--green)}
@@ -333,8 +337,12 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
       <div class="fdot fdot-esp"></div>Esp. respuesta
       <span class="filter-cnt" id="fc-esperando">0</span>
     </div>
+    <div class="filter-item" onclick="setFiltro('pte_gestion',this)">
+      <div class="fdot fdot-pte"></div>Pte. por Gestión
+      <span class="filter-cnt" id="fc-pte_gestion" style="background:rgba(217,119,6,.15);color:#d97706">0</span>
+    </div>
     <div class="filter-item" onclick="setFiltro('cerrado',this)">
-      <div class="fdot fdot-cer"></div>Cerradas
+      <div class="fdot fdot-cer"></div>Solucionadas
       <span class="filter-cnt" id="fc-cerrado">0</span>
     </div>
     <div class="wa-divider"></div>
@@ -393,6 +401,9 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
 </div>
 
 <style>@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+/* ── Etiqueta esperando respuesta en header chat ── */
+.wa-esp-tag{display:inline-flex;align-items:center;gap:4px;background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;margin-left:4px;animation:pulseTag 2s infinite}
+@keyframes pulseTag{0%,100%{opacity:1}50%{opacity:.65}}
 /* ── Validación visual primera gestión WA ── */
 .wa-req { color: #dc2626; font-weight: 700; }
 .wa-req-txt { font-size: 9px; color: #dc2626; font-weight: 600; display: none; }
@@ -441,22 +452,8 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
           oninput="this.value=this.value.toUpperCase();gWaValidarCampo('gWaObs','textarea')"></textarea>
       </div>
 
-      <!-- ACCIÓN -->
-      <div style="margin-bottom:14px">
-        <label style="font-size:11px;font-weight:700;color:var(--ink2);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:4px">
-          Acción / Tipificación <span class="wa-req">*</span> <span class="wa-req-txt">Campo obligatorio</span>
-        </label>
-        <select id="gWaAccion" class="minput" style="min-height:auto" onchange="gWaValidarCampo('gWaAccion','select')">
-          <option value="">— Seleccionar acción —</option>
-          <option>PQRSFD radicada</option>
-          <option>Información brindada</option>
-          <option>Sede indicada</option>
-          <option>Medicamento consultado</option>
-          <option>Sin respuesta usuario</option>
-          <option>Escalado a área</option>
-          <option>Otro</option>
-        </select>
-      </div>
+      <!-- ACCIÓN oculta — se guarda automáticamente como "Gestión registrada" -->
+      <input type="hidden" id="gWaAccion" value="Gestión registrada">
 
       <!-- DATOS PRIMERA GESTIÓN -->
       <div id="gWaPrimeraSeccion">
@@ -520,7 +517,7 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
             </div>
             <div>
               <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">
-                Email <span class="wa-req">*</span>
+                Email <span class="wa-req">*</span> <span style="font-weight:400;font-size:9px;color:var(--ink3)">(wa_xxx por defecto)</span>
               </label>
               <input id="gWaEmail" class="minput" placeholder="Se autocompleta..." style="font-size:12px"
                 oninput="gWaValidarCampo('gWaEmail','input')">
@@ -742,10 +739,13 @@ function updateCtrs(){
   const activas=s.filter(x=>x.estado==='activo').length;
   const esperando=s.filter(x=>x.estado==='esperando').length;
   const cerradas=s.filter(x=>x.estado==='cerrado').length;
+  const pteGestion=s.filter(x=>x.estado==='pte_gestion').length;
   document.getElementById('fc-escalado').textContent=escaladas;
   const fcAct=document.getElementById('fc-activo');if(fcAct)fcAct.textContent=activas;
   document.getElementById('fc-esperando').textContent=esperando;
   document.getElementById('fc-cerrado').textContent=cerradas;
+  const fcPte=document.getElementById('fc-pte_gestion');
+  if(fcPte) fcPte.textContent=pteGestion;
   document.getElementById('stat-total').textContent=s.length;
   const statActivas=document.getElementById('stat-activas');
   if(statActivas) statActivas.textContent=s.filter(x=>x.estado!=='cerrado'&&x.estado!=='nova').length;
@@ -770,6 +770,7 @@ function renderLista(){
   // "Todas" muestra todo EXCEPTO las que Nova está atendiendo
   if(S.filtro==='todas') list=list.filter(s=>s.estado!=='nova');
   else list=list.filter(s=>s.estado===S.filtro);
+  // pte_gestion aparece en Activas (necesita acción) y NO en Cerradas
   if(S.tab==='activas') list=list.filter(s=>s.estado!=='cerrado');
   if(S.tab==='cerradas') list=list.filter(s=>s.estado==='cerrado');
   if(q) list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q));
@@ -788,8 +789,8 @@ function renderLista(){
     const mins=Math.floor((Date.now()-new Date(s.updated_at).getTime())/60000);
     const tc=mins<10?'t-ok':mins<30?'t-warn':'t-danger';
     const tt=mins<60?`${mins}m`:`${Math.floor(mins/60)}h${mins%60?mins%60+'m':''}`;
-    const cbMap={nova:'cb-nova',escalado:'cb-esc',esperando:'cb-esp',cerrado:'cb-cer'};
-    const cbLbl={nova:'Nova TD',escalado:'Escalado',esperando:'Esperando',cerrado:'Cerrado'};
+    const cbMap={nova:'cb-nova',escalado:'cb-esc',esperando:'cb-esp',cerrado:'cb-cer',pte_gestion:'cb-pte'};
+    const cbLbl={nova:'Nova TD',escalado:'Escalado',esperando:'Esperando',cerrado:'Solucionado',pte_gestion:'Pte. por Gestión'};
     return `<div class="conv-item s-${s.estado||'nova'}${S.selTel===s.telefono?' sel':''}" onclick="selectConv('${escH(s.telefono)}')">
       <div class="conv-av">${ini}<div class="conv-av-dot"></div></div>
       <div class="conv-info">
@@ -834,7 +835,23 @@ async function refreshChat(tel){
   try{
     const data=await sb(`wa_sesiones?telefono=eq.${enc(tel)}&select=*&limit=1`);
     if(!data||!data[0])return;
-    const ses=data[0];
+    let ses=data[0];
+    // Si el bot cerró la sesión (estado='cerrado') pero el agente no ha registrado la gestión
+    // → convertir a 'pte_gestion' para que el agente sepa que debe actuar
+    if(ses.estado==='cerrado' && ses.agente_id){
+      const telWA = tel.replace('+','').replace(/\D/g,'');
+      const hoyR2 = new Date().toISOString().slice(0,10).replace(/-/g,'');
+      const ticketId = `WA-${telWA}-${hoyR2}`;
+      try{
+        const r = await sb(`correos?ticket_id=eq.${enc(ticketId)}&select=num_gestiones&limit=1`);
+        const numG = r&&r[0] ? r[0].num_gestiones||0 : 0;
+        if(numG===0){
+          // El agente no ha gestionado — marcar como pte_gestion
+          ses = {...ses, estado:'pte_gestion'};
+          await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{estado:'pte_gestion'});
+        }
+      }catch(e){}
+    }
     const idx=S.sesiones.findIndex(s=>s.telefono===tel);
     if(idx>=0) S.sesiones[idx]=ses;
     S.selSesion=ses;
@@ -849,10 +866,11 @@ async function refreshChat(tel){
 function renderHdr(ses){
   const nom=ses.nombre||ses.telefono||'Desconocido';
   const ini=nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-  const stLbl={nova:'🤖 Nova TD respondiendo',escalado:'👤 Sin asesor',activo:'✅ En atención',esperando:'⏳ Usuario esperando',cerrado:'✅ Cerrada'};
-  const stCol={nova:'color:var(--nova)',escalado:'color:var(--orange)',activo:'color:var(--green)',esperando:'color:var(--red)',cerrado:'color:var(--ink3)'};
+  const stLbl={nova:'🤖 Nova TD respondiendo',escalado:'👤 Sin asesor',activo:'✅ En atención',esperando:'⏳ Usuario esperando',cerrado:'✅ Solucionado',pte_gestion:'⚠️ Pte. por Gestión'};
+  const stCol={nova:'color:var(--nova)',escalado:'color:var(--orange)',activo:'color:var(--green)',esperando:'color:var(--red)',cerrado:'color:var(--ink3)',pte_gestion:'color:#d97706'};
   const esEsc=ses.estado==='escalado'||ses.estado==='activo'||ses.estado==='esperando';
   const esCer=ses.estado==='cerrado';
+  const esPteGestion=ses.estado==='pte_gestion';
   const esMio=ses.agente_id===AGENT_ID;
   document.getElementById('chatHdr').innerHTML=`
     <div class="chat-hav">${ini}</div>
@@ -860,6 +878,8 @@ function renderHdr(ses){
       <div class="chat-hname">${escH(nom)}</div>
       <div class="chat-hsub">
         <span style="${stCol[ses.estado]||'color:var(--nova)'}">● ${stLbl[ses.estado]||'Nova TD'}</span>
+        ${ses.estado==='esperando'?`<span class="wa-esp-tag">⏳ Esperando respuesta del usuario</span>`:''}
+        ${ses.estado==='pte_gestion'?`<span class="wa-esp-tag" style="background:#fef3c7;border-color:#fde68a;color:#d97706">⚠️ Pendiente por gestionar</span>`:''}
         ${ses.eps?`<span>·</span><span>${escH(ses.eps)}</span>`:''}
         <span>·</span><span style="font-family:'DM Mono',monospace">${ses.telefono}</span>
       </div>
@@ -910,6 +930,7 @@ function renderInput(ses){
   const el=document.getElementById('inputArea');
   const puedeResp=(ses.estado==='escalado'||ses.estado==='activo'||ses.estado==='esperando')&&ses.agente_id===AGENT_ID;
   const esCer=ses.estado==='cerrado';
+  const esPte=ses.estado==='pte_gestion';
   if(esCer){
     el.className='input-blocked';
     el.innerHTML=`<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg><p>Conversación cerrada</p>`;
@@ -1340,14 +1361,23 @@ function gWaAgregarMed(){
   document.getElementById('gWaMedLista').appendChild(div);
 }
 
+
+// ── Helper: genera ticketId estandarizado con fecha ─────────────
+// Formato: WA-{numero sin +57}-{YYYYMMDD}
+function gWaGetTicketId(tel) {
+  const num  = (tel||S.selTel||'').replace(/\+?57/,'').replace(/\D/g,'');
+  const fecha = new Date().toISOString().slice(0,10).replace(/-/g,'');
+  return `WA-${num}-${fecha}`;
+}
 async function abrirCerrar(){
   if(!S.selSesion) return;
   const ses = S.selSesion;
 
   // Determinar si es primera gestión consultando correos
   let numGest = 0;
-  const telWA = S.selTel.replace('+','').replace(/\D/g,'');
-  const ticketId = `WA-${telWA}`;
+  const telWA = S.selTel.replace(/\+?57/,'').replace(/\D/g,'');
+  const hoy   = new Date().toISOString().slice(0,10).replace(/-/g,''); // YYYYMMDD
+  const ticketId = `WA-${telWA}-${hoy}`;
   try{
     const r = await sb(`correos?ticket_id=eq.${enc(ticketId)}&select=num_gestiones&limit=1`);
     if(r&&r[0]) numGest = r[0].num_gestiones||0;
@@ -1383,7 +1413,7 @@ async function abrirCerrar(){
     document.getElementById('gWaCedula').value = ses.cedula||'';
     document.getElementById('gWaNombre').value = (ses.nombre||'').toUpperCase();
     // Teléfono: quitar +57 para estandarizar
-    const _telLimpio = (S.selTel||'').replace(/^\+57/,'').replace(/\D/g,'');
+    const _telLimpio = (S.selTel||'').replace(/\+?57/,'').replace(/\D/g,'');
     document.getElementById('gWaTelefono').value = _telLimpio;
     document.getElementById('gWaCiudad').value = (ses.ciudad||'').toUpperCase();
     // Departamento: usar ses.departamento si existe, sino vacío (NO usar ciudad)
@@ -1457,29 +1487,64 @@ async function gWaBuscarPaciente(cedula){
       const rows = r.ok ? await r.json() : [];
       if(rows&&rows[0]){
         const p = rows[0];
-        document.getElementById('gWaNombre').value = (p['Nombre Paciente']||'').toUpperCase();
-        const _t = p['Telefono']||S.selTel||'';
-        document.getElementById('gWaTelefono').value = _t.replace(/^\+57/,'');
-        document.getElementById('gWaCiudad').value = (p['Ciudad']||'').toUpperCase();
-        document.getElementById('gWaDepto').value = (p['Departamento']||'').toUpperCase();
-        document.getElementById('gWaDireccion').value = (p['Direccion']||p['Dirección']||'').toUpperCase();
-        if(p['EPS']){
-          document.getElementById('gWaEpsSearch').value = p['EPS'];
-          const found = _gWaEpsData.find(e=>e.nombre.toUpperCase().includes(p['EPS'].toUpperCase()));
+        // Cubrir todos los posibles nombres de campo del RPC
+        const _nom  = p['Nombre Paciente'] || p['nombre_paciente'] || p['Nombre'] || '';
+        const _tel  = p['Telefono'] || p['telefono'] || S.selTel || '';
+        const _ciu  = p['Ciudad'] || p['ciudad'] || '';
+        const _dep  = p['Departamento'] || p['departamento'] || '';
+        const _dir  = p['Direccion'] || p['Dirección'] || p['direccion'] || '';
+        const _eps  = p['EPS'] || p['eps'] || '';
+        const _correo = p['Correo'] || p['correo'] || p['email'] || '';
+        const _tdoc = p['Tipo De Documento'] || p['tipo_documento'] || 'CC';
+
+        document.getElementById('gWaNombre').value = _nom.toUpperCase();
+        document.getElementById('gWaTelefono').value = _tel.replace(/^\+57/,'').replace(/\D/g,'');
+        document.getElementById('gWaCiudad').value = _ciu.toUpperCase();
+        document.getElementById('gWaDepto').value = _dep.toUpperCase();
+        document.getElementById('gWaDireccion').value = _dir.toUpperCase();
+
+        // Email: usar el del paciente si existe, sino mantener el wa_xxx
+        if(_correo) {
+          document.getElementById('gWaEmail').value = _correo.toLowerCase();
+        }
+
+        // Tipo documento con mapeo
+        if(_tdoc) {
+          const mapa = {
+            'CC':'CÉDULA DE CIUDADANÍA','CÉDULA DE CIUDADANÍA':'CÉDULA DE CIUDADANÍA',
+            'TI':'TARJETA DE IDENTIDAD','TARJETA DE IDENTIDAD':'TARJETA DE IDENTIDAD',
+            'CE':'CÉDULA DE EXTRANJERÍA','CÉDULA DE EXTRANJERÍA':'CÉDULA DE EXTRANJERÍA',
+            'RC':'REGISTRO CIVIL DE NACIMIENTO',
+            'PA':'PASAPORTE','PASAPORTE':'PASAPORTE','NIT':'NIT'
+          };
+          const tdVal = mapa[_tdoc.toUpperCase()] || _tdoc;
+          const tdSel = document.getElementById('gWaTipoDoc');
+          if(tdSel) for(let op of tdSel.options) { if(op.value===tdVal){op.selected=true;break;} }
+        }
+
+        // EPS
+        if(_eps){
+          document.getElementById('gWaEpsSearch').value = _eps;
+          const found = _gWaEpsData.find(e=>
+            e.nombre.toUpperCase().includes(_eps.toUpperCase()) ||
+            _eps.toUpperCase().includes(e.nombre.toUpperCase())
+          );
           if(found){
             document.getElementById('gWaEpsId').value = found.id;
             const nitEl = document.getElementById('gWaNitEps');
             if(nitEl) nitEl.textContent = found.nit||'—';
           }
         }
+
         // Marcar verde lo que se llenó, rojo lo que faltó
-        ['gWaNombre','gWaTelefono','gWaCiudad','gWaDepto','gWaDireccion'].forEach(id=>{
+        ['gWaNombre','gWaTelefono','gWaCiudad','gWaDepto','gWaDireccion','gWaEmail'].forEach(id=>{
           const el=document.getElementById(id);
           if(!el) return;
           if(el.value.trim()){el.classList.add('gm-ok');el.classList.remove('gm-err');}
           else{el.classList.add('gm-err');el.classList.remove('gm-ok');}
         });
         gWaMkSearchOk('gWaEpsSearch','gWaEpsId');
+        gWaValidarCampo('gWaTipoDoc','select');
         toast('Paciente encontrado ✓','ok');
       } else {
         ['gWaNombre','gWaDireccion','gWaTelefono','gWaCiudad','gWaDepto'].forEach(id=>{
@@ -1520,15 +1585,15 @@ async function confirmarCerrar(){
 
   // Validaciones obligatorias
   if(!obs){ toast('Las observaciones son obligatorias','err'); document.getElementById('gWaObs').focus(); return; }
-  if(!accion){ toast('Selecciona una acción/tipificación','err'); return; }
 
-  const telWA   = S.selTel.replace('+','').replace(/\D/g,'');
-  const ticketId = `WA-${telWA}`;
+  const telWA   = S.selTel.replace(/\+?57/,'').replace(/\D/g,'');
+  const hoy     = new Date().toISOString().slice(0,10).replace(/-/g,''); // YYYYMMDD
+  const ticketId = `WA-${telWA}-${hoy}`;
   const btn = document.getElementById('btnConfirmarCerrar');
   btn.disabled=true; btn.textContent='Guardando…';
 
   try{
-    // ── Verificar si es primera gestión ──
+    // ── Verificar si es primera gestión del día ──
     let numGest = 0;
     let correoId = null;
     const rCorreo = await sb(`correos?ticket_id=eq.${enc(ticketId)}&select=id,num_gestiones&limit=1`);
@@ -1639,7 +1704,7 @@ async function confirmarCerrar(){
         tiene_tutela:   metadata.tiene_tutela,
         from_name:      ses.nombre||'',
         from_email:     `wa_${telWA}@tododrogas.online`,
-        subject:        `WhatsApp - ${ses.nombre||S.selTel}`,
+        subject:        `WhatsApp - ${ses.nombre||telWA}`,
         received_at:    ses.updated_at||now,
         created_at:     ses.updated_at||now,
         is_draft:       false,
@@ -1822,7 +1887,7 @@ function renderInfo(){
       <div class="info-row"><div class="info-lbl">Nombre</div><div class="info-val">${escH(nom)}</div></div>
       <div class="info-row"><div class="info-lbl">Teléfono</div><div class="info-val ph">${s.telefono}</div></div>
       ${s.eps?`<div class="info-row"><div class="info-lbl">EPS</div><div class="info-val"><span class="itag itag-eps">${escH(s.eps)}</span></div></div>`:''}
-      <div class="info-row"><div class="info-lbl">Estado</div><div><span class="itag ${s.estado==='nova'?'itag-nova':s.estado==='cerrado'?'itag-cer':'itag-esc'}">${s.estado==='nova'?'🤖 Nova TD':s.estado==='escalado'?'👤 Escalado':s.estado==='esperando'?'⏳ Esperando':'✅ Cerrado'}</span></div></div>
+      <div class="info-row"><div class="info-lbl">Estado</div><div><span class="itag ${s.estado==='nova'?'itag-nova':s.estado==='cerrado'?'itag-cer':s.estado==='pte_gestion'?'itag-pte':'itag-esc'}">${s.estado==='nova'?'🤖 Nova TD':s.estado==='escalado'?'👤 Escalado':s.estado==='esperando'?'⏳ Esperando':s.estado==='pte_gestion'?'⚠️ Pte. Gestión':'✅ Solucionado'}</span></div></div>
       ${s.agente_nombre?`<div class="info-row"><div class="info-lbl">Agente</div><div class="info-val">${escH(s.agente_nombre)}</div></div>`:''}
       ${s.resumen_nova?`<div class="info-row" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="info-lbl">📋 Resumen Nova</div><div class="info-val" style="font-size:11px;line-height:1.5;color:var(--ink2);background:var(--nova-l);padding:6px 8px;border-radius:6px;border-left:3px solid var(--nova)">${escH(s.resumen_nova)}</div></div>`:''}
       <div id="resumenNovaPanel" style="display:none;margin-top:8px;padding:8px;background:var(--nova-l);border-radius:6px;border-left:3px solid var(--nova)"></div>
@@ -1834,7 +1899,7 @@ function renderInfo(){
     </div>
     <div class="info-sec">
       <div class="info-sec-title">Acciones</div>
-      ${s.estado!=='cerrado'?`<button onclick="abrirCerrar()" style="width:100%;background:var(--green-l);border:1px solid var(--green);color:var(--green);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;margin-bottom:6px">✓ Cerrar conversación</button>`:''}
+      ${(s.estado!=='cerrado')?`<button onclick="abrirCerrar()" style="width:100%;background:${s.estado==='pte_gestion'?'#fef3c7':'var(--green-l)'};border:1px solid ${s.estado==='pte_gestion'?'#d97706':'var(--green)'};color:${s.estado==='pte_gestion'?'#d97706':'var(--green)'};padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;margin-bottom:6px">${s.estado==='pte_gestion'?'⚠️ Registrar gestión (pendiente)':'✓ Cerrar conversación'}</button>`:''}
       ${(s.estado==='escalado'||s.estado==='esperando')&&s.agente_id!==AGENT_ID?`<button onclick="tomar('${s.telefono}')" style="width:100%;background:var(--orange-l);border:1px solid var(--orange);color:var(--orange);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;margin-bottom:6px">👤 Tomar conversación</button>`:''}
       ${s.estado!=='cerrado'&&s.agente_id===AGENT_ID?`<button onclick="abrirTransferir('${s.telefono}')" style="width:100%;background:var(--blue-l);border:1px solid var(--blue);color:var(--blue);padding:8px;border-radius:var(--r2);font-size:12px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer">↔ Transferir a agente</button>`:''}
     </div>`;}
@@ -1854,6 +1919,22 @@ function startPolling(){
       if(newE>prevE){
         toast('⚡ Nueva conversación escalada','ok');
         if(Notification.permission==='granted') new Notification('Tododrogas WhatsApp',{body:'Nueva conversación escalada al agente'});
+      }
+      // Detectar sesiones cerradas por bot sin gestión del agente
+      for(const ses of data){
+        if(ses.estado==='cerrado' && ses.agente_id){
+          const telW = ses.telefono.replace(/\+?57/,'').replace(/\D/g,'');
+          const hoyP  = new Date().toISOString().slice(0,10).replace(/-/g,'');
+          const tId = `WA-${telW}-${hoyP}`;
+          try{
+            const r = await sb(`correos?ticket_id=eq.${enc(tId)}&select=num_gestiones&limit=1`);
+            const numG = r&&r[0] ? r[0].num_gestiones||0 : 0;
+            if(numG===0){
+              ses.estado='pte_gestion';
+              sb(`wa_sesiones?telefono=eq.${enc(ses.telefono)}`,'PATCH',{estado:'pte_gestion'}).catch(()=>{});
+            }
+          }catch(e){}
+        }
       }
       updateCtrs();renderLista();
     }catch(e){}
