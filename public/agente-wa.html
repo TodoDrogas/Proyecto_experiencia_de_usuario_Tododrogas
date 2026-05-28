@@ -167,11 +167,13 @@ body{background:#111b21;color:#e9edef;font-family:-apple-system,BlinkMacSystemFo
 .msg-sender.agent{color:var(--wa-d)}
 .msg-bub{padding:6px 9px 6px 9px;border-radius:7.5px;font-size:14.2px;line-height:1.45;position:relative;word-break:break-word;box-shadow:0 1px 1px rgba(0,0,0,.2)}
 /* Burbuja usuario (entrante) — gris oscuro WA */
-.bub-user{background:#202c33!important;border-top-left-radius:0!important;color:#e9edef!important}
-/* Burbuja agente (saliente) — verde oscuro WA */
-.bub-agent{background:#005c4b!important;border-top-right-radius:0!important;color:#e9edef!important}
-/* Burbuja Nova TD — azul índigo */
-.bub-nova{background:#1e2a4a!important;border-top-left-radius:0!important;color:#c7d2fe!important}
+.bub-user{background:#202c33!important;border-top-left-radius:0!important;color:#e9edef!important;box-shadow:0 1px 1px rgba(0,0,0,.2)!important}
+.bub-agent{background:#005c4b!important;border-top-right-radius:0!important;color:#e9edef!important;box-shadow:0 1px 1px rgba(0,0,0,.2)!important}
+.bub-nova{background:#1e2a4a!important;border-top-left-radius:0!important;color:#c7d2fe!important;box-shadow:0 1px 1px rgba(0,0,0,.2)!important}
+/* Compatibilidad absoluta */
+div.msg-bub.bub-user{background:#202c33!important;color:#e9edef!important}
+div.msg-bub.bub-agent{background:#005c4b!important;color:#e9edef!important}
+div.msg-bub.bub-nova{background:#1e2a4a!important;color:#c7d2fe!important}
 .nova-label{display:block;font-size:11px;font-weight:600;color:#818cf8;margin-bottom:3px}
 /* Compatibilidad con clases antiguas */
 .msg-row.inc .msg-bub{background:#202c33;border-top-left-radius:0;color:#e9edef}
@@ -394,8 +396,8 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
     WhatsApp <span style="opacity:.5;margin:0 4px">—</span> Nova TD
   </div>
   <div class="tb-right">
-    <button onclick="document.getElementById('modalTemaWa').style.display='flex'" title="Cambiar tema" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer">
-      🎨
+    <button onclick="document.getElementById('modalTemaWa').style.display='flex'" title="Cambiar tema claro/oscuro" id="btnTemaTop" style="display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.1);color:#fff;font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;transition:background .15s" onmouseover="this.style.background='rgba(255,255,255,.2)'" onmouseout="this.style.background='rgba(255,255,255,.1)'">
+      🌙 Tema
     </button>
     <button id="btnGlobal" onclick="toggleVista()" title="Vista global / mi vista" style="display:none;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer">
       🌐 Global
@@ -2029,36 +2031,9 @@ function renderInfo(){
   const hist=parseHist(s.history);
   const mc=hist.filter(m=>m.role==='user').length;
 
-  // Estado del agente
-  const estadoAgente = _pausado
-    ? `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#fef2f2;border-radius:8px;border:1px solid #fca5a5;margin-bottom:10px">
-        <div style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>
-        <span style="font-size:11px;font-weight:700;color:#991b1b">En pausa</span>
-        <span style="font-size:10px;color:#ef4444;margin-left:auto" id="tiempoPausa">--</span>
-       </div>`
-    : `<div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:#f0fdf4;border-radius:8px;border:1px solid #86efac;margin-bottom:10px">
-        <div style="width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite;flex-shrink:0"></div>
-        <span style="font-size:11px;font-weight:700;color:#166534">En línea</span>
-       </div>`;
-
-  // Frase motivadora aleatoria
-  const frases = [
-    '💪 Cada conversación es una oportunidad de hacer la diferencia.',
-    '🌟 Tu atención hoy puede cambiar el día de alguien.',
-    '❤️ La empatía es el mejor medicamento.',
-    '🚀 Vas muy bien, sigue así.',
-    '😊 Tu actitud positiva se transmite al usuario.',
-    '🎯 Enfocado y con energía — ¡tú puedes!',
-    '🌈 Gracias por tu dedicación al servicio.',
-    '💡 Una buena atención vale más que mil palabras.',
-  ];
-  const frase = frases[Math.floor(Math.random()*frases.length)];
+  // Estado del agente — solo en pausa se muestra banner
 
   p.innerHTML=`
-    <div class="info-sec" style="padding:10px 14px">
-      ${estadoAgente}
-      <div style="font-size:10px;color:var(--ink3);font-style:italic;line-height:1.4;padding:6px 8px;background:var(--bg2);border-radius:6px;border-left:3px solid var(--blue)">${frase}</div>
-    </div>
     <div class="info-sec">
       <div class="info-sec-title">Contacto</div>
       <div class="info-row"><div class="info-lbl">Nombre</div><div class="info-val">${escH(nom)}</div></div>
