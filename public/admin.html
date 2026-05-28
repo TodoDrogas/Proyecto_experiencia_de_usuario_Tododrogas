@@ -2554,7 +2554,6 @@ async function exportarSIGI() {
         'Mes':                     _mes,
         'Fecha Correo':            fSol,
         'ID Único':                c.id || '',
-        'Código PQRSFD':           ticketId,
         'Asunto':                  _up(c.subject || ''),
         '# Gestiones':             c.num_gestiones || 0,
         'Tipo Documento':          _up(dg.tipo_documento || pac?.['Tipo De Documento'] || c.tipo_documento || 'CÉDULA DE CIUDADANÍA'),
@@ -2608,7 +2607,7 @@ async function exportarSIGI() {
 
     const ws1 = XLSX.utils.json_to_sheet(h1.length ? h1 : [{'Sin datos':'No hay casos con gestiones en el período'}]);
     ws1['!cols'] = [
-      {wch:10},{wch:14},{wch:38},{wch:20},{wch:40},{wch:10},
+      {wch:10},{wch:14},{wch:38},{wch:40},{wch:10},
       {wch:18},{wch:14},{wch:28},{wch:22},{wch:30},{wch:14},{wch:13},
       {wch:32},{wch:20},{wch:13},{wch:14},{wch:20},{wch:20},{wch:34},{wch:14},{wch:14},
       {wch:14},{wch:30},{wch:28},{wch:50},{wch:14},{wch:16},{wch:16},
@@ -2673,16 +2672,25 @@ async function exportarSIGI() {
       }
 
       const _u = v => v ? v.toString().toUpperCase().trim() : '';
+      // Mes y Fecha del correo asociado
+      const _mesesM = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+      const _mesM = c?.created_at ? _mesesM[new Date(c.created_at).getMonth()] : '';
+      const _fechaM = c?.created_at ? new Date(c.created_at).toLocaleDateString('es-CO') : '';
+      // Agente: cédula real (no email)
+      const _cedAgente  = ag?.cedula || '';
+      const _nomAgente  = _u(ag?.nombre || c?.asignado_a || 'Sin asignar');
       return {
+        'Mes':               _mesM,
+        'Fecha Correo':      _fechaM,
+        'Asunto':            _u(c?.subject || ''),
         'ID Único':          c?.id || '',
-        'Código PQRSFD':    ticketId,
         'Código Medicamento': _u(m.codigo || ''),
         'Medicamento':       _u(m.descripcion || ''),
         'PBS':               _u(m.pbs || ''),
         'Cantidad':          m.cantidad || '',
         'Tipo solicitud':    _u(c?.tipo_pqr || c?.nombre_solicitud || ''),
-        'Nombre Usuario':    _u(ag?.nombre || c?.asignado_a || 'Sin asignar'),
-        'Cédula':            ag?.email || ag?.nombre || c?.asignado_a || 'Sin asignar',
+        'Cédula Agente':     _cedAgente,
+        'Nombre Agente':     _nomAgente,
         'Estado del ticket': _u(c?.estado || ''),
       };
     });
@@ -2690,7 +2698,7 @@ async function exportarSIGI() {
     const ws2 = XLSX.utils.json_to_sheet(
       h2.length ? h2 : [{'Sin datos':'Sin medicamentos en el período — el agente debe añadir medicamentos al ticket para que aparezcan aquí'}]
     );
-    ws2['!cols'] = [{wch:38},{wch:20},{wch:18},{wch:36},{wch:8},{wch:10},{wch:16},{wch:28},{wch:30},{wch:14}];
+    ws2['!cols'] = [{wch:10},{wch:14},{wch:40},{wch:38},{wch:18},{wch:36},{wch:8},{wch:10},{wch:18},{wch:14},{wch:28},{wch:14}];
     _styleSheet(ws2, 9);
     XLSX.utils.book_append_sheet(wb, ws2, 'MEDICAMENTOS');
 
@@ -2732,13 +2740,36 @@ async function exportarSIGI() {
     XLSX.utils.book_append_sheet(wb, ws4, 'EPS_CATALOGO');
 
     // ── Hoja 5: Satisfaccion_Correos ─────────────────────────────
+    const _mesesSat = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    // Helper: normalizar nombre agente (siempre Nombre Apellido, Title Case)
+    function _normAgente(nombre) {
+      if (!nombre) return '';
+      const n = nombre.trim().toUpperCase();
+      // Mapeo de variantes conocidas
+      const _mapaAg = {
+        'JARAMILLO VARGAS MARIA ISABEL': 'Maria Isabel Jaramillo',
+        'JARAMILLO VARGAS, MARIA ISABEL': 'Maria Isabel Jaramillo',
+        'MARIA ISABEL JARAMILLO VARGAS': 'Maria Isabel Jaramillo',
+        'MARIA ISABEL JARAMILLO': 'Maria Isabel Jaramillo',
+      };
+      if (_mapaAg[n]) return _mapaAg[n];
+      // Detectar formato APELLIDO NOMBRE y reordenar
+      const palabras = n.split(/\s+/);
+      const nombresComunes = new Set(['MARIA','ANDREA','MANUELA','DAYSI','ORIANA','VALENTINA','MARCELA','ANA','DIANA','LAURA']);
+      if (palabras.length >= 3 && !nombresComunes.has(palabras[0]) && palabras.some(p => nombresComunes.has(p))) {
+        const idx = palabras.findIndex(p => nombresComunes.has(p));
+        const reord = [...palabras.slice(idx), ...palabras.slice(0, idx)];
+        return reord.map(w => w[0] + w.slice(1).toLowerCase()).join(' ');
+      }
+      return palabras.map(w => w[0] + w.slice(1).toLowerCase()).join(' ');
+    }
     const _hSatSIGI = correosSIGI.filter(e=>e.calificacion>0).map(e=>({
+      Mes:                e.received_at||e.created_at ? _mesesSat[new Date(e.received_at||e.created_at).getMonth()] : '',
       ID_Unico:           e.id||'',
       Fecha_Correo:       e.received_at||e.created_at ? new Date(e.received_at||e.created_at).toLocaleDateString('es-CO') : '',
       Fecha_Calificacion: e.fecha_calificacion ? new Date(e.fecha_calificacion).toLocaleDateString('es-CO') : '',
-
       Canal:              (e.canal_contacto||e.origen||'correo').toUpperCase(),
-      Agente:             e.asignado_a||agById[e.agente_id]?.nombre||'',
+      Agente:             _normAgente(agById[e.agente_id]?.nombre || e.asignado_a || ''),
       Cedula_Paciente:    e.cedula_paciente||e.cedula||'',
       Email_Paciente:     e.from_email||e.correo||'',
       EPS:                epsCat.find(ep=>ep.id===e.eps_id)?.nombre||'',
@@ -2747,7 +2778,7 @@ async function exportarSIGI() {
       Asunto:             e.subject||'',
     }));
     const _wsSatSIGI = XLSX.utils.json_to_sheet(_hSatSIGI.length?_hSatSIGI:[{'Sin datos':'No hay calificaciones en el período'}]);
-    _wsSatSIGI['!cols']=[{wch:38},{wch:14},{wch:16},{wch:20},{wch:14},{wch:28},{wch:18},{wch:28},{wch:22},{wch:12},{wch:16},{wch:40}];
+    _wsSatSIGI['!cols']=[{wch:12},{wch:38},{wch:14},{wch:16},{wch:20},{wch:28},{wch:14},{wch:28},{wch:32},{wch:12},{wch:18},{wch:40}];
     XLSX.utils.book_append_sheet(wb, _wsSatSIGI, 'Satisfaccion_Correos');
 
     // ── Hoja 6: Satisfaccion_WhatsApp ────────────────────────────
@@ -2755,10 +2786,11 @@ async function exportarSIGI() {
     const _waH = hasta ? `&updated_at=lte.${hasta}T23:59:59-05:00` : '';
     const _waSessions = await sb(`wa_sesiones?calificacion=not.is.null`+_waD+_waH+`&select=telefono,nombre,eps,agente_nombre,calificacion,calificacion_texto,updated_at,tipificacion&limit=2000`).catch(()=>[]);
     const _hSatWa = (_waSessions||[]).filter(s=>s.calificacion>0).map(s=>({
+      Mes:                s.updated_at ? _mesesSat[new Date(s.updated_at).getMonth()] : '',
       Fecha:              s.updated_at ? new Date(s.updated_at).toLocaleDateString('es-CO') : '',
       ID:                 `WA-${(s.telefono||'').replace('+','')}`,
       Canal:              'WHATSAPP',
-      Agente:             s.agente_nombre||'',
+      Agente:             _normAgente(s.agente_nombre||''),
       EPS:                s.eps||'',
       Calificacion:       s.calificacion||'',
       Calificacion_Texto: s.calificacion_texto||'Sin calificación',
@@ -2766,7 +2798,7 @@ async function exportarSIGI() {
       Celular_Usuario:    s.telefono||'',
     }));
     const _wsSatWa = XLSX.utils.json_to_sheet(_hSatWa.length?_hSatWa:[{'Sin datos':'No hay calificaciones WhatsApp en el período'}]);
-    _wsSatWa['!cols']=[{wch:12},{wch:22},{wch:12},{wch:28},{wch:22},{wch:12},{wch:16},{wch:24},{wch:18}];
+    _wsSatWa['!cols']=[{wch:12},{wch:12},{wch:22},{wch:12},{wch:28},{wch:32},{wch:12},{wch:18},{wch:24},{wch:18}];
     XLSX.utils.book_append_sheet(wb, _wsSatWa, 'Satisfaccion_WhatsApp');
 
     // ── Descargar ─────────────────────────────────────────────────
