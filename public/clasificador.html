@@ -400,41 +400,62 @@ var T = {
 // ══════════════════════════════════════════════
 function ruleForPage(text){
   var t = text.toUpperCase();
+
+  // ── 1. FACTURA (señal más inequívoca) ─────────────────────────────────────
   if(t.includes('CUFE:') || t.includes('FACTURA ELECTRONICA') ||
      t.includes('MERCANCIA EXCLUIDA') || t.includes('RESOLUCION DE FACTURACION') ||
      (t.includes('TDNE') && t.includes('PRECIO UNI')))
     return 'FEV';
-  if(t.includes('ADRES') || t.includes('BDUA') ||
+
+  // ── 2. CRC — ANTES que PDE y DFV para evitar falsos positivos ─────────────
+  //    Las actas de entrega Tododrogas dicen "SIN VALIDACION ADRES" en
+  //    observaciones, lo que antes disparaba PDE. Su señal propia es mucho
+  //    más específica: código *D + 14 dígitos*, "ACTA DE ENTREGA",
+  //    "NOMBRE DE PERSONA QUE RECIBE" o "VALOR RECAUDADO" + firma.
+  if(/\*D\d{14}\*/.test(t) ||
+     t.includes('ACTA DE ENTREGA') ||
+     t.includes('NOMBRE DE PERSONA QUE RECIBE') ||
+     (t.includes('VALOR RECAUDADO') && t.includes('COP/CREC/CM')))
+    return 'CRC';
+
+  // ── 3. PDE — ADRES / BDUA / MIPRES ───────────────────────────────────────
+  //    Solo dispara cuando hay señales propias del documento ADRES,
+  //    NO por "SIN VALIDACION ADRES" que aparece en actas CRC.
+  if(t.includes('BDUA') ||
      t.includes('BASE DE DATOS ÚNICA DE AFILIADOS') ||
      t.includes('BASE DE DATOS UNICA DE AFILIADOS') ||
      t.includes('FECHA DE AFILIACIÓN EFECTIVA') ||
-     t.includes('FECHA DE AFILIACION EFECTIVA') || t.includes('MIPRES'))
+     t.includes('FECHA DE AFILIACION EFECTIVA') ||
+     t.includes('MIPRES') ||
+     (t.includes('ADRES') && (t.includes('BDUA') || t.includes('AFILIADOS') || t.includes('COTIZANTE') || t.includes('CONTRIBUTIVO'))))
     return 'PDE';
+
+  // ── 4. DFV — Orden de direccionamiento Salud Total ────────────────────────
+  //    Se eliminan señales débiles (PAGOS COMPARTIDOS, SERVICIOS DIRECCIONADOS,
+  //    INFORMACIÓN PRESTADOR, SALUD TOTAL+PRESTADOR) que también aparecen en
+  //    fórmulas médicas y actas. Solo señales unívocas del documento.
   if(t.includes('MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO') ||
      t.includes('MEDICAMENTOS - ORDEN DE DIRECCIONAMIENTO') ||
      t.includes('ORDEN DE DIRECCIONAMIENTO') ||
-     t.includes('SERVICIOS DIRECCIONADOS') ||
      t.includes('ENTIDAD RESPONSABLE DEL PAGO') ||
      t.includes('INFORMACIÓN DE LA TRANSACCIÓN') ||
      t.includes('INFORMACION DE LA TRANSACCION') ||
-     t.includes('PAGOS COMPARTIDOS') ||
      (t.includes('SALUD TOTAL') && t.includes('EPS002')) ||
-     (t.includes('SALUD TOTAL') && t.includes('PRESTADOR')) ||
-     (t.includes('FECHA VENCIMIENTO') && t.includes('NO. SOLICITUD')) ||
-     (t.includes('INFORMACIÓN PRESTADOR') || t.includes('INFORMACION PRESTADOR')))
+     (t.includes('FECHA VENCIMIENTO') && t.includes('NO. SOLICITUD') && t.includes('SALUD TOTAL')))
     return 'DFV';
-  if(t.includes('ACTA DE ENTREGA') || /\*D\d{14}\*/.test(t) ||
-     t.includes('NOMBRE DE PERSONA QUE RECIBE') || t.includes('VALOR RECAUDADO'))
-    return 'CRC';
+
+  // ── 5. OPF — Fórmula / Orden médica de IPS / Hospital ────────────────────
   if(t.includes('ORDEN MEDICAMENTOS P.O.S') || t.includes('ORDEN MEDICAMENTOS POS') ||
      t.includes('ESTA ORDEN ES VALIDA HASTA') ||
      t.includes('FORMULA MEDICA') || t.includes('FÓRMULA MÉDICA') ||
      t.includes('FORMULA MÉDICA') || t.includes('FÓRMULA MEDICA') ||
+     t.includes('FORMULA MÉDICA AMBULATORIA') ||
      t.includes('MEDICAMENTOS POS') ||
      t.includes('PROMOTORA CLINICA') || t.includes('ZONA FRANCA') ||
      t.includes('LICENCIADO A:') ||
      (t.includes('HOSPITAL') && t.includes('DOSIS') && t.includes('VIA') && !t.includes('CUFE')))
     return 'OPF';
+
   return null;
 }
 
@@ -810,13 +831,13 @@ PDE — ADRES / Validación de derechos / MIPRES:
 
 Reglas absolutas (en orden de prioridad):
 1. Si contiene CUFE → FEV
-2. Si contiene logo ADRES o BDUA → PDE
-3. Si ves título MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO (con o sin OCR) → DFV
-4. Si ves logo SaludTotal + número No.XXXXXXXX → DFV
-5. Si dice ACTA DE ENTREGA o código *D18...* → CRC
+2. Si contiene código *D + 14 dígitos*, "Acta de Entrega", "Nombre de persona que recibe" o "Valor Recaudado" + "Cop/Crec/Cm" → CRC  (ANTES que PDE, porque las actas dicen "SIN VALIDACION ADRES" en observaciones)
+3. Si contiene logo ADRES, BDUA, "Base de Datos Única de Afiliados", "Fecha de Afiliación Efectiva", COTIZANTE, o MIPRES → PDE  (solo si NO es un acta CRC)
+4. Si ves título MEDICAMENTOS-ORDEN DE DIRECCIONAMIENTO o "Entidad Responsable del Pago" de Salud Total → DFV  (señales fuertes únicamente; PAGOS COMPARTIDOS y SERVICIOS DIRECCIONADOS solos NO son suficientes)
+5. Si ves logo SaludTotal + número No.XXXXXXXX → DFV
 6. Si ves encabezado PROMOTORA CLINICA ZONA FRANCA o FORMULA MÉDICA + EVOLUCION → OPF
-7. Si tiene tabla MEDICAMENTO/DOSIS/VIA de hospital/clínica → OPF
-8. Si el OCR está vacío y la imagen muestra secciones de Salud Total EPS → DFV
+7. Si tiene tabla MEDICAMENTO/DOSIS/VIA de hospital/clínica/IPS → OPF
+8. Si el OCR está vacío y la imagen muestra secciones de Salud Total EPS con "Entidad Responsable del Pago" → DFV
 9. Si el OCR está vacío y la imagen muestra FORMULA MÉDICA o clínica/hospital → OPF
 10. Usa UNK SOLO si genuinamente no puedes determinar el tipo después de analizar todo.
 
