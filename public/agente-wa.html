@@ -838,15 +838,17 @@ async function refreshChat(tel){
     let ses=data[0];
     // Si el bot cerró la sesión (estado='cerrado') pero el agente no ha registrado la gestión
     // → convertir a 'pte_gestion' para que el agente sepa que debe actuar
-    if(ses.estado==='cerrado' && ses.agente_id){
-      const telWA = tel.replace('+','').replace(/\D/g,'');
+    // Solo verificar pte_gestion si NO se está guardando en este momento
+    if(ses.estado==='cerrado' && ses.agente_id && !_gWaGuardando){
+      const telWA = tel.replace(/\+?57/,'').replace(/\D/g,'');
       const hoyR2 = new Date().toISOString().slice(0,10).replace(/-/g,'');
-      const ticketId = `WA-${telWA}-${hoyR2}`;
+      const ticketIdR = `WA-${telWA}-${hoyR2}`;
       try{
-        const r = await sb(`correos?ticket_id=eq.${enc(ticketId)}&select=num_gestiones&limit=1`);
+        const r = await sb(`correos?ticket_id=eq.${enc(ticketIdR)}&select=num_gestiones,estado&limit=1`);
         const numG = r&&r[0] ? r[0].num_gestiones||0 : 0;
-        if(numG===0){
-          // El agente no ha gestionado — marcar como pte_gestion
+        const estG = r&&r[0] ? r[0].estado||'' : '';
+        // Solo pte_gestion si no hay gestiones Y el correo no está solucionado
+        if(numG===0 && estG!=='solucionado'){
           ses = {...ses, estado:'pte_gestion'};
           await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{estado:'pte_gestion'});
         }
@@ -1344,6 +1346,7 @@ function gWaValidarMeds() {
 }
 
 let _gWaEpsData = []; // cache EPS cargadas
+let _gWaGuardando = false; // bandera: bloquea polling mientras se guarda
 let _gWaTutela  = null;
 let _gWaMedCount = 0;
 
@@ -1444,6 +1447,11 @@ async function abrirCerrar(){
     document.getElementById('gWaDireccion').value = (ses.direccion||'').toUpperCase();
     // Email: usar el del correo activo (wa_xxx@tododrogas.online como fallback)
     document.getElementById('gWaEmail').value = ses.email || ses.from_email || `wa_${_telLimpio}@tododrogas.online`;
+    // ── Disparar autocomplete por cédula para llenar Dirección, Departamento
+    //    y cualquier otro campo que venga de tabla_usuarios
+    if(ses.cedula && ses.cedula.length >= 4){
+      gWaBuscarPaciente(ses.cedula, true); // inmediato — no esperar 600ms
+    }
     document.getElementById('gWaEpsSearch').value = ses.eps||'';
     document.getElementById('gWaEpsId').value = '';
     const nitEl = document.getElementById('gWaNitEps');
@@ -1497,9 +1505,10 @@ async function abrirCerrar(){
 
 // Buscar paciente por cédula
 let _gWaBuscarTimer = null;
-async function gWaBuscarPaciente(cedula){
+async function gWaBuscarPaciente(cedula, inmediato=false){
   clearTimeout(_gWaBuscarTimer);
   if(!cedula||cedula.length<6) return;
+  const delay = inmediato ? 50 : 600; // inmediato al abrir modal, 600ms al escribir
   _gWaBuscarTimer = setTimeout(async()=>{
     try{
       const r = await fetch(`${SB_URL}/rest/v1/rpc/buscar_paciente`,{
@@ -1614,6 +1623,7 @@ async function confirmarCerrar(){
   const ticketId = `WA-${telWA}-${hoy}`;
   const btn = document.getElementById('btnConfirmarCerrar');
   btn.disabled=true; btn.textContent='Guardando…';
+  _gWaGuardando = true; // bloquear polling
 
   try{
     // ── Verificar si es primera gestión del día ──
@@ -1791,9 +1801,12 @@ async function confirmarCerrar(){
     });
 
     document.getElementById('modalCerrar').classList.remove('open');
+    // Actualizar estado local inmediatamente para evitar que el polling lo revierta
     const idx=S.sesiones.findIndex(s=>s.telefono===S.selTel);
-    if(idx>=0) S.sesiones[idx].estado='cerrado';
-    if(S.selSesion) S.selSesion.estado='cerrado';
+    if(idx>=0){ S.sesiones[idx].estado='cerrado'; S.sesiones[idx].num_gestiones=(numGest+1); }
+    if(S.selSesion){ S.selSesion.estado='cerrado'; S.selSesion.num_gestiones=(numGest+1); }
+    // Detener polling de mensajes de esta conversación
+    if(S.pollingMsg){ clearInterval(S.pollingMsg); S.pollingMsg=null; }
     renderHdr(S.selSesion);renderInput(S.selSesion);renderInfo();updateCtrs();renderLista();
     toast(`Gestión #${numGest+1} registrada y conversación cerrada ✓`,'ok');
 
@@ -1803,6 +1816,7 @@ async function confirmarCerrar(){
   }finally{
     btn.disabled=false;
     btn.textContent='Guardar gestión y cerrar';
+    _gWaGuardando = false; // liberar polling
   }
 }
 
@@ -1946,17 +1960,20 @@ function startPolling(){
       // Detectar sesiones cerradas por bot sin gestión del agente
       for(const ses of data){
         if(ses.estado==='cerrado' && ses.agente_id){
-          const telW = ses.telefono.replace(/\+?57/,'').replace(/\D/g,'');
-          const hoyP  = new Date().toISOString().slice(0,10).replace(/-/g,'');
-          const tId = `WA-${telW}-${hoyP}`;
-          try{
-            const r = await sb(`correos?ticket_id=eq.${enc(tId)}&select=num_gestiones&limit=1`);
-            const numG = r&&r[0] ? r[0].num_gestiones||0 : 0;
-            if(numG===0){
-              ses.estado='pte_gestion';
-              sb(`wa_sesiones?telefono=eq.${enc(ses.telefono)}`,'PATCH',{estado:'pte_gestion'}).catch(()=>{});
-            }
-          }catch(e){}
+          if(!_gWaGuardando){ // no interferir mientras se guarda
+            const telW = ses.telefono.replace(/\+?57/,'').replace(/\D/g,'');
+            const hoyP  = new Date().toISOString().slice(0,10).replace(/-/g,'');
+            const tId = `WA-${telW}-${hoyP}`;
+            try{
+              const r = await sb(`correos?ticket_id=eq.${enc(tId)}&select=num_gestiones,estado&limit=1`);
+              const numG = r&&r[0] ? r[0].num_gestiones||0 : 0;
+              const estG = r&&r[0] ? r[0].estado||'' : '';
+              if(numG===0 && estG!=='solucionado'){
+                ses.estado='pte_gestion';
+                sb(`wa_sesiones?telefono=eq.${enc(ses.telefono)}`,'PATCH',{estado:'pte_gestion'}).catch(()=>{});
+              }
+            }catch(e){}
+          }
         }
       }
       updateCtrs();renderLista();
