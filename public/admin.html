@@ -516,6 +516,17 @@ html[data-theme="arctic"] .email-item,html[data-theme="arctic"] .gestion-modal,h
 html[data-theme="sunset"]     { --blue:#f97316!important;--blue-l:#ffedd5!important;--bg:#fffbf5!important;--surface:#fff7ed!important;--border:#fed7aa!important;--ink:#431407!important;--ink2:#9a3412!important;--ink3:#c2410c!important; }
 html[data-theme="sunset"] body,html[data-theme="sunset"] .folders-panel,html[data-theme="sunset"] .email-list-panel,html[data-theme="sunset"] .mgmt-right,html[data-theme="sunset"] .email-detail-outer{background:var(--bg)!important;color:var(--ink)!important}
 html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,html[data-theme="sunset"] .gestion-modal-wide,html[data-theme="sunset"] .tl-modal{background:var(--surface)!important;color:var(--ink)!important}
+
+/* ── Validación visual campos obligatorios primera gestión ── */
+.gm-req { color: var(--red); font-weight: 700; }
+.gm-req-txt { font-size: 9px; color: var(--red); font-weight: 600; text-transform: none; display: none; }
+.gm-input.gm-ok  { border-color: #16a34a !important; box-shadow: 0 0 0 2px rgba(22,163,74,.12); }
+.gm-input.gm-err { border-color: #dc2626 !important; box-shadow: 0 0 0 2px rgba(220,38,38,.12); }
+.gm-toggle-row.gm-ok  { outline: 2px solid #16a34a; border-radius: 6px; }
+.gm-toggle-row.gm-err { outline: 2px solid #dc2626; border-radius: 6px; }
+.gm-search-wrap.gm-ok  .gm-input { border-color: #16a34a !important; }
+.gm-search-wrap.gm-err .gm-input { border-color: #dc2626 !important; }
+#gCedulaMsg { font-size: 10px; color: var(--red); display: none; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -1501,8 +1512,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
       <!-- ── OBSERVACIONES — siempre visible ── -->
       <div id="secObsFixed" style="margin-bottom:12px">
         <div class="gm-field">
-          <label class="gm-label">Observaciones <span style="color:var(--red)">*</span></label>
-          <textarea class="gm-input" id="gestionObs" rows="3" placeholder="DESCRIBE LA GESTIÓN REALIZADA..." style="resize:vertical;min-height:80px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></textarea>
+          <label class="gm-label">Observaciones <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
+          <textarea class="gm-input" id="gestionObs" rows="3" placeholder="DESCRIBE LA GESTIÓN REALIZADA..." style="resize:vertical;min-height:80px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase();gValidarCampo('gestionObs','textarea')"></textarea>
         </div>
       </div>
 
@@ -1548,8 +1559,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         </div>
         <div class="gm-section-body collapsed" id="secPacienteBody">
           <div class="gm-field">
-            <label class="gm-label">Tipo de documento</label>
-            <select class="gm-input" id="gTipoDoc">
+            <label class="gm-label">Tipo de documento <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
+            <select class="gm-input" id="gTipoDoc" onchange="gValidarCampo('gTipoDoc','select')">
               <option value="">— Seleccionar —</option>
               <option value="CÉDULA DE CIUDADANÍA">Cédula de ciudadanía</option>
               <option value="TARJETA DE IDENTIDAD">Tarjeta de identidad</option>
@@ -1571,30 +1582,31 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </select>
           </div>
           <div class="gm-field">
-            <label class="gm-label">N° Documento <span style="color:var(--ink3);font-weight:400;text-transform:none;font-size:9px">→ autocompleta</span></label>
+            <label class="gm-label">N° Documento <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span> <span style="color:var(--ink3);font-weight:400;text-transform:none;font-size:9px">→ autocompleta</span></label>
             <div style="display:flex;gap:6px">
-              <input class="gm-input" id="gCedula" type="text" placeholder="Ej: 1020304050" oninput="gBuscarPaciente(this.value)" style="flex:1">
+              <input class="gm-input" id="gCedula" type="text" placeholder="Ej: 1020304050" oninput="gValidarCedula(this);gBuscarPaciente(this.value)" style="flex:1">
               <div id="gBuscandoSpinner" style="display:none;align-items:center;padding:0 6px;color:var(--ink3)">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
               </div>
             </div>
+            <div id="gCedulaMsg">Por favor ingrese un número válido</div>
           </div>
           <div class="gm-field span2">
-            <label class="gm-label">Nombre y apellidos</label>
-            <input class="gm-input" id="gNombre" type="text" placeholder="Se autocompleta…">
+            <label class="gm-label">Nombre y apellidos <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
+            <input class="gm-input" id="gNombre" type="text" placeholder="Se autocompleta…" oninput="gValidarCampo('gNombre','input')">
           </div>
           <div class="gm-field span2">
-            <label class="gm-label">Dirección</label>
-            <input class="gm-input" id="gDireccion" type="text" placeholder="Se autocompleta…">
+            <label class="gm-label">Dirección <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
+            <input class="gm-input" id="gDireccion" type="text" placeholder="Se autocompleta…" oninput="gValidarCampo('gDireccion','input')">
           </div>
           <div class="gm-field">
-            <label class="gm-label">Teléfono <span style="color:var(--ink3);font-weight:400;text-transform:none;font-size:9px">cel 10 dig / fijo 7 dig</span></label>
-            <input class="gm-input" id="gTelefono" type="text" placeholder="Se autocompleta…" oninput="gValidarTel(this)">
+            <label class="gm-label">Teléfono <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span> <span style="color:var(--ink3);font-weight:400;text-transform:none;font-size:9px">cel 10 dig / fijo 7 dig</span></label>
+            <input class="gm-input" id="gTelefono" type="text" placeholder="Se autocompleta…" oninput="gValidarTel(this);gValidarCampo('gTelefono','input')">
             <span id="gTelError" style="font-size:10px;color:var(--red);display:none">Debe tener 7 o 10 dígitos</span>
           </div>
           <div class="gm-field">
-            <label class="gm-label">Email</label>
-            <input class="gm-input" id="gEmail" type="text" placeholder="Se autocompleta…">
+            <label class="gm-label">Email <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
+            <input class="gm-input" id="gEmail" type="text" placeholder="Se autocompleta…" oninput="gValidarCampo('gEmail','input')">
           </div>
         </div>
       </div>
@@ -1608,7 +1620,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
         </div>
         <div class="gm-section-body collapsed" id="secEpsBody">
           <div class="gm-field span2">
-            <label class="gm-label">EPS <span style="color:var(--red)">*</span></label>
+            <label class="gm-label">EPS <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
             <div class="gm-search-wrap">
               <input class="gm-input" id="gEpsSearch" type="text" placeholder="Escribir para buscar EPS…" oninput="gFiltrarEPS(this.value)" onfocus="gFiltrarEPS('')" autocomplete="off">
               <button class="gm-clear" onclick="gLimpiarEPS()">×</button>
@@ -1621,8 +1633,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </div>
           </div>
           <div class="gm-field">
-            <label class="gm-label">Origen</label>
-            <select class="gm-input" id="gOrigen">
+            <label class="gm-label">Origen <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
+            <select class="gm-input" id="gOrigen" onchange="gValidarCampo('gOrigen','select')">
               <option value="">— Seleccionar —</option>
               <option value="CORREO ELECTRONICO">Correo electrónico</option>
               <option value="WHATSAPP">WhatsApp</option>
@@ -1635,7 +1647,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </select>
           </div>
           <div class="gm-field">
-            <label class="gm-label">Tipo de solicitud</label>
+            <label class="gm-label">Tipo de solicitud <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
             <div class="gm-search-wrap">
               <input class="gm-input" id="gNombreSolSearch" type="text" placeholder="Buscar tipo de solicitud…" oninput="gFiltrarNombreSol(this.value)" onfocus="gMostrarTipoSolicitud()" autocomplete="off">
               <button class="gm-clear" onclick="gLimpiarNombreSol()">×</button>
@@ -1644,7 +1656,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <input type="hidden" id="gNombreSolVal">
           </div>
           <div class="gm-field">
-            <label class="gm-label">Detalle solicitud</label>
+            <label class="gm-label">Detalle solicitud <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
             <div class="gm-search-wrap">
               <input class="gm-input" id="gDetalleSearch" type="text" placeholder="Buscar detalle…" oninput="gFiltrarDetalle(this.value)" onfocus="gMostrarDetalles()" autocomplete="off">
               <button class="gm-clear" onclick="gLimpiarDetalle()">×</button>
@@ -1653,7 +1665,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <input type="hidden" id="gDetalleVal">
           </div>
           <div class="gm-field">
-            <label class="gm-label">Departamento</label>
+            <label class="gm-label">Departamento <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
             <div class="gm-search-wrap">
               <input class="gm-input" id="gDeptoSearch" type="text" placeholder="Buscar departamento…" oninput="gFiltrarDepto(this.value)" autocomplete="off">
               <button class="gm-clear" onclick="gLimpiarDepto()">×</button>
@@ -1662,7 +1674,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <input type="hidden" id="gDeptoVal">
           </div>
           <div class="gm-field">
-            <label class="gm-label">Ciudad</label>
+            <label class="gm-label">Ciudad <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
             <div class="gm-search-wrap">
               <input class="gm-input" id="gCiudadSearch" type="text" placeholder="Buscar ciudad de sede…" oninput="gFiltrarCiudad(this.value)" onfocus="gFiltrarCiudad(this.value)" onblur="setTimeout(()=>{document.getElementById('gCiudadDropdown').style.display='none'},200)" autocomplete="off">
               <button class="gm-clear" onclick="gLimpiarCiudad()">×</button>
@@ -1671,8 +1683,8 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <input type="hidden" id="gCiudadVal">
           </div>
           <div class="gm-field">
-            <label class="gm-label">Categoría</label>
-            <select class="gm-input" id="gCategoria">
+            <label class="gm-label">Categoría <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
+            <select class="gm-input" id="gCategoria" onchange="gValidarCampo('gCategoria','select')">
               <option value="">— Seleccionar —</option>
               <option value="EPS">EPS</option>
               <option value="TODODROGAS">Tododrogas</option>
@@ -1683,7 +1695,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </select>
           </div>
           <div class="gm-field">
-            <label class="gm-label">¿Tiene tutela?</label>
+            <label class="gm-label">¿Tiene tutela? <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
             <div class="gm-toggle-row">
               <button class="gm-toggle-btn" id="gTutelaSi" onclick="gSetTutela(true)">SÍ</button>
               <button class="gm-toggle-btn" id="gTutelaNo" onclick="gSetTutela(false)">NO</button>
@@ -1739,7 +1751,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
     </div>
     <div class="form-field">
       <label class="form-label">Observaciones de cierre <span style="font-weight:400;color:var(--ink3)">(opcional)</span></label>
-      <textarea class="form-input" id="firmaObs" rows="3" placeholder="EJ: FIRMA DE CONFORMIDAD DEL CIUDADANO ADJUNTA..." style="resize:vertical;min-height:70px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></textarea>
+      <textarea class="form-input" id="firmaObs" rows="3" placeholder="EJ: FIRMA DE CONFORMIDAD DEL CIUDADANO ADJUNTA..." style="resize:vertical;min-height:70px;text-transform:uppercase" oninput="this.value=this.value.toUpperCase();gValidarCampo('gestionObs','textarea')"></textarea>
     </div>
     <div id="firmaError" style="display:none;background:var(--red-l);color:var(--red);border-radius:var(--r2);padding:8px 12px;font-size:11px;font-weight:700;margin-bottom:10px"></div>
     <div class="modal-actions">
@@ -2359,11 +2371,28 @@ async function exportarSIGI() {
     hist.forEach(h => {
       try {
         const ex = typeof h.datos_extra === 'string' ? JSON.parse(h.datos_extra) : (h.datos_extra || {});
-        if (ex.cedula_paciente && h.correo_id) {
-          const prev = datosGestion[h.correo_id];
-          if (!prev || (ex.nombre_paciente && !prev.nombre_paciente)) {
-            datosGestion[h.correo_id] = ex;
-          }
+        const tieneData = ex.cedula_paciente||ex.nombre_paciente||ex.eps_id||ex.eps_nombre||
+                          ex.nombre_solicitud||ex.detalle_solicitud||ex.departamento||
+                          ex.ciudad||ex.categoria_sigi||ex.origen||ex.tipo_documento||
+                          ex.direccion||ex.telefono;
+        if(tieneData && h.correo_id) {
+          const prev = datosGestion[h.correo_id] || {};
+          const merged = {...prev};
+          if(ex.cedula_paciente   && !merged.cedula_paciente)   merged.cedula_paciente   = ex.cedula_paciente;
+          if(ex.nombre_paciente   && !merged.nombre_paciente)   merged.nombre_paciente   = ex.nombre_paciente;
+          if(ex.eps_id            && !merged.eps_id)            merged.eps_id            = ex.eps_id;
+          if(ex.eps_nombre        && !merged.eps_nombre)        merged.eps_nombre        = ex.eps_nombre;
+          if(ex.nombre_solicitud  && !merged.nombre_solicitud)  merged.nombre_solicitud  = ex.nombre_solicitud;
+          if(ex.detalle_solicitud && !merged.detalle_solicitud) merged.detalle_solicitud = ex.detalle_solicitud;
+          if(ex.departamento      && !merged.departamento)      merged.departamento      = ex.departamento;
+          if(ex.ciudad            && !merged.ciudad)            merged.ciudad            = ex.ciudad;
+          if(ex.categoria_sigi    && !merged.categoria_sigi)    merged.categoria_sigi    = ex.categoria_sigi;
+          if(ex.origen            && !merged.origen)            merged.origen            = ex.origen;
+          if(ex.tipo_documento    && !merged.tipo_documento)    merged.tipo_documento    = ex.tipo_documento;
+          if(ex.direccion         && !merged.direccion)         merged.direccion         = ex.direccion;
+          if(ex.telefono          && !merged.telefono)          merged.telefono          = ex.telefono;
+          if(ex.tiene_tutela!==undefined && merged.tiene_tutela===undefined) merged.tiene_tutela = ex.tiene_tutela;
+          datosGestion[h.correo_id] = merged;
         }
       } catch(e) {}
     });
@@ -4611,6 +4640,8 @@ function gSetTutela(val) {
   _gTutela = val;
   document.getElementById('gTutelaSi').className = 'gm-toggle-btn' + (val===true?' active-si':'');
   document.getElementById('gTutelaNo').className = 'gm-toggle-btn' + (val===false?' active-no':'');
+  const row = document.querySelector('.gm-toggle-row');
+  if(row) { row.classList.add('gm-ok'); row.classList.remove('gm-err'); }
 }
 
 // ── Búsqueda EPS ──────────────────────────────
@@ -4655,6 +4686,7 @@ function gSelectEPS(id, nombre, nit) {
   document.getElementById('gEpsId').value = id;
   document.getElementById('gNitEps').textContent = nit || '—';
   document.getElementById('gEpsDropdown').style.display = 'none';
+  gMarcarSearchOk('gEpsSearch','gEpsId');
 }
 function gLimpiarEPS() {
   document.getElementById('gEpsSearch').value = '';
@@ -4664,6 +4696,73 @@ function gLimpiarEPS() {
 }
 
 // ── Tipo de Solicitud (antes "Nombre Solicitud") ─────
+
+// ── Validación visual en tiempo real ─────────────────────────────────────────
+function gValidarCampo(id, tipo) {
+  const el = document.getElementById(id);
+  if(!el) return;
+  const val = (tipo === 'select') ? el.value : el.value.trim();
+  if(val) { el.classList.remove('gm-err'); el.classList.add('gm-ok'); }
+  else    { el.classList.remove('gm-ok');  el.classList.add('gm-err'); }
+}
+
+function gValidarCedula(el) {
+  const v = el.value.trim();
+  const msg = document.getElementById('gCedulaMsg');
+  // Solo letras (sin números) → inválido (pasaporte puede tener letras+nums)
+  if(v && /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(v)) {
+    el.classList.add('gm-err'); el.classList.remove('gm-ok');
+    if(msg) msg.style.display = 'block';
+  } else if(v) {
+    el.classList.add('gm-ok'); el.classList.remove('gm-err');
+    if(msg) msg.style.display = 'none';
+  } else {
+    el.classList.add('gm-err'); el.classList.remove('gm-ok');
+    if(msg) msg.style.display = 'none';
+  }
+}
+
+// Llamar desde gBuscarPaciente cuando autocompleta para marcar verde
+function gMarcarCampoOk(id) {
+  const el = document.getElementById(id);
+  if(el && el.value.trim()) { el.classList.remove('gm-err'); el.classList.add('gm-ok'); }
+}
+function gMarcarSearchOk(searchId, valId) {
+  const el = document.getElementById(searchId);
+  const v  = document.getElementById(valId)?.value;
+  if(el) { if(v) { el.classList.remove('gm-err'); el.classList.add('gm-ok'); } else { el.classList.remove('gm-ok'); el.classList.add('gm-err'); } }
+}
+
+// Validar medicamentos — si cualquier campo del med está lleno, todos son obligatorios
+function gValidarMedicamentos() {
+  let todosOk = true;
+  for(let i = 1; i <= _gMedCount; i++) {
+    const wrap = document.getElementById(`gMed_${i}`);
+    if(!wrap) continue;
+    const cod   = (document.getElementById(`gMedCodHidden_${i}`)?.value || document.getElementById(`gMedCod_${i}`)?.value || '').trim();
+    const desc  = (document.getElementById(`gMedDesc_${i}`)?.value || '').trim();
+    const descE = (document.getElementById(`gMedDescEsc_${i}`)?.value || '').trim();
+    const cant  = (document.getElementById(`gMedCant_${i}`)?.value || '').trim();
+    const pbs   = (document.getElementById(`gMedPbs_${i}`)?.value || '').trim();
+    // Si tocó alguno → todos obligatorios
+    const toco = cod || desc || descE || cant || pbs;
+    if(toco) {
+      let medOk = true;
+      const markMed = (elId, val) => {
+        const el = document.getElementById(elId);
+        if(!el) return;
+        if(val) { el.classList.remove('gm-err'); el.classList.add('gm-ok'); }
+        else    { el.classList.remove('gm-ok');  el.classList.add('gm-err'); medOk = false; todosOk = false; }
+      };
+      markMed(`gMedCod_${i}`,  cod);
+      markMed(`gMedDesc_${i}`, desc);
+      markMed(`gMedCant_${i}`, cant);
+      markMed(`gMedPbs_${i}`,  pbs);
+    }
+  }
+  return todosOk;
+}
+
 const G_NOMBRES_SOL = {
   'Petición':                   [],
   'Queja':                      [],
@@ -4732,13 +4831,16 @@ function gSelectNombreSol(val) {
   if(detalleActual && !detalles.includes(detalleActual)) {
     document.getElementById('gDetalleSearch').value = '';
     document.getElementById('gDetalleVal').value = '';
+    gMarcarSearchOk('gDetalleSearch','gDetalleVal');
   }
+  gMarcarSearchOk('gNombreSolSearch','gNombreSolVal');
 }
 function gLimpiarNombreSol() {
   document.getElementById('gNombreSolSearch').value = '';
   document.getElementById('gNombreSolVal').value = '';
   document.getElementById('gNombreSolDropdown').style.display = 'none';
   window._gDetallesActivos = null;
+  gMarcarSearchOk('gNombreSolSearch','gNombreSolVal');
 }
 
 // ── Búsqueda Detalle solicitud ────────────────
@@ -4757,11 +4859,13 @@ function gSelectDetalle(val) {
   document.getElementById('gDetalleSearch').value = val;
   document.getElementById('gDetalleVal').value = val;
   document.getElementById('gDetalleDropdown').style.display = 'none';
+  gMarcarSearchOk('gDetalleSearch','gDetalleVal');
 }
 function gLimpiarDetalle() {
   document.getElementById('gDetalleSearch').value = '';
   document.getElementById('gDetalleVal').value = '';
   document.getElementById('gDetalleDropdown').style.display = 'none';
+  gMarcarSearchOk('gDetalleSearch','gDetalleVal');
 }
 
 // ── Departamentos y ciudades de Colombia (lista estática) ──
@@ -4871,6 +4975,7 @@ function gSelectCiudad(val) {
   document.getElementById('gCiudadSearch').value = val;
   document.getElementById('gCiudadVal').value    = val;
   document.getElementById('gCiudadDropdown').style.display = 'none';
+  gMarcarSearchOk('gCiudadSearch','gCiudadVal');
 }
 function gLimpiarCiudad() {
   document.getElementById('gCiudadSearch').value = '';
@@ -5385,14 +5490,33 @@ async function openGestionModal(mode) {
       const eps = state.epsCatalogo.find(e=>e.id===email.eps_id);
       if(eps) gSelectEPS(eps.id, eps.nombre, eps.nit||'');
     }
+    // Precargar Nombre Solicitud SOLO si el valor está en el catálogo oficial
+    const _catalogoNombres = Object.keys(G_NOMBRES_SOL);
+    const _catalogoNombresUp = _catalogoNombres.map(n => n.toUpperCase());
     if(email.nombre_solicitud) {
-      document.getElementById('gNombreSolSearch').value = email.nombre_solicitud;
-      document.getElementById('gNombreSolVal').value    = email.nombre_solicitud;
-      window._gDetallesActivos = G_NOMBRES_SOL[email.nombre_solicitud]||null;
+      const _nomIdx = _catalogoNombresUp.indexOf(email.nombre_solicitud.trim().toUpperCase());
+      if(_nomIdx >= 0) {
+        const _nomValido = _catalogoNombres[_nomIdx];
+        document.getElementById('gNombreSolSearch').value = _nomValido;
+        document.getElementById('gNombreSolVal').value    = _nomValido;
+        window._gDetallesActivos = G_NOMBRES_SOL[_nomValido] || null;
+      } else {
+        document.getElementById('gNombreSolSearch').value = '';
+        document.getElementById('gNombreSolVal').value    = '';
+        window._gDetallesActivos = null;
+      }
     }
+    // Precargar Detalle Solicitud SOLO si el valor está en el catálogo oficial
+    const _catalogoDetallesUp = G_DETALLES.map(d => d.toUpperCase());
     if(email.detalle_solicitud) {
-      document.getElementById('gDetalleSearch').value = email.detalle_solicitud;
-      document.getElementById('gDetalleVal').value    = email.detalle_solicitud;
+      const _detIdx = _catalogoDetallesUp.indexOf(email.detalle_solicitud.trim().toUpperCase());
+      if(_detIdx >= 0) {
+        document.getElementById('gDetalleSearch').value = G_DETALLES[_detIdx];
+        document.getElementById('gDetalleVal').value    = G_DETALLES[_detIdx];
+      } else {
+        document.getElementById('gDetalleSearch').value = '';
+        document.getElementById('gDetalleVal').value    = '';
+      }
     }
     if(email.departamento_paciente) {
       document.getElementById('gDeptoSearch').value = email.departamento_paciente;
@@ -5427,6 +5551,43 @@ async function openGestionModal(mode) {
   gCargarCiudadesSedes();
 
   document.getElementById('modalGestion').classList.add('show');
+  // Inicializar estado visual de campos: rojo si primera gestión
+  if(esPrimera) {
+    setTimeout(() => {
+      ['gTipoDoc','gCedula','gNombre','gDireccion','gTelefono','gEmail',
+       'gOrigen','gCategoria','gestionObs'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) {
+          const val = el.value || el.innerText || '';
+          if(val.trim()) { el.classList.remove('gm-err'); el.classList.add('gm-ok'); }
+          else           { el.classList.remove('gm-ok');  el.classList.add('gm-err'); }
+        }
+      });
+      // EPS
+      const epsEl = document.getElementById('gEpsSearch');
+      const epsId = document.getElementById('gEpsId')?.value;
+      if(epsEl) { if(epsId) { epsEl.classList.add('gm-ok'); epsEl.classList.remove('gm-err'); } else { epsEl.classList.add('gm-err'); epsEl.classList.remove('gm-ok'); } }
+      // Nombre solicitud
+      const nsEl = document.getElementById('gNombreSolSearch');
+      const nsVal = document.getElementById('gNombreSolVal')?.value;
+      if(nsEl) { if(nsVal) { nsEl.classList.add('gm-ok'); nsEl.classList.remove('gm-err'); } else { nsEl.classList.add('gm-err'); nsEl.classList.remove('gm-ok'); } }
+      // Detalle
+      const dsEl = document.getElementById('gDetalleSearch');
+      const dsVal = document.getElementById('gDetalleVal')?.value;
+      if(dsEl) { if(dsVal) { dsEl.classList.add('gm-ok'); dsEl.classList.remove('gm-err'); } else { dsEl.classList.add('gm-err'); dsEl.classList.remove('gm-ok'); } }
+      // Departamento
+      const dpEl = document.getElementById('gDeptoSearch');
+      const dpVal = document.getElementById('gDeptoVal')?.value;
+      if(dpEl) { if(dpVal) { dpEl.classList.add('gm-ok'); dpEl.classList.remove('gm-err'); } else { dpEl.classList.add('gm-err'); dpEl.classList.remove('gm-ok'); } }
+      // Ciudad
+      const cdEl = document.getElementById('gCiudadSearch');
+      const cdVal = document.getElementById('gCiudadVal')?.value;
+      if(cdEl) { if(cdVal) { cdEl.classList.add('gm-ok'); cdEl.classList.remove('gm-err'); } else { cdEl.classList.add('gm-err'); cdEl.classList.remove('gm-ok'); } }
+      // Tutela
+      const tutRow = document.querySelector('.gm-toggle-row');
+      if(tutRow) { if(_gTutela !== null) { tutRow.classList.add('gm-ok'); tutRow.classList.remove('gm-err'); } else { tutRow.classList.add('gm-err'); tutRow.classList.remove('gm-ok'); } }
+    }, 50);
+  }
 }
 
 // Cerrar dropdowns al hacer clic fuera
@@ -5468,10 +5629,52 @@ async function saveGestion() {
 
   // ── Validación extra en primera gestión ──
   if(esPrimera) {
-    if(!document.getElementById('gEpsId')?.value)         { showToast('EPS es obligatoria en la primera gestión','error'); return; }
-    if(!document.getElementById('gOrigen')?.value)        { showToast('Origen es obligatorio en la primera gestión','error'); return; }
-    if(!document.getElementById('gNombreSolVal')?.value)  { showToast('Nombre Solicitud es obligatorio en la primera gestión','error'); return; }
-    if(!document.getElementById('gCategoria')?.value)     { showToast('Categoría es obligatoria en la primera gestión','error'); return; }
+    const _vFail = (msg, elId) => {
+      showToast(msg, 'error');
+      if(elId) { const el=document.getElementById(elId); if(el){el.classList.add('gm-err');el.classList.remove('gm-ok');el.focus();} }
+    };
+    // Observaciones
+    if(!obs) { _vFail('Las observaciones son obligatorias','gestionObs'); return; }
+    // Tipo documento
+    if(!document.getElementById('gTipoDoc')?.value)       { _vFail('Tipo de documento es obligatorio','gTipoDoc'); return; }
+    // Cédula
+    const _cedVal = document.getElementById('gCedula')?.value?.trim()||'';
+    if(!_cedVal) { _vFail('N° Documento es obligatorio','gCedula'); return; }
+    if(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(_cedVal)) { _vFail('Por favor ingrese un número válido','gCedula'); return; }
+    // Nombre
+    if(!document.getElementById('gNombre')?.value?.trim()) { _vFail('Nombre y apellidos es obligatorio','gNombre'); return; }
+    // Dirección
+    if(!document.getElementById('gDireccion')?.value?.trim()) { _vFail('Dirección es obligatoria','gDireccion'); return; }
+    // Teléfono
+    if(!document.getElementById('gTelefono')?.value?.trim()) { _vFail('Teléfono es obligatorio','gTelefono'); return; }
+    // Email
+    if(!document.getElementById('gEmail')?.value?.trim())    { _vFail('Email es obligatorio','gEmail'); return; }
+    // EPS
+    if(!document.getElementById('gEpsId')?.value)            { _vFail('EPS es obligatoria','gEpsSearch'); return; }
+    // Origen
+    if(!document.getElementById('gOrigen')?.value)           { _vFail('Origen es obligatorio','gOrigen'); return; }
+    // Nombre Solicitud — obligatorio y en catálogo
+    const _nomSolVal = document.getElementById('gNombreSolVal')?.value||'';
+    if(!_nomSolVal) { _vFail('Tipo de solicitud es obligatorio','gNombreSolSearch'); return; }
+    if(!Object.keys(G_NOMBRES_SOL).map(n=>n.toUpperCase()).includes(_nomSolVal.trim().toUpperCase())) {
+      _vFail('Tipo de solicitud debe ser un valor del catálogo','gNombreSolSearch'); return;
+    }
+    // Detalle Solicitud — obligatorio y en catálogo
+    const _detSolVal = document.getElementById('gDetalleVal')?.value||'';
+    if(!_detSolVal) { _vFail('Detalle solicitud es obligatorio','gDetalleSearch'); return; }
+    if(!G_DETALLES.map(d=>d.toUpperCase()).includes(_detSolVal.trim().toUpperCase())) {
+      _vFail('Detalle solicitud debe ser un valor del catálogo','gDetalleSearch'); return;
+    }
+    // Departamento
+    if(!document.getElementById('gDeptoVal')?.value)         { _vFail('Departamento es obligatorio','gDeptoSearch'); return; }
+    // Ciudad
+    if(!document.getElementById('gCiudadVal')?.value)        { _vFail('Ciudad es obligatoria','gCiudadSearch'); return; }
+    // Categoría
+    if(!document.getElementById('gCategoria')?.value)        { _vFail('Categoría es obligatoria','gCategoria'); return; }
+    // Tutela
+    if(_gTutela === null || _gTutela === undefined)           { _vFail('Debe indicar si tiene tutela',''); return; }
+    // Medicamentos: si tocó algún campo → todos obligatorios
+    if(!gValidarMedicamentos()) { showToast('Complete todos los campos del medicamento agregado','error'); return; }
   }
 
   const _rawAgId  = sessionStorage.getItem('pqr_agent_id')||'';
@@ -10824,7 +11027,7 @@ function cerrarObsDispensa() {
 
     <div>
       <label class="obs-label" for="obsDispensaObs">Observación</label>
-      <textarea id="obsDispensaObs" rows="3" placeholder="ESCRIBA UNA OBSERVACIÓN (OPCIONAL)…" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"></textarea>
+      <textarea id="obsDispensaObs" rows="3" placeholder="ESCRIBA UNA OBSERVACIÓN (OPCIONAL)…" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase();gValidarCampo('gestionObs','textarea')"></textarea>
     </div>
 
     <div>
