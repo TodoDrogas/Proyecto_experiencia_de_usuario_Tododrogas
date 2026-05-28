@@ -578,6 +578,11 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
         <div>
           <div class="page-title">🌐 Vista Global</div>
           <div class="page-sub" id="globalSub">Todas las conversaciones activas</div>
+        <span id="g-activas" style="display:none"></span>
+        <span id="g-nova" style="display:none"></span>
+        <span id="g-escaladas" style="display:none"></span>
+        <span id="g-agents" style="display:none"></span>
+        <span id="g-pausa" style="display:none"></span>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <select class="filter-select" id="globalFiltroEstado" onchange="renderGlobal()">
@@ -589,15 +594,6 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
           </select>
           <button class="btn btn-ghost btn-sm" onclick="loadVistaGlobal()">↻</button>
         </div>
-      </div>
-
-      <!-- KPIs -->
-      <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:16px">
-        <div class="kpi-card kpi-green"><div class="kpi-label">Activas</div><div class="kpi-val" id="g-activas">—</div><div class="kpi-bar"></div></div>
-        <div class="kpi-card kpi-nova"><div class="kpi-label">Nova TD</div><div class="kpi-val" id="g-nova">—</div><div class="kpi-bar"></div></div>
-        <div class="kpi-card kpi-amber"><div class="kpi-label">Escaladas</div><div class="kpi-val" id="g-escaladas">—</div><div class="kpi-bar"></div></div>
-        <div class="kpi-card kpi-blue"><div class="kpi-label">Agentes online</div><div class="kpi-val" id="g-agents">—</div><div class="kpi-bar"></div></div>
-        <div class="kpi-card kpi-red"><div class="kpi-label">En pausa</div><div class="kpi-val" id="g-pausa">—</div><div class="kpi-bar"></div></div>
       </div>
 
       <!-- Layout: iframe ocupa todo el ancho -->
@@ -925,12 +921,24 @@ function filtrarPorAgente(agenteId, el){
 
     placeholder.style.display = 'none';
     iframe.style.display = 'block';
-    // Carga la vista del agente embebida (pasa agente_id como query param)
-    const base = 'agente-wa.html';
-    const url  = `${base}?embed=1&agent_id=${encodeURIComponent(agenteId)}`;
+    // Carga la vista del agente inyectando sessionStorage ANTES de que corra el JS de la página
     if(iframe.dataset.loaded !== agenteId){
-      iframe.src = url;
       iframe.dataset.loaded = agenteId;
+      const agentNombre = agente?.nombre || 'Agente';
+      // Paso 1: navegar a about:blank para tener acceso al contentWindow del mismo proceso
+      iframe.onload = null;
+      iframe.src = 'about:blank';
+      // Paso 2: una vez en about:blank, escribir sessionStorage e ir a la URL real
+      iframe.addEventListener('load', function onBlankLoad(){
+        iframe.removeEventListener('load', onBlankLoad);
+        try{
+          // Escribir en el sessionStorage del iframe (mismo proceso, no hay restricción CORS)
+          iframe.contentWindow.sessionStorage.setItem('pqr_agent_id', agenteId);
+          iframe.contentWindow.sessionStorage.setItem('pqr_name', agentNombre);
+        }catch(e){ console.warn('sessionStorage inject failed:', e); }
+        // Paso 3: ahora navegar a la vista del agente — el sessionStorage ya está listo
+        iframe.src = 'agente-wa.html?embed=1';
+      });
     }
   }
 
