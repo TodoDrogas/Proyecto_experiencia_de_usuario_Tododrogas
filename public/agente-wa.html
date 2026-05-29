@@ -973,9 +973,12 @@ const RR=[
   await loadSesiones();
   // Si viene filtro desde URL (admin viendo Nova TD), aplicarlo
   if(typeof _urlFiltroEstado !== 'undefined' && _urlFiltroEstado){
-    // Para Nova TD admin: mostrar nova + escalado + pte_gestion (todas las que gestiona Nova)
-    S.filtro = _urlFiltroEstado === 'nova' ? 'todas' : _urlFiltroEstado;
-    // Pero ocultar 'cerrado' del listado para mantener limpio
+    // Para Nova TD admin: mostrar todas las sesiones relevantes
+    if(_urlFiltroEstado === 'nova_all' || _urlFiltroEstado === 'nova'){
+      S.filtro = 'todas';
+    } else {
+      S.filtro = _urlFiltroEstado;
+    }
     renderLista();
   }
   startPolling();
@@ -1350,7 +1353,7 @@ function renderInput(ses){
     '  <div class="wa-input-box">' +
     '    <div id="emojiPicker" class="emoji-picker"></div>' +
     '    <span class="emoji-btn" onclick="toggleEmojiPicker(event)" title="Emoji" style="margin-bottom:2px">😊</span>' +
-    '    <textarea id="msgTa" placeholder="Escribe un mensaje..." onkeydown="onMsgKey(event)" oninput="autoH(this);onInputChange()" rows="1"></textarea>' +
+    '    <textarea id="msgTa" placeholder="Escribe un mensaje..." onkeydown="onMsgKey(event)" oninput="autoH(this);onInputChange()" onpaste="setTimeout(onInputChange,10)" onfocus="onInputChange()" rows="1"></textarea>' +
     '  </div>' +
     '  <button class="wa-mic-btn" id="micBtn" onclick="toggleMic()" title="Grabar audio">' +
     '    <svg id="micIcon" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" fill="none" stroke-width="2"/><line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" stroke-width="2"/><line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" stroke-width="2"/></svg>' +
@@ -2828,6 +2831,7 @@ function insertEmoji(e){
   ta.selectionStart = ta.selectionEnd = s + e.length;
   ta.focus();
   autoH(ta);
+  onInputChange();
 }
 
 function toggleEmojiPicker(ev){
