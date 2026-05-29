@@ -6022,6 +6022,102 @@ async function toggleEstadoLinea(){
     }catch(e){}
   });
 })();
+
+// ══════════════════════════════════════════════════════════════════════════
+// DETECCIÓN INTELIGENTE DE INACTIVIDAD GLOBAL (aplica a todo el sistema SIGI)
+// ══════════════════════════════════════════════════════════════════════════
+(function initIdleDetector(){
+  const IDLE_MIN       = 5;   // minutos sin actividad → pausa automática
+  const HIDDEN_MIN     = 2;   // minutos con pestaña oculta → pausa automática
+  let   _idleTimer     = null;
+  let   _autoPaused    = false;
+
+  function getSIGIAgentId(){
+    return sessionStorage.getItem('pqr_agent_id') || '';
+  }
+
+  async function patchAgente(payload){
+    const id = getSIGIAgentId();
+    if(!id) return;
+    try{
+      await fetch(`${window.SUPABASE_URL}/rest/v1/agentes?id=eq.${id}`,{
+        method:'PATCH',
+        headers:{
+          'apikey':        window.SUPABASE_KEY,
+          'Authorization': 'Bearer ' + window.SUPABASE_KEY,
+          'Content-Type':  'application/json',
+          'Prefer':        'return=minimal'
+        },
+        body: JSON.stringify(payload)
+      });
+    }catch(e){ console.warn('[idle-patch]', e.message); }
+  }
+
+  async function autoPausar(){
+    // No pausar si ya está manualmente pausado o sin ID
+    if(_agentePausado || _autoPaused || !getSIGIAgentId()) return;
+    _autoPaused = true;
+    _agentePausado = true;
+    await patchAgente({
+      pausado:          true,
+      pausado_at:       new Date().toISOString(),
+      en_linea:         true,   // sigue en línea pero pausado
+      ultima_actividad: new Date().toISOString()
+    });
+    // Actualizar botón En línea / Pausa en la UI
+    const btn = document.querySelector('[onclick*="toggleEstadoLinea"]') || document.getElementById('btnEstadoLinea');
+    const lbl = document.getElementById('estadoLineaLabel') || document.getElementById('estadoLinea');
+    if(btn){ btn.style.background='rgba(239,68,68,0.15)'; btn.style.borderColor='rgba(239,68,68,0.5)'; }
+    if(lbl){ lbl.textContent='En pausa (auto)'; }
+    showToast('⏸ Pausa automática — sin actividad por ' + IDLE_MIN + ' min. Mueve el cursor para reactivar.', 'warn');
+    console.log('[idle] Auto-pausado por inactividad');
+  }
+
+  async function autoReactivar(){
+    if(!_autoPaused) return;
+    _autoPaused  = false;
+    _agentePausado = false;
+    await patchAgente({
+      pausado:          false,
+      pausado_at:       null,
+      en_linea:         true,
+      ultima_actividad: new Date().toISOString()
+    });
+    const btn = document.querySelector('[onclick*="toggleEstadoLinea"]') || document.getElementById('btnEstadoLinea');
+    const lbl = document.getElementById('estadoLineaLabel') || document.getElementById('estadoLinea');
+    if(btn){ btn.style.background=''; btn.style.borderColor=''; }
+    if(lbl){ lbl.textContent='En línea'; }
+    showToast('🟢 Reactivado automáticamente', 'ok');
+    console.log('[idle] Auto-reactivado');
+  }
+
+  function resetTimer(){
+    // Si estaba auto-pausado, reactivar al detectar actividad
+    if(_autoPaused) autoReactivar();
+    if(_idleTimer) clearTimeout(_idleTimer);
+    _idleTimer = setTimeout(autoPausar, IDLE_MIN * 60 * 1000);
+  }
+
+  // Eventos de actividad sobre todo el documento
+  ['mousemove','mousedown','keydown','keypress','touchstart','scroll','click','focus','input']
+    .forEach(e => document.addEventListener(e, resetTimer, { passive: true }));
+
+  // Pestaña oculta (Ctrl+L, Alt+Tab, minimizar ventana)
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden){
+      // Pestaña oculta → timer más corto
+      if(_idleTimer) clearTimeout(_idleTimer);
+      _idleTimer = setTimeout(autoPausar, HIDDEN_MIN * 60 * 1000);
+    } else {
+      // Volvió a la pestaña → resetear timer normal
+      resetTimer();
+    }
+  });
+
+  // Iniciar al cargar
+  resetTimer();
+  console.log('[idle] Detector de inactividad activo — ' + IDLE_MIN + ' min');
+})();
 async function getGraphToken(){
   // Las credenciales Azure viven solo en api-token.php (servidor)
   // El browser NO envía ninguna credencial — solo solicita el token
