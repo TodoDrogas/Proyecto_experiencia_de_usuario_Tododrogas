@@ -477,9 +477,9 @@ async function cronInactividad() {
         // 30 min sin respuesta total → enviar encuesta Nova y cerrar
         // GUARD: no reenviar si ya se envió la encuesta
         if (s.encuesta_enviada_at) { continue; }
-        if (minsSinAct >= 30 && s.inactividad_aviso_at) {
+        if (minsSinAct >= 10 && s.inactividad_aviso_at) {
           const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
-          if (minsDesdeAviso >= 28) {
+          if (minsDesdeAviso >= 8) {
             const _msgEnc1 =
               `Ha sido un placer acompañarle, ${tratamiento(s.nombre)}. 😊\n\n` +
               `Esperamos haber resuelto su consulta satisfactoriamente.\n\n` +
@@ -613,9 +613,9 @@ async function cronInactividad() {
         // 30 min sin respuesta total → encuesta y cierre
         // GUARD: no reenviar si ya se envió la encuesta
         if (s.encuesta_enviada_at) { continue; }
-        if (minsSinAct >= 30 && s.inactividad_aviso_at) {
+        if (minsSinAct >= 10 && s.inactividad_aviso_at) {
           const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
-          if (minsDesdeAviso >= 28) {
+          if (minsDesdeAviso >= 8) {
             const _msgCierre = `Ha sido un placer acompañarle, ${tratamiento(s.nombre)}. 😊\n\n` +
               `Esperamos haber resuelto su inquietud de la mejor manera.\n\n` +
               `Antes de despedirnos, le invitamos a calificarnos:\n\n` +
@@ -648,8 +648,15 @@ async function cronInactividad() {
         const minsEnc = s.encuesta_enviada_at
           ? (ahora - new Date(s.encuesta_enviada_at).getTime()) / 60000
           : minsSinAct;
-        if (minsEnc >= 30) {
+        if (minsEnc >= 10) {
           const _agNombre = s.agente_nombre || 'Nova TD';
+          // Mensaje de despedida antes de cerrar
+          const _msgDespedida =
+            `Cerramos su consulta, ${tratamiento(s.nombre)}. 😊\n\n` +
+            `Si necesita ayuda nuevamente, con gusto le atendemos.\n\n` +
+            `*¡Hasta pronto! Tododrogas, siempre a su servicio.*`;
+          await enviarMeta(s.telefono, _msgDespedida);
+          await pushHistoryNova(s.telefono, _msgDespedida, 'nova');
           await supabase.from('wa_sesiones').update({
             estado:             'cerrado',
             calificacion:       null,
@@ -751,6 +758,104 @@ app.post('/webhook/meta', async (req, res) => {
     }
 
     if (sesion) {
+
+      // ── SESIÓN CERRADA: lógica de ventana 24h ────────────────────────────
+      if (sesion.estado === 'cerrado') {
+        const cerradoAt  = sesion.cerrado_at ? new Date(sesion.cerrado_at).getTime() : 0;
+        const horasDesde = (Date.now() - cerradoAt) / 3600000;
+
+        if (horasDesde <= 24) {
+          // ── Dentro de 24h → MISMA sesión ─────────────────────────────────
+          const hist = Array.isArray(sesion.history) ? sesion.history : [];
+          hist.push(nuevoMsg);
+
+          // ¿El agente ya registró la gestión?
+          const gestionRegistrada = !!(sesion.tipificacion?.trim() || sesion.observacion_cierre?.trim());
+          const tieneAgente       = !!sesion.agente_id;
+
+          let nuevoEstado;
+          let _msgReabierto;
+
+          if (!gestionRegistrada && tieneAgente) {
+            // Agente nunca registró → devolver al mismo agente para que complete
+            nuevoEstado   = 'escalado';
+            _msgReabierto =
+              `Hemos recibido su mensaje, ${tratamiento(sesion.nombre)}. 😊\n\n` +
+              `Su asesor continuará atendiéndole en breve.\n\n` +
+              `*Tododrogas, siempre a su servicio.*`;
+            console.log(`🔄 Sesión → escalado (agente sin gestión): ${telefono}`);
+          } else if (gestionRegistrada && tieneAgente) {
+            // Agente ya gestionó → nueva consulta, segunda gestión
+            nuevoEstado   = 'pte_gestion';
+            _msgReabierto =
+              `Hemos recibido su mensaje, ${tratamiento(sesion.nombre)}. 😊\n\n` +
+              `Un asesor revisará su caso a la brevedad.\n\n` +
+              `*Tododrogas, siempre a su servicio.*`;
+            console.log(`🔄 Sesión → pte_gestion (segunda gestión): ${telefono}`);
+          } else {
+            // Sin agente (cerrado por Nova sola) → Nova atiende de nuevo
+            nuevoEstado   = 'nova';
+            _msgReabierto = null; // Nova responderá normalmente
+            console.log(`🔄 Sesión → nova (sin agente previo): ${telefono}`);
+          }
+
+          await supabase.from('wa_sesiones').update({
+            estado:              nuevoEstado,
+            history:             hist,
+            unread_count:        (sesion.unread_count || 0) + 1,
+            inactividad_aviso_at: null,
+            cerrado_at:          null,  // ya no está cerrado
+            updated_at:          ahoraISO
+          }).eq('telefono', telefono);
+
+          sesion.estado = nuevoEstado;
+          sesion.history = hist;
+
+          if (_msgReabierto) {
+            await enviarMeta(telefono, _msgReabierto);
+            await pushHistoryNova(telefono, _msgReabierto, 'nova');
+            return;
+          }
+          // Si nuevoEstado = 'nova' → continúa al bloque Nova TD abajo
+          if (nuevoEstado !== 'nova') return;
+
+        } else {
+          // ── Más de 24h → NUEVA sesión limpia, Nova TD ────────────────────
+          const nueva = {
+            telefono,
+            nombre:       sesion.nombre || profile || '',
+            eps:          sesion.eps    || '',
+            cedula:       sesion.cedula || '',
+            history:      [nuevoMsg],
+            estado:       'nova',
+            unread_count: 1,
+            updated_at:   ahoraISO,
+            // Limpiar todos los campos de la sesión anterior
+            agente_id:           null,
+            agente_nombre:       null,
+            calificacion:        null,
+            calificacion_texto:  null,
+            encuesta_enviada:    null,
+            encuesta_enviada_at: null,
+            cerrado_at:          null,
+            motivo_cierre_wa:    null,
+            inactividad_aviso_at: null,
+            asignado_at:         null,
+            primera_respuesta_at: null,
+            transferido_de:      null,
+            transferido_at:      null,
+            tipificacion:        null,
+            observacion_cierre:  null,
+            fase:                null,
+          };
+          // Upsert — reutiliza el mismo telefono (PK) con datos limpios
+          await supabase.from('wa_sesiones').upsert(nueva);
+          sesion = nueva;
+          console.log(`🆕 Nueva sesión (>24h): ${telefono}`);
+          // Continúa al bloque de Nova TD abajo
+        }
+      }
+
       // ── ENCUESTA: si está esperando respuesta de encuesta ────────────────
       if (sesion.estado === 'esperando_encuesta') {
         const procesado = await procesarEncuesta(telefono, body, sesion);
