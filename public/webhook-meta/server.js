@@ -119,6 +119,22 @@ async function logConv(telefono, agenteId, agenteNombre, evento, duracionSeg = n
   }
 }
 
+// ── PUSH MENSAJE AL HISTORIAL (sin tocar updated_at) ────────────────────
+async function pushHistoryNova(telefono, contenido, role = 'nova') {
+  try {
+    const { data: ses } = await supabase
+      .from('wa_sesiones').select('history').eq('telefono', telefono).single();
+    const hist = Array.isArray(ses?.history) ? ses.history : [];
+    hist.push({ role, content: contenido, ts: new Date().toISOString() });
+    // NO actualizar updated_at — solo el historial
+    await supabase.from('wa_sesiones')
+      .update({ history: hist })
+      .eq('telefono', telefono);
+  } catch(e) {
+    console.error('❌ pushHistoryNova:', e.message);
+  }
+}
+
 // ── ARCHIVAR SESIÓN EN wa_historico ──────────────────────────────────────
 async function archivarEnHistorico(sesion, cerradoAt) {
   try {
@@ -591,7 +607,7 @@ async function cronInactividad() {
     const { data: sesiones } = await supabase
       .from('wa_sesiones')
       .select('telefono,estado,nombre,agente_id,agente_nombre,updated_at,inactividad_aviso_at,asignado_at,encuesta_enviada_at,primera_respuesta_at,tipificacion,observacion_cierre,eps')
-      .in('estado', ['nova','escalado','activo','esperando','esperando_encuesta','pte_gestion'])
+      .in('estado', ['nova','escalado','activo','esperando','esperando_encuesta','confirmando_solucion','pte_gestion'])
       .not('updated_at','is',null);
 
     if (!sesiones?.length) return;
@@ -642,7 +658,6 @@ async function cronInactividad() {
           continue; // no hacer nada más con esperando_encuesta
         }
 
-        // ════════════════════════════════════════════════════════════════════
         // ESTADO: pte_gestion → no tocar, el agente lo gestiona al llegar
         // ════════════════════════════════════════════════════════════════════
         if (s.estado === 'pte_gestion') continue;
@@ -668,11 +683,15 @@ async function cronInactividad() {
 
 ` +
                 `Si ya no necesita asistencia, escriba *SALIR* para cerrar.`;
-              await enviarMeta(s.telefono, _msgAviso);
-              // NO actualizar updated_at — solo inactividad_aviso_at
-              await supabase.from('wa_sesiones')
+              // FIX: update atómico PRIMERO — guard anti-loop
+              const { error: _errAvisoNova } = await supabase.from('wa_sesiones')
                 .update({ inactividad_aviso_at: ahoraISO })
-                .eq('telefono', s.telefono);
+                .eq('telefono', s.telefono)
+                .is('inactividad_aviso_at', null);
+              if (!_errAvisoNova) {
+                await enviarMeta(s.telefono, _msgAviso);
+                await pushHistoryNova(s.telefono, _msgAviso, 'nova');
+              }
             }
           } else {
             // Ya se mandó aviso — esperar 5 min más desde el aviso
@@ -771,11 +790,15 @@ async function cronInactividad() {
 
 ` +
                 `Si ya resolvió su consulta, escriba *LISTO* para cerrar.`;
-              await enviarMeta(s.telefono, _msgAviso);
-              await pushHistoryNova(s.telefono, _msgAviso, 'nova');
-              await supabase.from('wa_sesiones')
+              // FIX: update atómico PRIMERO — si ya fue seteado por otro proceso, no reenviar
+              const { error: _errAviso } = await supabase.from('wa_sesiones')
                 .update({ inactividad_aviso_at: ahoraISO })
-                .eq('telefono', s.telefono);
+                .eq('telefono', s.telefono)
+                .is('inactividad_aviso_at', null); // guard anti-loop
+              if (!_errAviso) {
+                await enviarMeta(s.telefono, _msgAviso);
+                await pushHistoryNova(s.telefono, _msgAviso, 'nova');
+              }
             }
           } else {
             const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
@@ -1394,8 +1417,17 @@ Un asesor revisará su caso en el próximo horario de atención:
                 await enviarMeta(telefono, _msgEscalado);
                 await pushHistoryNova(telefono, _msgEscalado, 'nova');
               } else {
-                // No hay agentes disponibles ahora
-                const _msgSinAgente = mensajeFueraHorario(sesActual?.nombre);
+                // No hay agentes disponibles ahora → esperando para que el panel lo muestre
+                const _trat2 = sesActual?.nombre ? `*${sesActual.nombre.split(' ')[0]}*` : 'estimado usuario';
+                const _msgSinAgente =
+                  `Agradecemos su paciencia, ${_trat2}. 🙏
+
+` +
+                  `En este momento todos nuestros asesores se encuentran atendiendo otras solicitudes. ` +
+                  `Su caso queda registrado con prioridad y le atenderemos en breve.
+
+` +
+                  `*Tododrogas, siempre a su servicio.*`;
                 await enviarMeta(telefono, _msgSinAgente);
                 await pushHistoryNova(telefono, _msgSinAgente, 'nova');
                 await supabase.from('wa_sesiones')
@@ -1403,7 +1435,7 @@ Un asesor revisará su caso en el próximo horario de atención:
                   .eq('telefono', telefono);
               }
             } else {
-              // Fuera del horario → guardar como pte_gestion para mañana
+              // Fuera del horario → guardar como esperando para mañana
               const _msgFuera = mensajeFueraHorario(sesActual?.nombre);
               await enviarMeta(telefono, _msgFuera);
               await pushHistoryNova(telefono, _msgFuera, 'nova');
@@ -1411,7 +1443,7 @@ Un asesor revisará su caso en el próximo horario de atención:
               await supabase.from('wa_sesiones')
                 .update({ estado: 'pte_gestion', updated_at: ahoraISO })
                 .eq('telefono', telefono);
-              console.log(`🌙 Fuera de horario: ${telefono} → pte_gestion`);
+              console.log(`🌙 Fuera de horario: ${telefono} → esperando`);
             }
           }
         } else {
@@ -1805,6 +1837,48 @@ app.post('/transferir', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── CRON: REASIGNAR pte_gestion CUANDO HAY AGENTES DISPONIBLES ──────────
+// Cada 2 min busca chats sin agente (pte_gestion) dentro de horario
+// y los asigna si hay alguien disponible — garantiza que ningún chat se pierda
+async function cronReasignarPteGestion() {
+  try {
+    if (!estaEnHorario()) return; // fuera de horario, esperar
+
+    const { data: agentes } = await supabase
+      .from('agentes').select('id').eq('activo', true).eq('en_linea', true).eq('pausado', false).limit(1);
+    if (!agentes?.length) return; // sin agentes disponibles
+
+    // Buscar sesiones pte_gestion sin agente asignado, ordenadas por antigüedad
+    const { data: pendientes } = await supabase
+      .from('wa_sesiones')
+      .select('telefono, nombre, eps, cedula, resumen_nova')
+      .eq('estado', 'pte_gestion')
+      .is('agente_id', null)
+      .order('updated_at', { ascending: true })
+      .limit(5);
+
+    if (!pendientes?.length) return;
+
+    for (const ses of pendientes) {
+      const agente = await autoAsignarAgente(ses.telefono, ses);
+      if (!agente) break; // sin más agentes disponibles
+      const _trat = ses.nombre ? `*${ses.nombre.split(' ')[0]}*` : 'estimado usuario';
+      const _m =
+        `Gracias por su paciencia, ${_trat}. 🤝
+
+` +
+        `Un asesor especializado está listo para atenderle ahora.
+
+` +
+        `*Tododrogas, siempre a su servicio.*`;
+      await enviarMeta(ses.telefono, _m);
+      await pushHistoryNova(ses.telefono, _m, 'nova');
+      console.log(`✅ pte_gestion reasignado: ${ses.telefono} → ${agente.nombre}`);
+    }
+  } catch(e) { console.error('❌ cronReasignarPteGestion:', e.message); }
+}
+setInterval(cronReasignarPteGestion, 2 * 60 * 1000);
 
 // ── CRON: TODOS LOS AGENTES PAUSADOS ────────────────────────────────────
 // Si todos están pausados dentro de horario → avisar al usuario cada 10 min
