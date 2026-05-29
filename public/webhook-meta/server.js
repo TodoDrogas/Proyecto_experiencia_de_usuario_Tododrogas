@@ -465,42 +465,38 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
   const _agenteGestion = sesion.agente_nombre || 'Nova TD';
   const _agenteId      = sesion.agente_id || null;
 
-  // Si no hay agente que haya gestionado → pasar a pte_gestion para que un agente cierre
-  // Si ya había agente asignado → cerrar directo (el agente ya está en el chat)
-  const _requiereGestion = !sesion.agente_id; // Nova sola = requiere que un agente gestione
-  const _estadoFinal = _requiereGestion ? 'pte_gestion' : 'cerrado';
-
-  // Si Nova resolvió sola → asignar automáticamente a un agente para la gestión
+  // Siempre pte_gestion para que el agente registre la gestión y cierre
+  // Si no hay agente → asignar uno automáticamente
   let _agenteAsigPte = null;
-  if (_requiereGestion) {
+  if (!sesion.agente_id) {
     _agenteAsigPte = await autoAsignarAgente(telefono, sesion);
   }
+
+  // Fetch historial fresco antes de agregar (evitar pisar mensajes)
+  const { data: _sesFresh } = await supabase
+    .from('wa_sesiones').select('history').eq('telefono', telefono).single();
+  const hist = Array.isArray(_sesFresh?.history) ? _sesFresh.history : (Array.isArray(sesion.history) ? sesion.history : []);
+  hist.push({ role: 'user', content: cal, ts: ahoraISO });
 
   await supabase.from('wa_sesiones').update({
     calificacion:       calNum,
     calificacion_texto: textos[calNum],
     fecha_calificacion: ahoraISO,
-    estado:             _estadoFinal,
-    cerrado_at:         _requiereGestion ? null : ahoraISO,
+    estado:             'pte_gestion',  // siempre pte_gestion → agente registra y cierra
+    cerrado_at:         null,
     motivo_cierre_wa:   'encuesta',
     agente_nombre:      _agenteAsigPte ? _agenteAsigPte.nombre : _agenteGestion,
     agente_id:          _agenteAsigPte ? _agenteAsigPte.id : (_agenteId || null),
+    history:            hist,
     updated_at:         ahoraISO
   }).eq('telefono', telefono);
-
-  // Agregar al historial
-  const hist = Array.isArray(sesion.history) ? sesion.history : [];
-  hist.push({ role: 'user', content: cal, ts: ahoraISO });
-  await supabase.from('wa_sesiones').update({ history: hist }).eq('telefono', telefono);
 
   // Responder al usuario
   const msg = `${emojis[calNum]} Gracias por calificarnos. Hemos registrado su atención como *${textos[calNum]}*.\n\nGracias por contactarnos. *Tododrogas, siempre a su servicio.*`;
   await enviarMeta(telefono, msg);
 
-  // Archivar si cierra definitivamente (agente asignado)
-  if (!_requiereGestion) {
-    await archivarEnHistorico({ ...sesion, calificacion: calNum, calificacion_texto: textos[calNum], motivo_cierre_wa: 'encuesta' }, ahoraISO);
-  }
+  // No archivar aquí — el agente registra la gestión y cierra desde el panel
+  // El archivo a wa_historico ocurre en confirmarCerrar() del agente-wa.html
 
   // Registrar origen y agente real en el log
   const _fueNova = !sesion.agente_id; // sin agente = Nova gestionó sola
@@ -629,10 +625,10 @@ async function cronInactividad() {
             if (_sinAgente2) { _agenteAsigInact = await autoAsignarAgente(s.telefono, s); }
             // FIX: cambiar estado PRIMERO para evitar reenvío
             const { error: _errCierre } = await supabase.from('wa_sesiones').update({
-              estado:             _sinAgente2 ? 'pte_gestion' : 'cerrado',
+              estado:             'pte_gestion',  // siempre pte_gestion → agente registra y cierra
               calificacion:       null,
               calificacion_texto: 'Sin calificación',
-              cerrado_at:         _sinAgente2 ? null : ahoraISO,
+              cerrado_at:         null,
               motivo_cierre_wa:   'inactividad',
               encuesta_enviada_at: null,
               agente_nombre:      _agenteAsigInact ? _agenteAsigInact.nombre : _agNombre,
