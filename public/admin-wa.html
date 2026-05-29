@@ -876,7 +876,13 @@ function filtrarPorAgente(agenteId, el){
           if(!doc || doc.getElementById('admin-override')) return;
           const style = doc.createElement('style');
           style.id = 'admin-override';
-          style.textContent = '.input-area{display:none!important;}.topbar{display:none!important;}.app-body{height:100dvh!important;}';
+          style.textContent = [
+              '.input-area,.wa-input-bar,.wa-rec-bar{display:none!important;}',
+              '.topbar{display:none!important;}',
+              '.app-body{height:100dvh!important;}',
+              '#msgTa,textarea{pointer-events:none!important;user-select:none!important;}',
+              'button[onclick*="enviar"],button[onclick*="abrirCerrar"],#btnSend{pointer-events:none!important;opacity:0.3!important;}',
+            ].join('');
           doc.head.appendChild(style);
         }catch(e){}
       }, 400);
@@ -891,7 +897,7 @@ function filtrarPorAgente(agenteId, el){
     placeholder.style.display = 'none';
     iframe.style.display = 'block';
     if(iframe.dataset.loaded !== 'nova'){
-      loadAgentIframe('00000000-0000-0000-0000-000000000000', 'Nova TD', '&vista_global=1');
+      loadAgentIframe('00000000-0000-0000-0000-000000000000', 'Nova TD', '&vista_global=1&filtro_estado=nova');
       iframe.dataset.loaded = 'nova';
     }
   } else {
@@ -1160,7 +1166,24 @@ function filterConvs(){
   if(agn)   list=list.filter(s=>s.agente_nombre===agn);
   if(desde) list=list.filter(s=>s.updated_at>=desde);
   if(hasta) list=list.filter(s=>s.updated_at<=(hasta+'T23:59:59'));
-  if(q)     list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q)||(s.cedula||'').includes(q));
+  if(q)     list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q)||(s.cedula||'').includes(q)||(s.observacion_cierre||'').toLowerCase().includes(q));
+
+  // Si busca por teléfono o nombre, también incluir sesiones archivadas (wa_historico)
+  if(q && q.length>=4 && !est){
+    sb(`wa_historico?or=(telefono.ilike.*${encodeURIComponent(q)}*,nombre.ilike.*${encodeURIComponent(q)}*,cedula.ilike.*${encodeURIComponent(q)}*)&order=cerrado_at.desc&limit=50&select=telefono,nombre,eps,cedula,agente_nombre,calificacion,calificacion_texto,cerrado_at,motivo_cierre_wa`)
+    .then(archivo=>{
+      if(!Array.isArray(archivo)||!archivo.length) return;
+      // Agregar sesiones archivadas que no estén ya en la lista actual
+      const telEnLista = new Set(list.map(s=>s.telefono));
+      const archivadas = archivo
+        .filter(a=>!telEnLista.has(a.telefono))
+        .map(a=>({...a, estado:'cerrado', updated_at:a.cerrado_at, _archivado:true}));
+      if(archivadas.length){
+        list = [...list, ...archivadas];
+        renderConvTable(list);
+      }
+    }).catch(()=>{});
+  }
   document.getElementById('convFooter').textContent=`${list.length} conversación${list.length!==1?'es':''}`;
   document.getElementById('convBody').innerHTML=list.length?list.map(s=>{
     const hist=parseHist(s.history);
@@ -1341,10 +1364,26 @@ async function loadSatisfaccion(){
 }
 
 // ── DESCARGAR PDF CONVERSACIÓN ───────────────────
-function descargarPDFTelefono(tel){
+async function descargarPDFTelefono(tel){
   const s = A.sesiones.find(x=>x.telefono===tel);
-  if(!s) return;
-  const hist = parseHist(s.history);
+  if(!s){ toast('Sesión no encontrada','err'); return; }
+
+  // Buscar historial archivado de sesiones anteriores
+  let histArchivado = [];
+  try{
+    const archivo = await sb(`wa_historico?telefono=eq.${encodeURIComponent(tel)}&order=cerrado_at.asc&select=history,cerrado_at,agente_nombre`);
+    if(Array.isArray(archivo)){
+      archivo.forEach(a=>{
+        const msgs = parseHist(a.history);
+        histArchivado = histArchivado.concat(msgs);
+      });
+    }
+  }catch(e){ console.warn('wa_historico:', e); }
+
+  // Combinar: histórico archivado + sesión actual
+  const histActual = parseHist(s.history);
+  const hist = [...histArchivado, ...histActual];
+
   const agente = A.agentes.find(a=>a.id===s.agente_id);
   const agNombre = agente?.nombre || s.agente_nombre || 'Sin asignar';
   const fecha = new Date(s.updated_at).toLocaleString('es-CO',{dateStyle:'long',timeStyle:'short'});
