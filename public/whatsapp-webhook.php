@@ -242,6 +242,7 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $s .= "REGLA RADICAR: Si el usuario quiere radicar una PQRSFD → usa [FORMULARIO].\n";
     $s .= "REGLA AUDIOS: Cuando el usuario envía un audio, recibirás la transcripción con prefijo [🎙️ Audio:]. Trátala como texto normal — responde al contenido, no menciones que es una transcripción.\n";
     $s .= "REGLA DOMICILIOS: Tododrogas NO realiza domicilios ni envíos. Si preguntan por domicilio/envío/delivery → responde que no hacemos domicilios e invita a la sede más cercana. NO uses [ESCALAR].\n";
+    $s .= "REGLA MEDICAMENTOS SEGUIMIENTO: Cuando el usuario ya recibió la información de App Solicitudes Web y tú preguntaste '¿Desea que un asesor verifique el estado? 1→Sí / 2→No' — si responde 1 o Sí → usa [ESCALAR] inmediatamente. Si responde 2 o No → continúa con Nova TD. NUNCA repitas el mismo mensaje de App Solicitudes Web si ya lo enviaste.\n";
     $s .= "REGLA MEDICAMENTOS VS REQUISITOS:\n";
     $s .= "  - QUÉ LLEVAR / REQUISITOS → [REQUISITOS]\n";
     $s .= "  - ESTADO medicamento / DEMORA → [MEDICAMENTOS]\n";
@@ -272,7 +273,7 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
 ";
     }
     $s .= "REGLA MENÚ DUPLICADO (CRÍTICA): NUNCA incluyas el bloque '¿En qué más le puedo ayudar? M → Menú / P → Pregunta' en tu respuesta de texto. Ese bloque lo agrega el sistema automáticamente. Si lo incluyes, aparecerá DOS VECES.\n";
-    $s .= "REGLA SATISFACCIÓN (CRÍTICA): Cuando el usuario exprese satisfacción o que ya no necesita más ayuda — frases como 'gracias', 'ya está bien', 'perfecto', 'listo', 'ok gracias', 'eso era todo', 'ya quedé', 'muchas gracias', 'no necesito más', 'fue todo' — responde brevemente y usa [ENCUESTA] para cerrar. NO sigas ofreciendo opciones. Ejemplo: '¡Con mucho gusto! Fue un placer ayudarle. [ENCUESTA]'.\n";
+    $s .= "REGLA SATISFACCIÓN (MÁXIMA PRIORIDAD): Detecta CUALQUIER señal de que el usuario ya no necesita ayuda, aunque la frase empiece con 'No'. Ejemplos EXACTOS que SIEMPRE deben activar [ENCUESTA]: 'no, así está bien gracias', 'no gracias', 'ya está bien', 'así está bien', 'gracias', 'muchas gracias', 'perfecto', 'listo', 'ok gracias', 'eso era todo', 'ya quedé', 'no necesito más', 'fue todo', 'ya me ayudó', 'con eso es suficiente', 'está bien así'. Responde MUY brevemente (1 línea) y añade [ENCUESTA]. NUNCA ofrezcas más opciones después de detectar satisfacción.\n";
     $s .= "REGLA NÚMEROS SUELTOS (CRÍTICA): Cuando el usuario envíe SOLO un número (1, 2, 3, etc.), SIEMPRE revisa el ÚLTIMO mensaje del asistente para entender a qué pregunta responde.
 ";
     $s .= "  - Si el último mensaje tuyo tenía opciones numeradas propias → interpreta en ESE contexto, NO como el menú principal.
