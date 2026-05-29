@@ -194,7 +194,14 @@ switch ($action) {
         break;
 
     default:
-        sendWA($from, $text);
+        // Evitar duplicar el bloque M/P si GPT ya lo incluyó en su respuesta
+        $menuBloque = "¿En qué más le puedo ayudar?";
+        if (str_contains($text, $menuBloque)) {
+            sendWA($from, $text);
+        } else {
+            $menuFinal = "\n\n*¿En qué más le puedo ayudar?*\n🏠 Escriba *M* → Menú principal\n💬 Escriba *P* → Tengo otra pregunta";
+            sendWA($from, $text . $menuFinal);
+        }
         break;
 }
 
@@ -235,6 +242,7 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $s .= "  PASO 3 — NUNCA omitir el tag.\n";
     $s .= "REGLA CONSULTAR: Si el usuario escribe ÚNICAMENTE un número TD-xxxxx o un correo → usa [CONSULTAR:valor].\n";
     $s .= "REGLA RADICAR: Si el usuario quiere radicar una PQRSFD → usa [FORMULARIO].\n";
+    $s .= "REGLA DOMICILIOS: Tododrogas NO realiza domicilios ni envíos. Si preguntan por domicilio/envío/delivery → responde que no hacemos domicilios e invita a la sede más cercana. NO uses [ESCALAR].\n";
     $s .= "REGLA MEDICAMENTOS VS REQUISITOS:\n";
     $s .= "  - QUÉ LLEVAR / REQUISITOS → [REQUISITOS]\n";
     $s .= "  - ESTADO medicamento / DEMORA → [MEDICAMENTOS]\n";
@@ -264,6 +272,8 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
         $s .= "  5. Usa [ESCALAR] igualmente — el server.js manejará el estado pte_gestion.
 ";
     }
+    $s .= "REGLA MENÚ DUPLICADO (CRÍTICA): NUNCA incluyas el bloque '¿En qué más le puedo ayudar? M → Menú / P → Pregunta' en tu respuesta de texto. Ese bloque lo agrega el sistema automáticamente. Si lo incluyes, aparecerá DOS VECES.
+";
     $s .= "REGLA NÚMEROS SUELTOS (CRÍTICA): Cuando el usuario envíe SOLO un número (1, 2, 3, etc.), SIEMPRE revisa el ÚLTIMO mensaje del asistente para entender a qué pregunta responde.
 ";
     $s .= "  - Si el último mensaje tuyo tenía opciones numeradas propias → interpreta en ESE contexto, NO como el menú principal.
@@ -470,25 +480,88 @@ function buscarSedes(string $municipio, string $eps, array $sedes): string {
     $epsNorm = strtoupper(trim($eps));
 
     $encontradas = array_filter($sedes, function($s) use ($munNorm, $epsNorm) {
-        $sm = strtoupper($s['municipio_norm'] ?? $s['municipio'] ?? '');
-        if ($sm !== $munNorm) return false;
+        // Municipio: acepta match exacto O que el campo contenga el municipio buscado
+        $smNorm = strtoupper($s['municipio_norm'] ?? '');
+        $smMun  = strtoupper($s['municipio'] ?? '');
+        $smCiu  = strtoupper($s['ciudad'] ?? '');
+        $munMatch = ($smNorm === $munNorm)
+                 || ($smMun  === $munNorm)
+                 || ($smCiu  === $munNorm)
+                 || (str_contains($smNorm, $munNorm))
+                 || (str_contains($smMun,  $munNorm))
+                 || (str_contains($munNorm, $smNorm) && strlen($smNorm) > 3);
+        if (!$munMatch) return false;
+
+        // EPS: acepta match exacto O que el nombre de la EPS de la sede CONTENGA la EPS del usuario
         if (!$epsNorm || $epsNorm === 'TODAS') return true;
         $epsArr = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
         foreach ($epsArr as $e) {
-            if (strtoupper(trim($e)) === $epsNorm || strtoupper(trim($e)) === 'TODAS') return true;
+            $eNorm = strtoupper(trim($e));
+            if ($eNorm === 'TODAS') return true;
+            // Match exacto o parcial (COOSALUD matchea COOSALUD EPS y viceversa)
+            if ($eNorm === $epsNorm) return true;
+            if (str_contains($eNorm, $epsNorm)) return true;
+            if (str_contains($epsNorm, $eNorm) && strlen($eNorm) > 4) return true;
         }
         return false;
     });
+
+    // Si no encontró con EPS específica, buscar sin filtro de EPS (mostrar todas las sedes del municipio)
+    if (empty($encontradas) && $epsNorm) {
+        $encontradas = array_filter($sedes, function($s) use ($munNorm) {
+            $smNorm = strtoupper($s['municipio_norm'] ?? '');
+            $smMun  = strtoupper($s['municipio'] ?? '');
+            $smCiu  = strtoupper($s['ciudad'] ?? '');
+            return ($smNorm === $munNorm) || ($smMun === $munNorm) || ($smCiu === $munNorm)
+                || str_contains($smNorm, $munNorm) || str_contains($smMun, $munNorm);
+        });
+        if (!empty($encontradas)) {
+            // Avisar que no hay sede específica de esa EPS pero mostrar las disponibles
+            $txt = "📍 No encontré sede específica de *$eps* en *$municipio*, pero estas sedes pueden atenderle:\n\n";
+            foreach (array_slice($encontradas, 0, 3) as $s) {
+                $horario = $s['horario'] ?? '';
+                $modelo  = strtoupper($s['modelo'] ?? '');
+                if (!$horario) {
+                    $horario = ($modelo === 'IN HOUSE')
+                        ? 'Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am'
+                        : 'Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m';
+                }
+                $epsArr  = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
+                $epsList = implode(', ', array_slice($epsArr, 0, 3));
+                $txt .= "🏥 *" . ($s['nombre'] ?? '') . "*
+";
+                $txt .= "📌 " . ($s['direccion'] ?? '') . "
+";
+                if ($s['telefono'] ?? '') $txt .= "📞 " . $s['telefono'] . "
+";
+                $txt .= "🕐 " . $horario . "
+";
+                $txt .= "EPS: " . $epsList . "
+
+";
+            }
+            return rtrim($txt);
+        }
+    }
 
     if (empty($encontradas)) {
         return "No encontré sedes de *$eps* en *$municipio*. Llame al 604 322 2432 para más información.";
     }
 
-    $txt = "📍 *Sedes en " . ucfirst(strtolower($municipio)) . "*:\n\n";
+    $txt = "📍 *Sedes en " . ucfirst(strtolower($municipio)) . "* para *" . ucfirst(strtolower($eps)) . "*:\n\n";
     foreach (array_slice($encontradas, 0, 3) as $s) {
+        $horario = $s['horario'] ?? '';
+        $modelo  = strtoupper($s['modelo'] ?? '');
+        // Horario por defecto según modelo
+        if (!$horario) {
+            $horario = ($modelo === 'IN HOUSE')
+                ? 'Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am'
+                : 'Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m';
+        }
         $txt .= "🏥 *" . ($s['nombre'] ?? '') . "*\n";
         $txt .= "📌 " . ($s['direccion'] ?? '') . "\n";
-        $txt .= "📞 " . ($s['telefono'] ?? '') . "\n";
+        if ($s['telefono'] ?? '') $txt .= "📞 " . $s['telefono'] . "\n";
+        $txt .= "🕐 " . $horario . "\n";
         if ($s['lat'] && $s['lng']) {
             $txt .= "🗺️ https://maps.google.com/?q=" . $s['lat'] . "," . $s['lng'] . "\n";
         }
