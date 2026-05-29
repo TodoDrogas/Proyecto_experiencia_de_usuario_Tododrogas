@@ -374,10 +374,21 @@ html[data-embed="1"] .topbar { display: none !important; height: 0 !important; o
 html[data-embed="1"] .layout { padding-top: 0 !important; }
 html[data-embed="1"] .sidebar { top: 0 !important; }
 html[data-embed="1"] body { padding-top: 0 !important; }
+/* Nova TD admin mode: solo muestra Activas (nova), Escaladas, Solucionadas */
+html[data-nova-view="1"] .filter-item { display: none !important; }
+html[data-nova-view="1"] .filter-item[data-estado="nova"],
+html[data-nova-view="1"] .filter-item[data-estado="escalado"],
+html[data-nova-view="1"] .filter-item[data-estado="cerrado"] { display: flex !important; }
+/* En nova view: ocultar topbar y stats de agente */
+html[data-nova-view="1"] .wa-actions,
+html[data-nova-view="1"] #btnGlobal { display: none !important; }
 </style>
 <script>
 if(new URLSearchParams(location.search).get('embed')==='1'){
   document.documentElement.setAttribute('data-embed','1');
+}
+if(new URLSearchParams(location.search).get('filtro_estado')==='nova'){
+  document.documentElement.setAttribute('data-nova-view','1');
 }
 </script>
 </head>
@@ -447,23 +458,28 @@ if(new URLSearchParams(location.search).get('embed')==='1'){
   <!-- COL 1 FILTROS -->
   <div class="wa-filters">
     <div class="filters-title">Conversaciones</div>
-    <div class="filter-item active" onclick="setFiltro('escalado',this)">
+    <div class="filter-item" data-estado="nova" onclick="setFiltro('nova',this)">
+      <span class="fi-dot" style="background:#a78bfa"></span>
+      <span>Activas Nova</span>
+      <span class="filter-cnt" id="fc-nova">0</span>
+    </div>
+    <div class="filter-item active" data-estado="escalado" onclick="setFiltro('escalado',this)">
       <div class="fdot fdot-esc"></div>Escaladas
       <span class="filter-cnt" id="fc-escalado">0</span>
     </div>
-    <div class="filter-item" onclick="setFiltro('activo',this)">
+    <div class="filter-item" data-estado="activo" onclick="setFiltro('activo',this)">
       <div class="fdot" style="background:#22c55e"></div>Activas
       <span class="filter-cnt" id="fc-activo">0</span>
     </div>
-    <div class="filter-item" onclick="setFiltro('esperando',this)">
+    <div class="filter-item" data-estado="esperando" onclick="setFiltro('esperando',this)">
       <div class="fdot fdot-esp"></div>Esp. respuesta
       <span class="filter-cnt" id="fc-esperando">0</span>
     </div>
-    <div class="filter-item" onclick="setFiltro('pte_gestion',this)">
+    <div class="filter-item" data-estado="pte_gestion" onclick="setFiltro('pte_gestion',this)">
       <div class="fdot fdot-pte"></div>Pte. por Gestión
       <span class="filter-cnt" id="fc-pte_gestion" style="background:rgba(217,119,6,.15);color:#d97706">0</span>
     </div>
-    <div class="filter-item" onclick="setFiltro('cerrado',this)">
+    <div class="filter-item" data-estado="cerrado" onclick="setFiltro('cerrado',this)">
       <div class="fdot fdot-cer"></div>Solucionadas
       <span class="filter-cnt" id="fc-cerrado">0</span>
     </div>
@@ -798,6 +814,8 @@ const AGENT_ID = _uuidRe.test(_rawId) ? _rawId : null;
 const AGENT_NAME = _urlParams.get('agent_name') ? decodeURIComponent(_urlParams.get('agent_name')) : (sessionStorage.getItem('pqr_name')||'Agente');
 // Si viene de URL (modo admin), no marcar en línea ni modificar estado del agente
 const _adminView = !!_urlAgentId;
+const _urlVistaGlobal = _urlParams.get('vista_global')==='1';
+const _urlFiltroEstado = _urlParams.get('filtro_estado')||null;
 function logout(){ sessionStorage.clear(); window.location.href='login.html'; }
 
 // ── SB HELPER ────────────────────────────────────
@@ -849,6 +867,11 @@ const RR=[
     }
   }catch{}
   await loadSesiones();
+  // Si viene filtro desde URL (admin viendo Nova TD), aplicarlo
+  if(typeof _urlFiltroEstado !== 'undefined' && _urlFiltroEstado){
+    S.filtro = _urlFiltroEstado;
+    renderLista();
+  }
   startPolling();
   if(Notification.permission==='default') Notification.requestPermission();
   // Login log + marcar en línea
@@ -889,6 +912,7 @@ function updateCtrs(){
   const fcPte=document.getElementById('fc-pte_gestion');
   if(fcPte) fcPte.textContent=pteGestion;
   document.getElementById('stat-total').textContent=s.length;
+  const fcNova=document.getElementById('fc-nova'); if(fcNova) fcNova.textContent=s.filter(x=>x.estado==='nova').length;
   const statActivas=document.getElementById('stat-activas');
   if(statActivas) statActivas.textContent=s.filter(x=>x.estado!=='cerrado'&&x.estado!=='nova').length;
 }
@@ -1261,7 +1285,7 @@ async function autoAsignar(){
 }
 
 // ── VISTA GLOBAL / MI VISTA ──────────────────────────────────────
-let _vistaGlobal = false;
+let _vistaGlobal = (typeof _urlVistaGlobal !== 'undefined') ? _urlVistaGlobal : false;
 function toggleVista(){
   _vistaGlobal = !_vistaGlobal;
   const btn = document.getElementById('btnGlobal');
