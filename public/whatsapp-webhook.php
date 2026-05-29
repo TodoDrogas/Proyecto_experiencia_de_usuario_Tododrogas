@@ -238,6 +238,38 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $s .= "REGLA MEDICAMENTOS VS REQUISITOS:\n";
     $s .= "  - QUÉ LLEVAR / REQUISITOS → [REQUISITOS]\n";
     $s .= "  - ESTADO medicamento / DEMORA → [MEDICAMENTOS]\n";
+    // Hora actual Bogotá para contexto de horario
+    $horaBogota = new DateTime('now', new DateTimeZone('America/Bogota'));
+    $dow        = (int)$horaBogota->format('N'); // 1=Lun...7=Dom
+    $mins       = (int)$horaBogota->format('H') * 60 + (int)$horaBogota->format('i');
+    $enHorario  = ($dow >= 1 && $dow <= 5 && $mins >= 420 && $mins < 1050)
+               || ($dow === 6 && $mins >= 480 && $mins < 720);
+
+    if ($enHorario) {
+        $s .= "HORARIO ASESORES: Estamos dentro del horario de atención (Lun-Vie 7am-5:30pm / Sáb 8am-12m). Si el usuario pide hablar con un asesor, usa [ESCALAR] — el sistema le asignará uno.
+";
+    } else {
+        $s .= "HORARIO ASESORES (CRÍTICO): Estamos FUERA del horario de atención. Los asesores no están disponibles ahora.
+";
+        $s .= "Si el usuario pide hablar con un asesor o escalar:
+";
+        $s .= "  1. Dile que el equipo de asesores no está disponible en este momento.
+";
+        $s .= "  2. Informa el horario: Lun-Vie 7:00am-5:30pm / Sáb 8:00am-12:00m.
+";
+        $s .= "  3. Dile que su solicitud quedará registrada y un asesor le contactará en el próximo horario hábil.
+";
+        $s .= "  4. Ofrece continuar con Nova TD para resolver lo que pueda ahora.
+";
+        $s .= "  5. Usa [ESCALAR] igualmente — el server.js manejará el estado pte_gestion.
+";
+    }
+    $s .= "REGLA NÚMEROS SUELTOS (CRÍTICA): Cuando el usuario envíe SOLO un número (1, 2, 3, etc.), SIEMPRE revisa el ÚLTIMO mensaje del asistente para entender a qué pregunta responde.
+";
+    $s .= "  - Si el último mensaje tuyo tenía opciones numeradas propias → interpreta en ESE contexto, NO como el menú principal.
+";
+    $s .= "  - Solo interpreta 1-6 como el menú principal si el último mensaje fue explícitamente el menú principal.
+";
     $s .= "TAGS: [MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]";
     return $s;
 }
@@ -251,7 +283,7 @@ function callGPT(string $system, array $messages): string {
             $messages
         ),
         'max_tokens'  => 500,
-        'temperature' => 0.4,
+        'temperature' => 0.3,
     ]);
 
     $ch = curl_init('https://api.openai.com/v1/chat/completions');
