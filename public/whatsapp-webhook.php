@@ -185,7 +185,9 @@ switch ($action) {
         break;
 
     case 'MEDICAMENTOS':
-        sendWA($from, $text . "\n\nPara consultar el estado de su medicamento comuníquese al:\n📞 PBX: 604 322 2432\n💬 WhatsApp: 304 341 2431");
+        // GPT genera el $text con el link de App Solicitudes Web.
+        // Solo agregar la pregunta SÍ/NO sin números para no colisionar con el menú.
+        sendWA($from, $text . "\n\n¿Desea que un asesor verifique el estado en el sistema? Responda *SÍ* o *NO*");
         break;
 
     case 'CAMBIAR_EPS':
@@ -242,7 +244,7 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $s .= "REGLA RADICAR: Si el usuario quiere radicar una PQRSFD → usa [FORMULARIO].\n";
     $s .= "REGLA AUDIOS: Cuando el usuario envía un audio, recibirás la transcripción con prefijo [🎙️ Audio:]. Trátala como texto normal — responde al contenido, no menciones que es una transcripción.\n";
     $s .= "REGLA DOMICILIOS: Tododrogas NO realiza domicilios ni envíos. Si preguntan por domicilio/envío/delivery → responde que no hacemos domicilios e invita a la sede más cercana. NO uses [ESCALAR].\n";
-    $s .= "REGLA MEDICAMENTOS SEGUIMIENTO: Cuando el usuario ya recibió la información de App Solicitudes Web y necesitas preguntarle si quiere un asesor, usa SIEMPRE esta pregunta: '¿Desea que un asesor verifique el estado? Responda *SÍ* o *NO*' — NUNCA uses números (1/2) porque confunden con el menú principal. Si responde Sí/Si/SÍ/sí → usa [ESCALAR] inmediatamente. Si responde No/NO/no → continúa con Nova TD. NUNCA repitas el mismo mensaje de App Solicitudes Web si ya lo enviaste.\n";
+    $s .= "REGLA MEDICAMENTOS SEGUIMIENTO: Cuando el usuario ya recibió la información de App Solicitudes Web, el sistema agrega automáticamente '¿Desea que un asesor verifique el estado? Responda *SÍ* o *NO*'. NUNCA uses números (1/2) en esta pregunta. Si el usuario responde Sí/Si/SÍ/sí → usa [ESCALAR] inmediatamente. Si responde No/NO/no → continúa con Nova TD. NUNCA generes tú mismo esta pregunta ni repitas el link de App Solicitudes Web si ya lo enviaste. NUNCA uses [MEDICAMENTOS] dos veces seguidas.\n";
     $s .= "REGLA MEDICAMENTOS VS REQUISITOS:\n";
     $s .= "  - QUÉ LLEVAR / REQUISITOS → [REQUISITOS]\n";
     $s .= "  - ESTADO medicamento / DEMORA → [MEDICAMENTOS]\n";
