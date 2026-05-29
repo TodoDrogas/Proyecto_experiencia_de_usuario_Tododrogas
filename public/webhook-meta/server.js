@@ -626,63 +626,61 @@ async function cronInactividad() {
         if (['escalado','activo','esperando'].includes(s.estado)) {
 
           // ── Agente no responde (escalado sin primera respuesta) ──────────
+          // Máximo 2 avisos al usuario, luego silencio hasta reasignación a los 12 min
+          // Flag: resumen_nova = 'aviso1' | 'aviso2' para saber cuántos se mandaron
           if (s.estado === 'escalado' && s.asignado_at && !s.primera_respuesta_at) {
             const minsAsig = (ahora - new Date(s.asignado_at).getTime()) / 60000;
             const _trat    = s.nombre ? `*${s.nombre.split(' ')[0]}*` : 'estimado usuario';
-            const minsAviso = s.inactividad_aviso_at
-              ? (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000
-              : 999;
+            const avisoFlag = s.resumen_nova || '';
 
-            // Primer aviso: 3+ min desde asignación, sin aviso previo
-            if (minsAsig >= 3 && !s.inactividad_aviso_at) {
+            // Primer aviso: 3+ min, sin avisos previos
+            if (minsAsig >= 3 && avisoFlag !== 'aviso1' && avisoFlag !== 'aviso2') {
               const _m = `Agradecemos su paciencia, ${_trat}. 🙏\n\nSu caso es nuestra prioridad y un asesor estará con usted en breve.\n\n*Tododrogas, siempre a su servicio.*`;
               await enviarMeta(s.telefono, _m);
               await pushHistoryNova(s.telefono, _m, 'nova');
               await supabase.from('wa_sesiones')
-                .update({ inactividad_aviso_at: ahoraISO })
+                .update({ inactividad_aviso_at: ahoraISO, resumen_nova: 'aviso1' })
                 .eq('telefono', s.telefono);
               continue;
             }
-            // Segundo aviso: 3+ min desde el primer aviso Y entre 6-12 min totales
-            if (s.inactividad_aviso_at && minsAviso >= 3 && minsAsig >= 6 && minsAsig < 12) {
-              const _m = `Permítanos 2 o 3 minutos más, ${_trat}. ⏳\n\nSu solicitud tiene prioridad. Gracias por su comprensión. 🌟`;
-              await enviarMeta(s.telefono, _m);
-              await pushHistoryNova(s.telefono, _m, 'nova');
-              await supabase.from('wa_sesiones')
-                .update({ inactividad_aviso_at: ahoraISO })
-                .eq('telefono', s.telefono);
-              continue;
-            }
-            if (minsAsig >= 12 && s.inactividad_aviso_at) {
-              const minsAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
-              if (minsAviso >= 4) {
-                if (s.agente_id) {
-                  const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
-                  if (ag) await supabase.from('agentes').update({ carga_actual: Math.max(0,(ag.carga_actual||1)-1) }).eq('id',s.agente_id);
-                }
-                await supabase.from('wa_sesiones').update({
-                  agente_id: null, agente_nombre: null,
-                  asignado_at: null, inactividad_aviso_at: null,
-                  primera_respuesta_at: null
-                }).eq('telefono', s.telefono);
-                const sesActual = {...s, agente_id:null, agente_nombre:null};
-                const nuevoAg = await autoAsignarAgente(s.telefono, sesActual);
-                const _trat2 = s.nombre ? `*${s.nombre.split(' ')[0]}*` : 'estimado usuario';
-                const _m = nuevoAg
-                  ? `Hemos asignado un nuevo asesor para garantizar su atención, ${_trat2}. Estará con usted en un momento. 🤝
-
-*Tododrogas, siempre a su servicio.*`
-                  : `Le pedimos disculpas por la espera, ${_trat2}. Su caso queda registrado como prioridad.
-
-*Tododrogas, siempre a su servicio.*`;
+            // Segundo aviso: 3+ min después del primero, solo si ya se mandó aviso1
+            if (avisoFlag === 'aviso1' && s.inactividad_aviso_at) {
+              const minsDesdeAviso1 = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
+              if (minsDesdeAviso1 >= 3) {
+                const _m = `Permítanos 2 o 3 minutos más, ${_trat}. ⏳\n\nSu solicitud tiene prioridad. Gracias por su comprensión. 🌟`;
                 await enviarMeta(s.telefono, _m);
                 await pushHistoryNova(s.telefono, _m, 'nova');
+                await supabase.from('wa_sesiones')
+                  .update({ inactividad_aviso_at: ahoraISO, resumen_nova: 'aviso2' })
+                  .eq('telefono', s.telefono);
                 continue;
               }
             }
-            continue; // agente asignado pero aún en tiempo de gracia
+            // Reasignación: 12+ min sin primera respuesta, ya se mandó aviso2
+            if (avisoFlag === 'aviso2' && minsAsig >= 12) {
+              if (s.agente_id) {
+                const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
+                if (ag) await supabase.from('agentes').update({ carga_actual: Math.max(0,(ag.carga_actual||1)-1) }).eq('id',s.agente_id);
+              }
+              await supabase.from('wa_sesiones').update({
+                agente_id: null, agente_nombre: null,
+                asignado_at: null, inactividad_aviso_at: null,
+                primera_respuesta_at: null, resumen_nova: null
+              }).eq('telefono', s.telefono);
+              const sesActual = {...s, agente_id:null, agente_nombre:null};
+              const nuevoAg = await autoAsignarAgente(s.telefono, sesActual);
+              const _trat2 = s.nombre ? `*${s.nombre.split(' ')[0]}*` : 'estimado usuario';
+              const _m = nuevoAg
+                ? `Hemos asignado un nuevo asesor para garantizar su atención, ${_trat2}. Estará con usted en un momento. 🤝\n\n*Tododrogas, siempre a su servicio.*`
+                : `Le pedimos disculpas por la espera, ${_trat2}. Su caso queda registrado como prioridad y le contactaremos a la brevedad.\n\n*Tododrogas, siempre a su servicio.*`;
+              await enviarMeta(s.telefono, _m);
+              await pushHistoryNova(s.telefono, _m, 'nova');
+              continue;
+            }
+            continue; // aún en tiempo de gracia — no hacer nada
           }
 
+          // ── Usuario inactivo con agente ──────────────────────────────────
           // ── Usuario inactivo con agente ──────────────────────────────────
           // Solo aplica si el agente ya respondió (primera_respuesta_at existe)
           // o si el estado es activo/esperando
