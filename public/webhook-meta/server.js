@@ -1013,35 +1013,49 @@ app.post('/webhook/meta', async (req, res) => {
             }).catch(e => console.warn('⚠️ wa_historico insert:', e.message));
           }
 
-          const nueva = {
-            telefono,
-            nombre:       sesion.nombre || profile || '',
-            eps:          sesion.eps    || '',
-            cedula:       sesion.cedula || '',
-            history:      [nuevoMsg],
-            estado:       'nova',
-            unread_count: 1,
-            updated_at:   ahoraISO,
-            agente_id:           null,
-            agente_nombre:       null,
-            calificacion:        null,
-            calificacion_texto:  null,
-            encuesta_enviada:    null,
-            encuesta_enviada_at: null,
-            cerrado_at:          null,
-            motivo_cierre_wa:    null,
+          // FIX: igual que WhatsApp — acumular historial, nunca borrar
+          // Solo limpiar campos operacionales, mantener history completo
+          const histExistente = Array.isArray(sesion.history) ? sesion.history : [];
+
+          // Agregar separador visual de nueva conversación
+          const _fechaSep = new Date(ahoraISO).toLocaleDateString('es-CO',{
+            weekday:'long', day:'numeric', month:'long', year:'numeric'
+          });
+          histExistente.push({
+            role:    'system',
+            content: `── Nueva conversación · ${_fechaSep} ──`,
+            ts:      ahoraISO
+          });
+          histExistente.push(nuevoMsg);
+
+          // Limitar a 2000 mensajes para no exceder límites de BD
+          if (histExistente.length > 2000) histExistente.splice(0, histExistente.length - 2000);
+
+          await supabase.from('wa_sesiones').update({
+            history:              histExistente,
+            estado:               'nova',
+            unread_count:         1,
+            updated_at:           ahoraISO,
+            agente_id:            null,
+            agente_nombre:        null,
+            calificacion:         null,
+            calificacion_texto:   null,
+            encuesta_enviada:     null,
+            encuesta_enviada_at:  null,
+            cerrado_at:           null,
+            motivo_cierre_wa:     null,
             inactividad_aviso_at: null,
-            asignado_at:         null,
+            asignado_at:          null,
             primera_respuesta_at: null,
-            transferido_de:      null,
-            transferido_at:      null,
-            tipificacion:        null,
-            observacion_cierre:  null,
-            fase:                null,
-          };
-          await supabase.from('wa_sesiones').upsert(nueva);
-          sesion = nueva;
-          console.log(`🆕 Nueva sesión (>24h): ${telefono}`);
+            transferido_de:       null,
+            transferido_at:       null,
+            tipificacion:         null,
+            observacion_cierre:   null,
+            fase:                 null,
+          }).eq('telefono', telefono);
+
+          sesion = { ...sesion, history: histExistente, estado: 'nova' };
+          console.log(`🔄 Conversación nueva (>24h) acumulada: ${telefono} — ${histExistente.length} msgs totales`);
           } // end else guardado_fuera_horario
         }
       }
@@ -1205,11 +1219,13 @@ app.post('/webhook/meta', async (req, res) => {
       if (history.length >= 500) history.splice(0, history.length - 499);
       history.push(nuevoMsg);
 
-      // Si hay agente y el usuario responde → volver a "activo" + reset inactividad
+      // Si hay agente y el usuario responde → volver a "activo"
+      // IMPORTANTE: NO resetear inactividad_aviso_at aquí — solo el agente
+      // al responder debe resetearlo. Si el usuario responde al aviso y el
+      // cron reseteara el timer, volvería a enviar el aviso infinitamente.
       const updateData = {
         history,
         unread_count:        (sesion.unread_count || 0) + 1,
-        inactividad_aviso_at: null, // reset al recibir mensaje
         updated_at:           ahoraISO,
         ...(profile && !sesion.nombre ? { nombre: profile } : {})
       };
@@ -1732,7 +1748,7 @@ app.post('/send', async (req, res) => {
       history,
       unread_count:        0,
       updated_at:          ahoraISO,
-      inactividad_aviso_at: null, // reset al enviar mensaje
+      inactividad_aviso_at: null, // agente respondió → reset timer inactividad
       mensajes_agente:     (sesion?.mensajes_agente || 0) + 1
     };
 
