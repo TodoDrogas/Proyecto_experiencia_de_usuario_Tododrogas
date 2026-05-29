@@ -23,7 +23,10 @@ app.use((req, res, next) => {
 });
 
 // Raw body para validar firma Meta
+// CRÍTICO: saltarse multipart/form-data — multer necesita el stream intacto
 app.use((req, res, next) => {
+  const ct = req.headers['content-type'] || '';
+  if (ct.includes('multipart/form-data')) return next();
   let data = '';
   req.on('data', chunk => { data += chunk; });
   req.on('end', () => {
@@ -120,29 +123,25 @@ async function logConv(telefono, agenteId, agenteNombre, evento, duracionSeg = n
 async function archivarEnHistorico(sesion, cerradoAt) {
   try {
     if (!sesion?.telefono) return;
-    // Obtener history actualizado de BD para tener el mensaje final
-    const { data: sesActual } = await supabase
-      .from('wa_sesiones').select('*').eq('telefono', sesion.telefono).single();
-    const s = sesActual || sesion;
-    if (!Array.isArray(s.history) || s.history.length === 0) return;
+    const { data: s } = await supabase.from('wa_sesiones').select('*').eq('telefono', sesion.telefono).single();
+    const src = s || sesion;
+    if (!Array.isArray(src.history) || src.history.length === 0) return;
     await supabase.from('wa_historico').insert({
-      telefono:          s.telefono,
-      nombre:            s.nombre            || '',
-      eps:               s.eps               || '',
-      cedula:            s.cedula            || '',
-      history:           s.history,
-      agente_id:         s.agente_id         || null,
-      agente_nombre:     s.agente_nombre     || null,
-      calificacion:      s.calificacion      || null,
-      calificacion_texto: s.calificacion_texto || null,
-      motivo_cierre_wa:  s.motivo_cierre_wa  || null,
-      cerrado_at:        cerradoAt           || s.cerrado_at || new Date().toISOString(),
+      telefono:          src.telefono,
+      nombre:            src.nombre            || '',
+      eps:               src.eps               || '',
+      cedula:            src.cedula            || '',
+      history:           src.history,
+      agente_id:         src.agente_id         || null,
+      agente_nombre:     src.agente_nombre     || null,
+      calificacion:      src.calificacion      || null,
+      calificacion_texto: src.calificacion_texto || null,
+      motivo_cierre_wa:  src.motivo_cierre_wa  || null,
+      cerrado_at:        cerradoAt             || src.cerrado_at || new Date().toISOString(),
       created_at:        new Date().toISOString()
     });
-    console.log(`📦 Archivado en wa_historico: ${s.telefono}`);
-  } catch(e) {
-    console.error('❌ archivarEnHistorico:', e.message);
-  }
+    console.log(`📦 Archivado en wa_historico: ${src.telefono}`);
+  } catch(e) { console.error('❌ archivarEnHistorico:', e.message); }
 }
 
 // ── GENERAR SALUDO INTELIGENTE CON OPENAI ────────────────────────────────
@@ -436,10 +435,11 @@ function mensajeFueraHorario(nombre) {
 
 // ── PROCESAR ENCUESTA WA ─────────────────────────────────────────────────
 async function procesarEncuesta(telefono, respuesta, sesion) {
-  const cal = respuesta.trim();
-  if (!['1', '2', '3'].includes(cal)) return false;
-
-  const calNum = parseInt(cal);
+  const calRaw = respuesta.trim().toUpperCase();
+  const mapaRespuesta = {'MALA':1,'MAL':1,'1':1,'REGULAR':2,'REG':2,'2':2,'BUENA':3,'BUEN':3,'BUENO':3,'3':3};
+  if (!mapaRespuesta[calRaw]) return false;
+  const calNum = mapaRespuesta[calRaw];
+  const cal    = String(calNum);
   const textos = { 1: 'Mala', 2: 'Regular', 3: 'Buena' };
   const emojis = { 1: '😞', 2: '😐', 3: '😊' };
 
@@ -481,12 +481,9 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
   const msg = `${emojis[calNum]} Gracias por calificarnos. Hemos registrado su atención como *${textos[calNum]}*.\n\nGracias por contactarnos. *Tododrogas, siempre a su servicio.*`;
   await enviarMeta(telefono, msg);
 
-  // Archivar en historico si cierra definitivamente (hay agente asignado)
+  // Archivar si cierra definitivamente (agente asignado)
   if (!_requiereGestion) {
-    await archivarEnHistorico({
-      ...sesion, calificacion: calNum,
-      calificacion_texto: textos[calNum], motivo_cierre_wa: 'encuesta'
-    }, ahoraISO);
+    await archivarEnHistorico({ ...sesion, calificacion: calNum, calificacion_texto: textos[calNum], motivo_cierre_wa: 'encuesta' }, ahoraISO);
   }
 
   // Registrar origen y agente real en el log
@@ -565,10 +562,26 @@ async function cronInactividad() {
         // ESTADO: esperando_encuesta → solo verificar timeout de 10 min
         // ════════════════════════════════════════════════════════════════════
         if (s.estado === 'esperando_encuesta') {
-          if (!s.encuesta_enviada_at) continue; // sin fecha → no tocar
+          if (!s.encuesta_enviada_at) continue;
           const minsEnc = (ahora - new Date(s.encuesta_enviada_at).getTime()) / 60000;
           if (minsEnc >= 10) {
             const _agNombre = s.agente_nombre || 'Nova TD';
+            const _sinAgente2 = !s.agente_id;
+            let _agenteAsigInact = null;
+            if (_sinAgente2) { _agenteAsigInact = await autoAsignarAgente(s.telefono, s); }
+            // FIX: cambiar estado PRIMERO para evitar reenvío
+            const { error: _errCierre } = await supabase.from('wa_sesiones').update({
+              estado:             _sinAgente2 ? 'pte_gestion' : 'cerrado',
+              calificacion:       null,
+              calificacion_texto: 'Sin calificación',
+              cerrado_at:         _sinAgente2 ? null : ahoraISO,
+              motivo_cierre_wa:   'inactividad',
+              encuesta_enviada_at: null,
+              agente_nombre:      _agenteAsigInact ? _agenteAsigInact.nombre : _agNombre,
+              agente_id:          _agenteAsigInact ? _agenteAsigInact.id : (s.agente_id || null),
+              updated_at:         ahoraISO
+            }).eq('telefono', s.telefono).eq('estado', 'esperando_encuesta');
+            if (_errCierre) { console.warn('⚠️ despedida ya procesada:', s.telefono); continue; }
             const _msgDespedida =
               `Cerramos su consulta, ${tratamiento(s.nombre)}. 😊
 
@@ -578,23 +591,6 @@ async function cronInactividad() {
 ` +
               `*¡Hasta pronto! Tododrogas, siempre a su servicio.*`;
             await enviarMeta(s.telefono, _msgDespedida);
-            const _sinAgente2 = !s.agente_id;
-            // Si Nova resolvió sola → asignar automáticamente a un agente
-            let _agenteAsigInact = null;
-            if (_sinAgente2) {
-              _agenteAsigInact = await autoAsignarAgente(s.telefono, s);
-            }
-            await supabase.from('wa_sesiones').update({
-              estado:             _sinAgente2 ? 'pte_gestion' : 'cerrado',
-              calificacion:       null,
-              calificacion_texto: 'Sin calificación',
-              cerrado_at:         _sinAgente2 ? null : ahoraISO,
-              motivo_cierre_wa:   'inactividad',
-              agente_nombre:      _agenteAsigInact ? _agenteAsigInact.nombre : _agNombre,
-              agente_id:          _agenteAsigInact ? _agenteAsigInact.id : (s.agente_id || null),
-              updated_at:         ahoraISO
-            }).eq('telefono', s.telefono);
-            // Archivar si cierra definitivamente (tenía agente)
             if (!_sinAgente2) {
               await archivarEnHistorico({ ...s, calificacion_texto: 'Sin calificación', motivo_cierre_wa: 'inactividad' }, ahoraISO);
             }
@@ -650,23 +646,21 @@ async function cronInactividad() {
                 `Antes de despedirnos, ¿nos regala un momento para calificarnos?
 
 ` +
-                `*1* → 😞 Mala
-*2* → 😐 Regular
-*3* → 😊 Buena
+                `*MALA* → 😞
+*REGULAR* → 😐
+*BUENA* → 😊
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              await enviarMeta(s.telefono, _msgEnc);
-              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
-              // Setear encuesta_enviada_at ANTES de cambiar estado (guard anti-loop)
-              // Update atómico: solo si encuesta_enviada_at sigue siendo null
               const { error: _errEnc1 } = await supabase.from('wa_sesiones').update({
                 estado:               'esperando_encuesta',
                 encuesta_enviada_at:  ahoraISO,
                 inactividad_aviso_at: null,
                 motivo_cierre_wa:     'inactividad'
               }).eq('telefono', s.telefono).is('encuesta_enviada_at', null);
-              if (_errEnc1) { console.warn('encuesta ya enviada (race condition):', s.telefono); continue; }
+              if (_errEnc1) { console.warn('encuesta ya enviada nova (race):', s.telefono); continue; }
+              await enviarMeta(s.telefono, _msgEnc);
+              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
               await logConv(s.telefono, null, null, 'encuesta_enviada', null, { motivo: 'inactividad_nova' });
             }
           }
@@ -768,15 +762,12 @@ async function cronInactividad() {
                 `Antes de despedirnos, ¿nos regala un momento para calificarnos?
 
 ` +
-                `*1* → 😞 Mala
-*2* → 😐 Regular
-*3* → 😊 Buena
+                `*MALA* → 😞
+*REGULAR* → 😐
+*BUENA* → 😊
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              await enviarMeta(s.telefono, _msgEnc);
-              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
-              // Reducir carga del agente
               if (s.agente_id) {
                 const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
                 if (ag) await supabase.from('agentes').update({ carga_actual: Math.max(0,(ag.carga_actual||1)-1) }).eq('id',s.agente_id);
@@ -787,7 +778,9 @@ async function cronInactividad() {
                 inactividad_aviso_at: null,
                 motivo_cierre_wa:     'inactividad'
               }).eq('telefono', s.telefono).is('encuesta_enviada_at', null);
-              if (_errEnc2) { console.warn('encuesta ya enviada agente (race condition):', s.telefono); continue; }
+              if (_errEnc2) { console.warn('encuesta ya enviada agente (race):', s.telefono); continue; }
+              await enviarMeta(s.telefono, _msgEnc);
+              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
               await logConv(s.telefono, s.agente_id, s.agente_nombre, 'encuesta_enviada', null, { motivo: 'inactividad_agente' });
             }
           }
@@ -998,7 +991,7 @@ app.post('/webhook/meta', async (req, res) => {
         if (bodyTrim && !['1','2','3'].includes(bodyTrim)) {
           await enviarMeta(telefono,
             `Por favor responda solo con *1*, *2* o *3* para calificarnos:\n\n` +
-            `*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena`
+            `*MALA* → 😞\n*REGULAR* → 😐\n*BUENA* → 😊`
           );
         }
         return; // SIEMPRE salir — no llegar a Nova ni a ningún otro handler
@@ -1009,7 +1002,7 @@ app.post('/webhook/meta', async (req, res) => {
       if (['SALIR', 'LISTO', 'ADIOS', 'ADIÓS', 'CHAO'].includes(bodyUp) &&
           ['nova', 'escalado', 'activo', 'esperando'].includes(sesion.estado)) {
         await enviarMeta(telefono,
-          `Gracias por contactarnos, ${tratamiento(sesion.nombre)}.\n\nAntes de cerrar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n*Tododrogas, siempre a su servicio.*`
+          `Gracias por contactarnos, ${tratamiento(sesion.nombre)}.\n\nAntes de cerrar, le invitamos a calificar nuestra atención:\n\n*MALA* → 😞\n*REGULAR* → 😐\n*BUENA* → 😊\n\n*Tododrogas, siempre a su servicio.*`
         );
         if (sesion.agente_id) {
           const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', sesion.agente_id).single();
@@ -1065,7 +1058,14 @@ Un asesor revisará su caso en el próximo horario de atención:
         return;
       }
 
-      await supabase.from('wa_sesiones').update(updateData).eq('telefono', telefono);
+      // FIX: en esperando_encuesta NO tocar updated_at (evita reset del cron)
+      if (sesion.estado === 'esperando_encuesta') {
+        await supabase.from('wa_sesiones')
+          .update({ history, unread_count: (sesion.unread_count || 0) + 1 })
+          .eq('telefono', telefono);
+      } else {
+        await supabase.from('wa_sesiones').update(updateData).eq('telefono', telefono);
+      }
       sesion.history = history;
     } else {
       // ── Nueva sesión ──────────────────────────────────────────────────────
@@ -1082,6 +1082,50 @@ Un asesor revisará su caso en el próximo horario de atención:
     }
 
     console.log(`📩 Mensaje de ${telefono}: ${body.substring(0, 60)}`);
+
+    // ── Detectar satisfacción si hay AGENTE activo → encuesta directa ──────
+    if (['escalado','activo','esperando'].includes(sesion.estado) && sesion.agente_id) {
+      const _bodyLowerAg = (body||'').toLowerCase().trim();
+      const _frasesSatAg = ['gracias','muchas gracias','ok gracias','no gracias',
+        'así está bien','no, así está bien','ya está bien','está bien así',
+        'perfecto','listo','eso era todo','ya quedé','no necesito más',
+        'fue todo','ya me ayudó','con eso es suficiente','excelente gracias',
+        'bien gracias','gracias por tu'];
+      const _histLenAg = Array.isArray(sesion?.history) ? sesion.history.length : 0;
+      if (_frasesSatAg.some(f => _bodyLowerAg.includes(f)) && _histLenAg >= 2) {
+        const ahoraEncAg = new Date().toISOString();
+        const _nomAg = sesion.nombre ? `*${sesion.nombre.split(' ')[0]}*` : '';
+        const _msgEncAg =
+          `¡Con mucho gusto${_nomAg ? ', '+_nomAg : ''}! Fue un placer ayudarle. 😊
+
+` +
+          `Antes de despedirnos, ¿nos regala un momento para calificarnos?
+
+` +
+          `*MALA* → 😞
+*REGULAR* → 😐
+*BUENA* → 😊
+
+` +
+          `*Tododrogas, siempre a su servicio.* 🌟`;
+        if (sesion.agente_id) {
+          const { data: _agDat } = await supabase.from('agentes').select('carga_actual').eq('id', sesion.agente_id).single();
+          if (_agDat) await supabase.from('agentes').update({ carga_actual: Math.max(0,(_agDat.carga_actual||1)-1) }).eq('id', sesion.agente_id);
+        }
+        const { error: _errAgEnc } = await supabase.from('wa_sesiones').update({
+          estado:               'esperando_encuesta',
+          encuesta_enviada_at:  ahoraEncAg,
+          inactividad_aviso_at: null,
+          motivo_cierre_wa:     'satisfaccion_usuario'
+        }).eq('telefono', telefono).is('encuesta_enviada_at', null);
+        if (!_errAgEnc) {
+          await enviarMeta(telefono, _msgEncAg);
+          await pushHistoryNova(telefono, _msgEncAg, 'nova');
+          await logConv(telefono, sesion.agente_id, sesion.agente_nombre, 'encuesta_enviada', null, { motivo: 'satisfaccion_agente' });
+        }
+        return;
+      }
+    }
 
     // ── Llamar a Nova TD si estado es nova ────────────────────────────────
     if ((sesion.estado || 'nova') === 'nova') {
@@ -1105,9 +1149,9 @@ Un asesor revisará su caso en el próximo horario de atención:
           `Antes de despedirnos, ¿nos regala un momento para calificarnos?
 
 ` +
-          `*1* → 😞 Mala
-*2* → 😐 Regular
-*3* → 😊 Buena
+          `*MALA* → 😞
+*REGULAR* → 😐
+*BUENA* → 😊
 
 ` +
           `*Tododrogas, siempre a su servicio.* 🌟`;
@@ -1613,7 +1657,7 @@ app.post('/transferir', async (req, res) => {
     });
 
     console.log(`🔄 Transferido ${telefono}: ${agente_origen_nombre} → ${nuevo_agente_nombre}`);
-    res.json({ ok: true, saludo_sugerido: nuevoSaludo });
+    res.json({ ok: true, saludo_sugerido: nuevoSaludo, history });
 
   } catch (err) {
     console.error('❌ Error transferir:', err.message);
@@ -1621,7 +1665,7 @@ app.post('/transferir', async (req, res) => {
   }
 });
 
-// ── ARCHIVAR SESIÓN MANUALMENTE (llamado desde el panel del agente) ────────
+// ── ARCHIVAR SESIÓN (llamado desde panel agente al cerrar) ──────────────
 app.post('/archivar', async (req, res) => {
   const origin = req.headers.origin || req.headers.referer || '';
   if (!ALLOWED_ORIGINS.some(o => origin.startsWith(o)))
