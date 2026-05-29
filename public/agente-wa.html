@@ -425,6 +425,10 @@ if(new URLSearchParams(location.search).get('filtro_estado')==='nova'){
     <button id="btnGlobal" onclick="toggleVista()" title="Vista global / mi vista" style="display:none;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer">
       🌐 Global
     </button>
+    <button onclick="abrirNuevoChat()" title="Iniciar conversación nueva" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1.5px solid rgba(37,211,102,0.5);background:rgba(37,211,102,0.15);color:#25d366;font-size:11px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .2s" onmouseover="this.style.background='rgba(37,211,102,0.3)'" onmouseout="this.style.background='rgba(37,211,102,0.15)'">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Nuevo chat
+    </button>
     <button id="btnPausa" onclick="togglePausa()" title="Pausar/Activar atención" style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:6px;border:1.5px solid rgba(255,255,255,0.2);background:rgba(255,255,255,0.08);color:#fff;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .2s">
       <svg id="iconPausa" width="11" height="11" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
       <span id="lblPausa">Pausar</span>
@@ -434,6 +438,63 @@ if(new URLSearchParams(location.search).get('filtro_estado')==='nova'){
       <span class="ag-name" id="agentNameLabel">Agente</span>
     </div>
     <button class="btn-logout" onclick="logout()">Salir</button>
+  </div>
+</div>
+
+<!-- MODAL NUEVO CHAT -->
+<div id="modalNuevoChat" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:16px;padding:28px;width:420px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <h3 style="font-size:16px;font-weight:700;margin:0">💬 Nuevo chat</h3>
+        <p style="font-size:11px;color:var(--ink3);margin:4px 0 0">Inicia una conversación con un número</p>
+      </div>
+      <button onclick="cerrarNuevoChat()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink3)">✕</button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase">Número WhatsApp *</label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <select id="ncPais" style="width:90px;padding:9px 8px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);font-size:13px;font-family:inherit">
+            <option value="57">🇨🇴 +57</option>
+            <option value="1">🇺🇸 +1</option>
+            <option value="52">🇲🇽 +52</option>
+            <option value="34">🇪🇸 +34</option>
+          </select>
+          <input id="ncTelefono" type="tel" placeholder="3001234567" style="flex:1;padding:9px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);font-size:13px;font-family:inherit;color:var(--ink)" oninput="this.value=this.value.replace(/\D/g,'')">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase">Plantilla</label>
+        <select id="ncTemplate" style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);font-size:13px;font-family:inherit;margin-top:4px" onchange="onNcTemplateChange()">
+          <option value="hello_world">👋 Saludo inicial (hello_world)</option>
+          <option value="seguimiento_gestion">📋 Seguimiento de gestión</option>
+          <option value="recordatorio_medicamento">💊 Recordatorio medicamento</option>
+          <option value="custom">✍️ Mensaje libre (solo 24h activas)</option>
+        </select>
+      </div>
+
+      <div id="ncParamsBox" style="display:none">
+        <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase">Parámetros de la plantilla</label>
+        <div id="ncParamsList" style="margin-top:6px;display:flex;flex-direction:column;gap:6px"></div>
+      </div>
+
+      <div id="ncMensajeLibreBox" style="display:none">
+        <label style="font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase">Mensaje</label>
+        <textarea id="ncMensajeLibre" placeholder="Escribe tu mensaje..." rows="3" style="width:100%;margin-top:4px;padding:9px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);font-size:13px;font-family:inherit;color:var(--ink);resize:vertical"></textarea>
+      </div>
+
+      <div id="ncError" style="display:none;background:#fef2f2;color:#dc2626;padding:8px 12px;border-radius:8px;font-size:12px"></div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
+        <button onclick="cerrarNuevoChat()" style="padding:9px 18px;border-radius:8px;border:1.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>
+        <button onclick="enviarNuevoChat()" id="btnEnviarNuevoChat" style="padding:9px 18px;border-radius:8px;border:none;background:#25d366;color:#fff;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit">
+          Enviar mensaje
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -912,7 +973,9 @@ const RR=[
   await loadSesiones();
   // Si viene filtro desde URL (admin viendo Nova TD), aplicarlo
   if(typeof _urlFiltroEstado !== 'undefined' && _urlFiltroEstado){
-    S.filtro = _urlFiltroEstado;
+    // Para Nova TD admin: mostrar nova + escalado + pte_gestion (todas las que gestiona Nova)
+    S.filtro = _urlFiltroEstado === 'nova' ? 'todas' : _urlFiltroEstado;
+    // Pero ocultar 'cerrado' del listado para mantener limpio
     renderLista();
   }
   startPolling();
@@ -1677,6 +1740,112 @@ function setTemaWa(t){
 // ── PAUSAR / REACTIVAR AGENTE ─────────────────────────────────────
 let _pausado = false;
 
+// ── NUEVO CHAT ───────────────────────────────────────────────────────────
+const _NC_TEMPLATES = {
+  'hello_world':             { params: [], desc: 'Saludo estándar de Meta' },
+  'seguimiento_gestion':     { params: ['Nombre del usuario','Número de radicado'], desc: 'Seguimiento PQRSFD' },
+  'recordatorio_medicamento':{ params: ['Nombre del usuario','Nombre del medicamento'], desc: 'Recordatorio' },
+  'custom':                  { params: [], desc: 'Mensaje libre' }
+};
+
+function abrirNuevoChat(){
+  const m=document.getElementById('modalNuevoChat');
+  if(m){ m.style.display='flex'; onNcTemplateChange(); }
+  setTimeout(()=>document.getElementById('ncTelefono')?.focus(),100);
+}
+
+function cerrarNuevoChat(){
+  const m=document.getElementById('modalNuevoChat');
+  if(m) m.style.display='none';
+  document.getElementById('ncTelefono').value='';
+  document.getElementById('ncMensajeLibre').value='';
+  document.getElementById('ncError').style.display='none';
+}
+
+function onNcTemplateChange(){
+  const tpl   = document.getElementById('ncTemplate')?.value||'hello_world';
+  const info  = _NC_TEMPLATES[tpl]||{params:[]};
+  const pBox  = document.getElementById('ncParamsBox');
+  const pList = document.getElementById('ncParamsList');
+  const mBox  = document.getElementById('ncMensajeLibreBox');
+
+  if(tpl==='custom'){
+    pBox.style.display='none';
+    mBox.style.display='block';
+  } else if(info.params.length){
+    pBox.style.display='block';
+    mBox.style.display='none';
+    pList.innerHTML = info.params.map((p,i)=>
+      `<input id="ncParam_${i}" placeholder="${p}" style="padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);font-size:13px;font-family:inherit;color:var(--ink);width:100%">`
+    ).join('');
+  } else {
+    pBox.style.display='none';
+    mBox.style.display='none';
+  }
+}
+
+async function enviarNuevoChat(){
+  const errEl  = document.getElementById('ncError');
+  const btn    = document.getElementById('btnEnviarNuevoChat');
+  errEl.style.display='none';
+
+  const pais    = document.getElementById('ncPais').value;
+  const tel     = document.getElementById('ncTelefono').value.replace(/\D/g,'');
+  const tpl     = document.getElementById('ncTemplate').value;
+  const msgLibre= document.getElementById('ncMensajeLibre').value.trim();
+
+  if(!tel || tel.length < 7){
+    errEl.textContent='Ingresa un número válido'; errEl.style.display='block'; return;
+  }
+  if(tpl==='custom' && !msgLibre){
+    errEl.textContent='Escribe el mensaje'; errEl.style.display='block'; return;
+  }
+
+  // Recoger parámetros si aplica
+  const info = _NC_TEMPLATES[tpl]||{params:[]};
+  const params = info.params.map((_,i)=>{
+    return document.getElementById('ncParam_'+i)?.value?.trim()||'';
+  }).filter(p=>p);
+
+  btn.disabled=true; btn.textContent='Enviando...';
+
+  try{
+    const body = {
+      telefono:      pais + tel,
+      agente_id:     AGENT_ID||'',
+      agente_nombre: AGENT_NAME,
+    };
+    if(tpl==='custom'){
+      body.mensaje_libre = msgLibre;
+    } else {
+      body.template_name   = tpl;
+      body.template_params = params;
+    }
+
+    const res = await fetch('https://tododrogas.online/wa/iniciar-conversacion',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error||'Error al enviar');
+
+    cerrarNuevoChat();
+    toast('✅ Mensaje enviado a +'+pais+tel,'ok');
+
+    // Cargar la conversación nueva en el agente
+    await loadSesiones();
+    setTimeout(()=>selectConv('+'+pais+tel), 800);
+
+  }catch(err){
+    errEl.textContent = err.message.substring(0,120);
+    errEl.style.display='block';
+  } finally {
+    btn.disabled=false; btn.textContent='Enviar mensaje';
+  }
+}
+
 // ── DETECCIÓN INTELIGENTE DE INACTIVIDAD ─────────────────────
 let _lastActivity = Date.now();
 let _idleTimer = null;
@@ -2234,7 +2403,7 @@ async function confirmarCerrar(){
 
     // ── Metadata de la gestión ──
     const metadata = {
-      agente_id:AGENT_ID, agente_nombre:AGENT_NAME,
+      agente_id: _agenteIdSIGI, agente_nombre: _agenteNomSIGI,
       por:'agente', observaciones:obs,
       num_gestion: numGest+1,
       canal:'whatsapp', telefono_wa: S.selTel
@@ -2271,13 +2440,19 @@ async function confirmarCerrar(){
     }
 
     // ── OPERACIÓN 1: Crear o actualizar correos ──
+    // Si la sesión fue resuelta por Nova TD (sin agente humano asignado),
+    // el agente en el SIGI debe ser Nova TD, no el humano que registra la gestión
+    const _fueNovaTD = !ses.agente_id || (ses.agente_nombre||'').toUpperCase().includes('NOVA TD');
+    const _agenteIdSIGI   = _fueNovaTD ? null        : AGENT_ID;
+    const _agenteNomSIGI  = _fueNovaTD ? 'NOVA TD'   : AGENT_NAME;
+
     const patchCorreo = {
       num_gestiones: numGest+1,
       estado: 'solucionado',
       fecha_resolucion: now,
       updated_at: now,
-      agente_id: AGENT_ID,
-      asignado_a: AGENT_NAME,
+      agente_id:  _agenteIdSIGI,
+      asignado_a: _agenteNomSIGI,
       canal_contacto: 'whatsapp',
     };
 
