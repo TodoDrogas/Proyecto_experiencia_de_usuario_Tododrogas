@@ -149,6 +149,12 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-
 .wa-ag-pill.act{background:var(--green-l);color:var(--green)}
 .wa-ag-pill.esp{background:#eff6ff;color:#1d4ed8}
 .wa-ag-pill.pte{background:#fef3c7;color:#d97706}
+.wa-ag-pill.esc{background:#fee2e2;color:#dc2626}
+.wa-ag-conv-list{width:100%;margin-top:6px;display:flex;flex-direction:column;gap:3px}
+.wa-ag-conv-item{font-size:10px;padding:3px 8px;border-radius:6px;display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wa-ag-conv-item.esc{background:#fee2e2;color:#dc2626}
+.wa-ag-conv-item.pte{background:#fef3c7;color:#d97706}
+.wa-ag-conv-item.act{background:#dcfce7;color:#16a34a}
 .badge-online{background:var(--green-l);color:var(--green)}
 .badge-pausa{background:var(--red-l);color:var(--red)}
 .badge-offline{background:var(--bg2);color:var(--ink3)}
@@ -1125,20 +1131,34 @@ function renderAgentesOnline(){
   el.innerHTML=agentes.map(a=>{
     const isPausado=a.pausado;
     const isOnline=a.en_linea&&!isPausado;
-    const activas   = A.sesiones.filter(s=>s.agente_id===a.id&&(s.estado==='activo'||s.estado==='escalado')).length;
-    const esperando = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='esperando').length;
-    const pte       = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='pte_gestion').length;
-    return`<div class="wa-ag-row">
-      <div class="wa-ag-avatar" style="background:${isOnline?'var(--green)':isPausado?'var(--red)':'var(--ink3)'}">${(a.nombre||'?').charAt(0)}</div>
-      <div style="flex:1;min-width:0">
-        <div class="wa-ag-name">${escH(a.nombre)}</div>
-        <div class="wa-ag-sub">${isOnline?'En línea':isPausado?'En pausa':'Ausente'}</div>
+    const sesActivas  = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='activo');
+    const sesEscaladas= A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='escalado');
+    const sesEsp      = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='esperando');
+    const sesPte      = A.sesiones.filter(s=>s.agente_id===a.id&&s.estado==='pte_gestion');
+    const totalActivas= sesActivas.length + sesEscaladas.length;
+
+    // Construir lista de conversaciones con nombre de usuario
+    const convItems = [
+      ...sesEscaladas.map(s=>`<div class="wa-ag-conv-item esc">🔴 ${escH(s.nombre||s.telefono||'?')} — Escalado</div>`),
+      ...sesPte.map(s=>`<div class="wa-ag-conv-item pte">⚠️ ${escH(s.nombre||s.telefono||'?')} — Pte. Gestión</div>`),
+      ...sesActivas.map(s=>`<div class="wa-ag-conv-item act">🟢 ${escH(s.nombre||s.telefono||'?')} — Activo</div>`),
+      ...sesEsp.map(s=>`<div class="wa-ag-conv-item act">⏳ ${escH(s.nombre||s.telefono||'?')} — Esp. resp.</div>`),
+    ];
+
+    return`<div class="wa-ag-row" style="flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:10px;width:100%">
+        <div class="wa-ag-avatar" style="background:${isOnline?'var(--green)':isPausado?'var(--red)':'var(--ink3)'}">${(a.nombre||'?').charAt(0)}</div>
+        <div style="flex:1;min-width:0">
+          <div class="wa-ag-name">${escH(a.nombre)}</div>
+          <div class="wa-ag-sub">${isOnline?'En línea':isPausado?'En pausa':'Ausente'}</div>
+        </div>
+        <div class="wa-ag-metrics">
+          <span class="wa-ag-pill ${totalActivas>0?'act':''}" style="${totalActivas===0?'opacity:.5':''}" title="Activas">${totalActivas} activa${totalActivas!==1?'s':''}</span>
+          ${sesEscaladas.length?`<span class="wa-ag-pill esc" title="Esperando asesor">🔴 ${sesEscaladas.length} escal.</span>`:''}
+          ${sesPte.length?`<span class="wa-ag-pill pte" title="Pendiente de gestión">⚠️ ${sesPte.length} pte.</span>`:''}
+        </div>
       </div>
-      <div class="wa-ag-metrics">
-        <span class="wa-ag-pill act" title="Activas">${activas} activa${activas!==1?'s':''}</span>
-        ${esperando?`<span class="wa-ag-pill esp" title="Esperando respuesta del usuario">⏳ ${esperando} esp.</span>`:''}
-        ${pte?`<span class="wa-ag-pill pte" title="Pendientes por gestionar">⚠️ ${pte} pte.</span>`:''}
-      </div>
+      ${convItems.length?`<div class="wa-ag-conv-list">${convItems.join('')}</div>`:''}
     </div>`;
   }).join('');
 }
