@@ -6118,6 +6118,26 @@ async function toggleEstadoLinea(){
   resetTimer();
   console.log('[idle] Detector de inactividad activo — ' + IDLE_MIN + ' min');
 })();
+
+// ── HEARTBEAT: cada 2 min confirma que el agente sigue activo ─────────────
+// Si el PC se bloquea, cierra el navegador o se apaga, ultima_actividad
+// deja de actualizarse y el cron del server lo marca offline automáticamente
+setInterval(async()=>{
+  const id = sessionStorage.getItem('pqr_agent_id')||'';
+  if(!id || _agentePausado) return; // no heartbeat si está pausado
+  try{
+    await fetch(`${window.SUPABASE_URL}/rest/v1/agentes?id=eq.${id}`,{
+      method:'PATCH',
+      headers:{
+        'apikey':        window.SUPABASE_KEY,
+        'Authorization': 'Bearer ' + window.SUPABASE_KEY,
+        'Content-Type':  'application/json',
+        'Prefer':        'return=minimal'
+      },
+      body: JSON.stringify({ ultima_actividad: new Date().toISOString() })
+    });
+  }catch(e){ console.warn('[heartbeat]', e.message); }
+}, 2 * 60 * 1000); // cada 2 minutos
 async function getGraphToken(){
   // Las credenciales Azure viven solo en api-token.php (servidor)
   // El browser NO envía ninguna credencial — solo solicita el token
