@@ -482,7 +482,7 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
     calificacion:       calNum,
     calificacion_texto: textos[calNum],
     fecha_calificacion: ahoraISO,
-    estado:             'pte_gestion',  // siempre pte_gestion → agente registra y cierra
+    estado:             'esperando',  // agente verá al llegar y registra gestión
     cerrado_at:         null,
     motivo_cierre_wa:   'encuesta',
     agente_nombre:      _agenteAsigPte ? _agenteAsigPte.nombre : _agenteGestion,
@@ -625,7 +625,7 @@ async function cronInactividad() {
             if (_sinAgente2) { _agenteAsigInact = await autoAsignarAgente(s.telefono, s); }
             // FIX: cambiar estado PRIMERO para evitar reenvío
             const { error: _errCierre } = await supabase.from('wa_sesiones').update({
-              estado:             'pte_gestion',  // siempre pte_gestion → agente registra y cierra
+              estado:             'esperando',  // agente verá al llegar y registra gestión
               calificacion:       null,
               calificacion_texto: 'Sin calificación',
               cerrado_at:         null,
@@ -781,13 +781,12 @@ async function cronInactividad() {
           // o si el estado es activo/esperando
           if (!s.inactividad_aviso_at) {
             if (minsDesdeUser >= 2) {
+              const _lineaAgente = s.agente_nombre
+                ? `*${s.agente_nombre}* continúa disponible para atenderle.\n\n`
+                : '';
               const _msgAviso =
-                `¿${tratamiento(s.nombre)}, continúa en línea?
-
-` +
-                `*${s.agente_nombre || 'Su asesor'}* continúa disponible.
-
-` +
+                `¿${tratamiento(s.nombre)}, continúa en línea?\n\n` +
+                _lineaAgente +
                 `Si ya resolvió su consulta, escriba *LISTO* para cerrar.`;
               // FIX: update atómico PRIMERO — si ya fue seteado por otro proceso, no reenviar
               const { error: _errAviso } = await supabase.from('wa_sesiones')
@@ -1446,7 +1445,7 @@ Un asesor revisará su caso en el próximo horario de atención:
                 await enviarMeta(telefono, _msgSinAgente);
                 await pushHistoryNova(telefono, _msgSinAgente, 'nova');
                 await supabase.from('wa_sesiones')
-                  .update({ estado: 'pte_gestion', updated_at: ahoraISO })
+                  .update({ estado: 'esperando', updated_at: ahoraISO })
                   .eq('telefono', telefono);
               }
             } else {
@@ -1456,7 +1455,7 @@ Un asesor revisará su caso en el próximo horario de atención:
               await pushHistoryNova(telefono, _msgFuera, 'nova');
               // Estado pte_gestion: el agente lo verá al llegar mañana
               await supabase.from('wa_sesiones')
-                .update({ estado: 'pte_gestion', updated_at: ahoraISO })
+                .update({ estado: 'esperando', updated_at: ahoraISO })
                 .eq('telefono', telefono);
               console.log(`🌙 Fuera de horario: ${telefono} → esperando`);
             }
@@ -1868,7 +1867,7 @@ async function cronReasignarPteGestion() {
     const { data: pendientes } = await supabase
       .from('wa_sesiones')
       .select('telefono, nombre, eps, cedula, resumen_nova')
-      .eq('estado', 'pte_gestion')
+      .eq('estado', 'esperando')
       .is('agente_id', null)
       .order('updated_at', { ascending: true })
       .limit(5);
