@@ -1,7 +1,10 @@
-const express = require('express');
+const express  = require('express');
 const { createClient } = require('@supabase/supabase-js');
-const ws      = require('ws');
-const crypto  = require('crypto');
+const ws       = require('ws');
+const crypto   = require('crypto');
+const FormData  = require('form-data');
+const multer    = require('multer');
+const upload    = multer({ storage: multer.memoryStorage(), limits: { fileSize: 16*1024*1024 } });
 require('dotenv').config();
 
 const app = express();
@@ -222,6 +225,92 @@ async function autoAsignarAgente(telefono, sesion) {
   }
 }
 
+// ── SISTEMA DE AUDIO ────────────────────────────────────────────────────────
+
+// 1. Descargar media de Meta Graph API
+async function descargarMediaMeta(mediaId) {
+  const infoRes = await fetch(
+    `https://graph.facebook.com/v19.0/${mediaId}`,
+    { headers: { 'Authorization': `Bearer ${META_TOKEN}` } }
+  );
+  if (!infoRes.ok) throw new Error(`Meta media info: ${infoRes.status}`);
+  const info = await infoRes.json();
+  if (!info.url) throw new Error('Meta no devolvió URL del media');
+
+  const fileRes = await fetch(info.url, {
+    headers: { 'Authorization': `Bearer ${META_TOKEN}` }
+  });
+  if (!fileRes.ok) throw new Error(`Meta download: ${fileRes.status}`);
+
+  const buffer   = Buffer.from(await fileRes.arrayBuffer());
+  const mimeType = info.mime_type || fileRes.headers.get('content-type') || 'audio/ogg';
+  return { buffer, mimeType };
+}
+
+// 2. Subir a Supabase Storage bucket: wa-media
+async function subirASupabase(buffer, fileName, mimeType) {
+  const { error } = await supabase.storage
+    .from('wa-media')
+    .upload(fileName, buffer, { contentType: mimeType, upsert: true });
+  if (error) throw new Error(`Storage: ${error.message}`);
+  const { data: pub } = supabase.storage.from('wa-media').getPublicUrl(fileName);
+  return pub.publicUrl;
+}
+
+// 3. Transcribir con Whisper
+async function transcribirAudio(buffer, mimeType) {
+  if (!OPENAI_KEY) return '[Audio recibido]';
+  const extMap = { 'audio/ogg':'ogg','audio/mpeg':'mp3','audio/mp4':'m4a',
+                   'audio/wav':'wav','audio/webm':'webm','audio/aac':'aac' };
+  const ext = extMap[mimeType] || 'ogg';
+
+  const form = new FormData();
+  form.append('file', buffer, { filename: `audio.${ext}`, contentType: mimeType });
+  form.append('model', 'whisper-1');
+  form.append('language', 'es');
+  form.append('response_format', 'text');
+
+  const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+    method:  'POST',
+    headers: { 'Authorization': `Bearer ${OPENAI_KEY}`, ...form.getHeaders() },
+    body:    form
+  });
+  if (!res.ok) { console.error('Whisper error:', await res.text()); return '[Audio recibido]'; }
+  return (await res.text()).trim() || '[Audio sin voz]';
+}
+
+// 4. Orquestador principal
+async function procesarAudio(msg, telefono) {
+  const mediaId = msg.audio?.id;
+  if (!mediaId) return { content:'[Audio recibido]', tipo:'audio', audio_url:null };
+
+  console.log(`🎙️ Audio de ${telefono} — id:${mediaId}`);
+  try {
+    const { buffer, mimeType } = await descargarMediaMeta(mediaId);
+    const extMap = { 'audio/ogg':'ogg','audio/mpeg':'mp3','audio/mp4':'m4a',
+                     'audio/wav':'wav','audio/webm':'webm','audio/aac':'aac' };
+    const ext      = extMap[mimeType] || 'ogg';
+    const fileName = `audios/${telefono.replace('+','')}/${Date.now()}.${ext}`;
+
+    const [audio_url, transcripcion] = await Promise.all([
+      subirASupabase(buffer, fileName, mimeType),
+      transcribirAudio(buffer, mimeType)
+    ]);
+
+    console.log(`✅ Audio: "${transcripcion.substring(0,80)}"`);
+    return {
+      content:   transcripcion,
+      tipo:      'audio',
+      audio_url,
+      duracion:  msg.audio?.duration || null,
+      mime_type: mimeType
+    };
+  } catch (err) {
+    console.error('❌ procesarAudio:', err.message);
+    return { content:'[Audio recibido — error al procesar]', tipo:'audio', audio_url:null };
+  }
+}
+
 // ── HORARIO DE ATENCIÓN ─────────────────────────────────────────────────
 function estaEnHorario() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
@@ -386,6 +475,8 @@ async function cronInactividad() {
           continue;
         }
         // 30 min sin respuesta total → enviar encuesta Nova y cerrar
+        // GUARD: no reenviar si ya se envió la encuesta
+        if (s.encuesta_enviada_at) { continue; }
         if (minsSinAct >= 30 && s.inactividad_aviso_at) {
           const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
           if (minsDesdeAviso >= 28) {
@@ -398,10 +489,11 @@ async function cronInactividad() {
             await enviarMeta(s.telefono, _msgEnc1);
             await pushHistoryNova(s.telefono, _msgEnc1, 'nova');
             await supabase.from('wa_sesiones').update({
-              estado:             'esperando_encuesta',
+              estado:              'esperando_encuesta',
               encuesta_enviada_at: ahoraISO,
-              motivo_cierre_wa:   'inactividad',
-              updated_at:         ahoraISO
+              inactividad_aviso_at: null,  // limpiar para que el cron no re-evalúe
+              motivo_cierre_wa:    'inactividad',
+              updated_at:          ahoraISO
             }).eq('telefono', s.telefono);
             await logConv(s.telefono, null, null, 'encuesta_enviada', null, { motivo: 'inactividad_nova' });
           }
@@ -519,6 +611,8 @@ async function cronInactividad() {
         }
 
         // 30 min sin respuesta total → encuesta y cierre
+        // GUARD: no reenviar si ya se envió la encuesta
+        if (s.encuesta_enviada_at) { continue; }
         if (minsSinAct >= 30 && s.inactividad_aviso_at) {
           const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
           if (minsDesdeAviso >= 28) {
@@ -539,6 +633,7 @@ async function cronInactividad() {
             await supabase.from('wa_sesiones').update({
               estado:              'esperando_encuesta',
               encuesta_enviada_at: ahoraISO,
+              inactividad_aviso_at: null,  // limpiar para que el cron no re-evalúe
               motivo_cierre_wa:    'inactividad',
               updated_at:          ahoraISO
             }).eq('telefono', s.telefono);
@@ -613,7 +708,6 @@ app.post('/webhook/meta', async (req, res) => {
     const msg      = messages[0];
     const telefono = '+' + msg.from;
     const tipo     = msg.type;
-    const body     = msg.text?.body || `[${tipo}]`;
     const profile  = value?.contacts?.[0]?.profile?.name || '';
 
     if (rateLimit(telefono)) return;
@@ -623,18 +717,54 @@ app.post('/webhook/meta', async (req, res) => {
       .from('wa_sesiones').select('*').eq('telefono', telefono).single();
 
     const ahoraISO = new Date().toISOString();
-    const nuevoMsg = {
-      role:    'user',
-      content: body,
-      ts:      ahoraISO,
-      tipo:    tipo !== 'text' ? tipo : undefined
-    };
+
+    // ── Procesar según tipo de mensaje ─────────────────────────────────────
+    let body     = msg.text?.body || '';
+    let nuevoMsg = { role:'user', content: body || `[${tipo}]`, ts: ahoraISO };
+
+    if (tipo === 'audio') {
+      // Procesar audio: descargar → storage → transcribir con Whisper
+      const audioData = await procesarAudio(msg, telefono);
+      body     = audioData.content; // transcripción para Nova/agente
+      nuevoMsg = { role:'user', ts: ahoraISO, ...audioData };
+
+      // Confirmar recepción al usuario mientras se procesa
+      if (sesion?.estado === 'nova') {
+        await enviarMeta(telefono, '🎙️ _Audio recibido, procesando..._').catch(()=>{});
+      }
+    } else if (tipo === 'image' || tipo === 'document' || tipo === 'video' || tipo === 'sticker') {
+      // Otros media: guardar referencia (se implementará en siguiente versión)
+      const mediaId = msg[tipo]?.id || '';
+      const caption = msg[tipo]?.caption || '';
+      body     = caption || `[${tipo}]`;
+      nuevoMsg = {
+        role:     'user',
+        content:  body,
+        tipo,
+        media_id: mediaId,
+        caption,
+        ts:       ahoraISO
+      };
+    } else if (!body) {
+      body     = `[${tipo}]`;
+      nuevoMsg = { role:'user', content: body, tipo, ts: ahoraISO };
+    }
 
     if (sesion) {
       // ── ENCUESTA: si está esperando respuesta de encuesta ────────────────
       if (sesion.estado === 'esperando_encuesta') {
         const procesado = await procesarEncuesta(telefono, body, sesion);
         if (procesado) return;
+        // Si no procesó (no era 1/2/3) → recordar que solo aceptamos esa respuesta
+        // y NO pasar a Nova ni a ningún otro handler
+        const bodyTrim = (body||'').trim();
+        if (bodyTrim && !['1','2','3'].includes(bodyTrim)) {
+          await enviarMeta(telefono,
+            `Por favor responda solo con *1*, *2* o *3* para calificarnos:\n\n` +
+            `*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena`
+          );
+        }
+        return; // SIEMPRE salir — no llegar a Nova ni a ningún otro handler
       }
 
       // ── SALIR / LISTO: cierre voluntario del usuario ─────────────────────
@@ -653,6 +783,7 @@ app.post('/webhook/meta', async (req, res) => {
         await supabase.from('wa_sesiones').update({
           estado:              'esperando_encuesta',
           encuesta_enviada_at: ahoraISO,
+          inactividad_aviso_at: null,
           updated_at:          ahoraISO
         }).eq('telefono', telefono);
         return;
@@ -808,6 +939,70 @@ Un asesor revisará su caso en el próximo horario de atención:
 });
 
 // ── ENVIAR MENSAJE (agente → usuario) ─────────────────────────────────────
+// ── ENVIAR AUDIO DEL AGENTE → USUARIO ────────────────────────────────────
+app.post('/send-audio', upload.single('audio'), async (req, res) => {
+  const origin = req.headers.origin || req.headers.referer || '';
+  if (!ALLOWED_ORIGINS.some(o => origin.startsWith(o)))
+    return res.status(403).json({ error: 'Forbidden' });
+
+  try {
+    const { telefono, agente_nombre, agente_id, duracion } = req.body;
+    const file = req.file;
+
+    if (!telefono || !file) return res.status(400).json({ error: 'telefono y audio requeridos' });
+
+    const ahoraISO = new Date().toISOString();
+    const ext      = file.mimetype.includes('webm') ? 'webm' : 'ogg';
+    const fileName = `audios-agente/${telefono.replace('+','')}/${Date.now()}.${ext}`;
+
+    // 1. Subir audio a Supabase Storage
+    const audioUrl = await subirASupabase(file.buffer, fileName, file.mimetype);
+
+    // 2. Enviar a WhatsApp via Meta API (audio message)
+    const metaRes = await fetch(
+      `https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${META_TOKEN}` },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to:   telefono.replace('+',''),
+          type: 'audio',
+          audio: { link: audioUrl }
+        })
+      }
+    );
+    if (!metaRes.ok) throw new Error(await metaRes.text());
+
+    // 3. Guardar en history del agente
+    const { data: sesion } = await supabase.from('wa_sesiones').select('history').eq('telefono', telefono).single();
+    const hist = Array.isArray(sesion?.history) ? sesion.history : [];
+    hist.push({
+      role:      'assistant',
+      sender:    'agent',
+      tipo:      'audio',
+      content:   '[Audio de voz]',
+      audio_url: audioUrl,
+      duracion:  parseInt(duracion)||0,
+      agente_nombre: agente_nombre || 'Agente',
+      ts: ahoraISO
+    });
+    await supabase.from('wa_sesiones').update({
+      history:    hist,
+      updated_at: ahoraISO,
+      mensajes_agente: supabase.rpc ? undefined : undefined // se actualiza aparte
+    }).eq('telefono', telefono);
+
+    // 4. Log
+    await logConv(telefono, agente_id||null, agente_nombre||'Agente', 'mensaje_agente');
+
+    res.json({ ok: true, audio_url: audioUrl });
+  } catch(err) {
+    console.error('❌ send-audio:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/send', async (req, res) => {
   const origin = req.headers.origin || req.headers.referer || '';
   if (!ALLOWED_ORIGINS.some(o => origin.startsWith(o)))
