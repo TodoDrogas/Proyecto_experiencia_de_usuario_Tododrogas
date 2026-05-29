@@ -420,14 +420,19 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
   const _agenteGestion = sesion.agente_nombre || 'Nova TD';
   const _agenteId      = sesion.agente_id || null;
 
+  // Si no hay agente que haya gestionado → pasar a pte_gestion para que un agente cierre
+  // Si ya había agente asignado → cerrar directo (el agente ya está en el chat)
+  const _requiereGestion = !sesion.agente_id; // Nova sola = requiere que un agente gestione
+  const _estadoFinal = _requiereGestion ? 'pte_gestion' : 'cerrado';
+
   await supabase.from('wa_sesiones').update({
     calificacion:       calNum,
     calificacion_texto: textos[calNum],
     fecha_calificacion: ahoraISO,
-    estado:             'cerrado',
-    cerrado_at:         ahoraISO,
+    estado:             _estadoFinal,
+    cerrado_at:         _requiereGestion ? null : ahoraISO,
     motivo_cierre_wa:   'encuesta',
-    agente_nombre:      _agenteGestion,  // ← garantiza que siempre haya un agente en el reporte
+    agente_nombre:      _agenteGestion,
     updated_at:         ahoraISO
   }).eq('telefono', telefono);
 
@@ -529,11 +534,15 @@ async function cronInactividad() {
 ` +
               `*¡Hasta pronto! Tododrogas, siempre a su servicio.*`;
             await enviarMeta(s.telefono, _msgDespedida);
+            const _sinAgente2 = !s.agente_id;
             await supabase.from('wa_sesiones').update({
-              estado: 'cerrado', calificacion: null,
+              estado:             _sinAgente2 ? 'pte_gestion' : 'cerrado',
+              calificacion:       null,
               calificacion_texto: 'Sin calificación',
-              cerrado_at: ahoraISO, motivo_cierre_wa: 'inactividad',
-              agente_nombre: _agNombre, updated_at: ahoraISO
+              cerrado_at:         _sinAgente2 ? null : ahoraISO,
+              motivo_cierre_wa:   'inactividad',
+              agente_nombre:      _agNombre,
+              updated_at:         ahoraISO
             }).eq('telefono', s.telefono);
             await logConv(s.telefono, s.agente_id, _agNombre, 'cerrado', null,
               { motivo: 'sin_calificacion_inactividad', origen_nova: !s.agente_id });
@@ -880,6 +889,24 @@ app.post('/webhook/meta', async (req, res) => {
 
         } else {
           // ── Más de 24h → NUEVA sesión limpia, Nova TD ────────────────────
+          // Primero archivar el historial anterior en wa_historico
+          if (Array.isArray(sesion.history) && sesion.history.length > 0) {
+            await supabase.from('wa_historico').insert({
+              telefono,
+              nombre:       sesion.nombre || '',
+              eps:          sesion.eps    || '',
+              cedula:       sesion.cedula || '',
+              history:      sesion.history,
+              agente_id:    sesion.agente_id    || null,
+              agente_nombre: sesion.agente_nombre || null,
+              calificacion: sesion.calificacion  || null,
+              calificacion_texto: sesion.calificacion_texto || null,
+              motivo_cierre_wa:   sesion.motivo_cierre_wa || null,
+              cerrado_at:   sesion.cerrado_at  || sesion.updated_at,
+              created_at:   ahoraISO
+            }).catch(e => console.warn('⚠️ wa_historico insert:', e.message));
+          }
+
           const nueva = {
             telefono,
             nombre:       sesion.nombre || profile || '',
@@ -889,7 +916,6 @@ app.post('/webhook/meta', async (req, res) => {
             estado:       'nova',
             unread_count: 1,
             updated_at:   ahoraISO,
-            // Limpiar todos los campos de la sesión anterior
             agente_id:           null,
             agente_nombre:       null,
             calificacion:        null,
@@ -907,11 +933,9 @@ app.post('/webhook/meta', async (req, res) => {
             observacion_cierre:  null,
             fase:                null,
           };
-          // Upsert — reutiliza el mismo telefono (PK) con datos limpios
           await supabase.from('wa_sesiones').upsert(nueva);
           sesion = nueva;
           console.log(`🆕 Nueva sesión (>24h): ${telefono}`);
-          // Continúa al bloque de Nova TD abajo
         }
       }
 
