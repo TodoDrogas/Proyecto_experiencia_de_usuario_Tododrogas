@@ -1213,6 +1213,34 @@ app.post('/webhook/meta', async (req, res) => {
         return;
       }
 
+      // ── Si usuario responde al aviso de inactividad SIN agente → Nova retoma ──
+      // Detectar: inactividad_aviso_at seteado + sin agente + estados nova/esperando
+      if (sesion.inactividad_aviso_at && !sesion.agente_id &&
+          ['nova','escalado','esperando','activo'].includes(sesion.estado)) {
+        const _bodyRespAviso = (body||'').toLowerCase().trim();
+        const _sigueActivo = ['si','sí','yes','aquí','ahi','acá','sigo','continúo',
+          'aqui','presente','claro','ok','listo'].some(p => _bodyRespAviso.includes(p));
+        if (_sigueActivo) {
+          // Reset timer + Nova responde ofreciéndose a ayudar
+          await supabase.from('wa_sesiones').update({
+            inactividad_aviso_at: null,
+            updated_at: ahoraISO
+          }).eq('telefono', telefono);
+          const _msgRetoma =
+            `Con gusto, ${tratamiento(sesion.nombre)}. 😊
+
+` +
+            `¿En qué más le puedo ayudar hoy? Estoy aquí para lo que necesite.
+
+` +
+            `🏠 Escriba *M* → Menú principal
+💬 Escriba *P* → Tengo otra pregunta`;
+          await enviarMeta(telefono, _msgRetoma);
+          await pushHistoryNova(telefono, _msgRetoma, 'nova');
+          return;
+        }
+      }
+
       const history = Array.isArray(sesion.history) ? sesion.history : [];
       if (history.length >= 500) history.splice(0, history.length - 499);
       history.push(nuevoMsg);
