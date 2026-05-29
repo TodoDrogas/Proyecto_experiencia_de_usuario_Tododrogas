@@ -880,6 +880,13 @@ const RR=[
     try{ await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{en_linea:true,pausado:false,ultima_actividad:new Date().toISOString()}); }catch{}
     setInterval(autoAsignar, 15000);
     window.addEventListener('beforeunload',()=>{ logEvento('logout'); });
+
+  // Heartbeat: actualiza ultima_actividad cada 2 min
+  setInterval(async()=>{
+    if(!AGENT_ID || _adminView) return;
+    try{ await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{ultima_actividad:new Date().toISOString()}); }
+    catch(e){}
+  }, 2 * 60 * 1000);
   }
 })();
 
