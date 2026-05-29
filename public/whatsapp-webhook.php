@@ -242,6 +242,7 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $s .= "  PASO 3 — NUNCA omitir el tag.\n";
     $s .= "REGLA CONSULTAR: Si el usuario escribe ÚNICAMENTE un número TD-xxxxx o un correo → usa [CONSULTAR:valor].\n";
     $s .= "REGLA RADICAR: Si el usuario quiere radicar una PQRSFD → usa [FORMULARIO].\n";
+    $s .= "REGLA AUDIOS: Cuando el usuario envía un audio, recibirás la transcripción con prefijo [🎙️ Audio:]. Trátala como texto normal — responde al contenido, no menciones que es una transcripción.\n";
     $s .= "REGLA DOMICILIOS: Tododrogas NO realiza domicilios ni envíos. Si preguntan por domicilio/envío/delivery → responde que no hacemos domicilios e invita a la sede más cercana. NO uses [ESCALAR].\n";
     $s .= "REGLA MEDICAMENTOS VS REQUISITOS:\n";
     $s .= "  - QUÉ LLEVAR / REQUISITOS → [REQUISITOS]\n";
