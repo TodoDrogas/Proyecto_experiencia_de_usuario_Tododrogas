@@ -740,20 +740,22 @@ async function cronInactividad() {
           if (s.estado === 'escalado' && s.asignado_at && !s.primera_respuesta_at) {
             const minsAsig  = (ahora - new Date(s.asignado_at).getTime()) / 60000;
             const _trat     = s.nombre ? `*${s.nombre.split(' ')[0]}*` : 'estimado usuario';
-            const avisoFlag = s.resumen_nova || '';
+            // FIX: usar inactividad_aviso_at como flag en vez de resumen_nova
+            // resumen_nova se reserva para el resumen real de la conversación
+            const yaAvisado = !!s.inactividad_aviso_at;
 
             // Único aviso: 5+ min, sin aviso previo
-            if (minsAsig >= 5 && !avisoFlag) {
+            if (minsAsig >= 5 && !yaAvisado) {
               const _m = `Gracias por su paciencia, ${_trat}. 🙏\n\nSu caso es nuestra prioridad y uno de nuestros asesores estará con usted en breve.\n\n*Tododrogas, siempre a su servicio.*`;
               await enviarMeta(s.telefono, _m);
               await pushHistoryNova(s.telefono, _m, 'nova');
               await supabase.from('wa_sesiones')
-                .update({ inactividad_aviso_at: ahoraISO, resumen_nova: 'aviso1' })
+                .update({ inactividad_aviso_at: ahoraISO })
                 .eq('telefono', s.telefono);
               continue;
             }
             // Reasignación: 12+ min sin primera respuesta, ya se mandó aviso
-            if (avisoFlag === 'aviso1' && minsAsig >= 12) {
+            if (yaAvisado && minsAsig >= 12) {
               if (s.agente_id) {
                 const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
                 if (ag) await supabase.from('agentes').update({ carga_actual: Math.max(0,(ag.carga_actual||1)-1) }).eq('id',s.agente_id);
@@ -761,7 +763,8 @@ async function cronInactividad() {
               await supabase.from('wa_sesiones').update({
                 agente_id: null, agente_nombre: null,
                 asignado_at: null, inactividad_aviso_at: null,
-                primera_respuesta_at: null, resumen_nova: null
+                primera_respuesta_at: null
+                // resumen_nova NO se limpia — contiene el resumen real de la conversación
               }).eq('telefono', s.telefono);
               const sesActual = {...s, agente_id:null, agente_nombre:null};
               const nuevoAg = await autoAsignarAgente(s.telefono, sesActual);
