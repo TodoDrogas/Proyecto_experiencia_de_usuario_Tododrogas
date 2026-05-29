@@ -1333,7 +1333,8 @@ function renderInput(ses){
     '  </div>' +
     '</div>' +
     '<input type="file" id="fileInputDoc" style="display:none" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onchange="subirAdjunto(this,\'document\')">' +
-    '<input type="file" id="fileInputImg" style="display:none" accept="image/*,video/*" onchange="subirAdjunto(this,\'image\')">' +
+    '<input type="file" id="fileInputImg" style="display:none" accept="image/jpeg,image/png,image/gif,image/webp" onchange="subirAdjunto(this,\'image\')">' +
+    '<input type="file" id="fileInputVid" style="display:none" accept="video/mp4,video/3gpp" onchange="subirAdjunto(this,\'video\')">'+
     '<div class="wa-rec-bar" id="recBar">' +
     '  <button class="wa-rec-cancel" onclick="cancelarGrabacion()" title="Cancelar">🗑️</button>' +
     '  <div class="wa-rec-dot"></div>' +
@@ -1390,8 +1391,9 @@ document.addEventListener('click',()=>{
 });
 function adjuntarArchivo(tipo){
   document.getElementById('attachMenu')?.classList.remove('open');
-  if(tipo==='document') document.getElementById('fileInputDoc')?.click();
+  if(tipo==='document')   document.getElementById('fileInputDoc')?.click();
   else if(tipo==='image') document.getElementById('fileInputImg')?.click();
+  else if(tipo==='video') document.getElementById('fileInputVid')?.click();
 }
 async function subirAdjunto(input, tipo){
   const file = input.files?.[0];
@@ -1404,12 +1406,20 @@ async function subirAdjunto(input, tipo){
   // Preview temporal en chat
   const chatMsgs=document.getElementById('chatMsgs');
   const tmpId='tmp_media_'+Date.now();
-  const previewContent = file.type.startsWith('image/')
-    ? `<img src="${URL.createObjectURL(file)}" style="max-width:220px;max-height:180px;border-radius:8px;display:block">`
-    : `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">📎 <span style="font-size:12px">${escH(file.name)}</span></div>`;
+  let previewContent;
+  if(file.type.startsWith('image/')){
+    previewContent = `<img src="${URL.createObjectURL(file)}" style="max-width:220px;max-height:180px;border-radius:8px;display:block;margin-bottom:4px">`;
+  } else if(file.type.startsWith('video/')){
+    previewContent = `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">🎥 <span style="font-size:12px">${escH(file.name)}</span></div>`;
+  } else {
+    previewContent = `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">📎 <span style="font-size:12px">${escH(file.name)}</span></div>`;
+  }
   chatMsgs?.insertAdjacentHTML('beforeend',
     `<div id="${tmpId}" class="msg-row out"><div class="msg-bub bub-agent">` +
-    `${previewContent}<div style="font-size:10px;color:var(--wa-text3);margin-top:4px">Enviando...</div></div></div>`);
+    `${previewContent}` +
+    `<div style="background:var(--border);border-radius:99px;height:4px;margin:4px 0;overflow:hidden"><div class="upload-progress" style="height:100%;background:var(--blue);width:0%;transition:width .2s"></div></div>` +
+    `<div class="upload-label" style="font-size:10px;color:var(--wa-text3)">Enviando... 0%</div>` +
+    `</div></div>`);
   chatMsgs && (chatMsgs.scrollTop=chatMsgs.scrollHeight);
 
   try{
@@ -1420,17 +1430,35 @@ async function subirAdjunto(input, tipo){
     fd.append('agente_id', AGENT_ID||'');
     fd.append('caption', '');
 
-    const res=await fetch('https://tododrogas.online/wa/send-media',{
-      method:'POST', body:fd
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', 'https://tododrogas.online/wa/send-media');
+      xhr.upload.onprogress = (e) => {
+        if(e.lengthComputable){
+          const pct = Math.round(e.loaded/e.total*100);
+          const tmpEl = document.getElementById(tmpId);
+          if(tmpEl){
+            const bar = tmpEl.querySelector('.upload-progress');
+            if(bar) bar.style.width = pct+'%';
+            const lbl = tmpEl.querySelector('.upload-label');
+            if(lbl) lbl.textContent = pct < 100 ? 'Enviando... '+pct+'%' : 'Procesando...';
+          }
+        }
+      };
+      xhr.onload = () => {
+        if(xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(xhr.responseText || 'Error '+xhr.status));
+      };
+      xhr.onerror = () => reject(new Error('Error de red al enviar archivo'));
+      xhr.send(fd);
     });
-    if(!res.ok) throw new Error(await res.text());
 
     document.getElementById(tmpId)?.remove();
     setTimeout(()=>{ if(S.selTel) refreshChat(S.selTel); }, 800);
     toast('Archivo enviado ✓','ok');
   }catch(err){
     document.getElementById(tmpId)?.remove();
-    toast('Error al enviar: '+err.message.substring(0,60),'err');
+    toast('Error al enviar: '+err.message.substring(0,80),'err');
     console.error('subirAdjunto error:', err);
   }
 }
