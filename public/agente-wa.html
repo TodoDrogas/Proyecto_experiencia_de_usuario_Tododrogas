@@ -103,11 +103,6 @@ body{background:#111b21;color:#e9edef;font-family:-apple-system,BlinkMacSystemFo
 .s-escalado .conv-av-dot{background:var(--orange);animation:pulseO 2s infinite}
 .s-esperando .conv-av-dot{background:var(--red);animation:pulseR 1.5s infinite}
 .s-cerrado .conv-av-dot{background:var(--ink3)}
-.s-esperando_encuesta .conv-av-dot{background:#a78bfa}
-.s-confirmando_solucion .conv-av-dot{background:#f59e0b}
-.cb-enc{background:rgba(167,139,250,.15);color:#a78bfa;border-color:rgba(167,139,250,.3)}
-.cb-conf{background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.3)}
-.cb-act{background:rgba(22,163,74,.15);color:#16a34a;border-color:rgba(22,163,74,.3)}
 @keyframes pulseO{0%,100%{box-shadow:0 0 0 0 rgba(234,88,12,.4)}50%{box-shadow:0 0 0 4px rgba(234,88,12,0)}}
 @keyframes pulseR{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 5px rgba(220,38,38,0)}}
 .conv-info{flex:1;min-width:0}
@@ -1035,7 +1030,7 @@ function updateCtrs(){
   document.getElementById('stat-total').textContent=s.length;
   const fcNova=document.getElementById('fc-nova'); if(fcNova) fcNova.textContent=s.filter(x=>x.estado==='nova').length;
   const statActivas=document.getElementById('stat-activas');
-  if(statActivas) statActivas.textContent=s.filter(x=>!['cerrado','nova'].includes(x.estado)).length;
+  if(statActivas) statActivas.textContent=s.filter(x=>x.estado!=='cerrado'&&x.estado!=='nova').length;
 }
 
 // ── FILTROS ──────────────────────────────────────
@@ -1057,9 +1052,9 @@ function renderLista(){
   // "Todas" muestra todo EXCEPTO las que Nova está atendiendo
   if(S.filtro==='todas') list=list.filter(s=>s.estado!=='nova');
   else if(S.filtro==='esperando')
-    // Agrupa: esperando + esperando_encuesta + confirmando_solucion
     list=list.filter(s=>['esperando','esperando_encuesta','confirmando_solucion'].includes(s.estado));
   else list=list.filter(s=>s.estado===S.filtro);
+  // pte_gestion aparece en Todas y Activas (necesita acción) — NO en Cerradas
   if(S.tab==='activas') list=list.filter(s=>s.estado!=='cerrado');
   if(S.tab==='cerradas') list=list.filter(s=>s.estado==='cerrado'||s.estado==='pte_gestion');
   if(q) list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q));
@@ -1938,19 +1933,17 @@ async function togglePausa(){
   const lbl  = document.getElementById('lblPausa');
   const icon = document.getElementById('iconPausa');
   if(_pausado){
-    btn.style.background  = 'rgba(239,68,68,0.25)';
-    btn.style.borderColor = 'rgba(239,68,68,0.6)';
-    lbl.textContent = 'En pausa';
-    icon.innerHTML  = '<path d="M8 5v14l11-7z"/>';
+    if(btn){ btn.style.background='rgba(239,68,68,0.25)'; btn.style.borderColor='rgba(239,68,68,0.6)'; }
+    if(lbl) lbl.textContent = 'En pausa';
+    if(icon) icon.innerHTML  = '<path d="M8 5v14l11-7z"/>';
     toast('⏸ Estás en pausa — no recibirás asignaciones automáticas','warn');
     iniciarTimerPausa();
     logEvento('pausa');
     try{ await sb(`agentes?id=eq.${AGENT_ID}`,'PATCH',{pausado:true,pausado_at:new Date().toISOString()}); }catch{}
   } else {
-    btn.style.background  = 'rgba(255,255,255,0.08)';
-    btn.style.borderColor = 'rgba(255,255,255,0.2)';
-    lbl.textContent = 'Pausar';
-    icon.innerHTML  = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+    if(btn){ btn.style.background='rgba(255,255,255,0.08)'; btn.style.borderColor='rgba(255,255,255,0.2)'; }
+    if(lbl) lbl.textContent = 'Pausar';
+    if(icon) icon.innerHTML  = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
     toast('▶ Reactivado — recibirás asignaciones normalmente','ok');
     detenerTimerPausa();
     logEvento('reactivar');
