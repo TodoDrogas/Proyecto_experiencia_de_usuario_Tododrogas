@@ -618,13 +618,14 @@ async function cronInactividad() {
               await enviarMeta(s.telefono, _msgEnc);
               await pushHistoryNova(s.telefono, _msgEnc, 'nova');
               // Setear encuesta_enviada_at ANTES de cambiar estado (guard anti-loop)
-              await supabase.from('wa_sesiones').update({
+              // Update atómico: solo si encuesta_enviada_at sigue siendo null
+              const { error: _errEnc1 } = await supabase.from('wa_sesiones').update({
                 estado:               'esperando_encuesta',
                 encuesta_enviada_at:  ahoraISO,
                 inactividad_aviso_at: null,
                 motivo_cierre_wa:     'inactividad'
-                // NO tocar updated_at
-              }).eq('telefono', s.telefono);
+              }).eq('telefono', s.telefono).is('encuesta_enviada_at', null);
+              if (_errEnc1) { console.warn('encuesta ya enviada (race condition):', s.telefono); continue; }
               await logConv(s.telefono, null, null, 'encuesta_enviada', null, { motivo: 'inactividad_nova' });
             }
           }
@@ -739,13 +740,13 @@ async function cronInactividad() {
                 const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
                 if (ag) await supabase.from('agentes').update({ carga_actual: Math.max(0,(ag.carga_actual||1)-1) }).eq('id',s.agente_id);
               }
-              await supabase.from('wa_sesiones').update({
+              const { error: _errEnc2 } = await supabase.from('wa_sesiones').update({
                 estado:               'esperando_encuesta',
                 encuesta_enviada_at:  ahoraISO,
                 inactividad_aviso_at: null,
                 motivo_cierre_wa:     'inactividad'
-                // NO tocar updated_at
-              }).eq('telefono', s.telefono);
+              }).eq('telefono', s.telefono).is('encuesta_enviada_at', null);
+              if (_errEnc2) { console.warn('encuesta ya enviada agente (race condition):', s.telefono); continue; }
               await logConv(s.telefono, s.agente_id, s.agente_nombre, 'encuesta_enviada', null, { motivo: 'inactividad_agente' });
             }
           }
@@ -1043,6 +1044,44 @@ Un asesor revisará su caso en el próximo horario de atención:
 
     // ── Llamar a Nova TD si estado es nova ────────────────────────────────
     if ((sesion.estado || 'nova') === 'nova') {
+
+      // Pre-detección de satisfacción ANTES de llamar a Nova
+      const _bodyLowerPre = (body||'').toLowerCase().trim();
+      const _frasesSat = ['gracias','muchas gracias','ok gracias','no gracias',
+        'así está bien','no, así está bien','ya está bien','está bien así',
+        'perfecto','listo','eso era todo','ya quedé','no necesito más',
+        'fue todo','ya me ayudó','con eso es suficiente','excelente gracias',
+        'bien gracias','gracias por tu'];
+      const _histLen = Array.isArray(sesion?.history) ? sesion.history.length : 0;
+      const _esSat = _frasesSat.some(f => _bodyLowerPre.includes(f)) && _histLen >= 2;
+
+      if (_esSat) {
+        const _nom = sesion.nombre ? `*${sesion.nombre.split(' ')[0]}*` : '';
+        const _msgEnc =
+          `¡Con mucho gusto${_nom ? ', '+_nom : ''}! Fue un placer ayudarle. 😊
+
+` +
+          `Antes de despedirnos, ¿nos regala un momento para calificarnos?
+
+` +
+          `*1* → 😞 Mala
+*2* → 😐 Regular
+*3* → 😊 Buena
+
+` +
+          `*Tododrogas, siempre a su servicio.* 🌟`;
+        await enviarMeta(telefono, _msgEnc);
+        await pushHistoryNova(telefono, _msgEnc, 'nova');
+        await supabase.from('wa_sesiones').update({
+          estado: 'esperando_encuesta',
+          encuesta_enviada_at: ahoraISO,
+          inactividad_aviso_at: null,
+          motivo_cierre_wa: 'satisfaccion_usuario'
+        }).eq('telefono', telefono).is('encuesta_enviada_at', null);
+        console.log(`✅ Satisfacción detectada pre-Nova: ${telefono} "${_bodyLowerPre.substring(0,30)}"`);
+        return res.sendStatus(200);
+      }
+
       try {
         const novaRes = await fetch('https://tododrogas.online/nova-wa.php', {
           method: 'POST',
@@ -1087,13 +1126,13 @@ Un asesor revisará su caso en el próximo horario de atención:
 
           // Si Nova envía encuesta (usuario satisfecho) → cambiar estado
           if (novaData.accion === 'ENCUESTA') {
-            await supabase.from('wa_sesiones').update({
+            const { error: _errEnc3 } = await supabase.from('wa_sesiones').update({
               estado:               'esperando_encuesta',
               encuesta_enviada_at:  ahoraISO,
               inactividad_aviso_at: null,
               motivo_cierre_wa:     'satisfaccion_usuario'
-              // NO tocar updated_at
-            }).eq('telefono', telefono);
+            }).eq('telefono', telefono).is('encuesta_enviada_at', null);
+            if (_errEnc3) console.warn('encuesta PHP race condition:', telefono);
             await logConv(telefono, null, null, 'encuesta_enviada', null, { motivo: 'satisfaccion_usuario' });
             console.log(`📋 Encuesta enviada por satisfacción: ${telefono}`);
           }
