@@ -1069,6 +1069,22 @@ Un asesor revisará su caso en el próximo horario de atención:
               .eq('telefono', telefono);
           }
 
+          // Detección de satisfacción en el BODY del mensaje como respaldo
+          // Si Nova olvidó [ENCUESTA] pero el usuario claramente dijo gracias/listo
+          if (!novaData.accion || novaData.accion === 'DEFAULT') {
+            const _bodyLower = (body||'').toLowerCase().trim();
+            const _frasesSatisfaccion = [
+              'no, así está bien','así está bien','no gracias','ya está bien',
+              'está bien así','gracias','muchas gracias','perfecto','listo',
+              'ok gracias','eso era todo','ya quedé','no necesito más','fue todo',
+              'ya me ayudó','con eso es suficiente','ya no necesito'
+            ];
+            if (_frasesSatisfaccion.some(f => _bodyLower.includes(f))) {
+              novaData.accion = 'ENCUESTA';
+              console.log(`💡 Satisfacción detectada en server: "${_bodyLower.substring(0,40)}"`);
+            }
+          }
+
           // Si Nova envía encuesta (usuario satisfecho) → cambiar estado
           if (novaData.accion === 'ENCUESTA') {
             await supabase.from('wa_sesiones').update({
