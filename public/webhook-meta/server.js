@@ -96,24 +96,6 @@ async function enviarMeta(telefono, mensaje) {
   return res.json();
 }
 
-// ── GUARDAR MENSAJE NOVA EN HISTORY ─────────────────────────────────────────
-async function pushHistoryNova(telefono, mensaje, rol = 'nova') {
-  try {
-    const { data } = await supabase
-      .from('wa_sesiones')
-      .select('history')
-      .eq('telefono', telefono)
-      .single();
-    const hist = Array.isArray(data?.history) ? data.history : [];
-    hist.push({ role: rol, content: mensaje, ts: new Date().toISOString() });
-    await supabase.from('wa_sesiones')
-      .update({ history: hist, updated_at: new Date().toISOString() })
-      .eq('telefono', telefono);
-  } catch(e) {
-    console.error('pushHistoryNova error:', e.message);
-  }
-}
-
 // ── LOG CONVERSACIÓN (métricas SIGI) ─────────────────────────────────────
 async function logConv(telefono, agenteId, agenteNombre, evento, duracionSeg = null, metadata = {}) {
   try {
@@ -240,6 +222,44 @@ async function autoAsignarAgente(telefono, sesion) {
   }
 }
 
+// ── HORARIO DE ATENCIÓN ─────────────────────────────────────────────────
+function estaEnHorario() {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+  const dow  = now.getDay(); // 0=Dom, 1=Lun ... 6=Sab
+  const h    = now.getHours();
+  const m    = now.getMinutes();
+  const mins = h * 60 + m;
+
+  if (dow === 0) return false; // Domingo cerrado
+  if (dow >= 1 && dow <= 5) {  // Lun-Vie 7:00-17:30
+    return mins >= 7*60 && mins < 17*60+30;
+  }
+  if (dow === 6) {             // Sáb 8:00-12:00
+    return mins >= 8*60 && mins < 12*60;
+  }
+  return false;
+}
+
+function mensajeFueraHorario(nombre) {
+  const now  = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+  const dow  = now.getDay();
+  const trat = nombre ? `*${nombre}*` : 'estimado usuario';
+  const horario = dow === 6
+    ? 'Los sábados atendemos de *8:00 a.m. a 12:00 m.*'
+    : 'Atendemos de *lunes a viernes de 7:00 a.m. a 5:30 p.m.* y *sábados de 8:00 a.m. a 12:00 m.*';
+  return `Gracias por comunicarse, ${trat}. 🙏
+
+En este momento nuestro equipo de asesores se encuentra fuera del horario de atención.
+
+🕐 ${horario}
+
+Su solicitud ha sido registrada y un asesor le atenderá en el próximo horario hábil.
+
+Mientras tanto, puede continuar con *Nova TD* para consultas generales, o dejarnos su mensaje y le responderemos a la brevedad.
+
+*Tododrogas, siempre a su servicio.*`;
+}
+
 // ── PROCESAR ENCUESTA WA ─────────────────────────────────────────────────
 async function procesarEncuesta(telefono, respuesta, sesion) {
   const cal = respuesta.trim();
@@ -270,8 +290,12 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
   const msg = `${emojis[calNum]} Gracias por calificarnos. Hemos registrado su atención como *${textos[calNum]}*.\n\nGracias por contactarnos. *Tododrogas, siempre a su servicio.*`;
   await enviarMeta(telefono, msg);
 
+  // Registrar si la gestión pasó por Nova (para métricas)
+  const _fueNova = Array.isArray(sesion.history) && sesion.history.some(m => m.role === 'nova');
   await logConv(telefono, sesion.agente_id, sesion.agente_nombre, 'cerrado', null, {
-    motivo: 'encuesta', calificacion: calNum
+    motivo: 'encuesta', calificacion: calNum,
+    origen_nova: _fueNova,
+    agente_gestion: sesion.agente_nombre || 'Nova TD'
   });
 
   console.log(`⭐ Encuesta WA respondida por ${telefono}: ${textos[calNum]}`);
@@ -288,7 +312,7 @@ async function cronInactividad() {
     const { data: sesiones } = await supabase
       .from('wa_sesiones')
       .select('telefono, estado, nombre, agente_id, agente_nombre, updated_at, inactividad_aviso_at, asignado_at, encuesta_enviada_at, history, eps, resumen_nova')
-      .in('estado', ['nova', 'escalado', 'activo', 'esperando', 'esperando_encuesta'])
+      .in('estado', ['nova', 'escalado', 'activo', 'esperando', 'esperando_encuesta', 'pte_gestion'])
       .not('updated_at', 'is', null);
 
     if (!sesiones?.length) return;
@@ -301,9 +325,9 @@ async function cronInactividad() {
       if (s.estado === 'nova') {
         // 2 min sin respuesta → preguntar si continúa
         if (minsSinAct >= 2 && !s.inactividad_aviso_at) {
-          const _msgInac1 = `¿${tratamiento(s.nombre)}, continúa en línea?\n\nEstamos disponibles para atenderle. Si tiene alguna consulta, con gusto le ayudamos.\n\nSi ya no necesita asistencia, escriba *SALIR* para cerrar la conversación.`;
-          await enviarMeta(s.telefono, _msgInac1);
-          await pushHistoryNova(s.telefono, _msgInac1, 'nova');
+          await enviarMeta(s.telefono,
+            `¿${tratamiento(s.nombre)}, continúa en línea?\n\nEstamos disponibles para atenderle. Si tiene alguna consulta, con gusto le ayudamos.\n\nSi ya no necesita asistencia, escriba *SALIR* para cerrar la conversación.`
+          );
           await supabase.from('wa_sesiones').update({
             inactividad_aviso_at: ahoraISO,
             updated_at: ahoraISO
@@ -315,9 +339,9 @@ async function cronInactividad() {
         if (minsSinAct >= 30 && s.inactividad_aviso_at) {
           const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
           if (minsDesdeAviso >= 28) {
-            const _msgEnc1 = `Cerramos la conversación por inactividad. ¡Fue un gusto poder acompañarle! 😊\n\nAntes de despedirnos, ¿nos regala un momento para calificarnos?\n\nResponda con:\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n¡Tododrogas siempre a su servicio! 🌟`;
-            await enviarMeta(s.telefono, _msgEnc1);
-            await pushHistoryNova(s.telefono, _msgEnc1, 'nova');
+            await enviarMeta(s.telefono,
+              `Cerramos la conversación por inactividad. ¡Fue un gusto poder acompañarle! 😊\n\nAntes de despedirnos, ¿nos regala un momento para calificarnos?\n\nResponda con:\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n¡Tododrogas siempre a su servicio! 🌟`
+            );
             await supabase.from('wa_sesiones').update({
               estado:             'esperando_encuesta',
               encuesta_enviada_at: ahoraISO,
@@ -346,9 +370,9 @@ async function cronInactividad() {
 
         // 2 min en "esperando" sin aviso previo → preguntar si continúa
         if (s.estado === 'esperando' && minsSinAct >= 2 && !s.inactividad_aviso_at) {
-          const _msgInac2 = `¿${tratamiento(s.nombre)}, continúa en línea?\n\n*${s.agente_nombre || 'Su asesor'}* continúa disponible para atenderle.\n\nSi ya resolvió su consulta, puede escribir *LISTO* para cerrar la atención.`;
-          await enviarMeta(s.telefono, _msgInac2);
-          await pushHistoryNova(s.telefono, _msgInac2, 'nova');
+          await enviarMeta(s.telefono,
+            `¿${tratamiento(s.nombre)}, continúa en línea?\n\n*${s.agente_nombre || 'Su asesor'}* continúa disponible para atenderle.\n\nSi ya resolvió su consulta, puede escribir *LISTO* para cerrar la atención.`
+          );
           await supabase.from('wa_sesiones').update({
             inactividad_aviso_at: ahoraISO,
             updated_at: ahoraISO
@@ -361,9 +385,9 @@ async function cronInactividad() {
         if (minsSinAct >= 30 && s.inactividad_aviso_at) {
           const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
           if (minsDesdeAviso >= 28) {
-            const _msgEnc2 = `Cerramos la conversación por inactividad.\n\nAntes de finalizar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\nGracias por contactarnos. *Tododrogas, siempre a su servicio.*`;
-            await enviarMeta(s.telefono, _msgEnc2);
-            await pushHistoryNova(s.telefono, _msgEnc2, 'nova');
+            await enviarMeta(s.telefono,
+              `Cerramos la conversación por inactividad.\n\nAntes de finalizar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\nGracias por contactarnos. *Tododrogas, siempre a su servicio.*`
+            );
             // Reducir carga del agente
             if (s.agente_id) {
               const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', s.agente_id).single();
@@ -473,13 +497,9 @@ app.post('/webhook/meta', async (req, res) => {
       const bodyUp = body.trim().toUpperCase();
       if (['SALIR', 'LISTO', 'ADIOS', 'ADIÓS', 'CHAO'].includes(bodyUp) &&
           ['nova', 'escalado', 'activo', 'esperando'].includes(sesion.estado)) {
-        const _msgSalir = `Gracias por contactarnos, ${tratamiento(sesion.nombre)}.\n\nAntes de cerrar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n*Tododrogas, siempre a su servicio.*`;
-        // Primero guardar el mensaje del usuario en history
-        const _histSalir = Array.isArray(sesion.history) ? sesion.history : [];
-        _histSalir.push(nuevoMsg);
-        await supabase.from('wa_sesiones').update({ history: _histSalir }).eq('telefono', telefono);
-        await enviarMeta(telefono, _msgSalir);
-        await pushHistoryNova(telefono, _msgSalir, 'nova');
+        await enviarMeta(telefono,
+          `Gracias por contactarnos, ${tratamiento(sesion.nombre)}.\n\nAntes de cerrar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n*Tododrogas, siempre a su servicio.*`
+        );
         if (sesion.agente_id) {
           const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', sesion.agente_id).single();
           if (ag) await supabase.from('agentes').update({
@@ -558,19 +578,37 @@ app.post('/webhook/meta', async (req, res) => {
               .eq('telefono', telefono);
           }
 
-          // Si Nova escaló → autoasignar agente
+          // Si Nova escaló → verificar horario antes de asignar agente
           if (novaData.accion === 'ESCALADO') {
             const { data: sesActual } = await supabase
               .from('wa_sesiones').select('*').eq('telefono', telefono).single();
-            const agente = await autoAsignarAgente(telefono, sesActual);
-            if (agente) {
-              await enviarMeta(telefono,
-                `En este momento le estamos conectando con un asesor especializado que revisará su caso. Por favor espere un momento.\n\n*Tododrogas, siempre a su servicio.*`
-              );
+
+            if (estaEnHorario()) {
+              // Dentro del horario → asignar agente normalmente
+              const agente = await autoAsignarAgente(telefono, sesActual);
+              if (agente) {
+                const _msgEscalado = `En este momento le estamos conectando con un asesor especializado que revisará su caso. Por favor espere un momento.\n\n*Tododrogas, siempre a su servicio.*`;
+                await enviarMeta(telefono, _msgEscalado);
+                await pushHistoryNova(telefono, _msgEscalado, 'nova');
+              } else {
+                // No hay agentes disponibles ahora
+                const _msgSinAgente = mensajeFueraHorario(sesActual?.nombre);
+                await enviarMeta(telefono, _msgSinAgente);
+                await pushHistoryNova(telefono, _msgSinAgente, 'nova');
+                await supabase.from('wa_sesiones')
+                  .update({ estado: 'pte_gestion', updated_at: ahoraISO })
+                  .eq('telefono', telefono);
+              }
             } else {
+              // Fuera del horario → guardar como pte_gestion para mañana
+              const _msgFuera = mensajeFueraHorario(sesActual?.nombre);
+              await enviarMeta(telefono, _msgFuera);
+              await pushHistoryNova(telefono, _msgFuera, 'nova');
+              // Estado pte_gestion: el agente lo verá al llegar mañana
               await supabase.from('wa_sesiones')
-                .update({ estado: 'escalado', updated_at: ahoraISO })
+                .update({ estado: 'pte_gestion', updated_at: ahoraISO })
                 .eq('telefono', telefono);
+              console.log(`🌙 Fuera de horario: ${telefono} → pte_gestion`);
             }
           }
         } else {
