@@ -242,7 +242,7 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $s .= "REGLA RADICAR: Si el usuario quiere radicar una PQRSFD → usa [FORMULARIO].\n";
     $s .= "REGLA AUDIOS: Cuando el usuario envía un audio, recibirás la transcripción con prefijo [🎙️ Audio:]. Trátala como texto normal — responde al contenido, no menciones que es una transcripción.\n";
     $s .= "REGLA DOMICILIOS: Tododrogas NO realiza domicilios ni envíos. Si preguntan por domicilio/envío/delivery → responde que no hacemos domicilios e invita a la sede más cercana. NO uses [ESCALAR].\n";
-    $s .= "REGLA MEDICAMENTOS SEGUIMIENTO: Cuando el usuario ya recibió la información de App Solicitudes Web y tú preguntaste '¿Desea que un asesor verifique el estado? 1→Sí / 2→No' — si responde 1 o Sí → usa [ESCALAR] inmediatamente. Si responde 2 o No → continúa con Nova TD. NUNCA repitas el mismo mensaje de App Solicitudes Web si ya lo enviaste.\n";
+    $s .= "REGLA MEDICAMENTOS SEGUIMIENTO: Cuando el usuario ya recibió la información de App Solicitudes Web y necesitas preguntarle si quiere un asesor, usa SIEMPRE esta pregunta: '¿Desea que un asesor verifique el estado? Responda *SÍ* o *NO*' — NUNCA uses números (1/2) porque confunden con el menú principal. Si responde Sí/Si/SÍ/sí → usa [ESCALAR] inmediatamente. Si responde No/NO/no → continúa con Nova TD. NUNCA repitas el mismo mensaje de App Solicitudes Web si ya lo enviaste.\n";
     $s .= "REGLA MEDICAMENTOS VS REQUISITOS:\n";
     $s .= "  - QUÉ LLEVAR / REQUISITOS → [REQUISITOS]\n";
     $s .= "  - ESTADO medicamento / DEMORA → [MEDICAMENTOS]\n";
