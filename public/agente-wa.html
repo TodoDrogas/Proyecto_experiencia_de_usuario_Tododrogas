@@ -1639,8 +1639,6 @@ async function abrirTransferir(tel){
 
 async function confirmarTransferir(agenteId, agenteNombre){
   try{
-    // Usar el endpoint del servidor para que agregue separador en historial,
-    // genere saludo, actualice cargas y devuelva history completo
     const r = await fetch('https://tododrogas.online/wa/transferir',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -2569,6 +2567,13 @@ async function confirmarCerrar(){
       agente_id:AGENT_ID,
       updated_at:now
     });
+
+    // ── OPERACIÓN 4: Archivar en wa_historico ──
+    fetch('https://tododrogas.online/wa/archivar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ telefono: S.selTel })
+    }).catch(e => console.warn('[archivar]', e.message));
 
     document.getElementById('modalCerrar').classList.remove('open');
     // Actualizar estado local inmediatamente para evitar que el polling lo revierta
