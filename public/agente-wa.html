@@ -1320,6 +1320,65 @@ function setTemaWa(t){
 
 // ── PAUSAR / REACTIVAR AGENTE ─────────────────────────────────────
 let _pausado = false;
+
+// ── DETECCIÓN INTELIGENTE DE INACTIVIDAD ─────────────────────
+let _lastActivity = Date.now();
+let _idleTimer = null;
+const _IDLE_MINUTES = 5; // minutos sin actividad → pausa automática
+
+function resetIdleTimer() {
+  _lastActivity = Date.now();
+  if (_idleTimer) clearTimeout(_idleTimer);
+  // Si estaba en pausa por inactividad, reactivar
+  if (_pausado && _autoPaused) {
+    _autoPaused = false;
+    togglePausa(); // reactivar
+  }
+  _idleTimer = setTimeout(autoPausarPorInactividad, _IDLE_MINUTES * 60 * 1000);
+}
+let _autoPaused = false;
+
+async function autoPausarPorInactividad() {
+  if (_pausado || _autoPaused) return;
+  if (!AGENT_ID) return;
+  _autoPaused = true;
+  _pausado = true;
+  try {
+    await sb(`agentes?id=eq.${AGENT_ID}`, 'PATCH', {
+      pausado: true,
+      pausado_at: new Date().toISOString(),
+      en_linea: true // sigue en línea pero pausado
+    });
+    toast('⏸ Pausa automática por inactividad (5 min sin actividad)', 'warn');
+    // Update UI
+    const btn = document.getElementById('btnPausa');
+    if (btn) {
+      btn.style.background = 'rgba(239,68,68,0.2)';
+      btn.style.borderColor = 'rgba(239,68,68,0.5)';
+      btn.innerHTML = '▶ Reactivar';
+    }
+  } catch(e) { console.warn('autoPausa error:', e); }
+}
+
+// Detectar actividad: mouse, teclado, touch, scroll, visibilitychange
+['mousemove','mousedown','keydown','touchstart','scroll','click'].forEach(evt => {
+  document.addEventListener(evt, resetIdleTimer, { passive: true });
+});
+
+// Si el agente cambia de pestaña/bloquea pantalla → pausar de inmediato
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    // Iniciar timer corto de 2 min si oculta
+    if (_idleTimer) clearTimeout(_idleTimer);
+    _idleTimer = setTimeout(autoPausarPorInactividad, 2 * 60 * 1000);
+  } else {
+    // Volvió → resetear
+    resetIdleTimer();
+  }
+});
+
+// Iniciar timer al cargar
+resetIdleTimer();
 async function togglePausa(){
   _pausado = !_pausado;
   const btn  = document.getElementById('btnPausa');
