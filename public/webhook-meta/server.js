@@ -407,10 +407,16 @@ function mensajeFueraHorario(nombre) {
 
 // ── PROCESAR ENCUESTA WA ─────────────────────────────────────────────────
 async function procesarEncuesta(telefono, respuesta, sesion) {
-  const cal = respuesta.trim();
-  if (!['1', '2', '3'].includes(cal)) return false;
-
-  const calNum = parseInt(cal);
+  const calRaw = respuesta.trim().toUpperCase();
+  // Aceptar palabras O números (compatibilidad hacia atrás)
+  const mapaRespuesta = {
+    'MALA': 1, 'MAL': 1, '1': 1,
+    'REGULAR': 2, 'REG': 2, '2': 2,
+    'BUENA': 3, 'BUEN': 3, 'BUENO': 3, '3': 3
+  };
+  if (!mapaRespuesta[calRaw]) return false;
+  const calNum = mapaRespuesta[calRaw];
+  const cal    = String(calNum); // para compatibilidad con el historial
   const textos = { 1: 'Mala', 2: 'Regular', 3: 'Buena' };
   const emojis = { 1: '😞', 2: '😐', 3: '😊' };
 
@@ -528,14 +534,12 @@ async function cronInactividad() {
         // ESTADO: esperando_encuesta → solo verificar timeout de 10 min
         // ════════════════════════════════════════════════════════════════════
         if (s.estado === 'esperando_encuesta') {
-          if (!s.encuesta_enviada_at) continue; // sin fecha → no tocar
+          if (!s.encuesta_enviada_at) continue;
           const minsEnc = (ahora - new Date(s.encuesta_enviada_at).getTime()) / 60000;
           if (minsEnc >= 10) {
             const _agNombre = s.agente_nombre || 'Nova TD';
             const _sinAgente2 = !s.agente_id;
-
-            // FIX: cambiar estado PRIMERO para que si el cron vuelve a correr
-            // en el próximo minuto, no encuentre esperando_encuesta y no reenvíe
+            // FIX: cambiar estado PRIMERO para evitar reenvío en siguiente ciclo
             let _agenteAsigInact = null;
             if (_sinAgente2) {
               _agenteAsigInact = await autoAsignarAgente(s.telefono, s);
@@ -546,19 +550,12 @@ async function cronInactividad() {
               calificacion_texto: 'Sin calificación',
               cerrado_at:         _sinAgente2 ? null : ahoraISO,
               motivo_cierre_wa:   'inactividad',
-              encuesta_enviada_at: null, // limpiar guard
+              encuesta_enviada_at: null,
               agente_nombre:      _agenteAsigInact ? _agenteAsigInact.nombre : _agNombre,
               agente_id:          _agenteAsigInact ? _agenteAsigInact.id : (s.agente_id || null),
               updated_at:         ahoraISO
-            }).eq('telefono', s.telefono)
-              .eq('estado', 'esperando_encuesta'); // anti race-condition
-
-            if (_errCierre) {
-              console.warn('⚠️  despedida ya procesada (race condition):', s.telefono);
-              continue;
-            }
-
-            // Ahora sí enviar (estado ya cambió en BD)
+            }).eq('telefono', s.telefono).eq('estado', 'esperando_encuesta');
+            if (_errCierre) { console.warn('⚠️ despedida ya procesada (race condition):', s.telefono); continue; }
             const _msgDespedida =
               `Cerramos su consulta, ${tratamiento(s.nombre)}. 😊
 
@@ -571,7 +568,7 @@ async function cronInactividad() {
             await logConv(s.telefono, s.agente_id, _agNombre, 'cerrado', null,
               { motivo: 'sin_calificacion_inactividad', origen_nova: !s.agente_id });
           }
-          continue; // no hacer nada más con esperando_encuesta
+          continue;
         }
 
         // ════════════════════════════════════════════════════════════════════
@@ -620,13 +617,13 @@ async function cronInactividad() {
                 `Antes de despedirnos, ¿nos regala un momento para calificarnos?
 
 ` +
-                `*1* → 😞 Mala
-*2* → 😐 Regular
-*3* → 😊 Buena
+                `*MALA* → 😞
+*REGULAR* → 😐
+*BUENA* → 😊
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              // FIX: update atómico PRIMERO — guard activo en BD antes de enviar
+              // FIX: update atómico PRIMERO
               const { error: _errEnc1 } = await supabase.from('wa_sesiones').update({
                 estado:               'esperando_encuesta',
                 encuesta_enviada_at:  ahoraISO,
@@ -737,13 +734,13 @@ async function cronInactividad() {
                 `Antes de despedirnos, ¿nos regala un momento para calificarnos?
 
 ` +
-                `*1* → 😞 Mala
-*2* → 😐 Regular
-*3* → 😊 Buena
+                `*MALA* → 😞
+*REGULAR* → 😐
+*BUENA* → 😊
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              // FIX: update atómico PRIMERO — guard activo en BD antes de enviar
+              // FIX: update atómico PRIMERO
               // Reducir carga del agente
               if (s.agente_id) {
                 const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
@@ -968,7 +965,7 @@ app.post('/webhook/meta', async (req, res) => {
         if (bodyTrim && !['1','2','3'].includes(bodyTrim)) {
           await enviarMeta(telefono,
             `Por favor responda solo con *1*, *2* o *3* para calificarnos:\n\n` +
-            `*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena`
+            `*MALA* → 😞\n*REGULAR* → 😐\n*BUENA* → 😊`
           );
         }
         return; // SIEMPRE salir — no llegar a Nova ni a ningún otro handler
@@ -979,7 +976,7 @@ app.post('/webhook/meta', async (req, res) => {
       if (['SALIR', 'LISTO', 'ADIOS', 'ADIÓS', 'CHAO'].includes(bodyUp) &&
           ['nova', 'escalado', 'activo', 'esperando'].includes(sesion.estado)) {
         await enviarMeta(telefono,
-          `Gracias por contactarnos, ${tratamiento(sesion.nombre)}.\n\nAntes de cerrar, le invitamos a calificar nuestra atención:\n\n*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n*Tododrogas, siempre a su servicio.*`
+          `Gracias por contactarnos, ${tratamiento(sesion.nombre)}.\n\nAntes de cerrar, le invitamos a calificar nuestra atención:\n\n*MALA* → 😞\n*REGULAR* → 😐\n*BUENA* → 😊\n\n*Tododrogas, siempre a su servicio.*`
         );
         if (sesion.agente_id) {
           const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', sesion.agente_id).single();
@@ -1035,10 +1032,8 @@ Un asesor revisará su caso en el próximo horario de atención:
         return;
       }
 
-      // FIX: si está esperando_encuesta, NO actualizar updated_at ni inactividad_aviso_at
-      // porque el cron usa updated_at para calcular inactividad y reenviaría la encuesta
+      // FIX: si está esperando_encuesta, NO actualizar updated_at (evita reset del cron)
       if (sesion.estado === 'esperando_encuesta') {
-        // Solo guardar el historial, sin tocar timers
         await supabase.from('wa_sesiones')
           .update({ history, unread_count: (sesion.unread_count || 0) + 1 })
           .eq('telefono', telefono);
@@ -1084,9 +1079,9 @@ Un asesor revisará su caso en el próximo horario de atención:
           `Antes de despedirnos, ¿nos regala un momento para calificarnos?
 
 ` +
-          `*1* → 😞 Mala
-*2* → 😐 Regular
-*3* → 😊 Buena
+          `*MALA* → 😞
+*REGULAR* → 😐
+*BUENA* → 😊
 
 ` +
           `*Tododrogas, siempre a su servicio.* 🌟`;
