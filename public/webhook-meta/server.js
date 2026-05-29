@@ -489,243 +489,260 @@ setInterval(cronAgentesOffline, 3 * 60 * 1000);
 setTimeout(cronAgentesOffline, 10000);
 
 // ── CRON: INACTIVIDAD Y ESTADOS ──────────────────────────────────────────
+// REGLAS CLARAS:
+// - updated_at = última actividad DEL USUARIO (no del sistema)
+// - inactividad_aviso_at = cuándo se mandó el aviso "¿continúa?"
+// - encuesta_enviada_at  = cuándo se mandó la encuesta (guard anti-loop)
+// - El cron NO actualiza updated_at (para no resetear el timer del usuario)
+
 async function cronInactividad() {
   try {
-    const ahora = Date.now();
+    const ahora    = Date.now();
     const ahoraISO = new Date(ahora).toISOString();
 
-    // Traer sesiones activas (nova, escalado, activo, esperando, esperando_encuesta)
     const { data: sesiones } = await supabase
       .from('wa_sesiones')
-      .select('telefono, estado, nombre, agente_id, agente_nombre, updated_at, inactividad_aviso_at, asignado_at, encuesta_enviada_at, history, eps, resumen_nova')
-      .in('estado', ['nova', 'escalado', 'activo', 'esperando', 'esperando_encuesta', 'pte_gestion'])
-      .not('updated_at', 'is', null);
+      .select('telefono,estado,nombre,agente_id,agente_nombre,updated_at,inactividad_aviso_at,asignado_at,encuesta_enviada_at,primera_respuesta_at,tipificacion,observacion_cierre,eps')
+      .in('estado', ['nova','escalado','activo','esperando','esperando_encuesta','pte_gestion'])
+      .not('updated_at','is',null);
 
     if (!sesiones?.length) return;
 
     for (const s of sesiones) {
-      const ultimaAct  = new Date(s.updated_at).getTime();
-      const minsSinAct = (ahora - ultimaAct) / 60000;
+      try {
+        const minsDesdeUser = (ahora - new Date(s.updated_at).getTime()) / 60000;
 
-      // ── NOVA: inactividad ────────────────────────────────────────────────
-      if (s.estado === 'nova') {
-        // 2 min sin respuesta → preguntar si continúa
-        if (minsSinAct >= 2 && !s.inactividad_aviso_at) {
-          await enviarMeta(s.telefono,
-            `¿${tratamiento(s.nombre)}, continúa en línea?\n\nEstamos disponibles para atenderle. Si tiene alguna consulta, con gusto le ayudamos.\n\nSi ya no necesita asistencia, escriba *SALIR* para cerrar la conversación.`
-          );
-          await supabase.from('wa_sesiones').update({
-            inactividad_aviso_at: ahoraISO,
-            updated_at: ahoraISO
-          }).eq('telefono', s.telefono);
-          await logConv(s.telefono, null, null, 'inactividad_aviso', null, { estado: 'nova' });
-          continue;
-        }
-        // 30 min sin respuesta total → enviar encuesta Nova y cerrar
-        // GUARD: no reenviar si ya se envió la encuesta
-        if (s.encuesta_enviada_at) { continue; }
-        if (minsSinAct >= 10 && s.inactividad_aviso_at) {
-          const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
-          if (minsDesdeAviso >= 8) {
-            const _msgEnc1 =
-              `Ha sido un placer acompañarle, ${tratamiento(s.nombre)}. 😊\n\n` +
-              `Esperamos haber resuelto su consulta satisfactoriamente.\n\n` +
-              `Antes de despedirnos, ¿nos regala un momento para calificarnos?\n\n` +
-              `*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n` +
-              `*Tododrogas, siempre a su servicio.* 🌟`;
-            await enviarMeta(s.telefono, _msgEnc1);
-            await pushHistoryNova(s.telefono, _msgEnc1, 'nova');
+        // ════════════════════════════════════════════════════════════════════
+        // ESTADO: esperando_encuesta → solo verificar timeout de 10 min
+        // ════════════════════════════════════════════════════════════════════
+        if (s.estado === 'esperando_encuesta') {
+          if (!s.encuesta_enviada_at) continue; // sin fecha → no tocar
+          const minsEnc = (ahora - new Date(s.encuesta_enviada_at).getTime()) / 60000;
+          if (minsEnc >= 10) {
+            const _agNombre = s.agente_nombre || 'Nova TD';
+            const _msgDespedida =
+              `Cerramos su consulta, ${tratamiento(s.nombre)}. 😊
+
+` +
+              `Si necesita ayuda nuevamente, con gusto le atendemos.
+
+` +
+              `*¡Hasta pronto! Tododrogas, siempre a su servicio.*`;
+            await enviarMeta(s.telefono, _msgDespedida);
             await supabase.from('wa_sesiones').update({
-              estado:              'esperando_encuesta',
-              encuesta_enviada_at: ahoraISO,
-              inactividad_aviso_at: null,  // limpiar para que el cron no re-evalúe
-              motivo_cierre_wa:    'inactividad',
-              updated_at:          ahoraISO
+              estado: 'cerrado', calificacion: null,
+              calificacion_texto: 'Sin calificación',
+              cerrado_at: ahoraISO, motivo_cierre_wa: 'inactividad',
+              agente_nombre: _agNombre, updated_at: ahoraISO
             }).eq('telefono', s.telefono);
-            await logConv(s.telefono, null, null, 'encuesta_enviada', null, { motivo: 'inactividad_nova' });
+            await logConv(s.telefono, s.agente_id, _agNombre, 'cerrado', null,
+              { motivo: 'sin_calificacion_inactividad', origen_nova: !s.agente_id });
           }
+          continue; // no hacer nada más con esperando_encuesta
         }
-        continue;
-      }
 
-      // ── CON AGENTE: escalado/activo/esperando ───────────────────────────
-      if (['escalado', 'activo', 'esperando'].includes(s.estado)) {
+        // ════════════════════════════════════════════════════════════════════
+        // ESTADO: pte_gestion → no tocar, el agente lo gestiona al llegar
+        // ════════════════════════════════════════════════════════════════════
+        if (s.estado === 'pte_gestion') continue;
 
-        // ── AGENTE NO RESPONDE: 3 min desde asignación sin primera respuesta ──
-        if (s.estado === 'escalado' && s.asignado_at && !s.primera_respuesta_at) {
-          const minsDesdeAsig = (ahora - new Date(s.asignado_at).getTime()) / 60000;
-          const _trat = s.nombre ? `*${s.nombre.split(' ')[0]}*` : 'estimado usuario';
+        // ════════════════════════════════════════════════════════════════════
+        // GUARD GLOBAL: si ya se envió encuesta, no hacer nada
+        // ════════════════════════════════════════════════════════════════════
+        if (s.encuesta_enviada_at) continue;
 
-          // 3 min → primer aviso de espera
-          if (minsDesdeAsig >= 3 && minsDesdeAsig < 4 && !s.inactividad_aviso_at) {
-            const _msgEspera1 =
-              `Agradecemos su paciencia, ${_trat}. 🙏
-
-` +
-              `Su caso es nuestra prioridad y un asesor especializado estará con usted en breve.
-
-` +
-              `*Tododrogas, siempre a su servicio.*`;
-            await enviarMeta(s.telefono, _msgEspera1);
-            await pushHistoryNova(s.telefono, _msgEspera1, 'nova');
-            await supabase.from('wa_sesiones').update({
-              inactividad_aviso_at: ahoraISO, updated_at: ahoraISO
-            }).eq('telefono', s.telefono);
-            continue;
-          }
-
-          // 6 min → segundo aviso
-          if (minsDesdeAsig >= 6 && minsDesdeAsig < 7 && s.inactividad_aviso_at) {
-            const minsAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
-            if (minsAviso >= 2) {
-              const _msgEspera2 =
-                `Permítanos 2 o 3 minutos más, ${_trat}. ⏳
+        // ════════════════════════════════════════════════════════════════════
+        // ESTADO: nova
+        // Flujo: 2min sin actividad → aviso → 8min más → encuesta → cerrar
+        // ════════════════════════════════════════════════════════════════════
+        if (s.estado === 'nova') {
+          if (!s.inactividad_aviso_at) {
+            // Aún no se mandó aviso — esperar 2 min desde última actividad
+            if (minsDesdeUser >= 2) {
+              const _msgAviso =
+                `¿${tratamiento(s.nombre)}, continúa en línea?
 
 ` +
-                `Su solicitud tiene prioridad y nuestro equipo está gestionando su caso.
+                `Estamos disponibles para atenderle.
 
 ` +
-                `Le garantizamos una atención personalizada. Gracias por su comprensión. 🌟`;
-              await enviarMeta(s.telefono, _msgEspera2);
-              await pushHistoryNova(s.telefono, _msgEspera2, 'nova');
+                `Si ya no necesita asistencia, escriba *SALIR* para cerrar.`;
+              await enviarMeta(s.telefono, _msgAviso);
+              // NO actualizar updated_at — solo inactividad_aviso_at
+              await supabase.from('wa_sesiones')
+                .update({ inactividad_aviso_at: ahoraISO })
+                .eq('telefono', s.telefono);
+            }
+          } else {
+            // Ya se mandó aviso — esperar 8 min más desde el aviso
+            const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
+            if (minsDesdeAviso >= 8) {
+              const _msgEnc =
+                `Ha sido un placer acompañarle, ${tratamiento(s.nombre)}. 😊
+
+` +
+                `Esperamos haber resuelto su consulta satisfactoriamente.
+
+` +
+                `Antes de despedirnos, ¿nos regala un momento para calificarnos?
+
+` +
+                `*1* → 😞 Mala
+*2* → 😐 Regular
+*3* → 😊 Buena
+
+` +
+                `*Tododrogas, siempre a su servicio.* 🌟`;
+              await enviarMeta(s.telefono, _msgEnc);
+              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
+              // Setear encuesta_enviada_at ANTES de cambiar estado (guard anti-loop)
               await supabase.from('wa_sesiones').update({
-                inactividad_aviso_at: ahoraISO, updated_at: ahoraISO
+                estado:               'esperando_encuesta',
+                encuesta_enviada_at:  ahoraISO,
+                inactividad_aviso_at: null,
+                motivo_cierre_wa:     'inactividad'
+                // NO tocar updated_at
               }).eq('telefono', s.telefono);
-              continue;
+              await logConv(s.telefono, null, null, 'encuesta_enviada', null, { motivo: 'inactividad_nova' });
             }
           }
+          continue;
+        }
 
-          // 12 min → reasignar a otro agente disponible
-          if (minsDesdeAsig >= 12 && s.inactividad_aviso_at) {
-            const minsAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
-            if (minsAviso >= 4) {
-              // Reducir carga del agente anterior
-              if (s.agente_id) {
-                const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', s.agente_id).single();
-                if (ag) await supabase.from('agentes').update({
-                  carga_actual: Math.max(0, (ag.carga_actual||1)-1)
-                }).eq('id', s.agente_id);
+        // ════════════════════════════════════════════════════════════════════
+        // ESTADOS CON AGENTE: escalado / activo / esperando
+        // Flujo: agente no responde → avisos → reasignar
+        //        usuario inactivo → aviso → encuesta → cerrar
+        // ════════════════════════════════════════════════════════════════════
+        if (['escalado','activo','esperando'].includes(s.estado)) {
+
+          // ── Agente no responde (escalado sin primera respuesta) ──────────
+          if (s.estado === 'escalado' && s.asignado_at && !s.primera_respuesta_at) {
+            const minsAsig = (ahora - new Date(s.asignado_at).getTime()) / 60000;
+            const _trat    = s.nombre ? `*${s.nombre.split(' ')[0]}*` : 'estimado usuario';
+
+            if (minsAsig >= 3 && minsAsig < 5 && !s.inactividad_aviso_at) {
+              const _m = `Agradecemos su paciencia, ${_trat}. 🙏
+
+Su caso es nuestra prioridad y un asesor estará con usted en breve.
+
+*Tododrogas, siempre a su servicio.*`;
+              await enviarMeta(s.telefono, _m);
+              await pushHistoryNova(s.telefono, _m, 'nova');
+              await supabase.from('wa_sesiones')
+                .update({ inactividad_aviso_at: ahoraISO })
+                .eq('telefono', s.telefono);
+              continue;
+            }
+            if (minsAsig >= 6 && minsAsig < 8 && s.inactividad_aviso_at) {
+              const minsAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
+              if (minsAviso >= 2) {
+                const _m = `Permítanos 2 o 3 minutos más, ${_trat}. ⏳
+
+Su solicitud tiene prioridad. Gracias por su comprensión. 🌟`;
+                await enviarMeta(s.telefono, _m);
+                await pushHistoryNova(s.telefono, _m, 'nova');
+                await supabase.from('wa_sesiones')
+                  .update({ inactividad_aviso_at: ahoraISO })
+                  .eq('telefono', s.telefono);
+                continue;
               }
-              // Limpiar asignación y reintentar
-              await supabase.from('wa_sesiones').update({
-                agente_id: null, agente_nombre: null,
-                asignado_at: null, inactividad_aviso_at: null,
-                primera_respuesta_at: null, updated_at: ahoraISO
-              }).eq('telefono', s.telefono);
-              const sesActual = { ...s, agente_id: null, agente_nombre: null };
-              const nuevoAgente = await autoAsignarAgente(s.telefono, sesActual);
-              const _msgReasig = nuevoAgente
-                ? `Hemos asignado un nuevo asesor especializado para garantizar su atención, ${_trat}. ` +
-                  `Estará con usted en un momento. 🤝
+            }
+            if (minsAsig >= 12 && s.inactividad_aviso_at) {
+              const minsAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
+              if (minsAviso >= 4) {
+                if (s.agente_id) {
+                  const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
+                  if (ag) await supabase.from('agentes').update({ carga_actual: Math.max(0,(ag.carga_actual||1)-1) }).eq('id',s.agente_id);
+                }
+                await supabase.from('wa_sesiones').update({
+                  agente_id: null, agente_nombre: null,
+                  asignado_at: null, inactividad_aviso_at: null,
+                  primera_respuesta_at: null
+                }).eq('telefono', s.telefono);
+                const sesActual = {...s, agente_id:null, agente_nombre:null};
+                const nuevoAg = await autoAsignarAgente(s.telefono, sesActual);
+                const _trat2 = s.nombre ? `*${s.nombre.split(' ')[0]}*` : 'estimado usuario';
+                const _m = nuevoAg
+                  ? `Hemos asignado un nuevo asesor para garantizar su atención, ${_trat2}. Estará con usted en un momento. 🤝
 
 *Tododrogas, siempre a su servicio.*`
-                : `Le pedimos disculpas por la espera, ${_trat}. ` +
-                  `En este momento todos nuestros asesores están ocupados. ` +
-                  `Su caso queda registrado como prioridad y le contactaremos al primer espacio disponible.
+                  : `Le pedimos disculpas por la espera, ${_trat2}. Su caso queda registrado como prioridad.
+
+*Tododrogas, siempre a su servicio.*`;
+                await enviarMeta(s.telefono, _m);
+                await pushHistoryNova(s.telefono, _m, 'nova');
+                continue;
+              }
+            }
+            continue; // agente asignado pero aún en tiempo de gracia
+          }
+
+          // ── Usuario inactivo con agente ──────────────────────────────────
+          // Solo aplica si el agente ya respondió (primera_respuesta_at existe)
+          // o si el estado es activo/esperando
+          if (!s.inactividad_aviso_at) {
+            if (minsDesdeUser >= 2) {
+              const _msgAviso =
+                `¿${tratamiento(s.nombre)}, continúa en línea?
 
 ` +
-                  `*Tododrogas, siempre a su servicio.*`;
-              await enviarMeta(s.telefono, _msgReasig);
-              await pushHistoryNova(s.telefono, _msgReasig, 'nova');
-              continue;
+                `*${s.agente_nombre || 'Su asesor'}* continúa disponible.
+
+` +
+                `Si ya resolvió su consulta, escriba *LISTO* para cerrar.`;
+              await enviarMeta(s.telefono, _msgAviso);
+              await pushHistoryNova(s.telefono, _msgAviso, 'nova');
+              await supabase.from('wa_sesiones')
+                .update({ inactividad_aviso_at: ahoraISO })
+                .eq('telefono', s.telefono);
+            }
+          } else {
+            const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
+            if (minsDesdeAviso >= 8) {
+              const _msgEnc =
+                `Ha sido un placer acompañarle, ${tratamiento(s.nombre)}. 😊
+
+` +
+                `Esperamos haber resuelto su consulta satisfactoriamente.
+
+` +
+                `Antes de despedirnos, ¿nos regala un momento para calificarnos?
+
+` +
+                `*1* → 😞 Mala
+*2* → 😐 Regular
+*3* → 😊 Buena
+
+` +
+                `*Tododrogas, siempre a su servicio.* 🌟`;
+              await enviarMeta(s.telefono, _msgEnc);
+              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
+              // Reducir carga del agente
+              if (s.agente_id) {
+                const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
+                if (ag) await supabase.from('agentes').update({ carga_actual: Math.max(0,(ag.carga_actual||1)-1) }).eq('id',s.agente_id);
+              }
+              await supabase.from('wa_sesiones').update({
+                estado:               'esperando_encuesta',
+                encuesta_enviada_at:  ahoraISO,
+                inactividad_aviso_at: null,
+                motivo_cierre_wa:     'inactividad'
+                // NO tocar updated_at
+              }).eq('telefono', s.telefono);
+              await logConv(s.telefono, s.agente_id, s.agente_nombre, 'encuesta_enviada', null, { motivo: 'inactividad_agente' });
             }
           }
         }
 
-        // 1 min sin respuesta del usuario con agente activo → pasar a "esperando"
-        if (s.estado === 'activo' && minsSinAct >= 1) {
-          await supabase.from('wa_sesiones').update({
-            estado:     'esperando',
-            updated_at: ahoraISO
-          }).eq('telefono', s.telefono);
-          await logConv(s.telefono, s.agente_id, s.agente_nombre, 'estado_cambio', null, {
-            estado_anterior: 'activo', estado_nuevo: 'esperando'
-          });
-          continue;
-        }
-
-        // 2 min en "esperando" sin aviso previo → preguntar si continúa
-        if (s.estado === 'esperando' && minsSinAct >= 2 && !s.inactividad_aviso_at) {
-          await enviarMeta(s.telefono,
-            `¿${tratamiento(s.nombre)}, continúa en línea?\n\n*${s.agente_nombre || 'Su asesor'}* continúa disponible para atenderle.\n\nSi ya resolvió su consulta, puede escribir *LISTO* para cerrar la atención.`
-          );
-          await supabase.from('wa_sesiones').update({
-            inactividad_aviso_at: ahoraISO,
-            updated_at: ahoraISO
-          }).eq('telefono', s.telefono);
-          await logConv(s.telefono, s.agente_id, s.agente_nombre, 'inactividad_aviso', null, { estado: 'esperando' });
-          continue;
-        }
-
-        // 30 min sin respuesta total → encuesta y cierre
-        // GUARD: no reenviar si ya se envió la encuesta
-        if (s.encuesta_enviada_at) { continue; }
-        if (minsSinAct >= 10 && s.inactividad_aviso_at) {
-          const minsDesdeAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
-          if (minsDesdeAviso >= 8) {
-            const _msgCierre = `Ha sido un placer acompañarle, ${tratamiento(s.nombre)}. 😊\n\n` +
-              `Esperamos haber resuelto su inquietud de la mejor manera.\n\n` +
-              `Antes de despedirnos, le invitamos a calificarnos:\n\n` +
-              `*1* → 😞 Mala\n*2* → 😐 Regular\n*3* → 😊 Buena\n\n` +
-              `Su opinión nos ayuda a mejorar. *Tododrogas, siempre a su servicio.* 🌟`;
-            await enviarMeta(s.telefono, _msgCierre);
-            await pushHistoryNova(s.telefono, _msgCierre, 'nova');
-            // Reducir carga del agente
-            if (s.agente_id) {
-              const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', s.agente_id).single();
-              if (ag) await supabase.from('agentes').update({
-                carga_actual: Math.max(0, (ag.carga_actual || 1) - 1)
-              }).eq('id', s.agente_id);
-            }
-            await supabase.from('wa_sesiones').update({
-              estado:              'esperando_encuesta',
-              encuesta_enviada_at: ahoraISO,
-              inactividad_aviso_at: null,  // limpiar para que el cron no re-evalúe
-              motivo_cierre_wa:    'inactividad',
-              updated_at:          ahoraISO
-            }).eq('telefono', s.telefono);
-            await logConv(s.telefono, s.agente_id, s.agente_nombre, 'encuesta_enviada', null, { motivo: 'inactividad_agente' });
-          }
-        }
-        continue;
-      }
-
-      // ── ESPERANDO_ENCUESTA: 30 min sin responder → cerrar sin calificación
-      if (s.estado === 'esperando_encuesta') {
-        const minsEnc = s.encuesta_enviada_at
-          ? (ahora - new Date(s.encuesta_enviada_at).getTime()) / 60000
-          : minsSinAct;
-        if (minsEnc >= 10) {
-          const _agNombre = s.agente_nombre || 'Nova TD';
-          // Mensaje de despedida antes de cerrar
-          const _msgDespedida =
-            `Cerramos su consulta, ${tratamiento(s.nombre)}. 😊\n\n` +
-            `Si necesita ayuda nuevamente, con gusto le atendemos.\n\n` +
-            `*¡Hasta pronto! Tododrogas, siempre a su servicio.*`;
-          await enviarMeta(s.telefono, _msgDespedida);
-          await pushHistoryNova(s.telefono, _msgDespedida, 'nova');
-          await supabase.from('wa_sesiones').update({
-            estado:             'cerrado',
-            calificacion:       null,
-            calificacion_texto: 'Sin calificación',
-            cerrado_at:         ahoraISO,
-            motivo_cierre_wa:   'inactividad',
-            agente_nombre:      _agNombre,
-            updated_at:         ahoraISO
-          }).eq('telefono', s.telefono);
-          await logConv(s.telefono, s.agente_id, _agNombre, 'cerrado', null, {
-            motivo: 'sin_calificacion_inactividad',
-            origen_nova: !s.agente_id
-          });
-        }
+      } catch(eS) {
+        console.error(`❌ cronInactividad [${s.telefono}]:`, eS.message);
       }
     }
-  } catch (e) {
+  } catch(e) {
     console.error('❌ cronInactividad:', e.message);
   }
 }
-
-// Ejecutar cron cada 60 segundos
 setInterval(cronInactividad, 60 * 1000);
 
 // ── HEALTH CHECK ───────────────────────────────────────────────────────────
@@ -1215,6 +1232,116 @@ app.post('/send-audio', upload.single('audio'), async (req, res) => {
     res.json({ ok: true, audio_url: audioUrl });
   } catch(err) {
     console.error('❌ send-audio:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── INICIAR CONVERSACIÓN CON NUEVO NÚMERO ───────────────────────────────
+// Meta exige plantilla HSM para el primer mensaje saliente.
+// Usamos el template "hello_world" (siempre aprobado) o uno personalizado.
+app.post('/iniciar-conversacion', async (req, res) => {
+  const origin = req.headers.origin || req.headers.referer || '';
+  if (!ALLOWED_ORIGINS.some(o => origin.startsWith(o)))
+    return res.status(403).json({ error: 'Forbidden' });
+
+  try {
+    const { telefono, agente_id, agente_nombre, template_name, template_params, mensaje_libre } = req.body;
+    if (!telefono) return res.status(400).json({ error: 'telefono requerido' });
+
+    const ahoraISO  = new Date().toISOString();
+    const telClean  = telefono.replace(/\D/g,'');
+    const telFull   = '+' + telClean;
+
+    // Verificar si ya existe sesión activa
+    const { data: sesExist } = await supabase
+      .from('wa_sesiones').select('telefono,estado').eq('telefono', telFull).single();
+
+    if (sesExist && !['cerrado'].includes(sesExist.estado)) {
+      return res.status(409).json({
+        error: 'Ya existe una conversación activa con este número',
+        estado: sesExist.estado
+      });
+    }
+
+    // ── Enviar por Meta API ──────────────────────────────────────────────
+    let metaBody;
+
+    if (template_name) {
+      // Usar plantilla HSM aprobada
+      const components = [];
+      if (template_params?.length) {
+        components.push({
+          type: 'body',
+          parameters: template_params.map(p => ({ type: 'text', text: p }))
+        });
+      }
+      metaBody = {
+        messaging_product: 'whatsapp',
+        to:   telClean,
+        type: 'template',
+        template: {
+          name:     template_name,
+          language: { code: 'es' },
+          ...(components.length ? { components } : {})
+        }
+      };
+    } else if (mensaje_libre) {
+      // Mensaje de texto libre (solo funciona dentro de ventana 24h existente)
+      metaBody = {
+        messaging_product: 'whatsapp',
+        to:   telClean,
+        type: 'text',
+        text: { body: mensaje_libre }
+      };
+    } else {
+      return res.status(400).json({ error: 'Se requiere template_name o mensaje_libre' });
+    }
+
+    const metaRes = await fetch(
+      `https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`,
+      {
+        method:  'POST',
+        headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${META_TOKEN}` },
+        body:    JSON.stringify(metaBody)
+      }
+    );
+    if (!metaRes.ok) {
+      const err = await metaRes.text();
+      console.error('Meta iniciar-conv error:', err);
+      return res.status(502).json({ error: 'Error Meta API: ' + err.substring(0,200) });
+    }
+    const metaData = await metaRes.json();
+
+    // ── Crear o reactivar sesión en Supabase ─────────────────────────────
+    const contenido = mensaje_libre || `[Plantilla: ${template_name}]`;
+    const nuevoMsg  = { role:'assistant', sender:'agent', content:contenido,
+                        agente_nombre: agente_nombre||'Agente', ts: ahoraISO };
+
+    const sesionData = {
+      telefono:    telFull,
+      estado:      'escalado',
+      agente_id:   agente_id   || null,
+      agente_nombre: agente_nombre || null,
+      asignado_at: ahoraISO,
+      history:     [nuevoMsg],
+      unread_count: 0,
+      updated_at:  ahoraISO,
+      // Limpiar campos anteriores si reactivamos
+      calificacion: null, calificacion_texto: null,
+      encuesta_enviada_at: null, cerrado_at: null,
+      inactividad_aviso_at: null, motivo_cierre_wa: null,
+    };
+
+    await supabase.from('wa_sesiones').upsert(sesionData);
+    await logConv(telFull, agente_id||null, agente_nombre||'Agente', 'iniciado_agente', null, {
+      template: template_name || 'mensaje_libre'
+    });
+
+    console.log(`📤 Conversación iniciada con ${telFull} por ${agente_nombre}`);
+    res.json({ ok: true, telefono: telFull, message_id: metaData.messages?.[0]?.id });
+
+  } catch(err) {
+    console.error('❌ iniciar-conversacion:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
