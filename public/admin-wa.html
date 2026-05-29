@@ -1113,6 +1113,7 @@ async function loadDashboard(){
 
 function renderAgentesOnline(){
   const el=document.getElementById('agentesOnlineList');
+  if(!el) return; // dashboard puede no estar visible
   const agentes=A.agentes.filter(a=>a.activo||a.en_linea||A.sesiones.some(s=>s.agente_id===a.id));
   if(!agentes.length){el.innerHTML='<div class="empty">Ningún agente activo</div>';return;}
   el.innerHTML=agentes.map(a=>{
@@ -1457,6 +1458,8 @@ function descargarPDFTelefono(tel){
       renderSidebarAgentes();
       // Animar brevemente los dots que cambiaron para dar feedback visual
       document.querySelectorAll('.sidebar-ag-dot').forEach(d=>{ d.style.transition='background .4s'; });
+      // Actualizar panel de agentes online en dashboard (si está visible)
+      renderAgentesOnline();
 
       // Actualizar badges del topbar
       const _nbOnline = document.getElementById('nb-online');
@@ -1516,6 +1519,29 @@ function descargarPDFTelefono(tel){
       }
 
     }catch(e){ console.warn('[agentes-realtime]', e.message); }
+  }, 5000);
+
+  // ── Poller sidebar agentes: siempre activo cada 5s aunque no haya sección ──
+  // Garantiza que los puntos del sidebar siempre reflejen el estado real
+  setInterval(async()=>{
+    try{
+      const data = await sb('agentes?select=id,en_linea,pausado,carga_actual&order=nombre.asc');
+      if(!data?.length) return;
+      let changed = false;
+      data.forEach(ag=>{
+        const prev = A.agentes.find(a=>a.id===ag.id);
+        if(prev && (prev.en_linea!==ag.en_linea || prev.pausado!==ag.pausado)){
+          prev.en_linea = ag.en_linea;
+          prev.pausado  = ag.pausado;
+          prev.carga_actual = ag.carga_actual;
+          changed = true;
+        }
+      });
+      if(changed){
+        renderSidebarAgentes();
+        renderAgentesOnline();
+      }
+    }catch(e){}
   }, 5000);
 
 })();
