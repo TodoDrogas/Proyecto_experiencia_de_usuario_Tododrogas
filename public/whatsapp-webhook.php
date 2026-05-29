@@ -227,9 +227,7 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $s .= "USUARIO: $nombre | EPS: " . ($epsU ?: 'Sin EPS') . " (SAVIA SALUD = SAVIA, PREVENTIVA SALUD = PREVENTIVA)\n";
     $s .= "CANAL: WhatsApp — responde en texto plano sin HTML. Usa emojis con moderación.\n";
     $s .= "TRATO: Siempre de USTED.\n";
-    $s .= "HORARIOS SEDES:\n";
-    $s .= "- SEDES PROPIAS (Tododrogas): Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m.\n";
-    $s .= "- SEDES IN HOUSE (dentro de hospitales/IPS): Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am.\n";
+    $s .= "HORARIOS SEDES: Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m. IMPORTANTE: Al usuario NO le interesa si la sede es 'propia' o 'in house'. Usa SIEMPRE el horario general anterior a menos que tengas el horario específico de la sede en la base de datos.\n";
     $s .= "TODAS las sedes abren sábados.\n";
     $s .= $catalogo;
     $s .= "REGLA SEDES ESPECIALES MEDELLÍN: Hay DOS sedes en Medellín en la misma dirección (BIC Piso 6 y Primer Piso). Consulta SIEMPRE el catálogo — NUNCA inventes datos.\n";
@@ -274,6 +272,8 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
 ";
     }
     $s .= "REGLA MENÚ DUPLICADO (CRÍTICA): NUNCA incluyas el bloque '¿En qué más le puedo ayudar? M → Menú / P → Pregunta' en tu respuesta de texto. Ese bloque lo agrega el sistema automáticamente. Si lo incluyes, aparecerá DOS VECES.
+    $s .= "REGLA SATISFACCIóN (CRÍTICA): Cuando el usuario exprese satisfacción o que ya no necesita más ayuda — frases como 'gracias', 'ya está bien', 'perfecto', 'listo', 'ok gracias', 'eso era todo', 'ya quedé', 'muchas gracias', 'no necesito más', 'fue todo' — responde brevemente y usa [ENCUESTA] para cerrar. NO sigas ofreciendo opciones. Ejemplo: '¡Con mucho gusto! Fue un placer ayudarle. [ENCUESTA]'.
+";
 ";
     $s .= "REGLA NÚMEROS SUELTOS (CRÍTICA): Cuando el usuario envíe SOLO un número (1, 2, 3, etc.), SIEMPRE revisa el ÚLTIMO mensaje del asistente para entender a qué pregunta responde.
 ";
