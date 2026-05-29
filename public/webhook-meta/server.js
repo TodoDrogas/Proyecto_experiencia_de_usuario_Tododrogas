@@ -532,6 +532,33 @@ async function cronInactividad() {
           const minsEnc = (ahora - new Date(s.encuesta_enviada_at).getTime()) / 60000;
           if (minsEnc >= 10) {
             const _agNombre = s.agente_nombre || 'Nova TD';
+            const _sinAgente2 = !s.agente_id;
+
+            // ── FIX: cambiar estado PRIMERO (antes de enviar) para que si el cron
+            // vuelve a ejecutarse en el próximo minuto, no reenvíe la despedida ──
+            let _agenteAsigInact = null;
+            if (_sinAgente2) {
+              _agenteAsigInact = await autoAsignarAgente(s.telefono, s);
+            }
+            const { error: _errCierre } = await supabase.from('wa_sesiones').update({
+              estado:             _sinAgente2 ? 'pte_gestion' : 'cerrado',
+              calificacion:       null,
+              calificacion_texto: 'Sin calificación',
+              cerrado_at:         _sinAgente2 ? null : ahoraISO,
+              motivo_cierre_wa:   'inactividad',
+              encuesta_enviada_at: null, // limpiar para que el guard global actúe si falla el estado
+              agente_nombre:      _agenteAsigInact ? _agenteAsigInact.nombre : _agNombre,
+              agente_id:          _agenteAsigInact ? _agenteAsigInact.id : (s.agente_id || null),
+              updated_at:         ahoraISO
+            }).eq('telefono', s.telefono)
+              .eq('estado', 'esperando_encuesta'); // guard: solo si sigue en ese estado (anti race-condition)
+
+            if (_errCierre) {
+              console.warn('⚠️  despedida ya procesada (race condition):', s.telefono);
+              continue;
+            }
+
+            // Ahora sí enviar el mensaje (el estado ya cambió)
             const _msgDespedida =
               `Cerramos su consulta, ${tratamiento(s.nombre)}. 😊
 
@@ -541,22 +568,6 @@ async function cronInactividad() {
 ` +
               `*¡Hasta pronto! Tododrogas, siempre a su servicio.*`;
             await enviarMeta(s.telefono, _msgDespedida);
-            const _sinAgente2 = !s.agente_id;
-            // Si Nova resolvió sola → asignar automáticamente a un agente
-            let _agenteAsigInact = null;
-            if (_sinAgente2) {
-              _agenteAsigInact = await autoAsignarAgente(s.telefono, s);
-            }
-            await supabase.from('wa_sesiones').update({
-              estado:             _sinAgente2 ? 'pte_gestion' : 'cerrado',
-              calificacion:       null,
-              calificacion_texto: 'Sin calificación',
-              cerrado_at:         _sinAgente2 ? null : ahoraISO,
-              motivo_cierre_wa:   'inactividad',
-              agente_nombre:      _agenteAsigInact ? _agenteAsigInact.nombre : _agNombre,
-              agente_id:          _agenteAsigInact ? _agenteAsigInact.id : (s.agente_id || null),
-              updated_at:         ahoraISO
-            }).eq('telefono', s.telefono);
             await logConv(s.telefono, s.agente_id, _agNombre, 'cerrado', null,
               { motivo: 'sin_calificacion_inactividad', origen_nova: !s.agente_id });
           }
@@ -615,17 +626,17 @@ async function cronInactividad() {
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              await enviarMeta(s.telefono, _msgEnc);
-              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
-              // Setear encuesta_enviada_at ANTES de cambiar estado (guard anti-loop)
-              // Update atómico: solo si encuesta_enviada_at sigue siendo null
+              // FIX: update atómico PRIMERO — si falla, ya fue enviada (race condition)
               const { error: _errEnc1 } = await supabase.from('wa_sesiones').update({
                 estado:               'esperando_encuesta',
                 encuesta_enviada_at:  ahoraISO,
                 inactividad_aviso_at: null,
                 motivo_cierre_wa:     'inactividad'
               }).eq('telefono', s.telefono).is('encuesta_enviada_at', null);
-              if (_errEnc1) { console.warn('encuesta ya enviada (race condition):', s.telefono); continue; }
+              if (_errEnc1) { console.warn('encuesta ya enviada nova (race condition):', s.telefono); continue; }
+              // Ahora sí enviar (el guard ya está activado en BD)
+              await enviarMeta(s.telefono, _msgEnc);
+              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
               await logConv(s.telefono, null, null, 'encuesta_enviada', null, { motivo: 'inactividad_nova' });
             }
           }
@@ -733,8 +744,7 @@ async function cronInactividad() {
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              await enviarMeta(s.telefono, _msgEnc);
-              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
+              // FIX: update atómico PRIMERO — activar guard antes de enviar
               // Reducir carga del agente
               if (s.agente_id) {
                 const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
@@ -747,6 +757,9 @@ async function cronInactividad() {
                 motivo_cierre_wa:     'inactividad'
               }).eq('telefono', s.telefono).is('encuesta_enviada_at', null);
               if (_errEnc2) { console.warn('encuesta ya enviada agente (race condition):', s.telefono); continue; }
+              // Ahora sí enviar (el guard ya está activado en BD)
+              await enviarMeta(s.telefono, _msgEnc);
+              await pushHistoryNova(s.telefono, _msgEnc, 'nova');
               await logConv(s.telefono, s.agente_id, s.agente_nombre, 'encuesta_enviada', null, { motivo: 'inactividad_agente' });
             }
           }
