@@ -311,6 +311,53 @@ async function procesarAudio(msg, telefono) {
   }
 }
 
+// ── SISTEMA DE ADJUNTOS (imágenes, documentos, video) ──────────────────────
+
+// Descargar y subir cualquier media de Meta a Supabase
+async function procesarMedia(msg, telefono, tipo) {
+  const mediaObj = msg[tipo] || {};
+  const mediaId  = mediaObj.id;
+  const caption  = mediaObj.caption || '';
+  const mimeType = mediaObj.mime_type || '';
+  const fileName_orig = mediaObj.filename || '';
+
+  if (!mediaId) return { content: caption || `[${tipo}]`, tipo, media_url: null };
+
+  console.log(`📎 Procesando ${tipo} de ${telefono} — id:${mediaId}`);
+  try {
+    const { buffer, mimeType: mime } = await descargarMediaMeta(mediaId);
+
+    // Determinar extensión
+    const extMap = {
+      'image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/webp':'webp',
+      'video/mp4':'mp4','video/3gpp':'3gp',
+      'application/pdf':'pdf',
+      'application/msword':'doc',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document':'docx',
+      'application/vnd.ms-excel':'xls',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'xlsx',
+      'text/plain':'txt','text/csv':'csv',
+    };
+    const ext      = extMap[mime] || mime.split('/')[1] || 'bin';
+    const folder   = tipo === 'image' ? 'imagenes' : tipo === 'video' ? 'videos' : 'documentos';
+    const safeName = fileName_orig ? fileName_orig.replace(/[^a-zA-Z0-9._-]/g,'_') : `${Date.now()}.${ext}`;
+    const fileName = `${folder}/${telefono.replace('+','')}/${safeName}`;
+
+    const media_url = await subirASupabase(buffer, fileName, mime);
+    const content   = caption || (tipo === 'image' ? '[Imagen]' : tipo === 'video' ? '[Video]' : `[Documento: ${safeName}]`);
+
+    console.log(`✅ ${tipo} subido: ${media_url.substring(0,60)}`);
+    return { content, tipo, media_url, caption, mime_type: mime, file_name: safeName };
+
+  } catch(err) {
+    console.error(`❌ procesarMedia(${tipo}):`, err.message);
+    return { content: caption || `[${tipo} — error al procesar]`, tipo, media_url: null };
+  }
+}
+
+// ── ENVIAR ADJUNTO DEL AGENTE → USUARIO ──────────────────────────────────────
+// (endpoint /send-media — agente sube archivo, server lo envía por Meta API)
+
 // ── HORARIO DE ATENCIÓN ─────────────────────────────────────────────────
 function estaEnHorario() {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
@@ -739,19 +786,14 @@ app.post('/webhook/meta', async (req, res) => {
       if (sesion?.estado === 'nova') {
         await enviarMeta(telefono, '🎙️ _Audio recibido, procesando..._').catch(()=>{});
       }
-    } else if (tipo === 'image' || tipo === 'document' || tipo === 'video' || tipo === 'sticker') {
-      // Otros media: guardar referencia (se implementará en siguiente versión)
-      const mediaId = msg[tipo]?.id || '';
-      const caption = msg[tipo]?.caption || '';
-      body     = caption || `[${tipo}]`;
-      nuevoMsg = {
-        role:     'user',
-        content:  body,
-        tipo,
-        media_id: mediaId,
-        caption,
-        ts:       ahoraISO
-      };
+    } else if (tipo === 'image' || tipo === 'document' || tipo === 'video') {
+      // Descargar de Meta → subir a Supabase Storage → guardar URL
+      const mediaData = await procesarMedia(msg, telefono, tipo);
+      body     = mediaData.content;
+      nuevoMsg = { role:'user', ts: ahoraISO, ...mediaData };
+    } else if (tipo === 'sticker') {
+      body     = '[Sticker 😄]';
+      nuevoMsg = { role:'user', content: body, tipo, ts: ahoraISO };
     } else if (!body) {
       body     = `[${tipo}]`;
       nuevoMsg = { role:'user', content: body, tipo, ts: ahoraISO };
@@ -1045,6 +1087,75 @@ Un asesor revisará su caso en el próximo horario de atención:
 
 // ── ENVIAR MENSAJE (agente → usuario) ─────────────────────────────────────
 // ── ENVIAR AUDIO DEL AGENTE → USUARIO ────────────────────────────────────
+// ── ENVIAR MEDIA DEL AGENTE → USUARIO ────────────────────────────────────
+app.post('/send-media', upload.single('file'), async (req, res) => {
+  const origin = req.headers.origin || req.headers.referer || '';
+  if (!ALLOWED_ORIGINS.some(o => origin.startsWith(o)))
+    return res.status(403).json({ error: 'Forbidden' });
+
+  try {
+    const { telefono, agente_nombre, agente_id, caption } = req.body;
+    const file = req.file;
+    if (!telefono || !file) return res.status(400).json({ error: 'telefono y file requeridos' });
+
+    const ahoraISO  = new Date().toISOString();
+    const mime      = file.mimetype;
+    const isImage   = mime.startsWith('image/');
+    const isVideo   = mime.startsWith('video/');
+    const isAudio   = mime.startsWith('audio/');
+    const isPdf     = mime === 'application/pdf';
+    const folder    = isImage ? 'imagenes-agente' : isVideo ? 'videos-agente' : isAudio ? 'audios-agente' : 'documentos-agente';
+    const safeName  = file.originalname?.replace(/[^a-zA-Z0-9._-]/g,'_') || `file_${Date.now()}`;
+    const fileName  = `${folder}/${telefono.replace('+','')}/${Date.now()}_${safeName}`;
+
+    // 1. Subir a Supabase Storage
+    const media_url = await subirASupabase(file.buffer, fileName, mime);
+
+    // 2. Enviar por Meta API según tipo
+    let metaBody;
+    if (isImage) {
+      metaBody = { messaging_product:'whatsapp', to:telefono.replace('+',''), type:'image',
+        image:{ link:media_url, caption: caption||'' }};
+    } else if (isVideo) {
+      metaBody = { messaging_product:'whatsapp', to:telefono.replace('+',''), type:'video',
+        video:{ link:media_url, caption: caption||'' }};
+    } else if (isAudio) {
+      metaBody = { messaging_product:'whatsapp', to:telefono.replace('+',''), type:'audio',
+        audio:{ link:media_url }};
+    } else {
+      // documento, pdf, etc
+      metaBody = { messaging_product:'whatsapp', to:telefono.replace('+',''), type:'document',
+        document:{ link:media_url, filename:safeName, caption: caption||'' }};
+    }
+
+    const metaRes = await fetch(`https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${META_TOKEN}`},
+      body: JSON.stringify(metaBody)
+    });
+    if (!metaRes.ok) throw new Error(await metaRes.text());
+
+    // 3. Guardar en history
+    const { data: sesion } = await supabase.from('wa_sesiones').select('history').eq('telefono',telefono).single();
+    const hist = Array.isArray(sesion?.history) ? sesion.history : [];
+    hist.push({
+      role:'assistant', sender:'agent',
+      tipo:    isImage?'image':isVideo?'video':isAudio?'audio':'document',
+      content: caption || `[${isImage?'Imagen':isVideo?'Video':isAudio?'Audio':'Documento'}: ${safeName}]`,
+      media_url, file_name:safeName, mime_type:mime,
+      agente_nombre: agente_nombre||'Agente',
+      ts: ahoraISO
+    });
+    await supabase.from('wa_sesiones').update({ history:hist, updated_at:ahoraISO }).eq('telefono',telefono);
+    await logConv(telefono, agente_id||null, agente_nombre||'Agente', 'mensaje_agente');
+
+    res.json({ ok:true, media_url });
+  } catch(err) {
+    console.error('❌ send-media:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/send-audio', upload.single('audio'), async (req, res) => {
   const origin = req.headers.origin || req.headers.referer || '';
   if (!ALLOWED_ORIGINS.some(o => origin.startsWith(o)))
