@@ -271,10 +271,8 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
         $s .= "  5. Usa [ESCALAR] igualmente — el server.js manejará el estado pte_gestion.
 ";
     }
-    $s .= "REGLA MENÚ DUPLICADO (CRÍTICA): NUNCA incluyas el bloque '¿En qué más le puedo ayudar? M → Menú / P → Pregunta' en tu respuesta de texto. Ese bloque lo agrega el sistema automáticamente. Si lo incluyes, aparecerá DOS VECES.
-    $s .= "REGLA SATISFACCIóN (CRÍTICA): Cuando el usuario exprese satisfacción o que ya no necesita más ayuda — frases como 'gracias', 'ya está bien', 'perfecto', 'listo', 'ok gracias', 'eso era todo', 'ya quedé', 'muchas gracias', 'no necesito más', 'fue todo' — responde brevemente y usa [ENCUESTA] para cerrar. NO sigas ofreciendo opciones. Ejemplo: '¡Con mucho gusto! Fue un placer ayudarle. [ENCUESTA]'.
-";
-";
+    $s .= "REGLA MENÚ DUPLICADO (CRÍTICA): NUNCA incluyas el bloque '¿En qué más le puedo ayudar? M → Menú / P → Pregunta' en tu respuesta de texto. Ese bloque lo agrega el sistema automáticamente. Si lo incluyes, aparecerá DOS VECES.\n";
+    $s .= "REGLA SATISFACCIÓN (CRÍTICA): Cuando el usuario exprese satisfacción o que ya no necesita más ayuda — frases como 'gracias', 'ya está bien', 'perfecto', 'listo', 'ok gracias', 'eso era todo', 'ya quedé', 'muchas gracias', 'no necesito más', 'fue todo' — responde brevemente y usa [ENCUESTA] para cerrar. NO sigas ofreciendo opciones. Ejemplo: '¡Con mucho gusto! Fue un placer ayudarle. [ENCUESTA]'.\n";
     $s .= "REGLA NÚMEROS SUELTOS (CRÍTICA): Cuando el usuario envíe SOLO un número (1, 2, 3, etc.), SIEMPRE revisa el ÚLTIMO mensaje del asistente para entender a qué pregunta responde.
 ";
     $s .= "  - Si el último mensaje tuyo tenía opciones numeradas propias → interpreta en ESE contexto, NO como el menú principal.
