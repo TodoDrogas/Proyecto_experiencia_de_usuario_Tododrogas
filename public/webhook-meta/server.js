@@ -23,7 +23,10 @@ app.use((req, res, next) => {
 });
 
 // Raw body para validar firma Meta
+// IMPORTANTE: saltarse multipart/form-data — multer necesita el stream intacto
 app.use((req, res, next) => {
+  const ct = req.headers['content-type'] || '';
+  if (ct.includes('multipart/form-data')) return next(); // multer lo maneja
   let data = '';
   req.on('data', chunk => { data += chunk; });
   req.on('end', () => {
@@ -408,15 +411,10 @@ function mensajeFueraHorario(nombre) {
 // ── PROCESAR ENCUESTA WA ─────────────────────────────────────────────────
 async function procesarEncuesta(telefono, respuesta, sesion) {
   const calRaw = respuesta.trim().toUpperCase();
-  // Aceptar palabras O números (compatibilidad hacia atrás)
-  const mapaRespuesta = {
-    'MALA': 1, 'MAL': 1, '1': 1,
-    'REGULAR': 2, 'REG': 2, '2': 2,
-    'BUENA': 3, 'BUEN': 3, 'BUENO': 3, '3': 3
-  };
+  const mapaRespuesta = { 'MALA':1,'MAL':1,'1':1,'REGULAR':2,'REG':2,'2':2,'BUENA':3,'BUEN':3,'BUENO':3,'3':3 };
   if (!mapaRespuesta[calRaw]) return false;
   const calNum = mapaRespuesta[calRaw];
-  const cal    = String(calNum); // para compatibilidad con el historial
+  const cal    = String(calNum);
   const textos = { 1: 'Mala', 2: 'Regular', 3: 'Buena' };
   const emojis = { 1: '😞', 2: '😐', 3: '😊' };
 
@@ -539,11 +537,9 @@ async function cronInactividad() {
           if (minsEnc >= 10) {
             const _agNombre = s.agente_nombre || 'Nova TD';
             const _sinAgente2 = !s.agente_id;
-            // FIX: cambiar estado PRIMERO para evitar reenvío en siguiente ciclo
+            // FIX: cambiar estado PRIMERO para evitar reenvío
             let _agenteAsigInact = null;
-            if (_sinAgente2) {
-              _agenteAsigInact = await autoAsignarAgente(s.telefono, s);
-            }
+            if (_sinAgente2) { _agenteAsigInact = await autoAsignarAgente(s.telefono, s); }
             const { error: _errCierre } = await supabase.from('wa_sesiones').update({
               estado:             _sinAgente2 ? 'pte_gestion' : 'cerrado',
               calificacion:       null,
@@ -555,7 +551,7 @@ async function cronInactividad() {
               agente_id:          _agenteAsigInact ? _agenteAsigInact.id : (s.agente_id || null),
               updated_at:         ahoraISO
             }).eq('telefono', s.telefono).eq('estado', 'esperando_encuesta');
-            if (_errCierre) { console.warn('⚠️ despedida ya procesada (race condition):', s.telefono); continue; }
+            if (_errCierre) { console.warn('⚠️ despedida ya procesada:', s.telefono); continue; }
             const _msgDespedida =
               `Cerramos su consulta, ${tratamiento(s.nombre)}. 😊
 
@@ -623,7 +619,6 @@ async function cronInactividad() {
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              // FIX: update atómico PRIMERO
               const { error: _errEnc1 } = await supabase.from('wa_sesiones').update({
                 estado:               'esperando_encuesta',
                 encuesta_enviada_at:  ahoraISO,
@@ -740,8 +735,6 @@ async function cronInactividad() {
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              // FIX: update atómico PRIMERO
-              // Reducir carga del agente
               if (s.agente_id) {
                 const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
                 if (ag) await supabase.from('agentes').update({ carga_actual: Math.max(0,(ag.carga_actual||1)-1) }).eq('id',s.agente_id);
@@ -1032,7 +1025,7 @@ Un asesor revisará su caso en el próximo horario de atención:
         return;
       }
 
-      // FIX: si está esperando_encuesta, NO actualizar updated_at (evita reset del cron)
+      // FIX: si está esperando_encuesta, NO tocar updated_at (evita reset del cron)
       if (sesion.estado === 'esperando_encuesta') {
         await supabase.from('wa_sesiones')
           .update({ history, unread_count: (sesion.unread_count || 0) + 1 })
@@ -1056,6 +1049,51 @@ Un asesor revisará su caso en el próximo horario de atención:
     }
 
     console.log(`📩 Mensaje de ${telefono}: ${body.substring(0, 60)}`);
+
+    // ── Detectar satisfacción si hay AGENTE activo → encuesta directa ────
+    if (['escalado','activo','esperando'].includes(sesion.estado) && sesion.agente_id) {
+      const _bodyLowerAg = (body||'').toLowerCase().trim();
+      const _frasesSatAg = ['gracias','muchas gracias','ok gracias','no gracias',
+        'así está bien','no, así está bien','ya está bien','está bien así',
+        'perfecto','listo','eso era todo','ya quedé','no necesito más',
+        'fue todo','ya me ayudó','con eso es suficiente','excelente gracias',
+        'bien gracias','gracias por tu'];
+      const _histLenAg = Array.isArray(sesion?.history) ? sesion.history.length : 0;
+      if (_frasesSatAg.some(f => _bodyLowerAg.includes(f)) && _histLenAg >= 2) {
+        const ahoraEncAg = new Date().toISOString();
+        const _nomAg = sesion.nombre ? `*${sesion.nombre.split(' ')[0]}*` : '';
+        const _msgEncAg =
+          `¡Con mucho gusto${_nomAg ? ', '+_nomAg : ''}! Fue un placer ayudarle. 😊
+
+` +
+          `Antes de despedirnos, ¿nos regala un momento para calificarnos?
+
+` +
+          `*MALA* → 😞
+*REGULAR* → 😐
+*BUENA* → 😊
+
+` +
+          `*Tododrogas, siempre a su servicio.* 🌟`;
+        // Reducir carga del agente
+        const { data: _agDat } = await supabase.from('agentes').select('carga_actual').eq('id', sesion.agente_id).single();
+        if (_agDat) await supabase.from('agentes').update({ carga_actual: Math.max(0,(_agDat.carga_actual||1)-1) }).eq('id', sesion.agente_id);
+        // Cambiar estado PRIMERO (guard anti-loop)
+        const { error: _errAgEnc } = await supabase.from('wa_sesiones').update({
+          estado:               'esperando_encuesta',
+          encuesta_enviada_at:  ahoraEncAg,
+          inactividad_aviso_at: null,
+          motivo_cierre_wa:     'satisfaccion_usuario'
+        }).eq('telefono', telefono).is('encuesta_enviada_at', null);
+        if (!_errAgEnc) {
+          await enviarMeta(telefono, _msgEncAg);
+          await pushHistoryNova(telefono, _msgEncAg, 'nova');
+          await logConv(telefono, sesion.agente_id, sesion.agente_nombre, 'encuesta_enviada', null, { motivo: 'satisfaccion_agente' });
+          console.log(`✅ Satisfacción con agente → encuesta: ${telefono}`);
+        }
+        return;
+      }
+    }
 
     // ── Llamar a Nova TD si estado es nova ────────────────────────────────
     if ((sesion.estado || 'nova') === 'nova') {
@@ -1587,7 +1625,8 @@ app.post('/transferir', async (req, res) => {
     });
 
     console.log(`🔄 Transferido ${telefono}: ${agente_origen_nombre} → ${nuevo_agente_nombre}`);
-    res.json({ ok: true, saludo_sugerido: nuevoSaludo });
+    // Devolver history completo para que el frontend lo muestre sin recargar
+    res.json({ ok: true, saludo_sugerido: nuevoSaludo, history });
 
   } catch (err) {
     console.error('❌ Error transferir:', err.message);
