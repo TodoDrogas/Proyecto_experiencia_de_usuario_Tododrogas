@@ -103,6 +103,11 @@ body{background:#111b21;color:#e9edef;font-family:-apple-system,BlinkMacSystemFo
 .s-escalado .conv-av-dot{background:var(--orange);animation:pulseO 2s infinite}
 .s-esperando .conv-av-dot{background:var(--red);animation:pulseR 1.5s infinite}
 .s-cerrado .conv-av-dot{background:var(--ink3)}
+.s-esperando_encuesta .conv-av-dot{background:#a78bfa}
+.s-confirmando_solucion .conv-av-dot{background:#f59e0b}
+.cb-enc{background:rgba(167,139,250,.15);color:#a78bfa;border-color:rgba(167,139,250,.3)}
+.cb-conf{background:rgba(245,158,11,.15);color:#f59e0b;border-color:rgba(245,158,11,.3)}
+.cb-act{background:rgba(22,163,74,.15);color:#16a34a;border-color:rgba(22,163,74,.3)}
 @keyframes pulseO{0%,100%{box-shadow:0 0 0 0 rgba(234,88,12,.4)}50%{box-shadow:0 0 0 4px rgba(234,88,12,0)}}
 @keyframes pulseR{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.5)}50%{box-shadow:0 0 0 5px rgba(220,38,38,0)}}
 .conv-info{flex:1;min-width:0}
@@ -1018,7 +1023,7 @@ function updateCtrs(){
   const s=S.sesiones;
   const escaladas=s.filter(x=>x.estado==='escalado').length;
   const activas=s.filter(x=>x.estado==='activo').length;
-  const esperando=s.filter(x=>x.estado==='esperando').length;
+  const esperando=s.filter(x=>['esperando','esperando_encuesta','confirmando_solucion'].includes(x.estado)).length;
   const cerradas=s.filter(x=>x.estado==='cerrado').length;
   const pteGestion=s.filter(x=>x.estado==='pte_gestion').length;
   document.getElementById('fc-escalado').textContent=escaladas;
@@ -1030,7 +1035,7 @@ function updateCtrs(){
   document.getElementById('stat-total').textContent=s.length;
   const fcNova=document.getElementById('fc-nova'); if(fcNova) fcNova.textContent=s.filter(x=>x.estado==='nova').length;
   const statActivas=document.getElementById('stat-activas');
-  if(statActivas) statActivas.textContent=s.filter(x=>x.estado!=='cerrado'&&x.estado!=='nova').length;
+  if(statActivas) statActivas.textContent=s.filter(x=>!['cerrado','nova'].includes(x.estado)).length;
 }
 
 // ── FILTROS ──────────────────────────────────────
@@ -1051,8 +1056,10 @@ function renderLista(){
   let list=[...S.sesiones];
   // "Todas" muestra todo EXCEPTO las que Nova está atendiendo
   if(S.filtro==='todas') list=list.filter(s=>s.estado!=='nova');
+  else if(S.filtro==='esperando')
+    // Agrupa: esperando + esperando_encuesta + confirmando_solucion
+    list=list.filter(s=>['esperando','esperando_encuesta','confirmando_solucion'].includes(s.estado));
   else list=list.filter(s=>s.estado===S.filtro);
-  // pte_gestion aparece en Todas y Activas (necesita acción) — NO en Cerradas
   if(S.tab==='activas') list=list.filter(s=>s.estado!=='cerrado');
   if(S.tab==='cerradas') list=list.filter(s=>s.estado==='cerrado'||s.estado==='pte_gestion');
   if(q) list=list.filter(s=>(s.nombre||'').toLowerCase().includes(q)||(s.telefono||'').includes(q)||(s.eps||'').toLowerCase().includes(q));
@@ -1071,8 +1078,8 @@ function renderLista(){
     const mins=Math.floor((Date.now()-new Date(s.updated_at).getTime())/60000);
     const tc=mins<10?'t-ok':mins<30?'t-warn':'t-danger';
     const tt=mins<60?`${mins}m`:`${Math.floor(mins/60)}h${mins%60?mins%60+'m':''}`;
-    const cbMap={nova:'cb-nova',escalado:'cb-esc',esperando:'cb-esp',cerrado:'cb-cer',pte_gestion:'cb-pte'};
-    const cbLbl={nova:'Nova TD',escalado:'Escalado',esperando:'Esperando',cerrado:'Solucionado',pte_gestion:'Pte. Gestión'};
+    const cbMap={nova:'cb-nova',escalado:'cb-esc',activo:'cb-act',esperando:'cb-esp',esperando_encuesta:'cb-enc',confirmando_solucion:'cb-conf',cerrado:'cb-cer',pte_gestion:'cb-pte'};
+    const cbLbl={nova:'Nova TD',escalado:'Escalado',activo:'Activo',esperando:'Esp. respuesta',esperando_encuesta:'Encuesta',confirmando_solucion:'Confirmando',cerrado:'Solucionado',pte_gestion:'Pte. Gestión'};
     return `<div class="conv-item s-${s.estado||'nova'}${S.selTel===s.telefono?' sel':''}" onclick="selectConv('${escH(s.telefono)}')">
       <div class="conv-av">${ini}<div class="conv-av-dot"></div></div>
       <div class="conv-info">
@@ -1171,8 +1178,8 @@ async function refreshChat(tel){
 function renderHdr(ses){
   const nom=ses.nombre||ses.telefono||'Desconocido';
   const ini=nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-  const stLbl={nova:'🤖 Nova TD respondiendo',escalado:'👤 Sin asesor',activo:'✅ En atención',esperando:'⏳ Usuario esperando',cerrado:'✅ Solucionado',pte_gestion:'⚠️ Pte. por Gestión'};
-  const stCol={nova:'color:var(--nova)',escalado:'color:var(--orange)',activo:'color:var(--green)',esperando:'color:var(--red)',cerrado:'color:var(--ink3)',pte_gestion:'color:#d97706'};
+  const stLbl={nova:'🤖 Nova TD respondiendo',escalado:'👤 Sin asesor',activo:'✅ En atención',esperando:'⏳ Esp. respuesta',esperando_encuesta:'⭐ Esperando calificación',confirmando_solucion:'❓ Confirmando solución',cerrado:'✅ Solucionado',pte_gestion:'⚠️ Pte. por Gestión'};
+  const stCol={nova:'color:var(--nova)',escalado:'color:var(--orange)',activo:'color:var(--green)',esperando:'color:var(--red)',esperando_encuesta:'color:#a78bfa',confirmando_solucion:'color:#f59e0b',cerrado:'color:var(--ink3)',pte_gestion:'color:#d97706'};
   const esEsc=ses.estado==='escalado'||ses.estado==='activo'||ses.estado==='esperando';
   const esCer=ses.estado==='cerrado';
   const esPteGestion=ses.estado==='pte_gestion';
@@ -1618,12 +1625,13 @@ async function enviar(){
       body:JSON.stringify({telefono:S.selTel,mensaje:txt,agente_nombre:AGENT_NAME}),
     });
     if(!waR.ok) throw new Error('Error WA: '+await waR.text());
-    // Guardar en historial
-    const ses=S.selSesion;
-    const hist=parseHist(ses.history);
-    hist.push({role:'assistant',sender:'agent',content:txt,agente_nombre:AGENT_NAME,timestamp:new Date().toISOString()});
-    await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}`,'PATCH',{history:JSON.stringify(hist),updated_at:new Date().toISOString()});
-    S.msgs=hist;renderMsgs(hist);
+    // Fetch fresco para no pisar mensajes que llegaron mientras enviábamos
+    const freshSes = await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}&select=history&limit=1`);
+    const histBase = parseHist(freshSes?.[0]?.history || S.selSesion?.history);
+    histBase.push({role:'assistant',sender:'agent',content:txt,agente_nombre:AGENT_NAME,ts:new Date().toISOString()});
+    await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}`,'PATCH',{history:JSON.stringify(histBase),updated_at:new Date().toISOString()});
+    if(S.selSesion) S.selSesion.history = histBase;
+    S.msgs=histBase;renderMsgs(histBase);
   }catch(e){toast('Error al enviar: '+e.message,'err');if(ta)ta.value=txt;}
   finally{if(btn)btn.disabled=false;if(ta)ta.focus();}
 }
