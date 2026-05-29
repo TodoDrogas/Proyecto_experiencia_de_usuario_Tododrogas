@@ -197,6 +197,21 @@ jobs:
           target:   /var/www/pqr/
           strip_components: 1
 
+      # ── 7e. Backup y permisos en VPS ────────────────────────────
+      - name: Backup archivos críticos en VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host:     ${{ secrets.VPS_WEB_HOST }}
+          username: root
+          key:      ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            TS=$(date +%Y%m%d_%H%M)
+            for f in server.js agente-wa.html agente.html whatsapp-webhook.php nova-wa.php admin-wa.html; do
+              [ -f /opt/webhook-meta/$f ] && cp /opt/webhook-meta/$f /opt/webhook-meta/$f.bak.$TS 2>/dev/null || true
+              [ -f /var/www/pqr/$f ]      && cp /var/www/pqr/$f      /var/www/pqr/$f.bak.$TS      2>/dev/null || true
+            done
+            echo "✅ Backups $TS creados" 
+
       # ── 7f. GENERAR webhook-meta/.env ───────────────────────────
       - name: Generar webhook-meta/.env
         run: |
@@ -208,6 +223,8 @@ jobs:
           META_APP_SECRET=${{ secrets.META_APP_SECRET }}
           SUPABASE_URL=${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY=${{ secrets.SUPABASE_KEY_SERVICE }}
+          OPENAI_API_KEY=${{ secrets.OPENAI_KEY }}
+          NOVA_TOKEN=${{ secrets.NOVA_TOKEN }}
           PORT=3000
           ENVEOF
           echo "✅ webhook-meta/.env generado"
@@ -219,7 +236,7 @@ jobs:
           host:     ${{ secrets.VPS_WEB_HOST }}
           username: root
           key:      ${{ secrets.VPS_SSH_KEY }}
-          source:   "public/webhook-meta/server.js"
+          source:   "public/webhook-meta/server.js,public/webhook-meta/package.json"
           target:   /opt/webhook-meta/
           strip_components: 2
 
@@ -233,6 +250,8 @@ jobs:
           script: |
             cd /opt/webhook-meta
             npm install --omit=dev
+            npm list form-data > /dev/null 2>&1 || npm install form-data multer --save
+            echo "✅ Dependencias OK" 
             if pm2 list | grep -q "webhook-meta"; then
               pm2 restart webhook-meta
               echo "✅ PM2 webhook-meta reiniciado"
@@ -243,6 +262,7 @@ jobs:
             fi
             sleep 2
             curl -sf http://localhost:3000 && echo "✅ webhook-meta OK" || echo "❌ No responde"
+            pm2 logs webhook-meta --lines 5 --nostream 2>/dev/null | tail -6 || true
 
       # ── 8. MIGRAR TABLAS SUPABASE ──────────────────────────────
       - name: Migrar tablas Supabase
@@ -311,7 +331,8 @@ jobs:
             ERRORS=0
             for f in /var/www/pqr/radicar-pqr.php /var/www/pqr/sincronizar-correos.php \
                      /var/www/pqr/nova-td-respuesta.php /var/www/pqr/login.php \
-                     /var/www/pqr/whatsapp-webhook.php /var/www/pqr/clasificador-proxy.php; do
+                     /var/www/pqr/whatsapp-webhook.php /var/www/pqr/nova-wa.php \
+                     /var/www/pqr/clasificador-proxy.php; do
               [ -f "$f" ] || continue
               OUT=$(php -l "$f" 2>&1)
               if echo "$OUT" | grep -q "No syntax errors"; then
