@@ -425,6 +425,12 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
   const _requiereGestion = !sesion.agente_id; // Nova sola = requiere que un agente gestione
   const _estadoFinal = _requiereGestion ? 'pte_gestion' : 'cerrado';
 
+  // Si Nova resolvió sola → asignar automáticamente a un agente para la gestión
+  let _agenteAsigPte = null;
+  if (_requiereGestion) {
+    _agenteAsigPte = await autoAsignarAgente(telefono, sesion);
+  }
+
   await supabase.from('wa_sesiones').update({
     calificacion:       calNum,
     calificacion_texto: textos[calNum],
@@ -432,7 +438,8 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
     estado:             _estadoFinal,
     cerrado_at:         _requiereGestion ? null : ahoraISO,
     motivo_cierre_wa:   'encuesta',
-    agente_nombre:      _agenteGestion,
+    agente_nombre:      _agenteAsigPte ? _agenteAsigPte.nombre : _agenteGestion,
+    agente_id:          _agenteAsigPte ? _agenteAsigPte.id : (_agenteId || null),
     updated_at:         ahoraISO
   }).eq('telefono', telefono);
 
@@ -535,13 +542,19 @@ async function cronInactividad() {
               `*¡Hasta pronto! Tododrogas, siempre a su servicio.*`;
             await enviarMeta(s.telefono, _msgDespedida);
             const _sinAgente2 = !s.agente_id;
+            // Si Nova resolvió sola → asignar automáticamente a un agente
+            let _agenteAsigInact = null;
+            if (_sinAgente2) {
+              _agenteAsigInact = await autoAsignarAgente(s.telefono, s);
+            }
             await supabase.from('wa_sesiones').update({
               estado:             _sinAgente2 ? 'pte_gestion' : 'cerrado',
               calificacion:       null,
               calificacion_texto: 'Sin calificación',
               cerrado_at:         _sinAgente2 ? null : ahoraISO,
               motivo_cierre_wa:   'inactividad',
-              agente_nombre:      _agNombre,
+              agente_nombre:      _agenteAsigInact ? _agenteAsigInact.nombre : _agNombre,
+              agente_id:          _agenteAsigInact ? _agenteAsigInact.id : (s.agente_id || null),
               updated_at:         ahoraISO
             }).eq('telefono', s.telefono);
             await logConv(s.telefono, s.agente_id, _agNombre, 'cerrado', null,
