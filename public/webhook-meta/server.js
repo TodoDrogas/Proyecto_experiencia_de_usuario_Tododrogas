@@ -534,8 +534,8 @@ async function cronInactividad() {
             const _agNombre = s.agente_nombre || 'Nova TD';
             const _sinAgente2 = !s.agente_id;
 
-            // ── FIX: cambiar estado PRIMERO (antes de enviar) para que si el cron
-            // vuelve a ejecutarse en el próximo minuto, no reenvíe la despedida ──
+            // FIX: cambiar estado PRIMERO para que si el cron vuelve a correr
+            // en el próximo minuto, no encuentre esperando_encuesta y no reenvíe
             let _agenteAsigInact = null;
             if (_sinAgente2) {
               _agenteAsigInact = await autoAsignarAgente(s.telefono, s);
@@ -546,19 +546,19 @@ async function cronInactividad() {
               calificacion_texto: 'Sin calificación',
               cerrado_at:         _sinAgente2 ? null : ahoraISO,
               motivo_cierre_wa:   'inactividad',
-              encuesta_enviada_at: null, // limpiar para que el guard global actúe si falla el estado
+              encuesta_enviada_at: null, // limpiar guard
               agente_nombre:      _agenteAsigInact ? _agenteAsigInact.nombre : _agNombre,
               agente_id:          _agenteAsigInact ? _agenteAsigInact.id : (s.agente_id || null),
               updated_at:         ahoraISO
             }).eq('telefono', s.telefono)
-              .eq('estado', 'esperando_encuesta'); // guard: solo si sigue en ese estado (anti race-condition)
+              .eq('estado', 'esperando_encuesta'); // anti race-condition
 
             if (_errCierre) {
               console.warn('⚠️  despedida ya procesada (race condition):', s.telefono);
               continue;
             }
 
-            // Ahora sí enviar el mensaje (el estado ya cambió)
+            // Ahora sí enviar (estado ya cambió en BD)
             const _msgDespedida =
               `Cerramos su consulta, ${tratamiento(s.nombre)}. 😊
 
@@ -626,7 +626,7 @@ async function cronInactividad() {
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              // FIX: update atómico PRIMERO — si falla, ya fue enviada (race condition)
+              // FIX: update atómico PRIMERO — guard activo en BD antes de enviar
               const { error: _errEnc1 } = await supabase.from('wa_sesiones').update({
                 estado:               'esperando_encuesta',
                 encuesta_enviada_at:  ahoraISO,
@@ -634,7 +634,6 @@ async function cronInactividad() {
                 motivo_cierre_wa:     'inactividad'
               }).eq('telefono', s.telefono).is('encuesta_enviada_at', null);
               if (_errEnc1) { console.warn('encuesta ya enviada nova (race condition):', s.telefono); continue; }
-              // Ahora sí enviar (el guard ya está activado en BD)
               await enviarMeta(s.telefono, _msgEnc);
               await pushHistoryNova(s.telefono, _msgEnc, 'nova');
               await logConv(s.telefono, null, null, 'encuesta_enviada', null, { motivo: 'inactividad_nova' });
@@ -744,7 +743,7 @@ async function cronInactividad() {
 
 ` +
                 `*Tododrogas, siempre a su servicio.* 🌟`;
-              // FIX: update atómico PRIMERO — activar guard antes de enviar
+              // FIX: update atómico PRIMERO — guard activo en BD antes de enviar
               // Reducir carga del agente
               if (s.agente_id) {
                 const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id',s.agente_id).single();
@@ -757,7 +756,6 @@ async function cronInactividad() {
                 motivo_cierre_wa:     'inactividad'
               }).eq('telefono', s.telefono).is('encuesta_enviada_at', null);
               if (_errEnc2) { console.warn('encuesta ya enviada agente (race condition):', s.telefono); continue; }
-              // Ahora sí enviar (el guard ya está activado en BD)
               await enviarMeta(s.telefono, _msgEnc);
               await pushHistoryNova(s.telefono, _msgEnc, 'nova');
               await logConv(s.telefono, s.agente_id, s.agente_nombre, 'encuesta_enviada', null, { motivo: 'inactividad_agente' });
@@ -1037,7 +1035,16 @@ Un asesor revisará su caso en el próximo horario de atención:
         return;
       }
 
-      await supabase.from('wa_sesiones').update(updateData).eq('telefono', telefono);
+      // FIX: si está esperando_encuesta, NO actualizar updated_at ni inactividad_aviso_at
+      // porque el cron usa updated_at para calcular inactividad y reenviaría la encuesta
+      if (sesion.estado === 'esperando_encuesta') {
+        // Solo guardar el historial, sin tocar timers
+        await supabase.from('wa_sesiones')
+          .update({ history, unread_count: (sesion.unread_count || 0) + 1 })
+          .eq('telefono', telefono);
+      } else {
+        await supabase.from('wa_sesiones').update(updateData).eq('telefono', telefono);
+      }
       sesion.history = history;
     } else {
       // ── Nueva sesión ──────────────────────────────────────────────────────
