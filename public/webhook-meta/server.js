@@ -629,13 +629,13 @@ async function cronInactividad() {
           if (s.estado === 'escalado' && s.asignado_at && !s.primera_respuesta_at) {
             const minsAsig = (ahora - new Date(s.asignado_at).getTime()) / 60000;
             const _trat    = s.nombre ? `*${s.nombre.split(' ')[0]}*` : 'estimado usuario';
+            const minsAviso = s.inactividad_aviso_at
+              ? (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000
+              : 999;
 
-            if (minsAsig >= 3 && minsAsig < 5 && !s.inactividad_aviso_at) {
-              const _m = `Agradecemos su paciencia, ${_trat}. 🙏
-
-Su caso es nuestra prioridad y un asesor estará con usted en breve.
-
-*Tododrogas, siempre a su servicio.*`;
+            // Primer aviso: 3+ min desde asignación, sin aviso previo
+            if (minsAsig >= 3 && !s.inactividad_aviso_at) {
+              const _m = `Agradecemos su paciencia, ${_trat}. 🙏\n\nSu caso es nuestra prioridad y un asesor estará con usted en breve.\n\n*Tododrogas, siempre a su servicio.*`;
               await enviarMeta(s.telefono, _m);
               await pushHistoryNova(s.telefono, _m, 'nova');
               await supabase.from('wa_sesiones')
@@ -643,19 +643,15 @@ Su caso es nuestra prioridad y un asesor estará con usted en breve.
                 .eq('telefono', s.telefono);
               continue;
             }
-            if (minsAsig >= 6 && minsAsig < 8 && s.inactividad_aviso_at) {
-              const minsAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
-              if (minsAviso >= 2) {
-                const _m = `Permítanos 2 o 3 minutos más, ${_trat}. ⏳
-
-Su solicitud tiene prioridad. Gracias por su comprensión. 🌟`;
-                await enviarMeta(s.telefono, _m);
-                await pushHistoryNova(s.telefono, _m, 'nova');
-                await supabase.from('wa_sesiones')
-                  .update({ inactividad_aviso_at: ahoraISO })
-                  .eq('telefono', s.telefono);
-                continue;
-              }
+            // Segundo aviso: 3+ min desde el primer aviso Y entre 6-12 min totales
+            if (s.inactividad_aviso_at && minsAviso >= 3 && minsAsig >= 6 && minsAsig < 12) {
+              const _m = `Permítanos 2 o 3 minutos más, ${_trat}. ⏳\n\nSu solicitud tiene prioridad. Gracias por su comprensión. 🌟`;
+              await enviarMeta(s.telefono, _m);
+              await pushHistoryNova(s.telefono, _m, 'nova');
+              await supabase.from('wa_sesiones')
+                .update({ inactividad_aviso_at: ahoraISO })
+                .eq('telefono', s.telefono);
+              continue;
             }
             if (minsAsig >= 12 && s.inactividad_aviso_at) {
               const minsAviso = (ahora - new Date(s.inactividad_aviso_at).getTime()) / 60000;
@@ -1060,6 +1056,19 @@ Un asesor revisará su caso en el próximo horario de atención:
             await supabase.from('wa_sesiones')
               .update({ history: hist, updated_at: ahoraISO })
               .eq('telefono', telefono);
+          }
+
+          // Si Nova envía encuesta (usuario satisfecho) → cambiar estado
+          if (novaData.accion === 'ENCUESTA') {
+            await supabase.from('wa_sesiones').update({
+              estado:               'esperando_encuesta',
+              encuesta_enviada_at:  ahoraISO,
+              inactividad_aviso_at: null,
+              motivo_cierre_wa:     'satisfaccion_usuario'
+              // NO tocar updated_at
+            }).eq('telefono', telefono);
+            await logConv(telefono, null, null, 'encuesta_enviada', null, { motivo: 'satisfaccion_usuario' });
+            console.log(`📋 Encuesta enviada por satisfacción: ${telefono}`);
           }
 
           // Si Nova escala → NO enviar el respuesta de Nova (evitar duplicado)
