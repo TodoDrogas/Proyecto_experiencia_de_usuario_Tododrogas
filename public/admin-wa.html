@@ -1254,11 +1254,11 @@ async function loadAgentes(){
           <div><div style="font-size:13px;font-weight:600">${escH(a.nombre)}</div><div style="font-size:10px;color:var(--ink3)">${escH(a.rol||'agente')}</div></div>
         </div></td>
         <td class="mono">${escH(a.cedula||'—')}</td>
-        <td>${isOnline?'<span class="badge badge-online">🟢 En línea</span>':isPausado?'<span class="badge badge-pausa">⏸ En pausa</span>':'<span class="badge badge-offline">Ausente</span>'}</td>
-        <td style="text-align:center;font-weight:700;color:${activos>5?'var(--red)':activos>2?'var(--orange)':'var(--green)'}">${activos}</td>
+        <td data-ag-dot="${escH(a.id)}">${isOnline?'<span class="badge badge-online">🟢 En línea</span>':isPausado?'<span class="badge badge-pausa">⏸ En pausa</span>':'<span class="badge badge-offline">Ausente</span>'}</td>
+        <td style="text-align:center;font-weight:700;color:${activos>5?'var(--red)':activos>2?'var(--orange)':'var(--green)'}" data-ag-badge="${escH(a.id)}">${activos}</td>
         <td style="text-align:center;font-weight:600;color:var(--green)">${hoyOk}</td>
-        <td style="font-size:11px;font-family:'DM Mono',monospace;color:${isPausado?'var(--red)':'var(--ink3)'}">${tiempoPausa}</td>
-        <td><div style="display:flex;gap:4px">
+        <td style="font-size:11px;font-family:'DM Mono',monospace;color:${isPausado?'var(--red)':'var(--ink3)'}" data-ag-pausa="${escH(a.id)}">${tiempoPausa}</td>
+        <td data-ag-btn="${escH(a.id)}"><div style="display:flex;gap:4px">
           <button class="btn btn-sm ${isPausado?'btn-success':'btn-danger'}" onclick='toggleAgente("${escH(a.id)}",${!isPausado})'>
             ${isPausado?'▶ Activar':'⏸ Pausar'}
           </button>
@@ -1422,12 +1422,102 @@ function descargarPDFTelefono(tel){
   document.getElementById('repDesde').value=hace30;
   document.getElementById('repHasta').value=hoy;
   await loadDashboard();
+  // ── Poller general de secciones (30s) ──────────────────────────────────
   setInterval(()=>{
     const sec=document.querySelector('.section.active')?.id;
     if(sec==='sec-dashboard') loadDashboard();
     if(sec==='sec-conversaciones') loadConversaciones();
     if(sec==='sec-agentes') loadAgentes();
   },30000);
+
+  // ── Poller de estado de agentes en TIEMPO REAL (5s) ──────────────────
+  // Actualiza SOLO el estado en_linea/pausado/carga_actual sin recargar toda la UI
+  setInterval(async()=>{
+    try{
+      const data = await sb('agentes?select=id,nombre,en_linea,pausado,carga_actual&order=nombre.asc');
+      if(!data?.length) return;
+
+      // Detectar cambios vs estado anterior
+      let huboCAmbio = false;
+      data.forEach(ag=>{
+        const prev = A.agentes.find(a=>a.id===ag.id);
+        if(prev){
+          if(prev.en_linea!==ag.en_linea || prev.pausado!==ag.pausado || prev.carga_actual!==ag.carga_actual){
+            huboCAmbio = true;
+            prev.en_linea    = ag.en_linea;
+            prev.pausado     = ag.pausado;
+            prev.carga_actual= ag.carga_actual;
+          }
+        }
+      });
+
+      if(!huboCAmbio) return; // sin cambios → no re-renderizar
+
+      // Actualizar sidebar de agentes visualmente (puntos de color en tiempo real)
+      renderSidebarAgentes();
+      // Animar brevemente los dots que cambiaron para dar feedback visual
+      document.querySelectorAll('.sidebar-ag-dot').forEach(d=>{ d.style.transition='background .4s'; });
+
+      // Actualizar badges del topbar
+      const _nbOnline = document.getElementById('nb-online');
+      if(_nbOnline) _nbOnline.textContent = A.agentes.filter(a=>a.en_linea&&!a.pausado).length;
+
+      // Si está en sec-agentes, actualizar dots inline sin reload completo
+      const sec = document.querySelector('.section.active')?.id;
+      if(sec==='sec-agentes'){
+        data.forEach(ag=>{
+          const dot = document.querySelector(`[data-ag-dot="${ag.id}"]`);
+          const badge = document.querySelector(`[data-ag-badge="${ag.id}"]`);
+          if(dot){
+            const isOnline = ag.en_linea && !ag.pausado;
+            const isPausa  = ag.pausado;
+            // Update status badge cell
+            dot.innerHTML = isOnline
+              ? '<span class="badge badge-online">🟢 En línea</span>'
+              : isPausa
+              ? '<span class="badge badge-pausa">⏸ En pausa</span>'
+              : '<span class="badge badge-offline">Ausente</span>';
+          }
+          if(badge){
+            badge.textContent = ag.carga_actual||0;
+          }
+          // Update pause timer cell
+          const pausaCell = document.querySelector(`[data-ag-pausa="${ag.id}"]`);
+          if(pausaCell){
+            const isPausa = ag.pausado;
+            if(isPausa && ag.pausado_at){
+              const seg = Math.floor((Date.now()-new Date(ag.pausado_at))/1000);
+              const mm  = Math.floor(seg/60), ss = seg%60;
+              pausaCell.textContent = `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+              pausaCell.style.color = 'var(--red)';
+            } else {
+              pausaCell.textContent = '—';
+              pausaCell.style.color = 'var(--ink3)';
+            }
+          }
+          // Update action button
+          const btnCell = document.querySelector(`[data-ag-btn="${ag.id}"]`);
+          if(btnCell){
+            const isPausa = ag.pausado;
+            btnCell.innerHTML = `<div style="display:flex;gap:4px">
+              <button class="btn btn-sm ${isPausa?'btn-success':'btn-danger'}" onclick='toggleAgente("${ag.id}",${!isPausa})'>
+                ${isPausa?'▶ Activar':'⏸ Pausar'}
+              </button></div>`;
+          }
+        });
+      }
+
+      // Si está en dashboard, actualizar KPI de agentes online/pausa
+      if(sec==='sec-dashboard'){
+        const stOnline  = document.getElementById('st-online');
+        const stPausados= document.getElementById('st-pausados');
+        if(stOnline)   stOnline.textContent   = A.agentes.filter(a=>a.en_linea&&!a.pausado).length;
+        if(stPausados) stPausados.textContent = A.agentes.filter(a=>a.pausado).length;
+      }
+
+    }catch(e){ console.warn('[agentes-realtime]', e.message); }
+  }, 5000);
+
 })();
 </script>
 </body>
