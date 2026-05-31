@@ -431,13 +431,30 @@ textarea.fi{resize:vertical;min-height:72px}
 // ── AUTH ───────────────────────────────────────────────────────────────────
 const _pbxParams  = new URLSearchParams(location.search);
 const _isEmbed    = _pbxParams.get('embed')==='1';
-// En modo embed los datos vienen por URL; fuera del iframe desde sessionStorage
-const AGENT_ID    = _pbxParams.get('agent_id')   || sessionStorage.getItem('pqr_agent_id')  ||'';
-const AGENT_NAME  = _pbxParams.get('agent_name') ? decodeURIComponent(_pbxParams.get('agent_name')) : (sessionStorage.getItem('pqr_agent_name')||'');
+const AGENT_ID    = _pbxParams.get('agent_id') || sessionStorage.getItem('pqr_agent_id') || '';
+let   AGENT_NAME  = _pbxParams.get('agent_name')
+  ? decodeURIComponent(_pbxParams.get('agent_name'))
+  : (sessionStorage.getItem('pqr_name') || sessionStorage.getItem('pqr_agent_name') || '');
+
 if(!AGENT_ID && !_isEmbed) location.href='login.html';
 document.getElementById('tbName').textContent = AGENT_NAME||'Agente';
 document.getElementById('tbAv').textContent   = (AGENT_NAME||'?').charAt(0).toUpperCase();
 function logout(){ sessionStorage.clear(); location.href='login.html'; }
+
+// Si AGENT_NAME está vacío, buscarlo en la tabla agentes por ID
+(async function resolveAgentName(){
+  if(AGENT_NAME || !AGENT_ID) return;
+  try{
+    const ag = await fetch(window.SUPABASE_URL+'/rest/v1/agentes?id=eq.'+AGENT_ID+'&select=nombre&limit=1',
+      {headers:{'apikey':window.SUPABASE_KEY,'Authorization':'Bearer '+window.SUPABASE_KEY}});
+    const data = await ag.json();
+    if(data?.[0]?.nombre){
+      AGENT_NAME = data[0].nombre;
+      document.getElementById('tbName').textContent = AGENT_NAME;
+      document.getElementById('tbAv').textContent   = AGENT_NAME.charAt(0).toUpperCase();
+    }
+  }catch(e){}
+})();
 
 // ── SUPABASE ───────────────────────────────────────────────────────────────
 async function sb(path, method='GET', body=null){
