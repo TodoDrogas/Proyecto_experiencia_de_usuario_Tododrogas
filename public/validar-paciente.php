@@ -16,69 +16,66 @@ $nombre   = strtoupper(trim($body['nombre']   ?? ''));
 $telefono = preg_replace('/\D/', '', trim($body['telefono'] ?? ''));
 $debug    = !empty($body['debug']);
 
-// ── CONSULTA DIRECTA A tabla_usuarios ─────────────────────
-// Evita depender de la RPC buscar_paciente y sus alias de campos
-function sbGet($sb_url, $sb_key, $path) {
+// ── HTTP helper ───────────────────────────────────────────
+function sbHttp($sb_url, $sb_key, $path, $method='GET', $post=null) {
     $ch = curl_init($sb_url . '/rest/v1/' . $path);
-    curl_setopt_array($ch, [
+    $headers = [
+        'apikey: '               . $sb_key,
+        'Authorization: Bearer ' . $sb_key,
+        'Content-Type: application/json',
+        'Accept: application/json',
+    ];
+    $opts = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_TIMEOUT        => 10,
         CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_HTTPHEADER     => [
-            'apikey: '               . $sb_key,
-            'Authorization: Bearer ' . $sb_key,
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ],
-    ]);
+        CURLOPT_HTTPHEADER     => $headers,
+    ];
+    if ($method === 'POST') {
+        $opts[CURLOPT_POST]       = true;
+        $opts[CURLOPT_POSTFIELDS] = json_encode($post);
+    }
+    curl_setopt_array($ch, $opts);
     $resp = curl_exec($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return ['code'=>$code, 'rows'=>json_decode($resp, true)];
+    return ['code' => $code, 'rows' => json_decode($resp, true)];
 }
 
-function sbRpc($sb_url, $sb_key, $fn, $params) {
-    $ch = curl_init($sb_url . '/rest/v1/rpc/' . $fn);
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => json_encode($params),
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 10,
-        CURLOPT_SSL_VERIFYPEER => true,
-        CURLOPT_HTTPHEADER     => [
-            'apikey: '               . $sb_key,
-            'Authorization: Bearer ' . $sb_key,
-            'Content-Type: application/json',
-            'Accept: application/json',
-        ],
-    ]);
-    $resp = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    return ['code'=>$code, 'rows'=>json_decode($resp, true)];
-}
+// ── BUSCAR EN tabla_usuarios ──────────────────────────────
+// Los nombres de columnas con espacios van como %22Nombre%20Col%22 en PostgREST
+$SELECT = 'select=' . implode(',', array_map('rawurlencode', [
+    'Tipo De Documento',
+    'Cedula Pacientes',
+    'Nombre Paciente',
+    'Direccion',
+    'Telefono',
+    'Departamento',
+    'Ciudad',
+    'EPS',
+    'Correo',
+]));
 
-// Buscar en tabla_usuarios directamente por cédula
 $row = null;
+
+// Buscar por cédula
 if ($cedula) {
-    $enc = urlencode($cedula);
-    $r = sbGet($SB_URL, $SB_KEY,
-        'tabla_usuarios?select=Tipo+De+Documento,Cedula+Pacientes,Nombre+Paciente,Direccion,Telefono,Departamento,Ciudad,EPS,Correo'
-        . '&Cedula+Pacientes=eq.' . $enc . '&limit=1'
-    );
-    if ($r['code'] === 200 && is_array($r['rows']) && count($r['rows']) > 0) {
+    $path = 'tabla_usuarios?' . $SELECT
+          . '&' . rawurlencode('Cedula Pacientes') . '=eq.' . rawurlencode($cedula)
+          . '&limit=1';
+    $r = sbHttp($SB_URL, $SB_KEY, $path);
+    if ($r['code'] === 200 && !empty($r['rows'])) {
         $row = $r['rows'][0];
     }
 }
 
-// Fallback: buscar por teléfono si no encontró por cédula
+// Fallback: buscar por teléfono
 if (!$row && $telefono) {
-    $enc = urlencode($telefono);
-    $r = sbGet($SB_URL, $SB_KEY,
-        'tabla_usuarios?select=Tipo+De+Documento,Cedula+Pacientes,Nombre+Paciente,Direccion,Telefono,Departamento,Ciudad,EPS,Correo'
-        . '&Telefono=eq.' . $enc . '&limit=1'
-    );
-    if ($r['code'] === 200 && is_array($r['rows']) && count($r['rows']) > 0) {
+    $path = 'tabla_usuarios?' . $SELECT
+          . '&' . rawurlencode('Telefono') . '=eq.' . rawurlencode($telefono)
+          . '&limit=1';
+    $r = sbHttp($SB_URL, $SB_KEY, $path);
+    if ($r['code'] === 200 && !empty($r['rows'])) {
         $row = $r['rows'][0];
     }
 }
@@ -89,21 +86,21 @@ if ($debug) {
 }
 
 if (!$row) {
-    echo json_encode(['ok'=>false,'razon'=>'no_encontrado',
-        'msg'=>'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
+    echo json_encode(['ok' => false, 'razon' => 'no_encontrado',
+        'msg' => 'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
     exit;
 }
 
 // ── VERIFICAR VIP ─────────────────────────────────────────
 $vip_data = null;
 if ($cedula) {
-    $r_vip = sbRpc($SB_URL, $SB_KEY, 'verificar_vip', ['p_cedula' => $cedula]);
-    if ($r_vip['code']===200 && is_array($r_vip['rows']) && count($r_vip['rows'])>0) {
+    $r_vip = sbHttp($SB_URL, $SB_KEY, 'rpc/verificar_vip', 'POST', ['p_cedula' => $cedula]);
+    if ($r_vip['code'] === 200 && !empty($r_vip['rows'])) {
         $vip_data = $r_vip['rows'][0];
     }
 }
 
-// Mapeo exacto desde los campos reales de tabla_usuarios
+// ── RESPUESTA con todos los campos de tabla_usuarios ──────
 $resp = [
     'ok'             => true,
     'razon'          => 'validado',
@@ -120,7 +117,7 @@ $resp = [
 
 if ($vip_data) {
     $resp['vip']    = true;
-    $resp['saludo'] = $vip_data['saludo'];
+    $resp['saludo'] = $vip_data['saludo'] ?? '';
 }
 
 echo json_encode($resp);
