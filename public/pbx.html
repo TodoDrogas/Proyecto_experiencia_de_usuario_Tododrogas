@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gestión PBX · Tododrogas</title>
+<script>if(new URLSearchParams(location.search).get('embed')==='1'){document.write('<style>#mainTopbar{display:none!important}</style>');}</script>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="config.js" onerror="console.warn('config.js not found')"></script>
 <style>
@@ -403,8 +404,18 @@ textarea.fi{resize:vertical;min-height:72px}
         </div>
       </div>
 
-    </div>
-    <div class="modal-footer">
+      <!-- MEDICAMENTOS -->
+      <div class="sec-t" style="margin-top:2px">
+        Medicamentos
+        <span style="font-weight:400;text-transform:none;font-size:9px;color:var(--ink3);margin-left:4px">(opcional)</span>
+      </div>
+      <div>
+        <div id="mMedLista" style="display:flex;flex-direction:column;gap:10px"></div>
+        <button onclick="pbxAgregarMed()" style="margin-top:8px;background:var(--blue-l);color:var(--blue);border:1.5px solid rgba(37,99,235,.3);border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Poppins',sans-serif;display:flex;align-items:center;gap:5px">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Añadir medicamento
+        </button>
+      </div>
       <button class="btn btn-cancel" onclick="cerrarModal()">Cancelar</button>
       <button class="btn btn-save" id="btnGuardar" onclick="guardarGestion()">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
@@ -417,22 +428,12 @@ textarea.fi{resize:vertical;min-height:72px}
 <div class="toast" id="toast"></div>
 
 <script>
-// ── IFRAME EMBED ───────────────────────────────────────────────────────────
-(function(){
-  if(window.self===window.top) return;
-  function hide(){
-    const tb=document.getElementById('mainTopbar');
-    if(tb) tb.style.display='none';
-    document.body.style.height='100%';
-  }
-  document.readyState==='loading' ? document.addEventListener('DOMContentLoaded',hide) : hide();
-})();
-</script>
-<script>
 // ── AUTH ───────────────────────────────────────────────────────────────────
-const _isEmbed = new URLSearchParams(location.search).get('embed')==='1';
-const AGENT_ID   = sessionStorage.getItem('pqr_agent_id')  ||'';
-const AGENT_NAME = sessionStorage.getItem('pqr_agent_name')||'';
+const _pbxParams  = new URLSearchParams(location.search);
+const _isEmbed    = _pbxParams.get('embed')==='1';
+// En modo embed los datos vienen por URL; fuera del iframe desde sessionStorage
+const AGENT_ID    = _pbxParams.get('agent_id')   || sessionStorage.getItem('pqr_agent_id')  ||'';
+const AGENT_NAME  = _pbxParams.get('agent_name') ? decodeURIComponent(_pbxParams.get('agent_name')) : (sessionStorage.getItem('pqr_agent_name')||'');
 if(!AGENT_ID && !_isEmbed) location.href='login.html';
 document.getElementById('tbName').textContent = AGENT_NAME||'Agente';
 document.getElementById('tbAv').textContent   = (AGENT_NAME||'?').charAt(0).toUpperCase();
@@ -581,6 +582,8 @@ function buscarPaciente(cedula){
         if(d.direccion||d.Direccion){document.getElementById('mDireccion').value=up(d.direccion||d.Direccion);mkOk('mDireccion','inp');}
         if(d.telefono||d.Telefono)  {document.getElementById('mTelefono').value=(d.telefono||d.Telefono).replace(/\D/g,'');mkOk('mTelefono','inp');}
         if(d.email||d.Correo)       {document.getElementById('mEmail').value=(d.email||d.Correo).toLowerCase();mkOk('mEmail','inp');}
+        if(d.ciudad||d.Ciudad)      {document.getElementById('mCiudad').value=up(d.ciudad||d.Ciudad);mkOk('mCiudad','inp');}
+        if(d.departamento||d.Departamento){document.getElementById('mDepto').value=up(d.departamento||d.Departamento);mkOk('mDepto','inp');}
         if(d.tipo_documento||d['Tipo De Documento']){
           const raw=d.tipo_documento||d['Tipo De Documento']||'';
           const mapa={'CC':'CÉDULA DE CIUDADANÍA','CÉDULA DE CIUDADANÍA':'CÉDULA DE CIUDADANÍA','TI':'TARJETA DE IDENTIDAD','CE':'CÉDULA DE EXTRANJERÍA','RC':'REGISTRO CIVIL DE NACIMIENTO','PA':'PASAPORTE','NIT':'NIT'};
@@ -595,7 +598,91 @@ function buscarPaciente(cedula){
   },600);
 }
 
-// ── TUTELA ─────────────────────────────────────────────────────────────────
+// ── MEDICAMENTOS ───────────────────────────────────────────────────────────
+let _medCount = 0;
+const _medTimers = {};
+
+function pbxAgregarMed(){
+  _medCount++;
+  const idx = _medCount;
+  const wrap = document.createElement('div');
+  wrap.id = `pbxMed_${idx}`;
+  wrap.style.cssText = 'background:var(--bg2);border-radius:8px;padding:10px 12px;position:relative';
+  wrap.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:11px;font-weight:700;color:var(--ink3)">MEDICAMENTO #${idx}</span>
+      <button onclick="document.getElementById('pbxMed_${idx}').remove()" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;line-height:1">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="grid-column:1/-1">
+        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">Descripción (buscar por nombre) *</label>
+        <div style="position:relative">
+          <input class="fi" id="pbxMedDesc_${idx}" type="text" placeholder="Escriba el nombre del medicamento..."
+            oninput="this.value=this.value.toUpperCase();pbxBuscarMed(this.value,${idx})"
+            autocomplete="off" style="text-transform:uppercase"
+            onblur="setTimeout(()=>{var d=document.getElementById('pbxMedDd_${idx}');if(d)d.style.display='none'},200)">
+          <div id="pbxMedDd_${idx}" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r3) var(--r3);max-height:200px;overflow-y:auto;font-size:12px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+        </div>
+        <input type="hidden" id="pbxMedCod_${idx}">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">Cantidad *</label>
+        <input class="fi" id="pbxMedCant_${idx}" type="number" min="0" placeholder="0">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">PBS</label>
+        <select class="fi" id="pbxMedPbs_${idx}">
+          <option value="">—</option>
+          <option value="SI">Sí</option>
+          <option value="NO">No</option>
+          <option value="PARCIAL">Parcial</option>
+        </select>
+      </div>
+    </div>`;
+  document.getElementById('mMedLista').appendChild(wrap);
+}
+
+function pbxBuscarMed(q, idx){
+  clearTimeout(_medTimers[idx]);
+  const dd = document.getElementById(`pbxMedDd_${idx}`);
+  if(!q || q.length < 2){ if(dd) dd.style.display='none'; return; }
+  _medTimers[idx] = setTimeout(async()=>{
+    try{
+      const res = await sb(`medicamentos?or=(Nombre.ilike.*${encodeURIComponent(q)}*,Codigo.ilike.*${encodeURIComponent(q)}*)&limit=15&select=Codigo,Nombre,Articulo_PBS`);
+      if(!res || !res.length){ dd.style.display='none'; return; }
+      dd.innerHTML = res.map(m=>`
+        <div style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s"
+          onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''"
+          onmousedown="pbxSelMed(${idx},'${(m.Codigo||'').replace(/'/g,"\\'")}','${(m.Nombre||'').replace(/'/g,"\\'")}','${(m.Articulo_PBS||'').replace(/'/g,"\\'")}')">
+          <div style="font-weight:600;color:var(--ink)">${m.Nombre||''}</div>
+          <div style="font-size:10px;color:var(--ink3)">Cód: ${m.Codigo||'—'} · PBS: ${m.Articulo_PBS||'—'}</div>
+        </div>`).join('');
+      dd.style.display = 'block';
+    }catch(e){ if(dd) dd.style.display='none'; }
+  }, 400);
+}
+
+function pbxSelMed(idx, codigo, nombre, pbs){
+  document.getElementById(`pbxMedDesc_${idx}`).value = nombre;
+  document.getElementById(`pbxMedCod_${idx}`).value  = codigo;
+  const pbsSel = document.getElementById(`pbxMedPbs_${idx}`);
+  if(pbsSel && pbs){ pbsSel.value = pbs.toUpperCase()==='SI'?'SI':(pbs.toUpperCase()==='NO'?'NO':''); }
+  const dd = document.getElementById(`pbxMedDd_${idx}`);
+  if(dd) dd.style.display='none';
+}
+
+function pbxGetMeds(){
+  const meds = [];
+  document.querySelectorAll('[id^="pbxMed_"]').forEach(wrap=>{
+    const idx = wrap.id.replace('pbxMed_','');
+    const desc = document.getElementById(`pbxMedDesc_${idx}`)?.value?.trim();
+    const cant = document.getElementById(`pbxMedCant_${idx}`)?.value;
+    const pbs  = document.getElementById(`pbxMedPbs_${idx}`)?.value;
+    const cod  = document.getElementById(`pbxMedCod_${idx}`)?.value;
+    if(desc) meds.push({ codigo:cod||null, descripcion:desc, cantidad:cant?parseFloat(cant):null, pbs:pbs||null });
+  });
+  return meds;
+}
 function setTutela(val){
   _tutela=val;
   document.getElementById('btnSi').className='tut-btn'+(val===true?' si':'');
@@ -673,17 +760,26 @@ async function guardarGestion(){
     const _emailPac=document.getElementById('mEmail').value.trim();
     const _emailFb=_isWa?`wa_${_tel}@tododrogas.online`:`pbx_${_tel}@tododrogas.online`;
 
-    await sb('correos','POST',{
+    // Email del asesor desde tabla agentes
+    let _emailAsesor = _emailFb;
+    if(AGENT_ID){
+      try{
+        const ag=await sb(`agentes?id=eq.${AGENT_ID}&select=email&limit=1`);
+        if(ag?.[0]?.email) _emailAsesor=ag[0].email;
+      }catch(e){}
+    }
+
+    const correoCreado = await sb('correos','POST',{
       ticket_id:             _ticketId,
       subject:               obs,
-      from_email:            _emailPac||_emailFb,
+      from_email:            _emailPac||_emailAsesor,
       from_name:             document.getElementById('mNombre').value,
       nombre:                document.getElementById('mNombre').value,
       cedula_paciente:       document.getElementById('mCedula').value,
       tipo_documento:        document.getElementById('mTipoDoc').value,
       direccion_paciente:    document.getElementById('mDireccion').value,
       telefono_contacto:     _tel,
-      correo:                _emailPac||_emailFb,
+      correo:                _emailPac||_emailAsesor,
       eps_id:                document.getElementById('mEpsId').value||null,
       origen:                _canalActivo,
       canal_contacto:        _isWa?'whatsapp':'telefono',
@@ -704,8 +800,22 @@ async function guardarGestion(){
       received_at:ahora,asignacion_automatica:ahora,created_at:ahora,
       updated_at:ahora,sent_at:ahora,fecha_resolucion:ahora
     });
+
+    // Guardar medicamentos en gestiones_medicamentos
+    const correoId=Array.isArray(correoCreado)?correoCreado[0]?.id:correoCreado?.id;
+    if(correoId){
+      const meds=pbxGetMeds();
+      for(const med of meds){
+        try{ await sb('gestiones_medicamentos','POST',{correo_id:correoId,...med}); }
+        catch(e){ console.warn('[med]',e.message); }
+      }
+    }
+
     toast('Gestión registrada ✓','ok');
     cerrarModal();
+    // Reset medicamentos
+    document.getElementById('mMedLista').innerHTML='';
+    _medCount=0;
     cargarGestiones();
   }catch(e){
     toast('Error: '+e.message.substring(0,60),'err');
