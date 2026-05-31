@@ -482,28 +482,44 @@ let _pacTimer = null;
 function buscarPaciente(cedula){
   clearTimeout(_pacTimer);
   const c = cedula.replace(/\D/g,'');
-  if(c.length < 6) return;
+  if(c.length < 4) return;
   _pacTimer = setTimeout(async()=>{
     try{
-      const r = await fetch('validar-paciente.php',{
+      // admin-buscar-paciente.php devuelve todos los campos del paciente
+      const r = await fetch('admin-buscar-paciente.php',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({cedula:c})
       });
       const d = await r.json();
       if(d.ok){
-        if(d.nombre)   { document.getElementById('mNombre').value   = d.nombre.toUpperCase();   mkOk('mNombre','input'); }
-        if(d.direccion){ document.getElementById('mDireccion').value= d.direccion.toUpperCase(); mkOk('mDireccion','input'); }
-        if(d.telefono) { document.getElementById('mTelefono').value = d.telefono;               mkOk('mTelefono','input'); }
-        if(d.email)    { document.getElementById('mEmail').value    = d.email;                  mkOk('mEmail','input'); }
-        if(d.tipo_documento){
+        const up = s => s ? s.toString().toUpperCase().trim() : '';
+        if(d.nombre||d.Nombre)
+          { document.getElementById('mNombre').value    = up(d.nombre||d.Nombre);           mkOk('mNombre','input'); }
+        if(d.direccion||d.Direccion)
+          { document.getElementById('mDireccion').value = up(d.direccion||d.Direccion);     mkOk('mDireccion','input'); }
+        if(d.telefono||d.Telefono)
+          { document.getElementById('mTelefono').value  = (d.telefono||d.Telefono).replace(/\D/g,''); mkOk('mTelefono','input'); }
+        if(d.email||d.Correo)
+          { document.getElementById('mEmail').value     = (d.email||d.Correo).toLowerCase(); mkOk('mEmail','input'); }
+        if(d.tipo_documento||d['Tipo De Documento']){
+          const raw = d.tipo_documento || d['Tipo De Documento'] || '';
+          const mapa = {
+            'CC':'CÉDULA DE CIUDADANÍA','CÉDULA DE CIUDADANÍA':'CÉDULA DE CIUDADANÍA',
+            'TI':'TARJETA DE IDENTIDAD','TARJETA DE IDENTIDAD':'TARJETA DE IDENTIDAD',
+            'CE':'CÉDULA DE EXTRANJERÍA','CÉDULA DE EXTRANJERÍA':'CÉDULA DE EXTRANJERÍA',
+            'RC':'REGISTRO CIVIL DE NACIMIENTO','PA':'PASAPORTE','NIT':'NIT'
+          };
+          const tdVal = mapa[raw.toUpperCase()] || raw;
           const sel = document.getElementById('mTipoDoc');
-          for(let op of sel.options){ if(op.value===d.tipo_documento||op.value.startsWith(d.tipo_documento)){op.selected=true;break;} }
+          for(let op of sel.options){ if(op.value===tdVal){op.selected=true;break;} }
           mkOk('mTipoDoc','select');
         }
         toast('Paciente encontrado ✓','ok');
+      } else {
+        toast('Paciente no encontrado — completa los datos manualmente','');
       }
-    }catch(e){}
+    }catch(e){ console.warn('[buscarPaciente]',e.message); }
   },600);
 }
 
