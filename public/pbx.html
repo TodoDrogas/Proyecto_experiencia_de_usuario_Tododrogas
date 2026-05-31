@@ -761,7 +761,11 @@ function pbxBuscarMed(q, idx){
   dd.style.display='block';
   _medTimers[idx]=setTimeout(async()=>{
     try{
-      const rows = await sb('rpc/buscar_medicamentos','POST',{q});
+      // Buscar por código exacto primero, luego por nombre
+      let rows = await sb(`medicamentos?Codigo=eq.${encodeURIComponent(q.trim())}&select=Codigo,Nombre,Articulo_PBS&limit=5`);
+      if(!rows||!rows.length){
+        rows = await sb(`medicamentos?or=(Nombre.ilike.*${encodeURIComponent(q)}*,Codigo.ilike.*${encodeURIComponent(q)}*)&select=Codigo,Nombre,Articulo_PBS&limit=15`);
+      }
       if(!rows||!rows.length){
         dd.innerHTML='<div style="padding:7px 12px;font-size:12px;color:var(--ink3);font-style:italic">Sin resultados para "'+q+'"</div>';
         return;
