@@ -393,25 +393,35 @@ textarea.fm-input{resize:vertical;min-height:80px}
 
 <script>
 // Si está embebido en iframe ocultar topbar y hero
-if(window.self !== window.top){
-  document.addEventListener('DOMContentLoaded',()=>{
+(function(){
+  if(window.self === window.top) return; // no es iframe
+  function ocultarChrome(){
     const tb = document.querySelector('.topbar');
     const hero = document.querySelector('.hero');
     const infoBox = document.querySelector('.info-box');
     if(tb) tb.style.display='none';
     if(hero) hero.style.display='none';
     if(infoBox) infoBox.style.display='none';
-    // Quitar padding top del main
     const main = document.querySelector('.main');
-    if(main) main.style.paddingTop='20px';
-  });
-}
+    if(main){ main.style.paddingTop='20px'; main.style.paddingBottom='20px'; }
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded', ocultarChrome);
+  } else {
+    ocultarChrome();
+  }
+})();
 </script>
+<script>
+// ── AUTH ──────────────────────────────────────────────────────────────────
+const _isEmbed = new URLSearchParams(window.location.search).get('embed') === '1';
 const AGENT_ID   = sessionStorage.getItem('pqr_agent_id')   || '';
 const AGENT_NAME = sessionStorage.getItem('pqr_agent_name') || '';
 const AGENT_CED  = sessionStorage.getItem('pqr_agent_cedula')|| '';
 
-if(!AGENT_ID){ window.location.href='login.html'; }
+// En iframe el sessionStorage es compartido con el padre (mismo origen)
+// Solo redirigir si no hay sesión Y no está embebido
+if(!AGENT_ID && !_isEmbed){ window.location.href='login.html'; }
 
 document.getElementById('tbName').textContent = AGENT_NAME || 'Agente';
 document.getElementById('tbAv').textContent   = (AGENT_NAME||'?').charAt(0).toUpperCase();
