@@ -255,6 +255,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
                 <th>Tipo solicitud</th>
                 <th>Detalle</th>
                 <th>EPS</th>
+                <th>Departamento</th>
                 <th>Ciudad</th>
                 <th>Asesor</th>
                 <th>Fecha</th>
@@ -318,8 +319,8 @@ async function cargarDashboard(){
 
   try{
     const [hoy, mes, agentes] = await Promise.all([
-      sb(`correos?select=id,canal_contacto,agente_id,asignado_a&received_at=gte.${hoyIni}&received_at=lte.${hoyFin}&or=(canal_contacto.eq.whatsapp,canal_contacto.eq.telefono)&limit=500`),
-      sb(`correos?select=id&received_at=gte.${mesIni}&or=(canal_contacto.eq.whatsapp,canal_contacto.eq.telefono)&limit=2000`),
+      sb(`correos?select=id,canal_contacto,agente_id,asignado_a&received_at=gte.${hoyIni}&received_at=lte.${hoyFin}&or=(canal_contacto.eq.whatsapp,canal_contacto.eq.telefono)&limit=2000`),
+      sb(`correos?select=id&received_at=gte.${mesIni}&or=(canal_contacto.eq.whatsapp,canal_contacto.eq.telefono)&limit=5000`),
       sb(`agentes?select=id,nombre,cedula,activo&activo=eq.true&order=nombre.asc`)
     ]);
 
@@ -388,12 +389,13 @@ async function cargarHistorial(){
   const ini=document.getElementById('fFechaIni').value||_ini;
   const fin=document.getElementById('fFechaFin').value||_hoy;
   document.getElementById('tblBody').innerHTML='<tr><td colspan="10" class="empty">Cargando...</td></tr>';
+  document.getElementById('tblCount').textContent='';
   try{
     const data=await sb(
-      `correos?select=id,ticket_id,subject,nombre,cedula_paciente,nombre_solicitud,detalle_solicitud,categoria_sigi,canal_contacto,origen,asignado_a,received_at,departamento_paciente,ciudad_paciente,eps_id`
+      `correos?select=id,ticket_id,subject,nombre,cedula_paciente,nombre_solicitud,detalle_solicitud,categoria_sigi,canal_contacto,origen,asignado_a,received_at,departamento_paciente,ciudad_paciente,eps_id,eps_catalogo(nombre)`
       +`&received_at=gte.${ini}T00:00:00.000Z&received_at=lte.${fin}T23:59:59.999Z`
       +`&or=(canal_contacto.eq.whatsapp,canal_contacto.eq.telefono)`
-      +`&order=received_at.desc&limit=500`
+      +`&order=received_at.desc&limit=2000`
     )||[];
     _historial=data;
     filtrarTabla();
@@ -423,6 +425,7 @@ function filtrarTabla(){
     ?lista.map(g=>{
       const esWa=g.canal_contacto==='whatsapp';
       const fecha=g.received_at?new Date(g.received_at).toLocaleString('es-CO',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—';
+      const epsNombre = g.eps_catalogo?.nombre || '—';
       return `<tr>
         <td><span class="badge ${esWa?'badge-wa':'badge-tel'}">${esWa?'💬 WA':'📞 PBX'}</span></td>
         <td class="mono">${esc(g.ticket_id||'—')}</td>
@@ -430,13 +433,14 @@ function filtrarTabla(){
         <td class="mono">${esc(g.cedula_paciente||'—')}</td>
         <td>${esc(g.nombre_solicitud||'—')}</td>
         <td>${esc(g.detalle_solicitud||'—')}</td>
-        <td style="font-size:11px;color:var(--ink3)">${esc(g.ciudad_paciente||'—')}</td>
+        <td style="font-size:11px;color:var(--ink3)">${esc(epsNombre)}</td>
         <td style="font-size:11px;color:var(--ink3)">${esc(g.departamento_paciente||'—')}</td>
+        <td style="font-size:11px;color:var(--ink3)">${esc(g.ciudad_paciente||'—')}</td>
         <td style="font-size:11px">${esc(g.asignado_a||'—')}</td>
         <td class="mono" style="white-space:nowrap">${fecha}</td>
       </tr>`;
     }).join('')
-    :'<tr><td colspan="10" class="empty">Sin gestiones para este filtro</td></tr>';
+    :'<tr><td colspan="11" class="empty">Sin gestiones para este filtro</td></tr>';
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────────
