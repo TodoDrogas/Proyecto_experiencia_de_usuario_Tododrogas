@@ -2072,6 +2072,33 @@ function gMarcarSearchOk(searchId, valId) {
   if(el) { if(v) { el.classList.remove('gm-err'); el.classList.add('gm-ok'); } else { el.classList.remove('gm-ok'); el.classList.add('gm-err'); } }
 }
 
+function gActualizarMedVisual(idx) {
+  const cod  = (document.getElementById(`gMedCod_${idx}`)?.value || document.getElementById(`gMedCodHidden_${idx}`)?.value || '').trim();
+  const desc = (document.getElementById(`gMedDesc_${idx}`)?.value || '').trim();
+  const cant = (document.getElementById(`gMedCant_${idx}`)?.value || '').trim();
+  const pbs  = (document.getElementById(`gMedPbs_${idx}`)?.value || '').trim();
+  const esc  = (document.getElementById(`gMedDescEsc_${idx}`)?.value || '').trim();
+  const toco = cod || desc || cant || pbs || esc;
+  // Mostrar asteriscos en campos obligatorios
+  document.querySelectorAll(`.gm-req-med-${idx}`).forEach(el => {
+    el.style.display = toco ? 'inline' : 'none';
+  });
+  if (!toco) return;
+  // Descripción, Cantidad y PBS son obligatorios → rojo/verde
+  [[`gMedDesc_${idx}`, desc], [`gMedCant_${idx}`, cant], [`gMedPbs_${idx}`, pbs]].forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (v) { el.classList.add('gm-ok');  el.classList.remove('gm-err'); }
+    else   { el.classList.add('gm-err'); el.classList.remove('gm-ok'); }
+  });
+  // Código: verde si tiene, neutro si no (no obligatorio)
+  const codEl = document.getElementById(`gMedCod_${idx}`);
+  if (codEl) {
+    if (cod) { codEl.classList.add('gm-ok'); codEl.classList.remove('gm-err'); }
+    else     { codEl.classList.remove('gm-ok'); codEl.classList.remove('gm-err'); }
+  }
+}
+
 function gValidarMedicamentos() {
   let todosOk = true;
   for(let i = 1; i <= _gMedCount; i++) {
@@ -7464,8 +7491,8 @@ document.getElementById('celBtnS').onclick=function(){document.getElementById('c
 /* ── Validación visual campos obligatorios primera gestión ── */
 .gm-req { color: var(--red); font-weight: 700; }
 .gm-req-txt { font-size: 9px; color: var(--red); font-weight: 600; text-transform: none; display: none; }
-.gm-input.gm-ok  { border-color: #16a34a !important; box-shadow: 0 0 0 2px rgba(22,163,74,.12); }
-.gm-input.gm-err { border-color: #dc2626 !important; box-shadow: 0 0 0 2px rgba(220,38,38,.12); }
+.gm-input.gm-ok  { border-color: #16a34a !important; box-shadow: 0 0 0 2px rgba(22,163,74,.12); background:#dcfce7 !important; }
+.gm-input.gm-err { border-color: #dc2626 !important; box-shadow: 0 0 0 2px rgba(220,38,38,.12); background:#fee2e2 !important; }
 .gm-toggle-row.gm-ok  { outline: 2px solid #16a34a; border-radius: 6px; }
 .gm-toggle-row.gm-err { outline: 2px solid #dc2626; border-radius: 6px; }
 .gm-search-wrap.gm-ok  .gm-input { border-color: #16a34a !important; }
