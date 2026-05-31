@@ -2235,21 +2235,22 @@ async function abrirCerrar(){
     const nitEl = document.getElementById('gWaNitEps');
     if(nitEl) nitEl.textContent = '—';
 
-    // ── Pre-llenar datos del paciente desde wa_sesiones ───────────────────
-    // Estos los guardó validar-paciente.php cuando Nova validó al usuario
-    document.getElementById('gWaCedula').value    = ses.cedula         || '';
-    document.getElementById('gWaTipoDoc').value   = ses.tipo_documento || '';
-    document.getElementById('gWaNombre').value    = (ses.nombre        || '').toUpperCase();
-    document.getElementById('gWaDireccion').value = (ses.direccion     || '').toUpperCase();
-    document.getElementById('gWaEmail').value     = ses.email          || '';
-    const _telLimpio = (ses.telefono_paciente || S.selTel||'').replace(/\+?57/,'').replace(/\D/g,'');
+    // ── Pre-llenar datos del paciente desde tabla_usuarios ──────────────
+    // wa_sesiones NO tiene direccion/email/tipo_documento/departamento
+    // Solo usamos cedula y nombre de la sesión — el resto viene de tabla_usuarios
+    const _telLimpio = (S.selTel||'').replace(/\+?57/,'').replace(/\D/g,'');
+    document.getElementById('gWaCedula').value    = ses.cedula || '';
+    document.getElementById('gWaNombre').value    = (ses.nombre||'').replace(/[^\p{L}\s\-]/gu,'').trim().toUpperCase();
     document.getElementById('gWaTelefono').value  = _telLimpio;
-    document.getElementById('gWaCiudad').value    = (ses.ciudad        || '').toUpperCase();
-    document.getElementById('gWaDepto').value     = (ses.departamento  || '').toUpperCase();
+    // Dirección, email, tipo doc, ciudad, departamento → vacíos hasta que tabla_usuarios los llene
+    document.getElementById('gWaDireccion').value = '';
+    document.getElementById('gWaEmail').value     = '';
+    document.getElementById('gWaTipoDoc').value   = '';
+    document.getElementById('gWaCiudad').value    = '';
+    document.getElementById('gWaDepto').value     = '';
 
-    // Si algún campo del paciente falta → intentar completar desde tabla_usuarios
-    const faltaDato = !ses.nombre || !ses.direccion || !ses.tipo_documento;
-    if(ses.cedula && ses.cedula.length >= 4 && faltaDato){
+    // Disparar búsqueda en tabla_usuarios para completar todos los campos del paciente
+    if(ses.cedula && ses.cedula.length >= 4){
       gWaBuscarPaciente(ses.cedula, true);
     }
 
@@ -2318,18 +2319,12 @@ async function gWaBuscarPaciente(cedula, inmediato=false){
 
         if(_nom) document.getElementById('gWaNombre').value = _nom.toUpperCase();
         if(_tel) document.getElementById('gWaTelefono').value = _tel.replace(/^\+57/,'').replace(/\D/g,'');
-        // Ciudad y Departamento: solo sobreescribir si el RPC trajo valor
-        // Si están vacíos, conservar lo precargado desde ses.ciudad/ses.departamento
-        if(_ciu) document.getElementById('gWaCiudad').value = _ciu.toUpperCase();
-        if(_dep) document.getElementById('gWaDepto').value = _dep.toUpperCase();
         if(_dir) document.getElementById('gWaDireccion').value = _dir.toUpperCase();
 
-        // Email: usar el del paciente si existe, sino mantener el wa_xxx
-        if(_correo) {
-          document.getElementById('gWaEmail').value = _correo.toLowerCase();
-        }
+        // Email del paciente
+        if(_correo) document.getElementById('gWaEmail').value = _correo.toLowerCase();
 
-        // Tipo documento con mapeo
+        // Tipo documento
         if(_tdoc) {
           const mapa = {
             'CC':'CÉDULA DE CIUDADANÍA','CÉDULA DE CIUDADANÍA':'CÉDULA DE CIUDADANÍA',
@@ -2343,28 +2338,19 @@ async function gWaBuscarPaciente(cedula, inmediato=false){
           if(tdSel) for(let op of tdSel.options) { if(op.value===tdVal){op.selected=true;break;} }
         }
 
-        // EPS
-        if(_eps){
-          document.getElementById('gWaEpsSearch').value = _eps;
-          const found = _gWaEpsData.find(e=>
-            e.nombre.toUpperCase().includes(_eps.toUpperCase()) ||
-            _eps.toUpperCase().includes(e.nombre.toUpperCase())
-          );
-          if(found){
-            document.getElementById('gWaEpsId').value = found.id;
-            const nitEl = document.getElementById('gWaNitEps');
-            if(nitEl) nitEl.textContent = found.nit||'—';
-          }
-        }
+        // NO pre-llenar EPS, Ciudad ni Departamento — el asesor los diligencia
+        // (_eps y datos geográficos de tabla_usuarios se ignoran)
 
         // Marcar verde lo que se llenó, rojo lo que faltó
-        ['gWaNombre','gWaTelefono','gWaCiudad','gWaDepto','gWaDireccion','gWaEmail'].forEach(id=>{
+        ['gWaNombre','gWaTelefono','gWaDireccion','gWaEmail'].forEach(id=>{
           const el=document.getElementById(id);
           if(!el) return;
           if(el.value.trim()){el.classList.add('gm-ok');el.classList.remove('gm-err');}
           else{el.classList.add('gm-err');el.classList.remove('gm-ok');}
         });
-        gWaMkSearchOk('gWaEpsSearch','gWaEpsId');
+        // EPS siempre roja — asesor la elige
+        const epsEl2=document.getElementById('gWaEpsSearch');
+        if(epsEl2){epsEl2.classList.add('gm-err');epsEl2.classList.remove('gm-ok');}
         gWaValidarCampo('gWaTipoDoc','select');
         toast('Paciente encontrado ✓','ok');
       } else {
