@@ -479,10 +479,22 @@ app.post('/webhook/meta', async (req, res) => {
       }
 
       // ── TOMANDO MENSAJE FUERA DE HORARIO ────────────────────────────────────
+      // BUG FIX: el # puede venir solo, con espacios, o PEGADO al texto
+      // ("Por favor me ayudan con mi medicamento#") — body.trim()==='#' fallaba en ese caso
       if (sesion.fase === 'tomando_mensaje_fh') {
+        const bodyTrimmed  = body.trim();
+        const terminaHash  = bodyTrimmed === '#' || bodyTrimmed.endsWith('#');
+        // Si el # viene pegado al texto, guardar el texto limpio sin el símbolo
+        const textoLimpio  = terminaHash && bodyTrimmed !== '#'
+          ? bodyTrimmed.slice(0, -1).trim()
+          : bodyTrimmed;
+        // Guardar el mensaje con el contenido real (sin el # final)
+        const msgParaHist  = textoLimpio ? { ...nuevoMsg, content: textoLimpio } : nuevoMsg;
         const hist = Array.isArray(sesion.history) ? sesion.history : [];
-        hist.push(nuevoMsg);
-        if (body.trim() === '#') {
+        hist.push(msgParaHist);
+
+        if (terminaHash) {
+          // Usuario terminó — guardar y confirmar
           // Intentar asignar agente — si no hay disponible queda en cola para el primero que entre
           const agAsignado = await autoAsignarAgente(telefono, sesion);
 
@@ -497,8 +509,6 @@ app.post('/webhook/meta', async (req, res) => {
             estado:           'esperando',
             fase:             null,
             motivo_cierre_wa: 'guardado_fuera_horario',
-            // Si hay agente disponible queda asignado, si no queda agente_id=null
-            // El cron cronReasignar lo asignará cuando alguien entre en horario
             agente_id:        agAsignado?.id     || null,
             agente_nombre:    agAsignado?.nombre || null,
             updated_at:       ahoraISO
@@ -507,8 +517,9 @@ app.post('/webhook/meta', async (req, res) => {
           await enviarMeta(telefono, msgGuardado);
           await pushHistory(telefono, msgGuardado, 'nova');
           await logConv(telefono, agAsignado?.id||null, agAsignado?.nombre||null, 'guardado_fuera_horario');
+          console.log(`📩 Mensaje FH guardado: ${telefono} — "${textoLimpio.substring(0,60)}..."`);
         } else {
-          // Acumula silenciosamente
+          // Acumula silenciosamente — no responde nada
           await supabase.from('wa_sesiones').update({ history:hist, updated_at:ahoraISO }).eq('telefono', telefono);
         }
         return;
