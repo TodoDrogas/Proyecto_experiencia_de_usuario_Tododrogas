@@ -2868,52 +2868,16 @@ async function openGestionModal(mode) {
 
   // ── Precargar datos del correo (solo si es primera y hay datos) ──
   if(email && esPrimera) {
-    // Email del correo actual — es dinámico por cada correo
-    document.getElementById('gEmail').value = email.from_email || email.remitente || '';
-    document.getElementById('gNombre').value   = email.nombre||email.from_name||'';
-    document.getElementById('gTelefono').value = email.telefono_contacto||'';
-    if(email.origen) {
-      const origSel = document.getElementById('gOrigen');
-      for(let op of origSel.options){ if(op.value===email.origen){op.selected=true;break;} }
-    }
-    if(email.categoria_sigi||email.categoria_ia) {
-      const catSel = document.getElementById('gCategoria');
-      const catVal = email.categoria_sigi||email.categoria_ia||'';
-      for(let op of catSel.options){ if(op.value===catVal){op.selected=true;break;} }
-    }
-    if(email.tiene_tutela===true)  gSetTutela(true);
-    else if(email.tiene_tutela===false) gSetTutela(false);
-    if(email.eps_id && state.epsCatalogo) {
-      const eps = state.epsCatalogo.find(e=>e.id===email.eps_id);
-      if(eps) gSelectEPS(eps.id, eps.nombre, eps.nit||'');
-    }
-    // Precargar Nombre Solicitud SOLO si está en el catálogo
-    const _catNombres = Object.keys(G_NOMBRES_SOL);
-    const _catNombresUp = _catNombres.map(n=>n.toUpperCase());
-    if(email.nombre_solicitud) {
-      const _ni = _catNombresUp.indexOf(email.nombre_solicitud.trim().toUpperCase());
-      if(_ni >= 0) {
-        const _nv = _catNombres[_ni];
-        document.getElementById('gNombreSolSearch').value = _nv;
-        document.getElementById('gNombreSolVal').value    = _nv;
-        window._gDetallesActivos = G_NOMBRES_SOL[_nv] || null;
-      } else {
-        document.getElementById('gNombreSolSearch').value = '';
-        document.getElementById('gNombreSolVal').value    = '';
-        window._gDetallesActivos = null;
-      }
-    }
-    // Precargar Detalle SOLO si está en el catálogo
-    const _catDetUp = G_DETALLES.map(d=>d.toUpperCase());
-    if(email.detalle_solicitud) {
-      const _di = _catDetUp.indexOf(email.detalle_solicitud.trim().toUpperCase());
-      if(_di >= 0) {
-        document.getElementById('gDetalleSearch').value = G_DETALLES[_di];
-        document.getElementById('gDetalleVal').value    = G_DETALLES[_di];
-      } else {
-        document.getElementById('gDetalleSearch').value = '';
-        document.getElementById('gDetalleVal').value    = '';
-      }
+    // ── DATOS DEL PACIENTE — se pre-llenan automáticamente ────────────────
+    // Vienen del correo / tabla_usuarios
+    document.getElementById('gEmail').value    = email.from_email || email.remitente || '';
+    document.getElementById('gNombre').value   = email.nombre || email.from_name || '';
+    document.getElementById('gTelefono').value = email.telefono_contacto || '';
+    if(email.cedula_paciente)    document.getElementById('gCedula').value    = email.cedula_paciente;
+    if(email.direccion_paciente) document.getElementById('gDireccion').value = email.direccion_paciente;
+    if(email.tipo_documento) {
+      const tdSel = document.getElementById('gTipoDoc');
+      for(let op of tdSel.options){ if(op.value===email.tipo_documento){op.selected=true;break;} }
     }
     if(email.departamento_paciente) {
       document.getElementById('gDeptoSearch').value = email.departamento_paciente;
@@ -2923,13 +2887,21 @@ async function openGestionModal(mode) {
       document.getElementById('gCiudadSearch').value = email.ciudad_paciente;
       document.getElementById('gCiudadVal').value    = email.ciudad_paciente;
     }
-    if(email.tipo_documento) {
-      const tdSel = document.getElementById('gTipoDoc');
-      for(let op of tdSel.options){ if(op.value===email.tipo_documento){op.selected=true;break;} }
-    }
-    if(email.cedula_paciente)     document.getElementById('gCedula').value    = email.cedula_paciente;
-    if(email.direccion_paciente)  document.getElementById('gDireccion').value = email.direccion_paciente;
-    // Marcar verde/rojo todos los campos precargados
+
+    // ── TIPIFICACIÓN / EPS / CATEGORÍA / ORIGEN — siempre vacíos ─────────
+    // El asesor los diligencia obligatoriamente en cada gestión
+    gLimpiarEPS();
+    document.getElementById('gNombreSolSearch').value = '';
+    document.getElementById('gNombreSolVal').value    = '';
+    document.getElementById('gDetalleSearch').value   = '';
+    document.getElementById('gDetalleVal').value      = '';
+    window._gDetallesActivos = null;
+    const catSel = document.getElementById('gCategoria');
+    if(catSel) catSel.value = '';
+    const origSel = document.getElementById('gOrigen');
+    if(origSel) origSel.value = '';
+
+    // Marcar verde los campos con dato, rojo los vacíos
     setTimeout(() => {
       ['gTipoDoc','gCedula','gNombre','gDireccion','gTelefono','gEmail','gOrigen','gCategoria'].forEach(id => {
         const el = document.getElementById(id);
@@ -2938,9 +2910,9 @@ async function openGestionModal(mode) {
         if(v) { el.classList.add('gm-ok'); el.classList.remove('gm-err'); }
         else  { el.classList.add('gm-err'); el.classList.remove('gm-ok'); }
       });
-      const epsId = document.getElementById('gEpsId')?.value;
+      // EPS siempre roja al abrir — el asesor la elige
       const epsEl = document.getElementById('gEpsSearch');
-      if(epsEl) { if(epsId){epsEl.classList.add('gm-ok');epsEl.classList.remove('gm-err');}else{epsEl.classList.add('gm-err');epsEl.classList.remove('gm-ok');} }
+      if(epsEl){ epsEl.classList.add('gm-err'); epsEl.classList.remove('gm-ok'); }
       ['gNombreSolSearch:gNombreSolVal','gDetalleSearch:gDetalleVal','gDeptoSearch:gDeptoVal','gCiudadSearch:gCiudadVal'].forEach(pair => {
         const [sId,vId] = pair.split(':');
         gMarcarSearchOk(sId, vId);
