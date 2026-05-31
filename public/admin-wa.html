@@ -741,8 +741,8 @@ function fmtHace(ts){if(!ts)return'—';const d=Math.floor((Date.now()-new Date(
 function fmtFecha(ts){if(!ts)return'—';return new Date(ts).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'2-digit'});}
 function parseHist(h){try{return Array.isArray(h)?h:(typeof h==='string'?JSON.parse(h):[]);}catch{return[];}}
 function estadoBadge(e, motivo){
-  // Sesión que esperó fuera de horario → icono 🌙 en cualquier estado para priorizar
-  if(motivo==='guardado_fuera_horario' && ['esperando','escalado'].includes(e))
+  // Si la sesión está esperando pero es un mensaje FH guardado → badge diferenciado
+  if(e==='esperando' && motivo==='guardado_fuera_horario')
     return`<span class="badge badge-escalado">🌙 Prioridad FH</span>`;
   const m={nova:'badge-nova',escalado:'badge-escalado',activo:'badge-activo',cerrado:'badge-solucionado',esperando:'badge-esperando',esperando_encuesta:'badge-esperando',confirmando_solucion:'badge-conf',confirmando_solucion_nova:'badge-conf',pte_gestion:'badge-pte'};
   const lbl={nova:'Nova TD',escalado:'Escalado',activo:'Activo',cerrado:'Solucionado',esperando:'Esp. respuesta',esperando_encuesta:'⭐ Encuesta',confirmando_solucion:'❓ Confirmando',confirmando_solucion_nova:'❓ Confirmando resolución',pte_gestion:'⚠️ Pte. Gestión'};
@@ -1004,7 +1004,10 @@ function renderGlobal(){
   if(_agenteSelGlobal) list = list.filter(s=>s.agente_id===_agenteSelGlobal);
   // Agrupar estados relacionados en el filtro
   if(filtroEstado === 'esperando')
-    list = list.filter(s=>['esperando','esperando_encuesta','confirmando_solucion','confirmando_solucion_nova'].includes(s.estado));
+    // Excluir sesiones FH guardadas — tienen su propio filtro y no requieren acción inmediata
+    list = list.filter(s=>['esperando','esperando_encuesta','confirmando_solucion','confirmando_solucion_nova'].includes(s.estado)
+      && s.motivo_cierre_wa !== 'guardado_fuera_horario');
+
   else if(filtroEstado) list = list.filter(s=>s.estado===filtroEstado);
 
   const colores   = {nova:'#6366f1',escalado:'#f59e0b',activo:'#22c55e',esperando:'#3b82f6',cerrado:'#22c55e',esperando_encuesta:'#a78bfa',confirmando_solucion:'#f59e0b',confirmando_solucion_nova:'#f59e0b',pte_gestion:'#d97706'};
@@ -1012,6 +1015,7 @@ function renderGlobal(){
   // Sobreescribir etiqueta para FH guardados
   const getEtiq  = (s) => (s.motivo_cierre_wa==='guardado_fuera_horario'&&['esperando','escalado'].includes(s.estado)) ? '🌙 Prioridad FH' : (etiquetas[s.estado]||s.estado);
   const getColor = (s) => (s.motivo_cierre_wa==='guardado_fuera_horario'&&['esperando','escalado'].includes(s.estado)) ? '#f59e0b' : (colores[s.estado]||'#6366f1');
+  const getColor = (s) => (s.estado==='esperando'&&s.motivo_cierre_wa==='guardado_fuera_horario') ? '#6366f1' : (colores[s.estado]||'#6366f1');
 
   document.getElementById('globalGrid').innerHTML = list.length ? list.map(s=>{
     const hist  = parseHist(s.history);
@@ -1083,7 +1087,9 @@ async function loadDashboard(){
     const cerradas=A.sesiones.filter(s=>s.estado==='cerrado');
     const cerradasHoy=cerradas.filter(s=>s.updated_at>=hoyStr);
     const pteGestion=A.sesiones.filter(s=>s.estado==='pte_gestion');
-    const esperandoSes=A.sesiones.filter(s=>['esperando','esperando_encuesta','confirmando_solucion','confirmando_solucion_nova'].includes(s.estado));
+    const esperandoSes=A.sesiones.filter(s=>['esperando','esperando_encuesta','confirmando_solucion','confirmando_solucion_nova'].includes(s.estado)
+      && s.motivo_cierre_wa!=='guardado_fuera_horario');
+    const fhGuardados=A.sesiones.filter(s=>s.estado==='esperando'&&s.motivo_cierre_wa==='guardado_fuera_horario');
     const novaRes=cerradas.filter(s=>!s.agente_id);
     const novaPct=cerradas.length?Math.round(novaRes.length/cerradas.length*100):0;
     const escPct=cerradas.length?Math.round((cerradas.length-novaRes.length)/cerradas.length*100):0;
@@ -1226,7 +1232,7 @@ function filterConvs(){
         <div><div style="font-size:12px;font-weight:500">${escH(s.nombre||'Sin nombre')}</div>${s.cedula?`<div class="mono">${escH(s.cedula)}</div>`:''}</div></div></td>
       <td class="mono">${escH(s.telefono)}</td>
       <td style="font-size:11px">${escH(s.eps||'—')}</td>
-      <td>${estadoBadge(s.estado)}</td>
+      <td>${estadoBadge(s.estado, s.motivo_cierre_wa)}</td>
       <td style="font-size:11px;color:var(--ink3)">${escH(s.agente_nombre||'—')}</td>
       <td style="font-size:11px;text-align:center">${hist.length}</td>
       <td style="font-size:11px;color:var(--ink3)">${fmtHace(s.updated_at)}</td>
