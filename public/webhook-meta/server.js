@@ -533,10 +533,28 @@ app.post('/webhook/meta', async (req, res) => {
         const esM  = ['M','MENU','MENÚ','1'].includes(resp) || resp.startsWith('M');
         const esA  = ['A','ASESOR','2'].includes(resp) || resp.startsWith('A');
         if (esM) {
-          await supabase.from('wa_sesiones').update({ estado:'nova', fase:null, updated_at:ahoraISO }).eq('telefono', telefono);
-          sesion = { ...sesion, estado:'nova', fase:null };
+          // Actualizar estado y enviar menú directamente — NO llamar al PHP
+          // Si llega "M" a GPT, lo interpreta como texto libre y genera respuestas incorrectas
           const hist = Array.isArray(sesion.history)?sesion.history:[];
-          hist.push(nuevoMsg); sesion.history = hist;
+          hist.push(nuevoMsg);
+          await supabase.from('wa_sesiones').update({
+            estado:'nova', fase:null, history:hist, updated_at:ahoraISO
+          }).eq('telefono', telefono);
+          const sesActual = (await supabase.from('wa_sesiones').select('nombre').eq('telefono', telefono).single()).data;
+          const msgMenu =
+            `¿En qué le puedo ayudar, ${trat(sesActual?.nombre || sesion.nombre)}?\n\n` +
+            `1️⃣ Estado o entrega de medicamentos\n` +
+            `2️⃣ Puntos de dispensación\n` +
+            `3️⃣ Requisitos para reclamar\n` +
+            `4️⃣ Radicar PQRSFD\n` +
+            `5️⃣ Estado de mi radicado\n` +
+            `6️⃣ Horarios y canales\n` +
+            `7️⃣ Encuesta de satisfacción\n` +
+            `8️⃣ Pregunta a Nova TD\n\n` +
+            `Escriba el número de su opción.`;
+          await enviarMeta(telefono, msgMenu);
+          await pushHistory(telefono, msgMenu, 'nova');
+          return; // ← CRÍTICO: no seguir al bloque Nova PHP
         } else if (esA) {
           await supabase.from('wa_sesiones').update({ fase:null, updated_at:ahoraISO }).eq('telefono', telefono);
           if (estaEnHorario()) {
@@ -567,10 +585,27 @@ app.post('/webhook/meta', async (req, res) => {
         const esM  = ['M','MENU','MENÚ','1'].includes(resp) || resp.startsWith('M');
         const esA  = ['A','ASESOR','2'].includes(resp) || resp.startsWith('A');
         if (esM) {
-          await supabase.from('wa_sesiones').update({ estado:'nova', fase:null, updated_at:ahoraISO }).eq('telefono', telefono);
-          sesion = { ...sesion, estado:'nova', fase:null };
+          // Mismo fix que esperando_menu_post_nova — enviar menú directo sin pasar por PHP
           const hist = Array.isArray(sesion.history)?sesion.history:[];
-          hist.push(nuevoMsg); sesion.history = hist;
+          hist.push(nuevoMsg);
+          await supabase.from('wa_sesiones').update({
+            estado:'nova', fase:null, history:hist, updated_at:ahoraISO
+          }).eq('telefono', telefono);
+          const sesActual = (await supabase.from('wa_sesiones').select('nombre').eq('telefono', telefono).single()).data;
+          const msgMenu =
+            `¿En qué le puedo ayudar, ${trat(sesActual?.nombre || sesion.nombre)}?\n\n` +
+            `1️⃣ Estado o entrega de medicamentos\n` +
+            `2️⃣ Puntos de dispensación\n` +
+            `3️⃣ Requisitos para reclamar\n` +
+            `4️⃣ Radicar PQRSFD\n` +
+            `5️⃣ Estado de mi radicado\n` +
+            `6️⃣ Horarios y canales\n` +
+            `7️⃣ Encuesta de satisfacción\n` +
+            `8️⃣ Pregunta a Nova TD\n\n` +
+            `Escriba el número de su opción.`;
+          await enviarMeta(telefono, msgMenu);
+          await pushHistory(telefono, msgMenu, 'nova');
+          return; // ← no seguir al bloque Nova PHP
         } else if (esA) {
           const msgDejarMensaje = `Entendido, ${trat(sesion.nombre)}.\n\nEscriba su mensaje a continuación. Puede enviar varios mensajes.\n\nCuando termine, escriba *#* para guardarlo y un asesor le contactará en el próximo horario hábil.`;
           await supabase.from('wa_sesiones').update({ estado:'esperando', fase:'tomando_mensaje_fh', updated_at:ahoraISO }).eq('telefono', telefono);
