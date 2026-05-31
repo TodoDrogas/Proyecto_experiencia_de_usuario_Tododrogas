@@ -335,6 +335,12 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
   const ahoraISO = new Date().toISOString();
 
   const { data: sesFresh } = await supabase.from('wa_sesiones').select('*').eq('telefono', telefono).single();
+
+  // PROTECCIÓN: nunca cerrar sesiones guardadas fuera de horario — deben esperar al asesor
+  if (sesFresh?.motivo_cierre_wa === 'guardado_fuera_horario') {
+    console.warn(`⚠️ procesarEncuesta bloqueado para ${telefono} — sesión guardada_fuera_horario`);
+    return false;
+  }
   const hist = Array.isArray(sesFresh?.history) ? sesFresh.history : [];
   hist.push({ role: 'user', content: calRaw, ts: ahoraISO });
   hist.push({ role: 'nova', content: despedida[calNum], ts: ahoraISO });
@@ -575,7 +581,23 @@ app.post('/webhook/meta', async (req, res) => {
           }
           return;
         } else {
-          await enviarMeta(telefono, `Por favor marque *M* para volver al menú principal o *A* para hablar con un asesor.`); return;
+          // Detectar si el usuario expresa satisfacción/despedida en lugar de M o A
+          // En ese caso enviarlo a Nova para que dispare [ENCUESTA] correctamente
+          const satisfaccion = ['GRACIAS','OK','LISTO','PERFECTO','ENTENDIDO','YA','BIEN',
+            'MUCHAS GRACIAS','DE ACUERDO','QUEDÉ','YA QUEDE','ESO ERA','ESO ES TODO',
+            'NO NECESITO','NO GRACIAS','ESTÁ BIEN','ESTA BIEN','CLARO','EXCELENTE'];
+          const bodyUp = body.trim().toUpperCase();
+          const esSatisfaccion = satisfaccion.some(p => bodyUp === p || bodyUp.startsWith(p));
+          if (esSatisfaccion) {
+            // Quitar la fase para que Nova lo procese normalmente
+            await supabase.from('wa_sesiones').update({ estado:'nova', fase:null, updated_at:ahoraISO }).eq('telefono', telefono);
+            sesion = { ...sesion, estado:'nova', fase:null };
+            const hist = Array.isArray(sesion.history)?sesion.history:[];
+            hist.push(nuevoMsg); sesion.history = hist;
+            // Cae a Nova PHP abajo para detectar [ENCUESTA]
+          } else {
+            await enviarMeta(telefono, `Por favor marque *M* para volver al menú principal o *A* para hablar con un asesor.`); return;
+          }
         }
       }
 
@@ -935,7 +957,10 @@ async function cronEncuestaTimeout() {
     const ahoraISO = new Date(ahora).toISOString();
     const { data: sesiones } = await supabase.from('wa_sesiones')
       .select('telefono,nombre,agente_id,agente_nombre,encuesta_enviada_at,motivo_cierre_wa,history,calificacion')
-      .eq('estado','esperando_encuesta').not('encuesta_enviada_at','is',null);
+      .eq('estado','esperando_encuesta')
+      .not('encuesta_enviada_at','is',null)
+      // NUNCA cerrar sesiones guardadas fuera de horario — deben esperar reasignación
+      .not('motivo_cierre_wa','eq','guardado_fuera_horario');
     if (!sesiones?.length) return;
 
     for (const s of sesiones) {
