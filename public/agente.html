@@ -2325,11 +2325,18 @@ async function gCargarCiudadesSedes() {
 
 function gFiltrarCiudad(q) {
   const dd = document.getElementById('gCiudadDropdown');
-  // Fusionar sedes + lista estática, sin duplicados
   const estaticas = Object.values(G_CIUDADES_CO).flat();
-  const combinadas = Array.from(new Set([...G_CIUDADES_SEDES, ...estaticas])).sort();
+  // Deduplicar normalizando tildes — si hay MEDELLÍN y MEDELLIN, queda MEDELLÍN (con tilde gana)
+  const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+  const vistas = new Map(); // norm → versión con tilde preferida
+  [...G_CIUDADES_SEDES, ...estaticas].forEach(c => {
+    const k = norm(c);
+    // Preferir la versión CON tilde (más caracteres unicode = tiene tilde)
+    if(!vistas.has(k) || c.length > vistas.get(k).length) vistas.set(k, c);
+  });
+  const combinadas = Array.from(vistas.values()).sort();
   let ciudades = combinadas;
-  if (q && q.length > 0) ciudades = ciudades.filter(c => c.toLowerCase().includes(q.toLowerCase()));
+  if (q && q.length > 0) ciudades = ciudades.filter(c => norm(c).includes(norm(q)));
   if (!ciudades.length) { dd.style.display='none'; return; }
   dd.style.display='block';
   dd.innerHTML = ciudades.slice(0,20).map(c=>
