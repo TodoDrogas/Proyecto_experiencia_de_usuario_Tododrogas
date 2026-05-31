@@ -77,7 +77,12 @@ function nombreSeguro(nombre) {
 }
 function trat(nombre) {
   const n = nombreSeguro(nombre);
-  return n ? `*${n.split(' ')[0]}*` : 'estimado usuario';
+  if (!n) return 'estimado usuario';
+  // Limpiar emojis y caracteres especiales — el nombre VIP puede traer 🍀 ☘️ etc.
+  const limpio = n.replace(/[^\p{L}\s\-]/gu, '').trim();
+  // Tomar el primer token alfabético real
+  const tokens = limpio.split(/\s+/).filter(t => t.length >= 2);
+  return tokens.length ? `*${tokens[0]}*` : 'estimado usuario';
 }
 
 const ratemap = new Map();
@@ -101,12 +106,9 @@ function estaEnHorario() {
 }
 
 function _mensajeMenuFueraHorario(nombre) {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-  const dow = now.getDay();
-  const horario = dow === 6
-    ? 'Los sábados atendemos de *8:00 a.m. a 12:00 m.*'
-    : '*lunes a viernes de 7:00 a.m. a 5:30 p.m.* y *sábados de 8:00 a.m. a 12:00 m.*';
-  return `Nuestro equipo de asesores está fuera de horario, ${trat(nombre)}. 🌙\n\n🕐 Atendemos de ${horario}\n\n¿Qué desea hacer?\n\n🏠 Marque *M* → Volver al menú principal (Nova TD le atiende)\n✍️ Marque *A* → Dejar un mensaje para un asesor`;
+  // Horario siempre completo — independiente del día en que se consulte
+  const horario = '*Lunes a viernes de 7:00 a.m. a 5:30 p.m.* | *Sábados de 8:00 a.m. a 12:00 m.*';
+  return `En este momento nuestros asesores están fuera de horario, ${trat(nombre)}.\n\n🕐 ${horario}\n\n¿Qué desea hacer?\n\n📋 Marque *M* → Volver al menú principal (Nova TD le atiende)\n📩 Marque *A* → Dejar un mensaje para un asesor`;
 }
 
 async function enviarMeta(telefono, mensaje) {
@@ -299,7 +301,7 @@ async function procesarConfirmacionNova(telefono, respuesta, sesion) {
   const ahoraISO = new Date().toISOString();
 
   if (esSI) {
-    const msgEnc = `¡Nos alegra mucho haberle ayudado! 😊\n\n¿Nos regala un momento para calificarnos?\n\n*MALA* → 😞\n*REGULAR* → 😐\n*BUENA* → 😊\n\n*Tododrogas, siempre a su servicio.* 🌟`;
+    const msgEnc = `¿Nos regala un momento para calificarnos?\n\n*MALA* · *REGULAR* · *BUENA*\n\n*Tododrogas, siempre a su servicio.*`;
     const { error } = await supabase.from('wa_sesiones').update({
       estado: 'esperando_encuesta', encuesta_enviada_at: ahoraISO,
       motivo_cierre_wa: 'satisfaccion_nova', inactividad_aviso_at: null, updated_at: ahoraISO
@@ -308,7 +310,7 @@ async function procesarConfirmacionNova(telefono, respuesta, sesion) {
     return true;
   }
   if (esNO) {
-    const msgRetoma = `Entendemos, ${trat(sesion.nombre)}. Continuamos para ayudarle. 🤝\n\n¿En qué más le puedo asistir?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
+    const msgRetoma = `Entendido, ${trat(sesion.nombre)}. Con gusto continuamos.\n\n¿En qué más le puedo ayudar?\n\n📋 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
     await supabase.from('wa_sesiones').update({ estado: 'nova', fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
     await enviarMeta(telefono, msgRetoma); await pushHistory(telefono, msgRetoma, 'nova');
     return true;
@@ -326,9 +328,9 @@ async function procesarEncuesta(telefono, respuesta, sesion) {
   const calNum = mapa[calRaw];
   const textos = { 1:'Mala', 2:'Regular', 3:'Buena' };
   const despedida = {
-    1: `Lamentamos que su experiencia no haya sido la mejor, ${trat(sesion.nombre)}. 😔\n\nHemos registrado su calificación y trabajaremos para mejorar. Si tiene alguna observación adicional, puede escribirnos cuando lo desee.\n\n*Tododrogas, siempre a su servicio.*`,
-    2: `Gracias por su calificación, ${trat(sesion.nombre)}. 😐\n\nNos comprometemos a mejorar su experiencia en la próxima atención.\n\n*¡Hasta pronto! Tododrogas, siempre a su servicio.*`,
-    3: `¡Nos alegra mucho haberle ayudado, ${trat(sesion.nombre)}! 😊\n\nFue un placer atenderle. Recuerde que estamos disponibles cuando nos necesite.\n\n*¡Hasta pronto! Tododrogas, siempre a su servicio.* 🌟`
+    1: `${trat(sesion.nombre)}, lamentamos que su experiencia no haya sido la mejor.\n\nHemos registrado su calificación y trabajaremos para mejorar. Si tiene alguna observación adicional, puede escribirnos cuando lo desee.\n\n*Tododrogas, siempre a su servicio.*`,
+    2: `Gracias por su calificación, ${trat(sesion.nombre)}.\n\nNos comprometemos a mejorar su experiencia en la próxima atención.\n\n*Tododrogas, siempre a su servicio.*`,
+    3: `Gracias por calificarnos, ${trat(sesion.nombre)}. Nos alegra haberle ayudado.\n\nRecuerde que estamos disponibles cuando nos necesite.\n\n*Tododrogas, siempre a su servicio.*`
   };
   const ahoraISO = new Date().toISOString();
 
@@ -434,7 +436,7 @@ app.post('/webhook/meta', async (req, res) => {
       // ── ENCUESTA DE CALIFICACIÓN ────────────────────────────────────────────
       if (sesion.estado === 'esperando_encuesta') {
         const ok = await procesarEncuesta(telefono, body, sesion);
-        if (!ok) await enviarMeta(telefono, 'Por favor responda con *MALA*, *REGULAR* o *BUENA*:\n\n*MALA* → 😞\n*REGULAR* → 😐\n*BUENA* → 😊');
+        if (!ok) await enviarMeta(telefono, 'Por favor responda con *MALA*, *REGULAR* o *BUENA*.');
         return;
       }
 
@@ -457,7 +459,7 @@ app.post('/webhook/meta', async (req, res) => {
         const esSI = ['SI','SÍ','YES','1','CLARO','OK','OKEY','ESPERO','ESPERANDO'].some(p => resp.includes(p));
         const esNO = ['NO','2','NOPE','MENU','M'].some(p => resp.includes(p));
         if (esSI) {
-          const m = `Perfecto, ${trat(sesion.nombre)}. Le avisamos en cuanto un asesor esté disponible. 🙏\n\n*Tododrogas, siempre a su servicio.*`;
+          const m = `Perfecto, ${trat(sesion.nombre)}. Le avisaremos en cuanto un asesor esté disponible. \n\n*Tododrogas, siempre a su servicio.*`;
           await supabase.from('wa_sesiones').update({ fase:null, inactividad_aviso_at:ahoraISO, updated_at:ahoraISO }).eq('telefono', telefono);
           await enviarMeta(telefono, m); await pushHistory(telefono, m, 'nova'); return;
         }
@@ -500,9 +502,9 @@ app.post('/webhook/meta', async (req, res) => {
 
           const msgGuardado =
             `✅ *Su caso ha quedado registrado con atención prioritaria*, ${trat(sesion.nombre)}.\n\n` +
-            `Uno de nuestros asesores especializados tomará su caso en el próximo horario hábil y se comunicará con usted directamente.\n\n` +
-            `🕐 *Lunes a viernes 7:00 a.m. – 5:30 p.m.* | *Sábados 8:00 a.m. – 12:00 m.*\n\n` +
-            `*¡Hasta pronto! Tododrogas, siempre a su servicio.*`;
+            `Uno de nuestros asesores tomará su caso en el próximo horario hábil y se comunicará con usted directamente.\n\n` +
+            `🕐 *Lunes a viernes: 7:00 a.m. – 5:30 p.m.* | *Sábados: 8:00 a.m. – 12:00 m.*\n\n` +
+            `*Tododrogas, siempre a su servicio.*`;
 
           await supabase.from('wa_sesiones').update({
             history:          hist,
@@ -542,7 +544,7 @@ app.post('/webhook/meta', async (req, res) => {
             const agente = await autoAsignarAgente(telefono, sesActual || sesion);
             let msgEsc;
             if (agente) {
-              msgEsc = `Ha sido un gusto acompañarle, ${trat(sesion.nombre)}. 🤝\n\nLe conectamos con un asesor especializado que revisará su caso.\n\nPor favor espere un momento. 🙏\n\n*Tododrogas, siempre a su servicio.*`;
+              msgEsc = `Le conectamos con un asesor, ${trat(sesion.nombre)}.\n\nRevisará su caso en un momento.\n\n*Tododrogas, siempre a su servicio.*`;
             } else {
               msgEsc = `${trat(sesion.nombre)}, en este momento todos nuestros asesores están ocupados. ⏳\n\n¿Desea seguir esperando?\n\nResponda *SI* para continuar en espera\nResponda *NO* para volver al menú principal`;
               await supabase.from('wa_sesiones').update({ estado:'esperando', fase:'esperando_decision_espera', inactividad_aviso_at:ahoraISO, updated_at:ahoraISO }).eq('telefono', telefono);
@@ -570,7 +572,7 @@ app.post('/webhook/meta', async (req, res) => {
           const hist = Array.isArray(sesion.history)?sesion.history:[];
           hist.push(nuevoMsg); sesion.history = hist;
         } else if (esA) {
-          const msgDejarMensaje = `Entendido, ${trat(sesion.nombre)}. ✍️\n\nEscriba su mensaje a continuación. Puede enviar varios mensajes.\n\nCuando termine, escriba *#* para guardarlo y un asesor le contactará en el próximo horario hábil.`;
+          const msgDejarMensaje = `Entendido, ${trat(sesion.nombre)}.\n\nEscriba su mensaje a continuación. Puede enviar varios mensajes.\n\nCuando termine, escriba *#* para guardarlo y un asesor le contactará en el próximo horario hábil.`;
           await supabase.from('wa_sesiones').update({ estado:'esperando', fase:'tomando_mensaje_fh', updated_at:ahoraISO }).eq('telefono', telefono);
           await enviarMeta(telefono, msgDejarMensaje); await pushHistory(telefono, msgDejarMensaje, 'nova'); return;
         } else {
@@ -793,7 +795,7 @@ Responda *SI* o *NO*`;
           const sesActual = (await supabase.from('wa_sesiones').select('*').eq('telefono', telefono).single()).data;
           const agente = await autoAsignarAgente(telefono, sesActual);
           if (agente) {
-            const m = `Ha sido un gusto acompañarle, ${trat(sesActual?.nombre)}. 🤝\n\nLe conectamos con un asesor especializado.\n\nPor favor espere un momento. 🙏\n\n*Tododrogas, siempre a su servicio.*`;
+            const m = `Le conectamos con un asesor, ${trat(sesActual?.nombre)}.\n\nRevisará su caso en un momento.\n\n*Tododrogas, siempre a su servicio.*`;
             await enviarMeta(telefono, m); await pushHistory(telefono, m, 'nova');
           } else {
             const m = `${trat(sesActual?.nombre)}, en este momento todos nuestros asesores están ocupados. ⏳\n\n¿Desea seguir esperando?\n\nResponda *SI* para continuar en espera\nResponda *NO* para volver al menú principal`;
@@ -813,7 +815,7 @@ Responda *SI* o *NO*`;
       if (accion === 'DEFAULT' || !accion) {
         await supabase.from('wa_sesiones').update({ fase:'esperando_menu_post_nova', updated_at:ahoraISO }).eq('telefono', telefono);
         if (respuesta) {
-          const msgMenu = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
+          const msgMenu = `¿En qué más le puedo ayudar?\n\n📋 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
           await enviarMeta(telefono, msgMenu); await pushHistory(telefono, msgMenu, 'nova');
         }
       }
@@ -864,9 +866,9 @@ async function cronReasignar() {
       // Mensaje diferenciado según origen
       let m;
       if (ses.motivo_cierre_wa === 'guardado_fuera_horario') {
-        m = `Buenos días, ${trat(ses.nombre)}. 🤝\n\nUn asesor especializado ha tomado su caso y le atenderá ahora.\n\n*Tododrogas, siempre a su servicio.*`;
+        m = `Buenos días, ${trat(ses.nombre)}.\n\nUn asesor ha tomado su caso y le atenderá en breve.\n\n*Tododrogas, siempre a su servicio.*`;
       } else {
-        m = `Gracias por su paciencia, ${trat(ses.nombre)}. 🤝\n\nUn asesor especializado está listo para atenderle ahora.\n\n*Tododrogas, siempre a su servicio.*`;
+        m = `${trat(ses.nombre)}, un asesor está disponible y le atenderá ahora.\n\n*Tododrogas, siempre a su servicio.*`;
       }
       await enviarMeta(ses.telefono, m);
       await pushHistory(ses.telefono, m, 'nova');
@@ -895,7 +897,7 @@ async function cronEncuestaTimeout() {
         if (mins >= 30 && mins < 60) {
           const { data: check } = await supabase.from('wa_sesiones').select('inactividad_aviso_at').eq('telefono',s.telefono).single();
           if (check?.inactividad_aviso_at) continue;
-          const msgRec = `¿Nos regala un momento para calificarnos, ${trat(s.nombre)}? 😊\n\n*MALA* → 😞\n*REGULAR* → 😐\n*BUENA* → 😊`;
+          const msgRec = `${trat(s.nombre)}, ¿nos regala un momento para calificarnos?\n\n*MALA* · *REGULAR* · *BUENA*`;
           const { error } = await supabase.from('wa_sesiones').update({ inactividad_aviso_at:ahoraISO }).eq('telefono',s.telefono).is('inactividad_aviso_at',null);
           if (!error) { await enviarMeta(s.telefono, msgRec); await pushHistory(s.telefono, msgRec, 'nova'); }
           continue;
@@ -967,7 +969,7 @@ app.post('/continua-en-linea', async (req, res) => {
     if (!telefono) return res.status(400).json({ error:'telefono requerido' });
     const ahoraISO = new Date().toISOString();
     const { data: sesion } = await supabase.from('wa_sesiones').select('history,nombre').eq('telefono', telefono).single();
-    const mensaje = `Sigo disponible para atenderle, ${trat(sesion?.nombre)}. Estoy aquí para lo que necesite. 😊`;
+    const mensaje = `Sigo disponible para atenderle, ${trat(sesion?.nombre)}. Estoy aquí para lo que necesite.`;
     await enviarMeta(telefono, mensaje);
     const history = Array.isArray(sesion?.history) ? sesion.history : [];
     history.push({ role:'assistant', sender:'agent', content:mensaje, agente:agente_nombre||'Agente', ts:ahoraISO });
@@ -986,7 +988,7 @@ app.post('/iniciar-encuesta-cierre', async (req, res) => {
     const ahoraISO = new Date().toISOString();
     const { data: sesion } = await supabase.from('wa_sesiones').select('*').eq('telefono', telefono).single();
     if (sesion?.encuesta_enviada_at) return res.json({ ok:false, msg:'Encuesta ya enviada' });
-    const msgEnc = `Fue un placer atenderle, ${trat(sesion?.nombre)}. 😊\n\nAntes de cerrar, ¿nos regala un momento para calificarnos?\n\n*MALA* → 😞\n*REGULAR* → 😐\n*BUENA* → 😊\n\n*Tododrogas, siempre a su servicio.* 🌟`;
+    const msgEnc = `Antes de cerrar, ${trat(sesion?.nombre)}, ¿nos regala un momento para calificarnos?\n\n*MALA* · *REGULAR* · *BUENA*\n\n*Tododrogas, siempre a su servicio.*`;
     if (agente_id) {
       const { data: ag } = await supabase.from('agentes').select('carga_actual').eq('id', agente_id).single();
       if (ag) await supabase.from('agentes').update({ carga_actual:Math.max(0,(ag.carga_actual||1)-1) }).eq('id', agente_id);
