@@ -909,9 +909,12 @@ async function guardarGestion(){
     const ahora=new Date().toISOString();
     const obs=document.getElementById('mObs').value.trim().toUpperCase();
     const _tel=document.getElementById('mTelefono').value.replace(/\D/g,'');
-    const _fechaStr=new Date().toISOString().slice(0,16).replace(/[-:T]/g,'').slice(0,12);
+    const _ced=document.getElementById('mCedula').value.replace(/\D/g,'');
+    const _fechaStr=new Date().toISOString().slice(0,10).replace(/-/g,'');
     const _isWa=_canalActivo==='WHATSAPP';
-    const _ticketId=_isWa?`WA-${_tel}-${_fechaStr}`:`PBX-${_tel}-${_fechaStr}`;
+    // Fallback: cédula si no hay teléfono, timestamp si tampoco hay cédula
+    const _idKey = _tel || _ced || Date.now().toString().slice(-8);
+    const _ticketId=_isWa?`WA-${_idKey}-${_fechaStr}`:`PBX-${_idKey}-${_fechaStr}`;
     const _prefijo=_isWa?'[WHATSAPP]':'[TELÉFONO]';
     const _emailPac=document.getElementById('mEmail').value.trim();
     const _emailFb=_isWa?`wa_${_tel}@tododrogas.online`:`pbx_${_tel}@tododrogas.online`;
