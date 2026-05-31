@@ -1090,7 +1090,7 @@ function renderLista(){
     const cbLbl={nova:'Nova TD',escalado:'Escalado',activo:'Activo',esperando:'Esp. respuesta',esperando_encuesta:'Encuesta',confirmando_solucion:'Confirmando',cerrado:'Solucionado',pte_gestion:'Pte. Gestión'};
   // Sesiones guardadas fuera de horario → etiqueta de prioridad con luna
   const getEstadoLbl = (s) => (s.motivo_cierre_wa==='guardado_fuera_horario'&&['esperando','escalado'].includes(s.estado))
-    ? '🌙 Prioridad FH' : (cbLbl[s.estado]||s.estado);
+    ? '🌙 Fuera de horario' : (cbLbl[s.estado]||s.estado);
     return `<div class="conv-item s-${s.estado||'nova'}${S.selTel===s.telefono?' sel':''}" onclick="selectConv('${escH(s.telefono)}')">
       <div class="conv-av">${ini}<div class="conv-av-dot"></div></div>
       <div class="conv-info">
@@ -1205,7 +1205,9 @@ function renderHdr(ses){
     confirmando_solucion_nova:'color:#f59e0b',cerrado:'color:var(--ink3)',pte_gestion:'color:#d97706'
   };
   let faseBadge='';
-  if(ses.fase==='esperando_decision_espera') faseBadge=`<span class="fase-badge decision">⏳ Esperando SI/NO</span>`;
+  if(ses.motivo_cierre_wa==='guardado_fuera_horario' && ['esperando','escalado'].includes(ses.estado))
+    faseBadge=`<span class="fase-badge fh">🌙 Fuera de horario</span>`;
+  else if(ses.fase==='esperando_decision_espera') faseBadge=`<span class="fase-badge decision">⏳ Esperando SI/NO</span>`;
   else if(ses.fase==='tomando_mensaje_fh')   faseBadge=`<span class="fase-badge fh">✍️ Dejando mensaje FH</span>`;
   else if(ses.fase==='esperando_menu_fh')    faseBadge=`<span class="fase-badge fh">🌙 Menú fuera de horario</span>`;
   else if(ses.fase==='esperando_menu_post_nova') faseBadge=`<span class="fase-badge decision">🏠 Esperando M/A</span>`;
@@ -1219,7 +1221,7 @@ function renderHdr(ses){
       <div class="chat-hsub">
         <span style="${stCol[ses.estado]||'color:var(--nova)'}">● ${stLbl[ses.estado]||'Nova TD'}</span>
         ${faseBadge}
-        ${ses.estado==='esperando' && !['tomando_mensaje_fh','esperando_menu_fh'].includes(ses.fase||'')?`<span class="wa-esp-tag">⏳ Esperando respuesta del usuario</span>`:''}
+        ${ses.estado==='esperando' && !['tomando_mensaje_fh','esperando_menu_fh'].includes(ses.fase||'') && ses.motivo_cierre_wa!=='guardado_fuera_horario'?`<span class="wa-esp-tag">⏳ Esperando respuesta del usuario</span>`:''}
         ${ses.estado==='pte_gestion'?`<span class="wa-esp-tag" style="background:#fef3c7;border-color:#fde68a;color:#d97706">📋 Pendiente por gestionar</span>`:''}
         ${ses.eps?`<span>·</span><span>${escH(ses.eps)}</span>`:''}
         <span>·</span><span style="font-family:'DM Mono',monospace">${ses.telefono}</span>
