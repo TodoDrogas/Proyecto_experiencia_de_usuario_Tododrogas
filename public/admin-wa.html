@@ -740,9 +740,12 @@ function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function fmtHace(ts){if(!ts)return'—';const d=Math.floor((Date.now()-new Date(ts))/60000);if(d<1)return'ahora';if(d<60)return d+'m';if(d<1440)return Math.floor(d/60)+'h';return Math.floor(d/1440)+'d';}
 function fmtFecha(ts){if(!ts)return'—';return new Date(ts).toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'2-digit'});}
 function parseHist(h){try{return Array.isArray(h)?h:(typeof h==='string'?JSON.parse(h):[]);}catch{return[];}}
-function estadoBadge(e){
+function estadoBadge(e, motivo){
+  // Sesión que esperó fuera de horario → icono 🌙 en cualquier estado para priorizar
+  if(motivo==='guardado_fuera_horario' && ['esperando','escalado'].includes(e))
+    return`<span class="badge badge-escalado">🌙 Prioridad FH</span>`;
   const m={nova:'badge-nova',escalado:'badge-escalado',activo:'badge-activo',cerrado:'badge-solucionado',esperando:'badge-esperando',esperando_encuesta:'badge-esperando',confirmando_solucion:'badge-conf',confirmando_solucion_nova:'badge-conf',pte_gestion:'badge-pte'};
-  const lbl={nova:'Nova TD',escalado:'Escalado',activo:'Activo',cerrado:'Solucionado',esperando:'Esp. respuesta',esperando_encuesta:'⭐ Encuesta',confirmando_solucion:'❓ Confirmando',confirmando_solucion_nova:'❓ Confirmando resolución',pte_gestion:'Pte. Gestión'};
+  const lbl={nova:'Nova TD',escalado:'Escalado',activo:'Activo',cerrado:'Solucionado',esperando:'Esp. respuesta',esperando_encuesta:'⭐ Encuesta',confirmando_solucion:'❓ Confirmando',confirmando_solucion_nova:'❓ Confirmando resolución',pte_gestion:'⚠️ Pte. Gestión'};
   return`<span class="badge ${m[e]||'badge-nova'}">${lbl[e]||e||'nova'}</span>`;
 }
 function toast(msg,tipo=''){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show'+(tipo?' '+tipo:'');setTimeout(()=>t.className='toast',2800);}
@@ -1006,11 +1009,14 @@ function renderGlobal(){
 
   const colores   = {nova:'#6366f1',escalado:'#f59e0b',activo:'#22c55e',esperando:'#3b82f6',cerrado:'#22c55e',esperando_encuesta:'#a78bfa',confirmando_solucion:'#f59e0b',confirmando_solucion_nova:'#f59e0b',pte_gestion:'#d97706'};
   const etiquetas = {nova:'🤖 Nova TD',escalado:'👤 Escalado',activo:'✅ Activo',esperando:'⏳ Esp. respuesta',cerrado:'✅ Solucionado',esperando_encuesta:'⭐ Encuesta',confirmando_solucion:'❓ Confirmando',confirmando_solucion_nova:'❓ Confirmando resolución',pte_gestion:'⚠️ Pte. Gestión'};
+  // Sobreescribir etiqueta para FH guardados
+  const getEtiq  = (s) => (s.motivo_cierre_wa==='guardado_fuera_horario'&&['esperando','escalado'].includes(s.estado)) ? '🌙 Prioridad FH' : (etiquetas[s.estado]||s.estado);
+  const getColor = (s) => (s.motivo_cierre_wa==='guardado_fuera_horario'&&['esperando','escalado'].includes(s.estado)) ? '#f59e0b' : (colores[s.estado]||'#6366f1');
 
   document.getElementById('globalGrid').innerHTML = list.length ? list.map(s=>{
     const hist  = parseHist(s.history);
     const ult   = hist[hist.length-1];
-    const color = colores[s.estado]||'#6366f1';
+    const color = getColor(s);
     const agente = A.agentes.find(a=>a.id===s.agente_id);
     const etiqAgente = agente ? `<div style="display:flex;align-items:center;gap:5px;margin-top:6px;padding:4px 8px;background:${color}12;border-radius:6px;border:1px solid ${color}30">
       <div style="width:16px;height:16px;border-radius:50%;background:${color};display:flex;align-items:center;justify-content:center;font-size:8px;color:#fff;font-weight:700;flex-shrink:0">${(agente.nombre||'?').charAt(0)}</div>
@@ -1025,7 +1031,7 @@ function renderGlobal(){
             <div style="font-size:10px;color:var(--ink3);font-family:'DM Mono',monospace">${s.telefono}</div>
           </div>
         </div>
-        <span style="font-size:10px;font-weight:600;color:${color};background:${color}18;padding:2px 8px;border-radius:99px">${etiquetas[s.estado]||s.estado}</span>
+        <span style="font-size:10px;font-weight:600;color:${color};background:${color}18;padding:2px 8px;border-radius:99px">${getEtiq(s)}</span>
       </div>
       ${s.eps?`<div style="font-size:10px;color:var(--ink3);margin-bottom:4px">📋 ${escH(s.eps)}</div>`:''}
       ${ult?`<div style="font-size:11px;color:var(--ink2);background:var(--bg);padding:6px 8px;border-radius:6px;line-height:1.4;max-height:40px;overflow:hidden">${escH((ult.content||'').substring(0,70))}${(ult.content||'').length>70?'…':''}</div>`:''}
@@ -1124,7 +1130,7 @@ async function loadDashboard(){
     document.getElementById('recentBody').innerHTML=A.sesiones.slice(0,10).map(s=>`
       <tr>
         <td><div class="ag-row"><div class="ag-av" style="width:26px;height:26px;font-size:11px">${(s.nombre||'?').charAt(0)}</div><span style="font-size:12px">${escH(s.nombre||'Sin nombre')}</span></div></td>
-        <td>${estadoBadge(s.estado)}</td>
+        <td>${estadoBadge(s.estado, s.motivo_cierre_wa)}</td>
         <td style="font-size:11px;color:var(--ink3)">${escH(s.agente_nombre||'—')}</td>
         <td style="font-size:11px;color:var(--ink3)">${fmtHace(s.updated_at)}</td>
       </tr>`).join('');
