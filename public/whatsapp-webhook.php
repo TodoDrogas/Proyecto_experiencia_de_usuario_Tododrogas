@@ -1,42 +1,31 @@
 <?php
 // ══════════════════════════════════════════════════════════════
-//  Nova TD — WhatsApp Webhook
+//  Nova TD — WhatsApp Webhook (PHP)
 //  Tododrogas CIA SAS
-//  Phone Number ID : 1004615859412103   (+57 300 9732247)
-//  WABA ID         : 925400393219673
+//
+//  RESPONSABILIDAD DE ESTE ARCHIVO:
+//  - Recibir mensaje del usuario desde server.js (POST interno)
+//  - Llamar a GPT con el historial y contexto
+//  - Devolver JSON: { respuesta, accion }
+//  - accion puede ser: DEFAULT | ESCALADO | ENCUESTA | MENU
+//
+//  NOTA: Este archivo NO envía mensajes directamente al usuario.
+//        server.js maneja todos los envíos y el estado de la sesión.
+//        El menú M/A lo agrega server.js automáticamente en DEFAULT.
 // ══════════════════════════════════════════════════════════════
 
-// ── Secrets inyectados por GitHub Actions ──────────────────────
 define('WA_TOKEN',        '__TOKEN_WHATSAPP__');
 define('WA_VERIFY_TOKEN', '__WA_VERIFY_TOKEN__');
 define('WA_PHONE_ID',     '1004615859412103');
-define('OPENAI_KEY',      '__OPENAI_KEY__');   // Whisper (audio) + GPT (chat)
+define('OPENAI_KEY',      '__OPENAI_KEY__');
 define('SB_URL',          '__SB_URL__');
 define('SB_KEY',          '__SB_KEY__');
-
-// ── Seguridad ──────────────────────────────────────────────────
-if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'POST'])) {
-    http_response_code(405); exit;
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $rawBody   = file_get_contents('php://input');
-    $signature = $_SERVER['HTTP_X_HUB_SIGNATURE_256'] ?? '';
-    $appSecret = '__APP_SECRET__';
-    $expected  = 'sha256=' . hash_hmac('sha256', $rawBody, $appSecret);
-    if (!hash_equals($expected, $signature)) {
-        http_response_code(403);
-        echo json_encode(['error' => 'Invalid signature']);
-        exit;
-    }
-    $GLOBALS['_RAW_BODY'] = $rawBody;
-}
+define('NOVA_TOKEN',      '__NOVA_TOKEN__');
 
 header('Content-Type: application/json; charset=utf-8');
 
-// ══════════════════════════════════════════════════════════════
-//  VERIFICACIÓN DEL WEBHOOK (GET)
-// ══════════════════════════════════════════════════════════════
+// ── Verificación de token ──────────────────────────────────────
+// Llamadas vienen de server.js con el header X-Nova-Token
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $mode      = $_GET['hub_mode']         ?? '';
     $token     = $_GET['hub_verify_token'] ?? '';
@@ -51,103 +40,106 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     exit;
 }
 
-// ══════════════════════════════════════════════════════════════
-//  RECEPCIÓN DE MENSAJES (POST)
-// ══════════════════════════════════════════════════════════════
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
     echo json_encode(['error' => 'Method not allowed']);
     exit;
 }
 
-$body = $GLOBALS['_RAW_BODY'] ?? file_get_contents('php://input');
-$data = json_decode($body, true);
-
-// Meta espera siempre 200 inmediato
-http_response_code(200);
-echo json_encode(['status' => 'ok']);
-
-$entry   = $data['entry'][0]    ?? null;
-$changes = $entry['changes'][0] ?? null;
-$value   = $changes['value']    ?? null;
-$msgs    = $value['messages']   ?? [];
-
-if (empty($msgs)) exit;
-
-$msg   = $msgs[0];
-$from  = $msg['from'] ?? '';
-$msgId = $msg['id']   ?? '';
-$type  = $msg['type'] ?? '';
-
-// Evitar reprocesar el mismo mensaje
-$cacheFile = sys_get_temp_dir() . '/wa_msg_' . md5($msgId) . '.lock';
-if (file_exists($cacheFile)) exit;
-file_put_contents($cacheFile, '1');
-
-// ── Extraer texto o audio ──────────────────────────────────────
-$userText = '';
-
-if ($type === 'text') {
-    $userText = trim($msg['text']['body'] ?? '');
-} elseif ($type === 'audio') {
-    $audioId  = $msg['audio']['id'] ?? '';
-    $userText = transcribeAudio($audioId);
-} else {
-    sendWA($from, 'Lo siento, por ahora solo proceso mensajes de texto y audio. ¿En qué puedo ayudarle?');
+// Verificar token interno
+$novaToken = $_SERVER['HTTP_X_NOVA_TOKEN'] ?? '';
+if ($novaToken !== NOVA_TOKEN && NOVA_TOKEN !== '') {
+    http_response_code(403);
+    echo json_encode(['error' => 'Token inválido']);
     exit;
 }
 
-if (!$userText) exit;
+$body    = file_get_contents('php://input');
+$payload = json_decode($body, true);
 
-// ── Sesión del usuario en Supabase ────────────────────────────
-$session  = getOrCreateSession($from);
-$history  = $session['history']  ?? [];
-$userData = $session['usuario']  ?? [];
-$eps      = $session['eps']      ?? '';
-$sedes    = $session['sedes']    ?? [];
+$from    = $payload['telefono'] ?? '';
+$userMsg = $payload['mensaje']  ?? '';
+$sesion  = $payload['sesion']   ?? [];
 
-// ── Construir system prompt ────────────────────────────────────
+if (!$from || !$userMsg) {
+    http_response_code(400);
+    echo json_encode(['error' => 'telefono y mensaje requeridos']);
+    exit;
+}
+
+// ── Cargar datos de sesión ─────────────────────────────────────
+$history  = $sesion['history']  ?? [];
+$userData = [];
+$eps      = $sesion['eps']      ?? '';
+$sedes    = loadSedes();
+
+// Si hay cédula en la sesión, buscar datos del usuario
+if (!empty($sesion['cedula'])) {
+    $userData = buscarUsuarioPorCedula($sesion['cedula']);
+}
+
+// ── System prompt ──────────────────────────────────────────────
 $systemPrompt = buildSystemPrompt($userData, $eps, $sedes);
 
-// ── Agregar mensaje del usuario al historial ──────────────────
-$history[] = ['role' => 'user', 'content' => strtoupper($userText)];
-if (count($history) > 500) $history = array_slice($history, -500);
+// ── Construir historial filtrado para GPT ──────────────────────
+// Solo mensajes role=user y role=assistant (no nova/system) para no confundir al modelo
+$gptHistory = [];
+foreach ($history as $h) {
+    $role = $h['role'] ?? '';
+    if ($role === 'user') {
+        $gptHistory[] = ['role' => 'user', 'content' => $h['content'] ?? ''];
+    } elseif (in_array($role, ['assistant', 'nova'])) {
+        $gptHistory[] = ['role' => 'assistant', 'content' => $h['content'] ?? ''];
+    }
+}
 
-// ── Llamar a GPT (OpenAI) ─────────────────────────────────────
-$raw = callGPT($systemPrompt, $history);
+// Agregar mensaje actual
+$gptHistory[] = ['role' => 'user', 'content' => strtoupper($userMsg)];
+if (count($gptHistory) > 40) {
+    $gptHistory = array_slice($gptHistory, -40);
+}
+
+// ── Llamar a GPT ───────────────────────────────────────────────
+$raw = callGPT($systemPrompt, $gptHistory);
 
 if (!$raw) {
-    sendWA($from, 'No pude conectarme. Por favor llame al PBX 604 322 2432 o WhatsApp 304 341 2431.');
+    echo json_encode([
+        'respuesta' => 'No pude conectarme en este momento. Por favor llame al PBX 604 322 2432 o WhatsApp 304 341 2431.',
+        'accion'    => 'DEFAULT'
+    ]);
     exit;
 }
 
-// ── Agregar respuesta al historial ────────────────────────────
-$history[] = ['role' => 'assistant', 'content' => $raw];
-saveSession($from, $history, $userData, $eps);
+// ── Parsear acción ─────────────────────────────────────────────
+$parsed = parseAction($raw);
+$text   = $parsed['text'];
+$action = $parsed['action'];
+$data   = $parsed['data'];
 
-// ── Parsear tags de acción ────────────────────────────────────
-$parsed     = parseAction($raw);
-$text       = $parsed['text'];
-$action     = $parsed['action'];
-$actionData = $parsed['data'];
+// ── Construir respuesta final según acción ─────────────────────
+$respuesta = '';
 
-// ── Ejecutar acción y responder ───────────────────────────────
 switch ($action) {
 
     case 'FORMULARIO':
         $url = 'https://tododrogas.online/pqr_form.html';
-        if ($userData['cedula'] ?? '') {
+        if (!empty($userData['cedula'])) {
             $url .= '?cedula=' . urlencode($userData['cedula']);
         }
-        sendWA($from, $text . "\n\n📋 *Formulario PQRSFD:*\n" . $url);
+        $respuesta = $text . "\n\n📋 *Formulario PQRSFD:*\n" . $url;
+        $action    = 'DEFAULT'; // server.js agregará el menú M/A
         break;
 
     case 'ESCALAR':
-        sendWA($from, $text . "\n\nPuede comunicarse con nosotros:\n📞 PBX: 604 322 2432\n💬 WhatsApp: 304 341 2431\n✉️ pqrsfd@tododrogas.com.co");
+        // server.js maneja el escalado — solo devolvemos el texto de despedida
+        $respuesta = $text;
+        // accion = 'ESCALADO' → server.js busca agente o muestra opciones
         break;
 
     case 'ENCUESTA':
-        sendWA($from, $text . "\n\n⭐ Encuesta de satisfacción:\nhttps://tododrogas.online/pqr_encuesta.html");
+        // server.js envía la encuesta
+        $respuesta = $text;
+        // accion = 'ENCUESTA' → server.js cambia estado a esperando_encuesta
         break;
 
     case 'MENU':
@@ -158,20 +150,33 @@ switch ($action) {
         $menu .= "4️⃣ Radicar PQRSFD\n";
         $menu .= "5️⃣ Estado de mi radicado PQRSFD\n";
         $menu .= "6️⃣ Hablar con un asesor";
-        sendWA($from, $menu);
+        $respuesta = $menu;
+        $action    = 'DEFAULT';
         break;
 
     case 'CONSULTAR':
-        $radicado = consultarRadicado($actionData);
-        sendWA($from, $text . "\n\n" . $radicado);
+        $radicado  = consultarRadicado($data);
+        $respuesta = $text . "\n\n" . $radicado;
+        $action    = 'DEFAULT';
         break;
 
     case 'SEDES':
-        $partes      = explode(':', $actionData ?? '');
+        $partes      = explode(':', $data ?? '');
         $municipio   = trim($partes[0] ?? '');
         $epsOverride = isset($partes[1]) ? strtoupper(trim($partes[1])) : null;
-        $sedesText   = buscarSedes($municipio, $epsOverride ?: $eps, $sedes);
-        sendWA($from, $text . "\n\n" . $sedesText);
+        // Fallback: si GPT no pasó municipio, usar ciudad del usuario en sesión
+        if (!$municipio && !empty($sesion['ciudad'])) {
+            $municipio = $sesion['ciudad'];
+        }
+        if (!$municipio) {
+            $respuesta = "¿En qué municipio se encuentra para mostrarle las sedes disponibles?";
+            $action    = 'DEFAULT';
+            break;
+        }
+        $epsParaBuscar = $epsOverride ?: $eps;
+        $sedesText     = buscarSedes($municipio, $epsParaBuscar, $sedes);
+        $respuesta     = ($text ? rtrim($text) . "\n\n" : '') . $sedesText;
+        $action        = 'DEFAULT';
         break;
 
     case 'REQUISITOS':
@@ -181,30 +186,34 @@ switch ($action) {
         $req .= "• Carné de afiliación a la EPS\n";
         $req .= "• En caso de representante: autorización escrita + copia del documento del paciente\n\n";
         $req .= "¿Necesita más información? 📞 604 322 2432";
-        sendWA($from, $text . "\n\n" . $req);
+        $respuesta = $text . "\n\n" . $req;
+        $action    = 'DEFAULT';
         break;
 
     case 'MEDICAMENTOS':
-        // Solo enviar el texto de GPT + pregunta SÍ/NO sin números
-        sendWA($from, $text . "\n\n¿Desea que un asesor verifique el estado? Responda *SÍ* o *NO*");
+        $respuesta = $text . "\n\n¿Desea que un asesor verifique el estado? Responda *SÍ* o *NO*";
+        $action    = 'DEFAULT';
         break;
 
     case 'CAMBIAR_EPS':
-        sendWA($from, $text . "\n\nPor favor indíqueme el nombre de su EPS para actualizar sus datos.");
-        saveSession($from, $history, $userData, '', $sedes);
+        $respuesta = $text . "\n\nPor favor indíqueme el nombre de su EPS para actualizar sus datos.";
+        $action    = 'DEFAULT';
         break;
 
     default:
-        // Evitar duplicar el bloque M/P si GPT ya lo incluyó en su respuesta
-        $menuBloque = "¿En qué más le puedo ayudar?";
-        if (str_contains($text, $menuBloque)) {
-            sendWA($from, $text);
-        } else {
-            $menuFinal = "\n\n*¿En qué más le puedo ayudar?*\n🏠 Escriba *M* → Menú principal\n💬 Escriba *P* → Tengo otra pregunta";
-            sendWA($from, $text . $menuFinal);
-        }
+        // DEFAULT: server.js agregará el menú M/A después de esta respuesta.
+        // NO incluir el menú aquí — evitar duplicados.
+        $respuesta = $text;
+        $action    = 'DEFAULT';
         break;
 }
+
+// ── Devolver a server.js ──────────────────────────────────────
+echo json_encode([
+    'respuesta' => $respuesta,
+    'accion'    => $action,   // DEFAULT | ESCALADO | ENCUESTA
+    'data'      => $data
+], JSON_UNESCAPED_UNICODE);
 
 exit;
 
@@ -217,82 +226,87 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $nombre = $usuario['nombre'] ?? '?';
     $epsU   = strtoupper($eps);
 
-    $catalogo = "CATÁLOGO DE SEDES (datos reales):\n";
+    // ── Catálogo completo: dirección, teléfono, horario, EPS por sede ──────────
+    // GPT necesita la dirección completa para poder responder directamente
+    // sin necesidad de emitir el tag [SEDES] en consultas sencillas de ubicación
+    $catalogo = "CATÁLOGO COMPLETO DE SEDES ACTIVAS:\n";
     foreach ($sedes as $s) {
-        $epsArr    = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
-        $catalogo .= '- ' . ($s['nombre'] ?? '') . ' | Municipio: ' . ($s['municipio'] ?? '') . ' | EPS: ' . implode(', ', $epsArr) . "\n";
+        $epsArr  = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
+        $modelo  = strtoupper($s['modelo'] ?? '');
+        $horario = $s['horario'] ?? '';
+        if (!$horario) {
+            $horario = ($modelo === 'IN HOUSE')
+                ? 'Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am'
+                : 'Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m';
+        }
+        $epsList = implode(' / ', array_map('trim', $epsArr));
+        $linea   = '• ' . ($s['nombre'] ?? '');
+        $linea  .= ' | ' . ($s['municipio'] ?? $s['ciudad'] ?? '');
+        $linea  .= ' | Dir: '  . ($s['direccion'] ?? 'consultar');
+        if (!empty($s['telefono'])) $linea .= ' | Tel: ' . $s['telefono'];
+        $linea  .= ' | Horario: ' . $horario;
+        $linea  .= ' | EPS: ' . ($epsList ?: 'TODAS');
+        if (!empty($s['lat']) && !empty($s['lng'])) {
+            $linea .= ' | Maps: https://maps.google.com/?q=' . $s['lat'] . ',' . $s['lng'];
+        }
+        $catalogo .= $linea . "\n";
     }
 
     $s  = "Eres Nova TD, asistente virtual de Tododrogas CIA SAS.\n";
     $s .= "FECHA DE HOY: $hoy\n";
-    $s .= "USUARIO: $nombre | EPS: " . ($epsU ?: 'Sin EPS') . " (SAVIA SALUD = SAVIA, PREVENTIVA SALUD = PREVENTIVA)\n";
-    $s .= "CANAL: WhatsApp — responde en texto plano sin HTML. Usa emojis con moderación.\n";
-    $s .= "TRATO: Siempre de USTED.\n";
-    $s .= "HORARIOS SEDES: Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m. IMPORTANTE: Al usuario NO le interesa si la sede es 'propia' o 'in house'. Usa SIEMPRE el horario general anterior a menos que tengas el horario específico de la sede en la base de datos.\n";
-    $s .= "TODAS las sedes abren sábados.\n";
-    $s .= $catalogo;
-    $s .= "REGLA SEDES ESPECIALES MEDELLÍN: Hay DOS sedes en Medellín en la misma dirección (BIC Piso 6 y Primer Piso). Consulta SIEMPRE el catálogo — NUNCA inventes datos.\n";
-    $s .= "REGLA MEDICAMENTOS Y MEDICINA: Para CUALQUIER pregunta sobre medicamentos, dosis, enfermedades, tratamientos — responde con tu conocimiento médico-farmacéutico. Si el usuario menciona medicamento malo, vencido, dañado → di SIEMPRE: \"No lo consuma. Por su seguridad NO utilice ese medicamento.\" → luego ofrece: PBX 604 322 2432 / WA 304 341 2431.\n";
-    $s .= "PBX 604 322 2432 | WA 304 341 2431 | pqrsfd@tododrogas.com.co\n";
-    $s .= "Max 100 palabras. 1 emoji. NUNCA el menú, usa [MENU]. Un tag al final.\n";
-    $s .= "REGLA SEDES — OBLIGATORIA:\n";
-    $s .= "  PASO 1 — Si el usuario menciona una EPS → usar ESA EPS.\n";
-    $s .= "  PASO 2 — Si EPS mencionada ≠ EPS usuario → usar [SEDES:municipio:EPSMENCIONADA]\n";
-    $s .= "  PASO 3 — NUNCA omitir el tag.\n";
-    $s .= "REGLA CONSULTAR: Si el usuario escribe ÚNICAMENTE un número TD-xxxxx o un correo → usa [CONSULTAR:valor].\n";
+    $s .= "USUARIO: $nombre | EPS: " . ($epsU ?: 'Sin EPS') . "\n";
+    $s .= "CANAL: WhatsApp — texto plano, sin HTML. Emojis con moderación. Trato de USTED.\n\n";
+    $s .= $catalogo . "\n";
+
+    $s .= "REGLA SEDES — OBLIGATORIA Y PRIORITARIA:\n";
+    $s .= "  Activa [SEDES:municipio] ante CUALQUIERA de estas preguntas (aunque el usuario no diga 'sede'):\n";
+    $s .= "  - ¿Dónde recojo/retiro/reclamo mi medicamento?\n";
+    $s .= "  - ¿Dónde queda Tododrogas en [ciudad]?\n";
+    $s .= "  - ¿Dónde me atienden?\n";
+    $s .= "  - ¿Cuál es la dirección/ubicación?\n";
+    $s .= "  - ¿Tienen sede en [ciudad]?\n";
+    $s .= "  - Cualquier pregunta sobre puntos de dispensación, puntos de atención, farmacias, dónde ir\n";
+    $s .= "  REGLA EPS EN SEDES:\n";
+    $s .= "  - Si el usuario tiene EPS conocida → usa [SEDES:municipio] (filtra por su EPS automáticamente)\n";
+    $s .= "  - Si menciona una EPS diferente → usa [SEDES:municipio:EPSMENCIONADA]\n";
+    $s .= "  - Si pregunta por todas las sedes sin importar EPS → usa [SEDES:municipio:TODAS]\n";
+    $s .= "  NUNCA respondas con una dirección inventada. SIEMPRE usa el tag [SEDES] para consultas de ubicación.\n";
+    $s .= "  El sistema buscará en la base de datos real y devolverá la dirección exacta con mapa.\n\n";
+
+    $s .= "REGLA FUNDAMENTAL: Al finalizar CUALQUIER respuesta que no sea [ESCALAR] o [ENCUESTA], NO incluyas opciones de menú — el sistema las agrega automáticamente.\n";
+    $s .= "REGLA CONSULTAR: Si el usuario escribe SOLO un número TD-xxxxx o un correo → usa [CONSULTAR:valor].\n";
     $s .= "REGLA RADICAR: Si el usuario quiere radicar una PQRSFD → usa [FORMULARIO].\n";
-    $s .= "REGLA AUDIOS: Cuando el usuario envía un audio, recibirás la transcripción con prefijo [🎙️ Audio:]. Trátala como texto normal — responde al contenido, no menciones que es una transcripción.\n";
-    $s .= "REGLA DOMICILIOS: Tododrogas NO realiza domicilios ni envíos. Si preguntan por domicilio/envío/delivery → responde que no hacemos domicilios e invita a la sede más cercana. NO uses [ESCALAR].\n";
-    $s .= "REGLA MEDICAMENTOS SEGUIMIENTO: Cuando usas [MEDICAMENTOS], tu texto ($text) solo debe tener el mensaje con el link de App Solicitudes Web. NUNCA incluyas la pregunta de asesor en tu texto — el sistema la agrega automáticamente. Si el usuario responde SÍ → usa [ESCALAR]. Si responde NO → continúa. NUNCA uses [MEDICAMENTOS] dos veces seguidas en la misma conversación.\n";
-    $s .= "REGLA MEDICAMENTOS VS REQUISITOS:\n";
-    $s .= "  - QUÉ LLEVAR / REQUISITOS → [REQUISITOS]\n";
-    $s .= "  - ESTADO medicamento / DEMORA → [MEDICAMENTOS]\n";
-    // Hora actual Bogotá para contexto de horario
+    $s .= "REGLA MEDICAMENTOS: Para estado/demora de medicamentos → [MEDICAMENTOS]. Para qué llevar → [REQUISITOS].\n";
+    $s .= "REGLA DOMICILIOS: Tododrogas NO hace domicilios ni envíos. Si preguntan → explicar y ofrecer sede con [SEDES:municipio].\n";
+    $s .= "REGLA MEDICAMENTO MALO/VENCIDO: 'No lo consuma. Por su seguridad NO utilice ese medicamento.' + PBX 604 322 2432.\n";
+
+    // Detectar horario para instrucción de escalado
     $horaBogota = new DateTime('now', new DateTimeZone('America/Bogota'));
-    $dow        = (int)$horaBogota->format('N'); // 1=Lun...7=Dom
+    $dow        = (int)$horaBogota->format('N');
     $mins       = (int)$horaBogota->format('H') * 60 + (int)$horaBogota->format('i');
     $enHorario  = ($dow >= 1 && $dow <= 5 && $mins >= 420 && $mins < 1050)
                || ($dow === 6 && $mins >= 480 && $mins < 720);
 
     if ($enHorario) {
-        $s .= "HORARIO ASESORES: Estamos dentro del horario de atención (Lun-Vie 7am-5:30pm / Sáb 8am-12m). Si el usuario pide hablar con un asesor, usa [ESCALAR] — el sistema le asignará uno.
-";
+        $s .= "HORARIO ASESORES: Estamos DENTRO del horario. Si el usuario pide asesor → usa [ESCALAR].\n";
     } else {
-        $s .= "HORARIO ASESORES (CRÍTICO): Estamos FUERA del horario de atención. Los asesores no están disponibles ahora.
-";
-        $s .= "Si el usuario pide hablar con un asesor o escalar:
-";
-        $s .= "  1. Dile que el equipo de asesores no está disponible en este momento.
-";
-        $s .= "  2. Informa el horario: Lun-Vie 7:00am-5:30pm / Sáb 8:00am-12:00m.
-";
-        $s .= "  3. Dile que su solicitud quedará registrada y un asesor le contactará en el próximo horario hábil.
-";
-        $s .= "  4. Ofrece continuar con Nova TD para resolver lo que pueda ahora.
-";
-        $s .= "  5. Usa [ESCALAR] igualmente — el server.js manejará el estado pte_gestion.
-";
+        $s .= "HORARIO ASESORES: Estamos FUERA del horario (Lun-Vie 7am-5:30pm / Sáb 8am-12m). ";
+        $s .= "Si el usuario pide asesor → usa [ESCALAR]. El server.js mostrará el menú fuera de horario.\n";
     }
-    $s .= "REGLA MENÚ DUPLICADO (CRÍTICA): NUNCA incluyas el bloque '¿En qué más le puedo ayudar? M → Menú / P → Pregunta' en tu respuesta de texto. Ese bloque lo agrega el sistema automáticamente. Si lo incluyes, aparecerá DOS VECES.\n";
-    $s .= "REGLA SATISFACCIÓN (MÁXIMA PRIORIDAD): Detecta CUALQUIER señal de que el usuario ya no necesita ayuda, aunque la frase empiece con 'No'. Ejemplos EXACTOS que SIEMPRE deben activar [ENCUESTA]: 'no, así está bien gracias', 'no gracias', 'ya está bien', 'así está bien', 'gracias', 'muchas gracias', 'perfecto', 'listo', 'ok gracias', 'eso era todo', 'ya quedé', 'no necesito más', 'fue todo', 'ya me ayudó', 'con eso es suficiente', 'está bien así'. Responde MUY brevemente (1 línea) y añade [ENCUESTA]. NUNCA ofrezcas más opciones después de detectar satisfacción.\n";
-    $s .= "REGLA NÚMEROS SUELTOS (CRÍTICA): Cuando el usuario envíe SOLO un número (1, 2, 3, etc.), SIEMPRE revisa el ÚLTIMO mensaje del asistente para entender a qué pregunta responde.
-";
-    $s .= "  - Si el último mensaje tuyo tenía opciones numeradas propias → interpreta en ESE contexto, NO como el menú principal.
-";
-    $s .= "  - Solo interpreta 1-6 como el menú principal si el último mensaje fue explícitamente el menú principal.
-";
-    $s .= "TAGS: [MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m]";
+
+    $s .= "REGLA SATISFACCIÓN (MÁXIMA PRIORIDAD): Cualquier señal de que el usuario ya no necesita ayuda → responde brevemente y usa [ENCUESTA].\n";
+    $s .= "Ejemplos: 'no gracias', 'ya está bien', 'gracias', 'muchas gracias', 'perfecto', 'listo', 'ok gracias', 'eso era todo', 'ya quedé'.\n";
+    $s .= "TAGS disponibles: [MENU][FORMULARIO][ESCALAR][ENCUESTA][MEDICAMENTOS][REQUISITOS][CAMBIAR_EPS][CONSULTAR:v][SEDES:m][SEDES:m:EPS]\n";
+    $s .= "Max 100 palabras por respuesta. Un solo tag al final.\n";
+    $s .= "PBX 604 322 2432 | WA 304 341 2431 | pqrsfd@tododrogas.com.co\n";
+
     return $s;
 }
 
-// ── Llamar a GPT-4o (OpenAI Chat) ────────────────────────────
 function callGPT(string $system, array $messages): string {
     $payload = json_encode([
         'model'       => 'gpt-4o',
-        'messages'    => array_merge(
-            [['role' => 'system', 'content' => $system]],
-            $messages
-        ),
+        'messages'    => array_merge([['role' => 'system', 'content' => $system]], $messages),
         'max_tokens'  => 500,
         'temperature' => 0.3,
     ]);
@@ -310,12 +324,10 @@ function callGPT(string $system, array $messages): string {
     ]);
     $resp = curl_exec($ch);
     curl_close($ch);
-
     $data = json_decode($resp, true);
     return $data['choices'][0]['message']['content'] ?? '';
 }
 
-// ── Enviar mensaje por WhatsApp ────────────────────────────────
 function sendWA(string $to, string $text): void {
     $payload = json_encode([
         'messaging_product' => 'whatsapp',
@@ -323,7 +335,6 @@ function sendWA(string $to, string $text): void {
         'type'              => 'text',
         'text'              => ['body' => $text],
     ]);
-
     $ch = curl_init('https://graph.facebook.com/v19.0/' . WA_PHONE_ID . '/messages');
     curl_setopt_array($ch, [
         CURLOPT_POST           => true,
@@ -339,241 +350,8 @@ function sendWA(string $to, string $text): void {
     curl_close($ch);
 }
 
-// ── Transcribir audio con Whisper (OpenAI) ────────────────────
-function transcribeAudio(string $mediaId): string {
-    if (!$mediaId) return '';
-
-    $ch = curl_init('https://graph.facebook.com/v19.0/' . $mediaId);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . WA_TOKEN],
-    ]);
-    $res = json_decode(curl_exec($ch), true);
-    curl_close($ch);
-    $url = $res['url'] ?? '';
-    if (!$url) return '';
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . WA_TOKEN],
-    ]);
-    $audioData = curl_exec($ch);
-    curl_close($ch);
-
-    $tmpFile = tempnam(sys_get_temp_dir(), 'wa_audio_') . '.ogg';
-    file_put_contents($tmpFile, $audioData);
-
-    $ch = curl_init('https://api.openai.com/v1/audio/transcriptions');
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 30,
-        CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . OPENAI_KEY],
-        CURLOPT_POSTFIELDS     => [
-            'file'     => new CURLFile($tmpFile, 'audio/ogg', 'audio.ogg'),
-            'model'    => 'whisper-1',
-            'language' => 'es',
-        ],
-    ]);
-    $res = json_decode(curl_exec($ch), true);
-    curl_close($ch);
-    unlink($tmpFile);
-
-    return $res['text'] ?? '';
-}
-
-// ── Sesión en Supabase ─────────────────────────────────────────
-function getOrCreateSession(string $phone): array {
-    $url = SB_URL . '/rest/v1/wa_sesiones?telefono=eq.' . urlencode($phone) . '&select=*&limit=1';
-    $ch  = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => [
-            'apikey: ' . SB_KEY,
-            'Authorization: Bearer ' . SB_KEY,
-        ],
-    ]);
-    $res     = json_decode(curl_exec($ch), true);
-    curl_close($ch);
-
-    $session = $res[0] ?? [];
-    $history = json_decode($session['history'] ?? '[]', true) ?: [];
-    $usuario = json_decode($session['usuario'] ?? '{}', true) ?: [];
-    $eps     = $session['eps'] ?? '';
-    $sedes   = loadSedes();
-
-    return compact('history', 'usuario', 'eps', 'sedes');
-}
-
-function saveSession(string $phone, array $history, array $usuario, string $eps, array $sedes = []): void {
-    $payload = json_encode([
-        'telefono'   => $phone,
-        'history'    => json_encode(array_slice($history, -500)),
-        'usuario'    => json_encode($usuario),
-        'eps'        => $eps,
-        'updated_at' => (new DateTime('now', new DateTimeZone('America/Bogota')))->format('c'),
-    ]);
-
-    $ch = curl_init(SB_URL . '/rest/v1/wa_sesiones');
-    curl_setopt_array($ch, [
-        CURLOPT_POST           => true,
-        CURLOPT_POSTFIELDS     => $payload,
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => [
-            'apikey: ' . SB_KEY,
-            'Authorization: Bearer ' . SB_KEY,
-            'Content-Type: application/json',
-            'Prefer: resolution=merge-duplicates',
-        ],
-    ]);
-    curl_exec($ch);
-    curl_close($ch);
-}
-
-function loadSedes(): array {
-    $url = SB_URL . '/rest/v1/sedes?activa=eq.true&select=nombre,ciudad,municipio,municipio_norm,direccion,telefono,lat,lng,eps,horario,modelo';
-    $ch  = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => [
-            'apikey: ' . SB_KEY,
-            'Authorization: Bearer ' . SB_KEY,
-        ],
-    ]);
-    $res = json_decode(curl_exec($ch), true);
-    curl_close($ch);
-    return is_array($res) ? $res : [];
-}
-
-// ── Consultar radicado PQRSFD ─────────────────────────────────
-function consultarRadicado(string $valor): string {
-    $valor = trim($valor);
-    if (!$valor) return 'Por favor indique el número de radicado (formato TD-xxxxx) o su correo electrónico.';
-
-    $campo = str_contains($valor, '@') ? 'correo' : 'radicado';
-    $url   = SB_URL . '/rest/v1/correos?' . $campo . '=eq.' . urlencode($valor) . '&select=radicado,estado,tipo,fecha_creacion,descripcion&limit=1';
-    $ch    = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER     => [
-            'apikey: ' . SB_KEY,
-            'Authorization: Bearer ' . SB_KEY,
-        ],
-    ]);
-    $res = json_decode(curl_exec($ch), true);
-    curl_close($ch);
-
-    if (empty($res)) return "No encontré ninguna PQRSFD con el dato: $valor\n¿Desea radicar una nueva? Escríbame su solicitud.";
-
-    $r = $res[0];
-    return "📋 *Radicado:* " . ($r['radicado'] ?? '-') . "\n"
-         . "📌 *Estado:* "   . ($r['estado']   ?? '-') . "\n"
-         . "📁 *Tipo:* "     . ($r['tipo']     ?? '-') . "\n"
-         . "📅 *Fecha:* "    . substr($r['fecha_creacion'] ?? '-', 0, 10);
-}
-
-// ── Buscar sedes ───────────────────────────────────────────────
-function buscarSedes(string $municipio, string $eps, array $sedes): string {
-    if (!$municipio) return "¿En qué municipio se encuentra para mostrarle las sedes más cercanas?";
-
-    $munNorm = strtoupper(trim(preg_replace('/[áàä]/u','A', preg_replace('/[éèë]/u','E', preg_replace('/[íìï]/u','I', preg_replace('/[óòö]/u','O', preg_replace('/[úùü]/u','U', $municipio)))))));
-    $epsNorm = strtoupper(trim($eps));
-
-    $encontradas = array_filter($sedes, function($s) use ($munNorm, $epsNorm) {
-        // Municipio: acepta match exacto O que el campo contenga el municipio buscado
-        $smNorm = strtoupper($s['municipio_norm'] ?? '');
-        $smMun  = strtoupper($s['municipio'] ?? '');
-        $smCiu  = strtoupper($s['ciudad'] ?? '');
-        $munMatch = ($smNorm === $munNorm)
-                 || ($smMun  === $munNorm)
-                 || ($smCiu  === $munNorm)
-                 || (str_contains($smNorm, $munNorm))
-                 || (str_contains($smMun,  $munNorm))
-                 || (str_contains($munNorm, $smNorm) && strlen($smNorm) > 3);
-        if (!$munMatch) return false;
-
-        // EPS: acepta match exacto O que el nombre de la EPS de la sede CONTENGA la EPS del usuario
-        if (!$epsNorm || $epsNorm === 'TODAS') return true;
-        $epsArr = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
-        foreach ($epsArr as $e) {
-            $eNorm = strtoupper(trim($e));
-            if ($eNorm === 'TODAS') return true;
-            // Match exacto o parcial (COOSALUD matchea COOSALUD EPS y viceversa)
-            if ($eNorm === $epsNorm) return true;
-            if (str_contains($eNorm, $epsNorm)) return true;
-            if (str_contains($epsNorm, $eNorm) && strlen($eNorm) > 4) return true;
-        }
-        return false;
-    });
-
-    // Si no encontró con EPS específica, buscar sin filtro de EPS (mostrar todas las sedes del municipio)
-    if (empty($encontradas) && $epsNorm) {
-        $encontradas = array_filter($sedes, function($s) use ($munNorm) {
-            $smNorm = strtoupper($s['municipio_norm'] ?? '');
-            $smMun  = strtoupper($s['municipio'] ?? '');
-            $smCiu  = strtoupper($s['ciudad'] ?? '');
-            return ($smNorm === $munNorm) || ($smMun === $munNorm) || ($smCiu === $munNorm)
-                || str_contains($smNorm, $munNorm) || str_contains($smMun, $munNorm);
-        });
-        if (!empty($encontradas)) {
-            // Avisar que no hay sede específica de esa EPS pero mostrar las disponibles
-            $txt = "📍 No encontré sede específica de *$eps* en *$municipio*, pero estas sedes pueden atenderle:\n\n";
-            foreach (array_slice($encontradas, 0, 3) as $s) {
-                $horario = $s['horario'] ?? '';
-                $modelo  = strtoupper($s['modelo'] ?? '');
-                if (!$horario) {
-                    $horario = ($modelo === 'IN HOUSE')
-                        ? 'Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am'
-                        : 'Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m';
-                }
-                $epsArr  = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
-                $epsList = implode(', ', array_slice($epsArr, 0, 3));
-                $txt .= "🏥 *" . ($s['nombre'] ?? '') . "*
-";
-                $txt .= "📌 " . ($s['direccion'] ?? '') . "
-";
-                if ($s['telefono'] ?? '') $txt .= "📞 " . $s['telefono'] . "
-";
-                $txt .= "🕐 " . $horario . "
-";
-                $txt .= "EPS: " . $epsList . "
-
-";
-            }
-            return rtrim($txt);
-        }
-    }
-
-    if (empty($encontradas)) {
-        return "No encontré sedes de *$eps* en *$municipio*. Llame al 604 322 2432 para más información.";
-    }
-
-    $txt = "📍 *Sedes en " . ucfirst(strtolower($municipio)) . "* para *" . ucfirst(strtolower($eps)) . "*:\n\n";
-    foreach (array_slice($encontradas, 0, 3) as $s) {
-        $horario = $s['horario'] ?? '';
-        $modelo  = strtoupper($s['modelo'] ?? '');
-        // Horario por defecto según modelo
-        if (!$horario) {
-            $horario = ($modelo === 'IN HOUSE')
-                ? 'Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am'
-                : 'Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m';
-        }
-        $txt .= "🏥 *" . ($s['nombre'] ?? '') . "*\n";
-        $txt .= "📌 " . ($s['direccion'] ?? '') . "\n";
-        if ($s['telefono'] ?? '') $txt .= "📞 " . $s['telefono'] . "\n";
-        $txt .= "🕐 " . $horario . "\n";
-        if ($s['lat'] && $s['lng']) {
-            $txt .= "🗺️ https://maps.google.com/?q=" . $s['lat'] . "," . $s['lng'] . "\n";
-        }
-        $txt .= "\n";
-    }
-    return rtrim($txt);
-}
-
-// ── Parsear tags de acción ────────────────────────────────────
 function parseAction(string $raw): array {
-    $tags = ['FORMULARIO', 'ESCALAR', 'ENCUESTA', 'MENU', 'MEDICAMENTOS', 'REQUISITOS', 'CAMBIAR_EPS'];
+    $tags = ['FORMULARIO','ESCALAR','ENCUESTA','MENU','MEDICAMENTOS','REQUISITOS','CAMBIAR_EPS'];
 
     if (preg_match('/\[CONSULTAR:([^\]]+)\]/i', $raw, $m)) {
         $text = trim(preg_replace('/\[CONSULTAR:[^\]]+\]/i', '', $raw));
@@ -589,5 +367,166 @@ function parseAction(string $raw): array {
             return ['text' => $text, 'action' => $tag, 'data' => ''];
         }
     }
-    return ['text' => trim($raw), 'action' => '', 'data' => ''];
+    return ['text' => trim($raw), 'action' => 'DEFAULT', 'data' => ''];
+}
+
+function buscarUsuarioPorCedula(string $cedula): array {
+    if (!$cedula) return [];
+    $url = SB_URL . '/rest/v1/tabla_usuarios?Cedula%20Pacientes=eq.' . urlencode($cedula) . '&select=*&limit=1';
+    $ch  = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ['apikey: ' . SB_KEY, 'Authorization: Bearer ' . SB_KEY],
+    ]);
+    $res = json_decode(curl_exec($ch), true);
+    curl_close($ch);
+    $u = $res[0] ?? [];
+    if (empty($u)) return [];
+    return [
+        'nombre'  => $u['Nombre Paciente'] ?? '',
+        'cedula'  => $u['Cedula Pacientes'] ?? '',
+        'eps'     => $u['EPS'] ?? '',
+        'ciudad'  => $u['Ciudad'] ?? '',
+    ];
+}
+
+function loadSedes(): array {
+    // Traer TODOS los campos necesarios para dar dirección directa al usuario
+    $url = SB_URL . '/rest/v1/sedes?activa=eq.true&select=nombre,ciudad,municipio,municipio_norm,direccion,telefono,lat,lng,eps,horario,modelo,codigo,encargado&order=municipio.asc';
+    $ch  = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ['apikey: ' . SB_KEY, 'Authorization: Bearer ' . SB_KEY],
+    ]);
+    $res = json_decode(curl_exec($ch), true);
+    curl_close($ch);
+    return is_array($res) ? $res : [];
+}
+
+function consultarRadicado(string $valor): string {
+    $valor = trim($valor);
+    if (!$valor) return 'Por favor indique el número de radicado (formato TD-xxxxx) o su correo electrónico.';
+
+    $campo = str_contains($valor, '@') ? 'correo' : 'radicado';
+    $url   = SB_URL . '/rest/v1/correos?' . $campo . '=eq.' . urlencode($valor) . '&select=radicado,estado,tipo,fecha_creacion&limit=1';
+    $ch    = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER     => ['apikey: ' . SB_KEY, 'Authorization: Bearer ' . SB_KEY],
+    ]);
+    $res = json_decode(curl_exec($ch), true);
+    curl_close($ch);
+
+    if (empty($res)) return "No encontré ninguna PQRSFD con el dato: $valor\n¿Desea radicar una nueva?";
+
+    $r = $res[0];
+    return "📋 *Radicado:* " . ($r['radicado'] ?? '-') . "\n"
+         . "📌 *Estado:* "   . ($r['estado']   ?? '-') . "\n"
+         . "📁 *Tipo:* "     . ($r['tipo']     ?? '-') . "\n"
+         . "📅 *Fecha:* "    . substr($r['fecha_creacion'] ?? '-', 0, 10);
+}
+
+function buscarSedes(string $municipio, string $eps, array $sedes): string {
+    if (!$municipio) return "¿En qué municipio se encuentra para mostrarle las sedes más cercanas?";
+
+    $norm = fn($s) => strtoupper(trim(preg_replace(
+        ['/[áàäâã]/u','/[éèëê]/u','/[íìïî]/u','/[óòöôõ]/u','/[úùüû]/u'],
+        ['A','E','I','O','U'], $s
+    )));
+    $munNorm = $norm($municipio);
+    $epsNorm = strtoupper(trim($eps));
+
+    // ── Paso 1: filtrar por municipio + EPS ───────────────────────────────
+    $encontradas = array_filter($sedes, function($s) use ($munNorm, $epsNorm, $norm) {
+        // Match municipio
+        $smNorm  = $norm($s['municipio_norm'] ?? '');
+        $smMun   = $norm($s['municipio'] ?? '');
+        $smCiu   = $norm($s['ciudad'] ?? '');
+        $munMatch = $smNorm === $munNorm || $smMun === $munNorm || $smCiu === $munNorm
+                 || str_contains($smNorm, $munNorm) || str_contains($smMun, $munNorm)
+                 || str_contains($munNorm, $smNorm) && strlen($smNorm) > 3;
+        if (!$munMatch) return false;
+
+        // Sin filtro de EPS → mostrar todo
+        if (!$epsNorm || $epsNorm === 'TODAS') return true;
+
+        // Match EPS
+        $epsArr = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
+        foreach ($epsArr as $e) {
+            $eNorm = $norm(trim($e));
+            if ($eNorm === 'TODAS') return true;
+            if ($eNorm === $epsNorm) return true;
+            if (str_contains($eNorm, $epsNorm)) return true;
+            if (str_contains($epsNorm, $eNorm) && strlen($eNorm) > 4) return true;
+        }
+        return false;
+    });
+
+    // ── Paso 2: si no hay con EPS específica → mostrar todas del municipio ─
+    $avisarEpsNoEncontrada = false;
+    if (empty($encontradas) && $epsNorm && $epsNorm !== 'TODAS') {
+        $avisarEpsNoEncontrada = true;
+        $encontradas = array_filter($sedes, function($s) use ($munNorm, $norm) {
+            $smNorm = $norm($s['municipio_norm'] ?? '');
+            $smMun  = $norm($s['municipio'] ?? '');
+            $smCiu  = $norm($s['ciudad'] ?? '');
+            return $smNorm === $munNorm || $smMun === $munNorm || $smCiu === $munNorm
+                || str_contains($smNorm, $munNorm) || str_contains($smMun, $munNorm);
+        });
+    }
+
+    if (empty($encontradas)) {
+        return "No encontré sedes de *" . ucfirst(strtolower($eps)) . "* en *" . ucfirst(strtolower($municipio)) . "*.\n"
+             . "Para más información llame al 📞 604 322 2432.";
+    }
+
+    // ── Encabezado ────────────────────────────────────────────────────────
+    $munLabel = ucfirst(strtolower($municipio));
+    if ($avisarEpsNoEncontrada) {
+        $txt  = "📍 No encontré sede exclusiva de *" . ucfirst(strtolower($eps)) . "* en *$munLabel*.\n";
+        $txt .= "Estas sedes del municipio pueden atenderle (verifique su EPS):\n\n";
+    } else {
+        $epsLabel = ($epsNorm && $epsNorm !== 'TODAS') ? " para *" . ucfirst(strtolower($eps)) . "*" : '';
+        $txt = "📍 *Sedes en $munLabel*$epsLabel:\n\n";
+    }
+
+    foreach (array_slice($encontradas, 0, 4) as $s) {
+        $txt .= _formatearSede($s, $epsNorm);
+    }
+    return rtrim($txt);
+}
+
+function _formatearSede(array $s, string $epsUsuario = ''): string {
+    $horario = $s['horario'] ?? '';
+    $modelo  = strtoupper($s['modelo'] ?? '');
+    if (!$horario) {
+        $horario = ($modelo === 'IN HOUSE')
+            ? 'Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am'
+            : 'Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m';
+    }
+
+    // Lista de EPS que atiende esta sede
+    $epsArr  = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
+    $epsArr  = array_map('trim', $epsArr);
+    $esTotal = in_array('TODAS', array_map('strtoupper', $epsArr));
+
+    $txt  = "🏥 *" . ($s['nombre'] ?? '') . "*\n";
+    $txt .= "📌 " . ($s['direccion'] ?? 'Consultar dirección') . "\n";
+    if (!empty($s['telefono'])) $txt .= "📞 " . $s['telefono'] . "\n";
+    $txt .= "🕐 " . $horario . "\n";
+
+    // Mostrar EPS atendidas — si es TODAS simplificarlo
+    if ($esTotal) {
+        $txt .= "✅ Atiende todas las EPS\n";
+    } else {
+        $epsMostrar = array_slice($epsArr, 0, 5);
+        $txt .= "✅ EPS: " . implode(', ', $epsMostrar);
+        if (count($epsArr) > 5) $txt .= " y más";
+        $txt .= "\n";
+    }
+
+    if (!empty($s['lat']) && !empty($s['lng'])) {
+        $txt .= "🗺️ https://maps.google.com/?q=" . $s['lat'] . "," . $s['lng'] . "\n";
+    }
+    return $txt . "\n";
 }
