@@ -561,6 +561,10 @@ if(new URLSearchParams(location.search).get('filtro_estado')==='nova'){
       <div class="fdot fdot-esp"></div>Esp. respuesta
       <span class="filter-cnt" id="fc-esperando">0</span>
     </div>
+    <div class="filter-item" data-estado="fh_mensajes" onclick="setFiltro('fh_mensajes',this)">
+      <div class="fdot" style="background:#6366f1"></div>Mensaje FH
+      <span class="filter-cnt" id="fc-fh_mensajes" style="background:rgba(99,102,241,.15);color:#534AB7">0</span>
+    </div>
     <div class="filter-item" data-estado="pte_gestion" onclick="setFiltro('pte_gestion',this)">
       <div class="fdot fdot-pte"></div>Pte. por Gestión
       <span class="filter-cnt" id="fc-pte_gestion" style="background:rgba(217,119,6,.15);color:#d97706">0</span>
@@ -1031,12 +1035,15 @@ function updateCtrs(){
   const s=S.sesiones;
   const escaladas=s.filter(x=>x.estado==='escalado').length;
   const activas=s.filter(x=>x.estado==='activo').length;
-  const esperando=s.filter(x=>['esperando','esperando_encuesta','confirmando_solucion'].includes(x.estado)).length;
+  const esperando=s.filter(x=>['esperando','esperando_encuesta','confirmando_solucion','confirmando_solucion_nova'].includes(x.estado)
+    && x.fase !== 'tomando_mensaje_fh').length;
+  const fhMensajes=s.filter(x=>x.fase==='tomando_mensaje_fh').length;
   const cerradas=s.filter(x=>x.estado==='cerrado').length;
   const pteGestion=s.filter(x=>x.estado==='pte_gestion').length;
   document.getElementById('fc-escalado').textContent=escaladas;
   const fcAct=document.getElementById('fc-activo');if(fcAct)fcAct.textContent=activas;
   document.getElementById('fc-esperando').textContent=esperando;
+  const fcFH=document.getElementById('fc-fh_mensajes'); if(fcFH) fcFH.textContent=fhMensajes;
   document.getElementById('fc-cerrado').textContent=cerradas;
   const fcPte=document.getElementById('fc-pte_gestion');
   if(fcPte) fcPte.textContent=pteGestion;
@@ -1065,7 +1072,12 @@ function renderLista(){
   // "Todas" muestra todo EXCEPTO las que Nova está atendiendo
   if(S.filtro==='todas') list=list.filter(s=>s.estado!=='nova');
   else if(S.filtro==='esperando')
-    list=list.filter(s=>['esperando','esperando_encuesta','confirmando_solucion'].includes(s.estado));
+    // BUG FIX: excluir sesiones en fase tomando_mensaje_fh del bucket "esperando"
+    // No requieren acción del asesor — el usuario está escribiendo su mensaje FH
+    list=list.filter(s=>['esperando','esperando_encuesta','confirmando_solucion','confirmando_solucion_nova'].includes(s.estado)
+      && s.fase !== 'tomando_mensaje_fh');
+  else if(S.filtro==='fh_mensajes')
+    list=list.filter(s=>s.fase==='tomando_mensaje_fh');
   else list=list.filter(s=>s.estado===S.filtro);
   // pte_gestion aparece en Todas y Activas (necesita acción) — NO en Cerradas
   if(S.tab==='activas') list=list.filter(s=>s.estado!=='cerrado');
@@ -1216,7 +1228,7 @@ function renderHdr(ses){
       <div class="chat-hsub">
         <span style="${stCol[ses.estado]||'color:var(--nova)'}">● ${stLbl[ses.estado]||'Nova TD'}</span>
         ${faseBadge}
-        ${ses.estado==='esperando'?`<span class="wa-esp-tag">⏳ Esperando respuesta del usuario</span>`:''}
+        ${ses.estado==='esperando' && !['tomando_mensaje_fh','esperando_menu_fh'].includes(ses.fase||'')?`<span class="wa-esp-tag">⏳ Esperando respuesta del usuario</span>`:''}
         ${ses.estado==='pte_gestion'?`<span class="wa-esp-tag" style="background:#fef3c7;border-color:#fde68a;color:#d97706">📋 Pendiente por gestionar</span>`:''}
         ${ses.eps?`<span>·</span><span>${escH(ses.eps)}</span>`:''}
         <span>·</span><span style="font-family:'DM Mono',monospace">${ses.telefono}</span>
