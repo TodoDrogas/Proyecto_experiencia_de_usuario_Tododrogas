@@ -191,8 +191,14 @@ switch ($action) {
         break;
 
     case 'MEDICAMENTOS':
-        $respuesta = $text . "\n\n¿Desea que un asesor verifique el estado? Responda *SÍ* o *NO*";
-        $action    = 'DEFAULT';
+        // BUG FIX: Nova NO genera menús numerados propios (*1*/*2*)
+        // porque server.js no sabe interceptarlos — el usuario escribe "1"
+        // y GPT lo trata como nuevo mensaje, repitiendo la respuesta anterior.
+        // En su lugar: si Nova detecta que el usuario quiere verificar con un asesor,
+        // emite [ESCALAR] directamente y server.js maneja el flujo.
+        // El texto de GPT ya incluye la info — solo agregar la invitación a asesor.
+        $respuesta = $text;
+        $action    = 'DEFAULT'; // server.js agrega el menú M/A → A lleva al asesor
         break;
 
     case 'CAMBIAR_EPS':
@@ -273,7 +279,11 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $s .= "  NUNCA respondas con una dirección inventada. SIEMPRE usa el tag [SEDES] para consultas de ubicación.\n";
     $s .= "  El sistema buscará en la base de datos real y devolverá la dirección exacta con mapa.\n\n";
 
-    $s .= "REGLA FUNDAMENTAL: Al finalizar CUALQUIER respuesta que no sea [ESCALAR] o [ENCUESTA], NO incluyas opciones de menú — el sistema las agrega automáticamente.\n";
+    $s .= "REGLA FUNDAMENTAL (CRÍTICA): NUNCA generes menús numerados propios (*1*, *2*, etc.) en tus respuestas.\n";
+    $s .= "El sistema agrega automáticamente el menú M/A al final de cada DEFAULT. Si el usuario quiere asesor, usa [ESCALAR].\n";
+    $s .= "Ejemplo PROHIBIDO: '¿Desea asesor? *1* Sí *2* No' — NUNCA hagas esto.\n";
+    $s .= "Ejemplo CORRECTO: Responde la consulta + usa el tag apropiado ([ESCALAR], [MEDICAMENTOS], [SEDES], etc.)\n";
+    $s .= "Si el usuario escribe '1' o '2' como respuesta a tu respuesta anterior, es porque confundiste el sistema — NO lo hagas.\n";
     $s .= "REGLA CONSULTAR: Si el usuario escribe SOLO un número TD-xxxxx o un correo → usa [CONSULTAR:valor].\n";
     $s .= "REGLA RADICAR: Si el usuario quiere radicar una PQRSFD → usa [FORMULARIO].\n";
     $s .= "REGLA MEDICAMENTOS: Para estado/demora de medicamentos → [MEDICAMENTOS]. Para qué llevar → [REQUISITOS].\n";
