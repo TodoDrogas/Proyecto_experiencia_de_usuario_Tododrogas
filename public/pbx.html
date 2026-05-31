@@ -845,6 +845,8 @@ async function guardarGestion(){
       tiene_tutela:          _tutela,
       descripcion:           `${_prefijo} ${obs}`,
       transcripcion:         obs,
+      body_content:          obs,
+      body_preview:          obs.slice(0,255),
       estado:                'solucionado',
       agente_id:             AGENT_ID||null,
       asignado_a:            AGENT_NAME||null,
@@ -862,6 +864,32 @@ async function guardarGestion(){
       for(const med of meds){
         try{ await sb('gestiones_medicamentos','POST',{correo_id:correoId,...med}); }
         catch(e){ console.warn('[med]',e.message); }
+      }
+
+      // ── Registrar en historial_eventos para alimentar el informe SIGI ────
+      // Estos eventos permiten que las columnas de tiempo y observación
+      // se llenen correctamente en el export Excel
+      const _agenteId = AGENT_ID||null;
+      const _eventos = [
+        // Hora_Asignacion
+        { evento:'asignacion_automatica', descripcion:`Gestión ${_canalActivo} registrada` },
+        // Hora_Primera_Gestion + Observación
+        { evento:'gestion_pbx',           descripcion:obs, datos_extra: JSON.stringify({observaciones: obs, canal: _canalActivo}) },
+        // Respuesta Asignación + Hora_Primera_Respuesta
+        { evento:'correo_respondido',     descripcion:obs, datos_extra: JSON.stringify({observaciones: obs}) },
+        // Hora_Cierre
+        { evento:'solucionado',           descripcion:'Gestión solucionada' },
+      ];
+      for(const ev of _eventos){
+        try{
+          await sb('historial_eventos','POST',{
+            correo_id:  correoId,
+            agente_id:  _agenteId,
+            from_email: _emailPac||_emailAsesor,
+            subject:    obs,
+            ...ev
+          });
+        }catch(e){ console.warn('[historial]',e.message); }
       }
     }
 
