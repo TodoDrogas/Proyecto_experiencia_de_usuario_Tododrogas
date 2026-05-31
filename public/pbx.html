@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gestión PBX · Tododrogas</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="config.js" onerror="console.warn('config.js not found')"></script>
+<style>
+:root{
+  --ink:#0a0e1a;--ink2:#3a4258;--ink3:#8892a4;
+  --bg:#f2f4f8;--bg2:#e8ebf2;--surface:#ffffff;--surface2:#f7f8fb;
+  --border:#dde2ed;--border2:#c8d0e0;
+  --blue:#2563eb;--blue-d:#1d4ed8;--blue-l:#eff4ff;
+  --green:#16a34a;--green-l:#dcfce7;
+  --red:#dc2626;--red-l:#fee2e2;
+  --orange:#ea580c;--orange-l:#fff7ed;
+  --wa:#25d366;--wa-l:#e7fce8;
+  --tel:#7c3aed;--tel-l:#f5f3ff;
+  --r:12px;--r2:8px;--r3:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;min-height:100dvh;display:flex;flex-direction:column}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--ink);color:#fff;height:52px;display:flex;align-items:center;padding:0 20px;gap:12px;position:sticky;top:0;z-index:200;flex-shrink:0}
+.tb-dot{width:7px;height:7px;border-radius:50%;background:var(--blue);box-shadow:0 0 8px var(--blue)}
+.tb-title{font-size:15px;font-weight:800;color:#fff}
+.tb-divider{width:1px;height:20px;background:rgba(255,255,255,.15)}
+.tb-sub{font-size:12px;font-weight:500;color:rgba(255,255,255,.45)}
+.tb-badge{background:rgba(234,88,12,.2);color:#fb923c;border:1px solid rgba(234,88,12,.3);border-radius:99px;font-size:10px;font-weight:700;padding:2px 8px;letter-spacing:.3px}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.tb-agent{display:flex;align-items:center;gap:7px}
+.tb-av{width:28px;height:28px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700}
+.tb-name{font-size:12px;font-weight:600;color:#fff}
+.btn-logout{background:none;border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);padding:4px 10px;border-radius:6px;font-size:11px;font-family:'Poppins',sans-serif;cursor:pointer;transition:all .15s}
+.btn-logout:hover{border-color:var(--red);color:#fca5a5}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 20px}
+.container{width:100%;max-width:720px;display:flex;flex-direction:column;gap:32px}
+
+/* ── HERO ── */
+.hero{text-align:center}
+.hero-icon{width:64px;height:64px;background:var(--ink);border-radius:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 8px 24px rgba(10,14,26,.15)}
+.hero h1{font-size:24px;font-weight:800;color:var(--ink);margin-bottom:6px}
+.hero p{font-size:13px;color:var(--ink3);line-height:1.6;max-width:480px;margin:0 auto}
+.hero-wip{display:inline-flex;align-items:center;gap:6px;background:var(--orange-l);border:1px solid rgba(234,88,12,.2);color:var(--orange);border-radius:99px;font-size:11px;font-weight:600;padding:4px 12px;margin-top:12px}
+
+/* ── BOTONES GESTIÓN ── */
+.gestion-cards{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.gcard{border-radius:var(--r);border:2px solid var(--border);background:var(--surface);padding:28px 24px;cursor:pointer;transition:all .2s;display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden}
+.gcard::before{content:'';position:absolute;inset:0;opacity:0;transition:opacity .2s}
+.gcard:hover{transform:translateY(-3px);box-shadow:0 12px 32px rgba(10,14,26,.12)}
+.gcard-wa{border-color:rgba(37,211,102,.3)}
+.gcard-wa::before{background:linear-gradient(135deg,rgba(37,211,102,.05),transparent)}
+.gcard-wa:hover{border-color:var(--wa);box-shadow:0 12px 32px rgba(37,211,102,.15)}
+.gcard-wa:hover::before{opacity:1}
+.gcard-tel{border-color:rgba(124,58,237,.3)}
+.gcard-tel::before{background:linear-gradient(135deg,rgba(124,58,237,.05),transparent)}
+.gcard-tel:hover{border-color:var(--tel);box-shadow:0 12px 32px rgba(124,58,237,.15)}
+.gcard-tel:hover::before{opacity:1}
+.gcard-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center}
+.gcard-wa .gcard-icon{background:var(--wa-l)}
+.gcard-tel .gcard-icon{background:var(--tel-l)}
+.gcard-title{font-size:16px;font-weight:700;color:var(--ink)}
+.gcard-desc{font-size:12px;color:var(--ink3);line-height:1.5}
+.gcard-btn{margin-top:4px;display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:600;font-family:'Poppins',sans-serif;border:none;cursor:pointer;transition:all .15s}
+.gcard-wa .gcard-btn{background:var(--wa);color:#fff}
+.gcard-wa .gcard-btn:hover{background:#1eb856}
+.gcard-tel .gcard-btn{background:var(--tel);color:#fff}
+.gcard-tel .gcard-btn:hover{background:#6d28d9}
+
+/* ── INFO BOX ── */
+.info-box{background:var(--blue-l);border:1px solid rgba(37,99,235,.15);border-radius:var(--r2);padding:14px 16px;display:flex;gap:12px;align-items:flex-start}
+.info-box svg{flex-shrink:0;color:var(--blue);margin-top:1px}
+.info-box p{font-size:12px;color:var(--blue-d);line-height:1.6}
+
+/* ── MODAL GESTIÓN ── */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(10,14,26,.5);backdrop-filter:blur(4px);z-index:500;align-items:center;justify-content:center;padding:20px}
+.modal-bg.open{display:flex}
+.modal{background:var(--surface);border-radius:16px;width:100%;max-width:620px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 64px rgba(10,14,26,.25)}
+.modal-hdr{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.modal-hdr-icon{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.modal-hdr-title{font-size:15px;font-weight:700;color:var(--ink)}
+.modal-hdr-sub{font-size:11px;color:var(--ink3);margin-top:1px}
+.modal-close{margin-left:auto;background:none;border:none;cursor:pointer;color:var(--ink3);padding:4px;border-radius:6px;transition:all .15s}
+.modal-close:hover{background:var(--bg);color:var(--ink)}
+.modal-body{padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end}
+
+/* ── FORM ── */
+.fm-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fm-row.full{grid-template-columns:1fr}
+.fm-group{display:flex;flex-direction:column;gap:4px}
+.fm-label{font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.4px;display:flex;align-items:center;gap:4px}
+.fm-req{color:var(--red)}
+.fm-input{border:1.5px solid var(--border);border-radius:var(--r3);padding:9px 12px;font-size:12px;font-family:'Poppins',sans-serif;color:var(--ink);background:var(--surface);outline:none;transition:all .15s;width:100%}
+.fm-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.08)}
+.fm-input.gm-ok{border-color:var(--green)!important;background:var(--green-l)}
+.fm-input.gm-err{border-color:var(--red)!important;background:var(--red-l)}
+.fm-input[readonly]{background:var(--bg2);color:var(--ink3);cursor:not-allowed}
+select.fm-input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%238892a4' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+textarea.fm-input{resize:vertical;min-height:80px}
+
+/* ── EPS SEARCH ── */
+.eps-wrap{position:relative}
+.eps-drop{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1.5px solid var(--border);border-top:none;border-radius:0 0 var(--r3) var(--r3);max-height:180px;overflow-y:auto;z-index:10;display:none;box-shadow:0 8px 24px rgba(10,14,26,.1)}
+.eps-item{padding:8px 12px;font-size:12px;cursor:pointer;transition:background .1s}
+.eps-item:hover{background:var(--bg)}
+
+/* ── SECCIÓN ── */
+.sec-title{font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;padding-bottom:6px;border-bottom:1px solid var(--border);margin-bottom:4px}
+
+/* ── TUTELA TOGGLE ── */
+.tutela-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--r3);background:var(--surface)}
+.tutela-row.gm-ok{border-color:var(--green);background:var(--green-l)}
+.tutela-row.gm-err{border-color:var(--red);background:var(--red-l)}
+.tutela-label{font-size:12px;color:var(--ink2);flex:1}
+.tutela-btn{padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;border:1.5px solid var(--border);background:var(--bg);color:var(--ink2);cursor:pointer;transition:all .15s}
+.tutela-btn.active-si{background:var(--red);border-color:var(--red);color:#fff}
+.tutela-btn.active-no{background:var(--green);border-color:var(--green);color:#fff}
+
+/* ── BTNS ── */
+.btn{padding:9px 20px;border-radius:8px;font-size:13px;font-weight:600;font-family:'Poppins',sans-serif;border:none;cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn-cancel{background:var(--bg2);color:var(--ink2);border:1.5px solid var(--border)}
+.btn-cancel:hover{background:var(--bg);color:var(--ink)}
+.btn-save{background:var(--blue);color:#fff}
+.btn-save:hover{background:var(--blue-d)}
+.btn-save:disabled{opacity:.5;cursor:not-allowed}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:#fff;padding:10px 20px;border-radius:99px;font-size:12px;font-weight:600;font-family:'Poppins',sans-serif;z-index:999;transition:transform .3s;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+.toast.ok{background:var(--green)}
+.toast.err{background:var(--red)}
+
+@media(max-width:600px){
+  .gestion-cards{grid-template-columns:1fr}
+  .fm-row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="tb-dot"></div>
+  <div class="tb-title">tododrogas</div>
+  <div class="tb-divider"></div>
+  <div class="tb-sub">Gestión PBX</div>
+  <span class="tb-badge">🚧 En construcción</span>
+  <div class="tb-right">
+    <div class="tb-agent">
+      <div class="tb-av" id="tbAv">?</div>
+      <div class="tb-name" id="tbName">Cargando...</div>
+    </div>
+    <button class="btn-logout" onclick="logout()">Salir</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="container">
+
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-icon">
+        <svg width="28" height="28" fill="none" stroke="#fff" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.77a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+        </svg>
+      </div>
+      <h1>Gestión PBX / Teléfono</h1>
+      <p>Registra las gestiones atendidas por WhatsApp o llamada telefónica directamente en el sistema SIGI mientras la integración completa está en desarrollo.</p>
+      <span class="hero-wip">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Plataforma en construcción — funcionalidad temporal habilitada
+      </span>
+    </div>
+
+    <!-- TARJETAS -->
+    <div class="gestion-cards">
+
+      <div class="gcard gcard-wa" onclick="abrirModal('whatsapp')">
+        <div class="gcard-icon">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
+            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="#25d366" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="gcard-title">Gestión WhatsApp</div>
+          <div class="gcard-desc">Registra una gestión atendida por WhatsApp. El origen quedará marcado como <strong>WHATSAPP</strong> en el informe SIGI.</div>
+        </div>
+        <button class="gcard-btn">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Nueva gestión WA
+        </button>
+      </div>
+
+      <div class="gcard gcard-tel" onclick="abrirModal('telefono')">
+        <div class="gcard-icon">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.77a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" stroke="#7c3aed" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="gcard-title">Gestión Teléfono</div>
+          <div class="gcard-desc">Registra una gestión atendida por llamada. El origen quedará marcado como <strong>CONMUTADOR (TELÉFONO)</strong> en el informe SIGI.</div>
+        </div>
+        <button class="gcard-btn">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Nueva gestión Tel.
+        </button>
+      </div>
+
+    </div>
+
+    <!-- INFO -->
+    <div class="info-box">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <p>Todos los campos marcados con <strong style="color:var(--red)">*</strong> son obligatorios. Los datos del paciente se autocompletan al ingresar la cédula. Una vez guardada, la gestión queda registrada en el sistema SIGI y aparece en el informe mensual.</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL GESTIÓN -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-hdr">
+      <div class="modal-hdr-icon" id="mIcon"></div>
+      <div>
+        <div class="modal-hdr-title" id="mTitle">Nueva gestión</div>
+        <div class="modal-hdr-sub" id="mSub">Completa todos los campos obligatorios</div>
+      </div>
+      <button class="modal-close" onclick="cerrarModal()">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+
+      <!-- DATOS PACIENTE -->
+      <div class="sec-title">Datos del paciente <span style="font-weight:400;text-transform:none;font-size:9px;color:var(--ink3)">(se autocompleta al ingresar cédula)</span></div>
+      <div class="fm-row">
+        <div class="fm-group">
+          <label class="fm-label">Tipo de Documento <span class="fm-req">*</span></label>
+          <select class="fm-input gm-err" id="mTipoDoc" onchange="mkOk('mTipoDoc','select')">
+            <option value="">— Seleccionar —</option>
+            <option value="CÉDULA DE CIUDADANÍA">Cédula de Ciudadanía</option>
+            <option value="TARJETA DE IDENTIDAD">Tarjeta de Identidad</option>
+            <option value="CÉDULA DE EXTRANJERÍA">Cédula de Extranjería</option>
+            <option value="REGISTRO CIVIL DE NACIMIENTO">Registro Civil</option>
+            <option value="PASAPORTE">Pasaporte</option>
+            <option value="NIT">NIT</option>
+          </select>
+        </div>
+        <div class="fm-group">
+          <label class="fm-label">N° Documento <span class="fm-req">*</span> <span style="font-weight:400;text-transform:none;font-size:9px">→ autocompleta</span></label>
+          <input class="fm-input gm-err" id="mCedula" type="text" placeholder="Ej: 1020304050"
+            oninput="mkOk('mCedula','input');buscarPaciente(this.value)">
+        </div>
+      </div>
+      <div class="fm-row full">
+        <div class="fm-group">
+          <label class="fm-label">Nombre y Apellidos <span class="fm-req">*</span></label>
+          <input class="fm-input gm-err" id="mNombre" type="text" placeholder="Se autocompleta..."
+            oninput="this.value=this.value.toUpperCase();mkOk('mNombre','input')">
+        </div>
+      </div>
+      <div class="fm-row full">
+        <div class="fm-group">
+          <label class="fm-label">Dirección <span class="fm-req">*</span></label>
+          <input class="fm-input gm-err" id="mDireccion" type="text" placeholder="Se autocompleta..."
+            oninput="this.value=this.value.toUpperCase();mkOk('mDireccion','input')">
+        </div>
+      </div>
+      <div class="fm-row">
+        <div class="fm-group">
+          <label class="fm-label">Teléfono <span class="fm-req">*</span></label>
+          <input class="fm-input gm-err" id="mTelefono" type="text" placeholder="Se autocompleta..."
+            oninput="mkOk('mTelefono','input')">
+        </div>
+        <div class="fm-group">
+          <label class="fm-label">Email <span class="fm-req">*</span></label>
+          <input class="fm-input gm-err" id="mEmail" type="text" placeholder="Se autocompleta..."
+            oninput="mkOk('mEmail','input')">
+        </div>
+      </div>
+
+      <!-- EPS Y CLASIFICACIÓN -->
+      <div class="sec-title" style="margin-top:4px">EPS, Origen y Clasificación</div>
+      <div class="fm-row full">
+        <div class="fm-group">
+          <label class="fm-label">EPS <span class="fm-req">*</span></label>
+          <div class="eps-wrap">
+            <input class="fm-input gm-err" id="mEpsSearch" type="text" placeholder="Escribir para buscar EPS..."
+              oninput="buscarEps(this.value)" onfocus="buscarEps('')" autocomplete="off">
+            <input type="hidden" id="mEpsId">
+            <div class="eps-drop" id="mEpsDrop"></div>
+          </div>
+          <div style="font-size:10px;color:var(--ink3);margin-top:3px">NIT: <span id="mNitEps" style="font-family:'DM Mono',monospace">—</span></div>
+        </div>
+      </div>
+      <div class="fm-row">
+        <div class="fm-group">
+          <label class="fm-label">Origen <span class="fm-req">*</span></label>
+          <input class="fm-input gm-ok" id="mOrigen" type="text" readonly>
+        </div>
+        <div class="fm-group">
+          <label class="fm-label">Tipo de Solicitud <span class="fm-req">*</span></label>
+          <select class="fm-input gm-err" id="mTipoSol" onchange="mkOk('mTipoSol','select')">
+            <option value="">— Seleccionar —</option>
+            <option>QUEJA</option><option>PETICIÓN</option><option>RECLAMO</option>
+            <option>SOLICITUD</option><option>TUTELA</option><option>FALLO/SENTENCIA</option>
+            <option>INCIDENTE DESACATO</option><option>REQUERIMIENTO PREVIO</option>
+            <option>SANCIÓN INCIDENTE DESACATO</option><option>INFORMACIÓN</option>
+          </select>
+        </div>
+      </div>
+      <div class="fm-row">
+        <div class="fm-group">
+          <label class="fm-label">Detalle Solicitud <span class="fm-req">*</span></label>
+          <select class="fm-input gm-err" id="mDetalle" onchange="mkOk('mDetalle','select')">
+            <option value="">— Seleccionar —</option>
+            <option>PENDIENTE</option><option>FORMULA ERRADA</option><option>FORMULA VENCIDA</option>
+            <option>SIN FORMULA</option><option>SIN RADICADO</option><option>USUARIO YA RECLAMÓ</option>
+            <option>MUNICIPIO NO CONTRATADO</option><option>MX NO CONTRATADO</option>
+            <option>MIPRES NO DIRECCIONADO</option><option>INCONFORMIDAD POR PRESTACIÓN DE SERVICIOS</option>
+            <option>USUARIO NO RECLAMA</option><option>MX NO AUTORIZADO (GLP-1, COTIZACIÓN, ETC)</option>
+          </select>
+        </div>
+        <div class="fm-group">
+          <label class="fm-label">Categoría <span class="fm-req">*</span></label>
+          <select class="fm-input gm-err" id="mCategoria" onchange="mkOk('mCategoria','select')">
+            <option value="">— Seleccionar —</option>
+            <option>EPS</option><option>USUARIO EXTERNO</option>
+            <option>ENTE DE CONTROL</option><option>TODODROGAS</option>
+          </select>
+        </div>
+      </div>
+      <div class="fm-row">
+        <div class="fm-group">
+          <label class="fm-label">Departamento <span class="fm-req">*</span></label>
+          <input class="fm-input gm-err" id="mDepto" type="text" placeholder="Ej: ANTIOQUIA"
+            oninput="this.value=this.value.toUpperCase();mkOk('mDepto','input')">
+        </div>
+        <div class="fm-group">
+          <label class="fm-label">Ciudad <span class="fm-req">*</span></label>
+          <input class="fm-input gm-err" id="mCiudad" type="text" placeholder="Ej: MEDELLÍN"
+            oninput="this.value=this.value.toUpperCase();mkOk('mCiudad','input')">
+        </div>
+      </div>
+
+      <!-- OBSERVACIÓN Y ASUNTO -->
+      <div class="sec-title" style="margin-top:4px">Gestión</div>
+      <div class="fm-row full">
+        <div class="fm-group">
+          <label class="fm-label">Asunto / Descripción <span class="fm-req">*</span></label>
+          <input class="fm-input gm-err" id="mAsunto" type="text" placeholder="Ej: Consulta sobre entrega de medicamento..."
+            oninput="this.value=this.value.toUpperCase();mkOk('mAsunto','input')">
+        </div>
+      </div>
+      <div class="fm-row full">
+        <div class="fm-group">
+          <label class="fm-label">Observación <span class="fm-req">*</span></label>
+          <textarea class="fm-input gm-err" id="mObs" placeholder="Describe la gestión realizada..."
+            oninput="mkOk('mObs','input')"></textarea>
+        </div>
+      </div>
+      <div class="fm-row full">
+        <div class="fm-group">
+          <label class="fm-label">¿Tiene Tutela? <span class="fm-req">*</span></label>
+          <div class="tutela-row gm-err" id="mTutelaRow">
+            <span class="tutela-label">Seleccione si el caso tiene tutela asociada</span>
+            <button class="tutela-btn" id="btnSi" onclick="setTutela(true)">SÍ</button>
+            <button class="tutela-btn" id="btnNo" onclick="setTutela(false)">NO</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-cancel" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn btn-save" id="btnGuardar" onclick="guardarGestion()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Guardar gestión
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── AUTH ──────────────────────────────────────────────────────────────────
+const AGENT_ID   = sessionStorage.getItem('pqr_agent_id')   || '';
+const AGENT_NAME = sessionStorage.getItem('pqr_agent_name') || '';
+const AGENT_CED  = sessionStorage.getItem('pqr_agent_cedula')|| '';
+
+if(!AGENT_ID){ window.location.href='login.html'; }
+
+document.getElementById('tbName').textContent = AGENT_NAME || 'Agente';
+document.getElementById('tbAv').textContent   = (AGENT_NAME||'?').charAt(0).toUpperCase();
+
+function logout(){ sessionStorage.clear(); window.location.href='login.html'; }
+
+// ── SUPABASE ──────────────────────────────────────────────────────────────
+async function sb(path, method='GET', body=null){
+  const opts = {
+    method,
+    headers:{
+      'apikey':        window.SUPABASE_KEY,
+      'Authorization': 'Bearer '+window.SUPABASE_KEY,
+      'Content-Type':  'application/json',
+      'Prefer':        method==='POST' ? 'return=representation' : 'return=minimal'
+    }
+  };
+  if(body) opts.body = JSON.stringify(body);
+  const r = await fetch(window.SUPABASE_URL+'/rest/v1/'+path, opts);
+  if(!r.ok){ const t=await r.text(); throw new Error(t); }
+  return r.json().catch(()=>null);
+}
+
+// ── EPS CATÁLOGO ──────────────────────────────────────────────────────────
+let _epsCatalogo = [];
+async function cargarEps(){
+  if(_epsCatalogo.length) return;
+  try{ _epsCatalogo = await sb('eps_catalogo?select=id,nombre,nit&order=nombre.asc&limit=200') || []; }catch(e){}
+}
+cargarEps();
+
+function buscarEps(q){
+  const drop = document.getElementById('mEpsDrop');
+  const matches = q.length < 1
+    ? _epsCatalogo.slice(0,15)
+    : _epsCatalogo.filter(e=>e.nombre.toLowerCase().includes(q.toLowerCase())).slice(0,15);
+  if(!matches.length){ drop.style.display='none'; return; }
+  drop.innerHTML = matches.map(e=>
+    `<div class="eps-item" onmousedown="selEps('${e.id}','${e.nombre.replace(/'/g,"\\'")}','${(e.nit||'').replace(/'/g,"\\'")}')">
+       ${e.nombre}<span style="color:var(--ink3);font-size:10px;margin-left:6px">${e.nit||''}</span>
+     </div>`
+  ).join('');
+  drop.style.display='block';
+}
+function selEps(id, nombre, nit){
+  document.getElementById('mEpsSearch').value = nombre;
+  document.getElementById('mEpsId').value     = id;
+  document.getElementById('mNitEps').textContent = nit||'—';
+  document.getElementById('mEpsDrop').style.display='none';
+  mkOk('mEpsSearch','input');
+}
+document.addEventListener('click', e=>{
+  if(!e.target.closest('.eps-wrap')) document.getElementById('mEpsDrop').style.display='none';
+});
+
+// ── BUSCAR PACIENTE ───────────────────────────────────────────────────────
+let _pacTimer = null;
+function buscarPaciente(cedula){
+  clearTimeout(_pacTimer);
+  const c = cedula.replace(/\D/g,'');
+  if(c.length < 6) return;
+  _pacTimer = setTimeout(async()=>{
+    try{
+      const r = await fetch('validar-paciente.php',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({cedula:c})
+      });
+      const d = await r.json();
+      if(d.ok){
+        if(d.nombre)   { document.getElementById('mNombre').value   = d.nombre.toUpperCase();   mkOk('mNombre','input'); }
+        if(d.direccion){ document.getElementById('mDireccion').value= d.direccion.toUpperCase(); mkOk('mDireccion','input'); }
+        if(d.telefono) { document.getElementById('mTelefono').value = d.telefono;               mkOk('mTelefono','input'); }
+        if(d.email)    { document.getElementById('mEmail').value    = d.email;                  mkOk('mEmail','input'); }
+        if(d.tipo_documento){
+          const sel = document.getElementById('mTipoDoc');
+          for(let op of sel.options){ if(op.value===d.tipo_documento||op.value.startsWith(d.tipo_documento)){op.selected=true;break;} }
+          mkOk('mTipoDoc','select');
+        }
+        toast('Paciente encontrado ✓','ok');
+      }
+    }catch(e){}
+  },600);
+}
+
+// ── TUTELA ────────────────────────────────────────────────────────────────
+let _tutela = null;
+function setTutela(val){
+  _tutela = val;
+  document.getElementById('btnSi').className = 'tutela-btn'+(val===true?' active-si':'');
+  document.getElementById('btnNo').className = 'tutela-btn'+(val===false?' active-no':'');
+  const row = document.getElementById('mTutelaRow');
+  row.classList.add('gm-ok'); row.classList.remove('gm-err');
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────
+let _canal = '';
+function abrirModal(canal){
+  _canal  = canal;
+  _tutela = null;
+
+  // Reset todos los campos
+  ['mTipoDoc','mCedula','mNombre','mDireccion','mTelefono','mEmail',
+   'mTipoSol','mDetalle','mCategoria','mDepto','mCiudad','mAsunto','mObs'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(el.tagName==='SELECT') el.value=''; else el.value='';
+    el.classList.add('gm-err'); el.classList.remove('gm-ok');
+  });
+  document.getElementById('mEpsSearch').value='';
+  document.getElementById('mEpsId').value='';
+  document.getElementById('mNitEps').textContent='—';
+  document.getElementById('mEpsSearch').classList.add('gm-err');
+  document.getElementById('mEpsSearch').classList.remove('gm-ok');
+  document.getElementById('mTutelaRow').classList.add('gm-err');
+  document.getElementById('mTutelaRow').classList.remove('gm-ok');
+  document.getElementById('btnSi').className='tutela-btn';
+  document.getElementById('btnNo').className='tutela-btn';
+
+  // Origen según canal
+  const origen = canal==='whatsapp' ? 'WHATSAPP' : 'CONMUTADOR (TELÉFONO)';
+  const origenEl = document.getElementById('mOrigen');
+  origenEl.value = origen;
+  origenEl.classList.add('gm-ok'); origenEl.classList.remove('gm-err');
+
+  // Header del modal
+  const isWa = canal==='whatsapp';
+  document.getElementById('mTitle').textContent = isWa ? 'Gestión WhatsApp' : 'Gestión Teléfono / PBX';
+  document.getElementById('mSub').textContent   = 'Origen: '+origen+' · Completa todos los campos';
+  const icon = document.getElementById('mIcon');
+  icon.style.background = isWa ? 'var(--wa-l)' : 'var(--tel-l)';
+  icon.innerHTML = isWa
+    ? `<svg width="18" height="18" fill="none" stroke="#25d366" stroke-width="2" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`
+    : `<svg width="18" height="18" fill="none" stroke="#7c3aed" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 1.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.77a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`;
+
+  document.getElementById('modalBg').classList.add('open');
+  setTimeout(()=>document.getElementById('mCedula').focus(), 100);
+}
+function cerrarModal(){ document.getElementById('modalBg').classList.remove('open'); }
+
+// ── VALIDACIÓN ────────────────────────────────────────────────────────────
+function mkOk(id, tipo){
+  const el = document.getElementById(id);
+  if(!el) return;
+  const v = tipo==='select' ? el.value : el.value.trim();
+  if(v){ el.classList.add('gm-ok'); el.classList.remove('gm-err'); }
+  else { el.classList.add('gm-err'); el.classList.remove('gm-ok'); }
+}
+
+function validarTodo(){
+  const campos = ['mTipoDoc','mCedula','mNombre','mDireccion','mTelefono','mEmail',
+                  'mTipoSol','mDetalle','mCategoria','mDepto','mCiudad','mAsunto','mObs'];
+  let ok = true;
+  campos.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    const tipo = el.tagName==='SELECT'?'select':'input';
+    mkOk(id,tipo);
+    const v = tipo==='select'?el.value:el.value.trim();
+    if(!v) ok=false;
+  });
+  if(!document.getElementById('mEpsId').value){
+    document.getElementById('mEpsSearch').classList.add('gm-err');
+    document.getElementById('mEpsSearch').classList.remove('gm-ok');
+    ok=false;
+  }
+  if(_tutela===null){
+    document.getElementById('mTutelaRow').classList.add('gm-err');
+    document.getElementById('mTutelaRow').classList.remove('gm-ok');
+    ok=false;
+  }
+  return ok;
+}
+
+// ── GUARDAR ───────────────────────────────────────────────────────────────
+async function guardarGestion(){
+  if(!validarTodo()){ toast('Completa todos los campos obligatorios','err'); return; }
+
+  const btn = document.getElementById('btnGuardar');
+  btn.disabled=true; btn.textContent='Guardando...';
+
+  try{
+    const ahora      = new Date().toISOString();
+    const asunto     = document.getElementById('mAsunto').value.trim();
+    const obs        = document.getElementById('mObs').value.trim();
+    const _fechaStr  = new Date().toISOString().slice(0,16).replace(/[-:T]/g,'').slice(0,12); // YYYYMMDDHHmm
+    const _telLimpio = document.getElementById('mTelefono').value.replace(/\D/g,'');
+    const _ticketId  = _canal==='whatsapp'
+      ? `WA-${_telLimpio}-${_fechaStr}`
+      : `PBX-${_telLimpio}-${_fechaStr}`;
+
+    // 1 — Email: del paciente si existe, sino placeholder con teléfono
+    const _emailPaciente = document.getElementById('mEmail').value.trim();
+    const _emailFallback = _canal==='whatsapp'
+      ? `wa_${_telLimpio}@tododrogas.online`
+      : `pbx_${_telLimpio}@tododrogas.online`;
+    const _emailFinal = _emailPaciente || _emailFallback;
+
+    // 2 — Observación prefijada con canal para trazabilidad
+    const _prefijo = _canal==='whatsapp' ? '[WHATSAPP]' : '[TELÉFONO]';
+    const _obsCompleta = `${_prefijo} ${obs}`;
+
+    // 3 — Todos los timestamps iguales (gestión inmediata, sin bandeja previa)
+    const payload = {
+      ticket_id:             _ticketId,
+      subject:               asunto,
+      from_email:            _emailFinal,
+      from_name:             document.getElementById('mNombre').value,
+      nombre:                document.getElementById('mNombre').value,
+      cedula_paciente:       document.getElementById('mCedula').value,
+      tipo_documento:        document.getElementById('mTipoDoc').value,
+      direccion_paciente:    document.getElementById('mDireccion').value,
+      telefono_contacto:     document.getElementById('mTelefono').value,
+      correo:                _emailFinal,
+      eps_id:                document.getElementById('mEpsId').value||null,
+      origen:                document.getElementById('mOrigen').value,
+      canal_contacto:        _canal==='whatsapp'?'whatsapp':'telefono',
+      nombre_solicitud:      document.getElementById('mTipoSol').value,
+      detalle_solicitud:     document.getElementById('mDetalle').value,
+      categoria_sigi:        document.getElementById('mCategoria').value,
+      departamento_paciente: document.getElementById('mDepto').value,
+      ciudad_paciente:       document.getElementById('mCiudad').value,
+      tiene_tutela:          _tutela,
+      descripcion:           _obsCompleta,   // Observación prefijada con canal
+      transcripcion:         obs,            // Observación limpia sin prefijo
+      estado:                'solucionado',
+      agente_id:             AGENT_ID||null,
+      asignado_a:            AGENT_NAME||null,
+      num_gestiones:         1,
+      prioridad:             'normal',
+      is_read:               true,
+      is_draft:              false,
+      tiene_respuesta:       true,
+      // Todos los tiempos = ahora (gestión inmediata, sin flujo previo)
+      received_at:           ahora,   // Hora_Recibido
+      asignacion_automatica: ahora,   // Hora_Asignacion
+      created_at:            ahora,   // Hora_Primera_Gestion
+      updated_at:            ahora,
+      sent_at:               ahora,   // Hora_Primera_Respuesta
+      fecha_resolucion:      ahora,   // Hora_Cierre
+      // Hora_Pte_Firma → null (no aplica en WA/PBX)
+    };
+
+    const correoCreado = await sb('correos', 'POST', payload);
+    const correoId = Array.isArray(correoCreado) ? correoCreado[0]?.id : correoCreado?.id;
+
+    // ── Sumar gestión al agente ───────────────────────────────────────────
+    if(AGENT_ID){
+      try{
+        const agData = await sb(`agentes?id=eq.${AGENT_ID}&select=casos_activos`);
+        const actual = agData?.[0]?.casos_activos || 0;
+        await sb(`agentes?id=eq.${AGENT_ID}`, 'PATCH', {
+          casos_activos:    actual + 1,
+          ultima_actividad: ahora
+        });
+      }catch(e){ console.warn('[agentes patch]', e.message); }
+    }
+
+    // ── Registrar en historial_eventos ────────────────────────────────────
+    if(correoId){
+      try{
+        await sb('historial_eventos', 'POST', {
+          correo_id:   correoId,
+          agente_id:   AGENT_ID||null,
+          evento:      'gestion_'+_canal,
+          descripcion: obs,
+          subject:     asunto,
+          from_email:  `pbx_${AGENT_ID}@tododrogas.online`,
+          datos_extra: {
+            canal:         _canal,
+            origen:        document.getElementById('mOrigen').value,
+            agente_nombre: AGENT_NAME
+          }
+        });
+      }catch(e){ console.warn('[historial_eventos]', e.message); }
+    }
+
+    toast('Gestión registrada correctamente ✓','ok');
+    cerrarModal();
+  }catch(e){
+    toast('Error al guardar: '+e.message.substring(0,60),'err');
+  }finally{
+    btn.disabled=false;
+    btn.innerHTML='<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Guardar gestión';
+  }
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────
+function toast(msg, tipo=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show'+(tipo?' '+tipo:'');
+  setTimeout(()=>t.className='toast',3000);
+}
+</script>
+</body>
+</html>
