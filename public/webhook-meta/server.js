@@ -772,6 +772,27 @@ Responda *SI* o *NO*`;
         await supabase.from('wa_sesiones').update({ history:h }).eq('telefono', telefono);
       }
 
+      // MENU: PHP devolvió menú principal (el usuario escribió M/MENU)
+      if (accion === 'MENU') {
+        const sesActual = (await supabase.from('wa_sesiones').select('nombre').eq('telefono', telefono).single()).data;
+        const msgMenu =
+          `¿En qué le puedo ayudar, ${trat(sesActual?.nombre)}?\n\n` +
+          `1️⃣ Estado o entrega de medicamentos\n` +
+          `2️⃣ Puntos de dispensación\n` +
+          `3️⃣ Requisitos para reclamar\n` +
+          `4️⃣ Radicar PQRSFD\n` +
+          `5️⃣ Estado de mi radicado\n` +
+          `6️⃣ Horarios y canales\n` +
+          `7️⃣ Encuesta de satisfacción\n` +
+          `8️⃣ Pregunta a Nova TD\n\n` +
+          `Escriba el número de su opción.`;
+        await enviarMeta(telefono, msgMenu);
+        await pushHistory(telefono, msgMenu, 'nova');
+        // Sin fase — el interceptor del menú captura el número en el próximo mensaje
+        await supabase.from('wa_sesiones').update({ fase: null, updated_at: ahoraISO }).eq('telefono', telefono);
+        return;
+      }
+
       // ENCUESTA: Nova detectó satisfacción → confirmar primero SI/NO
       if (accion === 'ENCUESTA') {
         const msgConfirm = `¿La información que le brindamos resolvió su consulta hoy?\n\nResponda *SI* o *NO*`;
