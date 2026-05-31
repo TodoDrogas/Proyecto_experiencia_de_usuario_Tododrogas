@@ -131,6 +131,9 @@ body{background:var(--bg);color:var(--ink);font-family:'Poppins',sans-serif;heig
 .fi:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.07)}
 .fi.ok{border-color:var(--green)!important;background:var(--green-l)}
 .fi.err{border-color:var(--red)!important;background:var(--red-l)}
+/* Medicamentos — mismas clases pero declaradas explícitamente para inputs dinámicos */
+input.ok,select.ok{border-color:var(--green)!important;background:var(--green-l)!important}
+input.err,select.err{border-color:var(--red)!important;background:var(--red-l)!important}
 .fi[readonly]{background:var(--bg2);color:var(--ink3);cursor:not-allowed}
 select.fi{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' fill='none' stroke='%238892a4' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:26px}
 textarea.fi{resize:vertical;min-height:72px}
@@ -617,8 +620,8 @@ function buscarPaciente(cedula){
         if(d.direccion)   {document.getElementById('mDireccion').value=up(d.direccion);mkOk('mDireccion','inp');}
         if(d.telefono)    {document.getElementById('mTelefono').value=d.telefono.replace(/\D/g,'');mkOk('mTelefono','inp');}
         if(d.email)       {document.getElementById('mEmail').value=d.email.toLowerCase();mkOk('mEmail','inp');}
-        if(d.ciudad)      {document.getElementById('mCiudadSearch').value=up(d.ciudad);document.getElementById('mCiudadVal').value=up(d.ciudad);pbxSelCiudad(up(d.ciudad));}
-        if(d.departamento){document.getElementById('mDeptoSearch').value=up(d.departamento);document.getElementById('mDeptoVal').value=up(d.departamento);document.getElementById('mDeptoSearch').classList.add('ok');document.getElementById('mDeptoSearch').classList.remove('err');}
+        if(d.ciudad)      {} // no autocompletar — el asesor debe diligenciar
+        if(d.departamento){} // no autocompletar — el asesor debe diligenciar
         if(d.tipo_documento){
           const mapa={'CC':'CÉDULA DE CIUDADANÍA','CÉDULA DE CIUDADANÍA':'CÉDULA DE CIUDADANÍA','TI':'TARJETA DE IDENTIDAD','CE':'CÉDULA DE EXTRANJERÍA','RC':'REGISTRO CIVIL DE NACIMIENTO','PA':'PASAPORTE','NIT':'NIT'};
           const tdVal=mapa[d.tipo_documento.toUpperCase()]||d.tipo_documento;
@@ -641,39 +644,113 @@ function pbxAgregarMed(){
   const idx = _medCount;
   const wrap = document.createElement('div');
   wrap.id = `pbxMed_${idx}`;
-  wrap.style.cssText = 'background:var(--bg2);border-radius:8px;padding:10px 12px;position:relative';
+  wrap.style.cssText = 'background:var(--bg2);border-radius:8px;padding:10px 12px;position:relative;margin-bottom:8px';
   wrap.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
       <span style="font-size:11px;font-weight:700;color:var(--ink3)">MEDICAMENTO #${idx}</span>
-      <button onclick="document.getElementById('pbxMed_${idx}').remove()" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;line-height:1">✕</button>
+      <button onclick="document.getElementById('pbxMed_${idx}').remove()" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:14px;line-height:1;padding:0">✕</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-      <div style="grid-column:1/-1">
-        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">Descripción (buscar por nombre) *</label>
-        <div style="position:relative">
-          <input class="fi" id="pbxMedDesc_${idx}" type="text" placeholder="Escriba el nombre del medicamento..."
-            oninput="this.value=this.value.toUpperCase();pbxBuscarMed(this.value,${idx})"
-            autocomplete="off" style="text-transform:uppercase"
-            onblur="setTimeout(()=>{var d=document.getElementById('pbxMedDd_${idx}');if(d)d.style.display='none'},200)">
-          <div id="pbxMedDd_${idx}" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r3) var(--r3);max-height:200px;overflow-y:auto;font-size:12px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
-        </div>
-        <input type="hidden" id="pbxMedCod_${idx}">
+      <div>
+        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">
+          Código
+        </label>
+        <input class="fi" id="pbxMedCod_${idx}" type="text" placeholder="Código del med."
+          style="text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase();pbxMedVisual(${idx})">
+        <input type="hidden" id="pbxMedCodHidden_${idx}">
       </div>
       <div>
-        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">Cantidad *</label>
-        <input class="fi" id="pbxMedCant_${idx}" type="number" min="0" placeholder="0">
-      </div>
-      <div>
-        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">PBS</label>
-        <select class="fi" id="pbxMedPbs_${idx}">
+        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">
+          PBS <span class="pbx-req-med-${idx}" style="color:var(--red);display:none">*</span>
+        </label>
+        <select class="fi" id="pbxMedPbs_${idx}" onchange="pbxMedVisual(${idx})">
           <option value="">—</option>
           <option value="SI">Sí</option>
           <option value="NO">No</option>
           <option value="PARCIAL">Parcial</option>
         </select>
       </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">
+          Descripción (buscar por nombre) <span class="pbx-req-med-${idx}" style="color:var(--red);display:none">*</span>
+        </label>
+        <div style="position:relative">
+          <input class="fi" id="pbxMedDesc_${idx}" type="text" placeholder="Escriba el nombre del medicamento..."
+            style="text-transform:uppercase"
+            oninput="this.value=this.value.toUpperCase();pbxBuscarMed(this.value,${idx});pbxMedVisual(${idx})"
+            autocomplete="off"
+            onblur="setTimeout(()=>{var d=document.getElementById('pbxMedDd_${idx}');if(d)d.style.display='none'},200)">
+          <div id="pbxMedDd_${idx}" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 var(--r3) var(--r3);max-height:200px;overflow-y:auto;font-size:12px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+        </div>
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">
+          Descripción escrita / Artículo
+        </label>
+        <input class="fi" id="pbxMedDescEsc_${idx}" type="text" placeholder="DESCRIPCIÓN LIBRE"
+          style="text-transform:uppercase"
+          oninput="this.value=this.value.toUpperCase();pbxMedVisual(${idx})">
+      </div>
+      <div>
+        <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">
+          Cantidad <span class="pbx-req-med-${idx}" style="color:var(--red);display:none">*</span>
+        </label>
+        <input class="fi" id="pbxMedCant_${idx}" type="number" min="0" placeholder="0"
+          oninput="pbxMedVisual(${idx})">
+      </div>
     </div>`;
   document.getElementById('mMedLista').appendChild(wrap);
+}
+
+// Visual rojo/verde al tocar cualquier campo del medicamento
+function pbxMedVisual(idx){
+  const cod  = (document.getElementById(`pbxMedCod_${idx}`)?.value||'').trim();
+  const desc = (document.getElementById(`pbxMedDesc_${idx}`)?.value||'').trim();
+  const cant = (document.getElementById(`pbxMedCant_${idx}`)?.value||'').trim();
+  const pbs  = (document.getElementById(`pbxMedPbs_${idx}`)?.value||'').trim();
+  const esc  = (document.getElementById(`pbxMedDescEsc_${idx}`)?.value||'').trim();
+  const toco = cod||desc||cant||pbs||esc;
+  // Mostrar asteriscos en campos obligatorios
+  document.querySelectorAll(`.pbx-req-med-${idx}`).forEach(el => {
+    el.style.display = toco ? 'inline' : 'none';
+  });
+  if(!toco) return;
+  // Marcar verde/rojo: descripción, cantidad y PBS son obligatorios
+  [[`pbxMedDesc_${idx}`,desc],[`pbxMedCant_${idx}`,cant],[`pbxMedPbs_${idx}`,pbs]].forEach(([id,v])=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    if(v){el.classList.add('ok');el.classList.remove('err');}
+    else{el.classList.add('err');el.classList.remove('ok');}
+  });
+  // Código: verde si tiene valor, neutro si no (no obligatorio)
+  const codEl=document.getElementById(`pbxMedCod_${idx}`);
+  if(codEl){
+    if(cod){codEl.classList.add('ok');codEl.classList.remove('err');}
+    else{codEl.classList.remove('ok');codEl.classList.remove('err');}
+  }
+}
+
+// Validar todos los medicamentos antes de guardar
+function pbxValidarMeds(){
+  let ok=true;
+  document.querySelectorAll('[id^="pbxMed_"]').forEach(card=>{
+    const n=card.id.replace('pbxMed_','');
+    const desc=(document.getElementById(`pbxMedDesc_${n}`)?.value||'').trim();
+    const cant=(document.getElementById(`pbxMedCant_${n}`)?.value||'').trim();
+    const pbs =(document.getElementById(`pbxMedPbs_${n}`)?.value||'').trim();
+    const cod =(document.getElementById(`pbxMedCod_${n}`)?.value||'').trim();
+    const toco=desc||cant||pbs||cod;
+    if(toco){
+      [[`pbxMedDesc_${n}`,desc],[`pbxMedCant_${n}`,cant],[`pbxMedPbs_${n}`,pbs]].forEach(([id,v])=>{
+        const el=document.getElementById(id);
+        if(!el) return;
+        if(v){el.classList.add('ok');el.classList.remove('err');}
+        else{el.classList.add('err');el.classList.remove('ok');ok=false;}
+      });
+    }
+  });
+  return ok;
 }
 
 function pbxBuscarMed(q, idx){
@@ -698,22 +775,34 @@ function pbxBuscarMed(q, idx){
 
 function pbxSelMed(idx, codigo, nombre, pbs){
   document.getElementById(`pbxMedDesc_${idx}`).value = nombre;
+  document.getElementById(`pbxMedCodHidden_${idx}`).value = codigo;
   document.getElementById(`pbxMedCod_${idx}`).value  = codigo;
   const pbsSel = document.getElementById(`pbxMedPbs_${idx}`);
-  if(pbsSel && pbs){ pbsSel.value = pbs.toUpperCase()==='SI'?'SI':(pbs.toUpperCase()==='NO'?'NO':''); }
+  if(pbsSel && pbs){
+    const v = pbs.toUpperCase();
+    pbsSel.value = v==='SI'?'SI':(v==='NO'?'NO':(v==='PARCIAL'?'PARCIAL':''));
+  }
   const dd = document.getElementById(`pbxMedDd_${idx}`);
   if(dd) dd.style.display='none';
+  pbxMedVisual(idx);
 }
 
 function pbxGetMeds(){
   const meds = [];
   document.querySelectorAll('[id^="pbxMed_"]').forEach(wrap=>{
     const idx = wrap.id.replace('pbxMed_','');
-    const desc = document.getElementById(`pbxMedDesc_${idx}`)?.value?.trim();
-    const cant = document.getElementById(`pbxMedCant_${idx}`)?.value;
-    const pbs  = document.getElementById(`pbxMedPbs_${idx}`)?.value;
-    const cod  = document.getElementById(`pbxMedCod_${idx}`)?.value;
-    if(desc) meds.push({ codigo:cod||null, descripcion:desc, cantidad:cant?parseFloat(cant):null, pbs:pbs||null });
+    const desc    = document.getElementById(`pbxMedDesc_${idx}`)?.value?.trim();
+    const cant    = document.getElementById(`pbxMedCant_${idx}`)?.value;
+    const pbs     = document.getElementById(`pbxMedPbs_${idx}`)?.value;
+    const cod     = document.getElementById(`pbxMedCodHidden_${idx}`)?.value || document.getElementById(`pbxMedCod_${idx}`)?.value;
+    const descEsc = document.getElementById(`pbxMedDescEsc_${idx}`)?.value?.trim();
+    if(desc||cod) meds.push({
+      codigo:              cod||null,
+      descripcion:         desc||null,
+      descripcion_escrita: descEsc||null,
+      cantidad:            cant ? parseFloat(cant) : null,
+      pbs:                 pbs||null
+    });
   });
   return meds;
 }
@@ -790,6 +879,7 @@ function validarTodo(){
 // ── GUARDAR ────────────────────────────────────────────────────────────────
 async function guardarGestion(){
   if(!validarTodo()){toast('Completa todos los campos obligatorios','err');return;}
+  if(!pbxValidarMeds()){toast('Completa los campos obligatorios del medicamento','err');return;}
   const btn=document.getElementById('btnGuardar');
   btn.disabled=true;btn.textContent='Guardando...';
   try{
