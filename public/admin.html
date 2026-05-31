@@ -2412,7 +2412,7 @@ async function exportarSIGI() {
     });
 
     // Medicamentos: lotes en paralelo para garantizar que todos lleguen
-    // Medicamentos: query dedicada — busca solo eventos con medicamentos en el período
+    // Fuente 1: historial_eventos.datos_extra (correos legacy)
     const _medChunks2 = [];
     for(let i=0; i<correoIds.length; i+=50) _medChunks2.push(correoIds.slice(i,i+50));
     const _medRaw = (await Promise.all(
@@ -2438,6 +2438,27 @@ async function exportarSIGI() {
           });
         }
       } catch(e) {}
+    });
+
+    // Fuente 2: gestiones_medicamentos (WA, PBX y correos nuevos)
+    const _gMedRaw = (await Promise.all(
+      _medChunks2.map(chunk =>
+        sb(`gestiones_medicamentos?correo_id=in.(${chunk.join(',')})&select=correo_id,codigo,descripcion,descripcion_escrita,cantidad,pbs&limit=5000`).catch(()=>[])
+      )
+    )).flat().filter(Boolean);
+    _gMedRaw.forEach(m => {
+      // Evitar duplicados si ya fue cargado por historial_eventos
+      const yaExiste = meds.some(x => x.correo_id === m.correo_id && x.descripcion === m.descripcion && x.cantidad == m.cantidad);
+      if(!yaExiste) {
+        meds.push({
+          correo_id:           m.correo_id,
+          codigo:              m.codigo              || '',
+          descripcion:         m.descripcion         || '',
+          descripcion_escrita: m.descripcion_escrita || '',
+          cantidad:            m.cantidad            || '',
+          pbs:                 m.pbs                 || '',
+        });
+      }
     });
 
     // ── Cruzar tabla_usuarios por cédula ─────────────────────────────
