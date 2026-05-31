@@ -1100,13 +1100,16 @@ function renderLista(){
     const tt=mins<60?`${mins}m`:`${Math.floor(mins/60)}h${mins%60?mins%60+'m':''}`;
     const cbMap={nova:'cb-nova',escalado:'cb-esc',activo:'cb-act',esperando:'cb-esp',esperando_encuesta:'cb-enc',confirmando_solucion:'cb-conf',cerrado:'cb-cer',pte_gestion:'cb-pte'};
     const cbLbl={nova:'Nova TD',escalado:'Escalado',activo:'Activo',esperando:'Esp. respuesta',esperando_encuesta:'Encuesta',confirmando_solucion:'Confirmando',cerrado:'Solucionado',pte_gestion:'Pte. Gestión'};
+  // Sesiones guardadas fuera de horario → etiqueta de prioridad con luna
+  const getEstadoLbl = (s) => (s.motivo_cierre_wa==='guardado_fuera_horario'&&['esperando','escalado'].includes(s.estado))
+    ? '🌙 Prioridad FH' : (cbLbl[s.estado]||s.estado);
     return `<div class="conv-item s-${s.estado||'nova'}${S.selTel===s.telefono?' sel':''}" onclick="selectConv('${escH(s.telefono)}')">
       <div class="conv-av">${ini}<div class="conv-av-dot"></div></div>
       <div class="conv-info">
         <div class="conv-top"><span class="conv-name">${escH(nom)}</span><span class="conv-time">${fmtTime(s.updated_at)}</span></div>
         <div class="conv-prev${unread?' unread':''}">${prev}</div>
         <div class="conv-bot">
-          <span class="cbadge ${cbMap[s.estado]||'cb-nova'}">${cbLbl[s.estado]||'Nova TD'}</span>
+          <span class="cbadge ${cbMap[s.estado]||'cb-nova'}">${getEstadoLbl(s)}</span>
           <div style="display:flex;align-items:center;gap:4px">
             ${s.estado!=='cerrado'?`<span class="timer ${tc}">${tt}</span>`:''}
             ${unread?`<span class="unread-cnt">${unread}</span>`:''}
