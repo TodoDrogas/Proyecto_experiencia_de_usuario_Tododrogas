@@ -595,6 +595,159 @@ app.post('/webhook/meta', async (req, res) => {
     // ══════════════════════════════════════════════════════════════════════════
     if ((sesion?.estado || 'nova') !== 'nova') return;
 
+    // ── INTERCEPTAR MENÚ NUMERADO 1-8 ────────────────────────────────────────
+    // BUG FIX: cuando Nova emite el menú 1-8 (case MENU del PHP), el usuario
+    // responde con un número. Si ese número llega crudo a GPT, GPT no sabe
+    // que es una navegación de menú — lo interpreta como mensaje libre y
+    // repite la respuesta anterior o genera *1*/*2* propios.
+    // Solución: interceptar aquí y convertir el número en la acción correcta
+    // ANTES de llamar a Nova PHP.
+    {
+      const bodyNum = body.trim();
+      const ultimoNova = (() => {
+        const hist = Array.isArray(sesion?.history) ? sesion.history : [];
+        for (let i = hist.length - 1; i >= 0; i--) {
+          if (hist[i].role === 'nova') return hist[i].content || '';
+        }
+        return '';
+      })();
+      // Detectar si el último mensaje de Nova era un menú numerado (contiene 1️⃣ o *1*)
+      const eraMenúNumerado = /1️⃣|2️⃣|\*1\*|\*2\*/.test(ultimoNova);
+
+      if (eraMenúNumerado && /^[1-8]$/.test(bodyNum)) {
+        const mapMenuNova = {
+          '1': 'MEDICAMENTOS',  // Estado/entrega medicamentos
+          '2': 'SEDES',         // Puntos de dispensación
+          '3': 'REQUISITOS',    // Requisitos para reclamar
+          '4': 'FORMULARIO',    // Radicar PQRSFD
+          '5': 'CONSULTAR',     // Estado radicado
+          '6': 'HORARIOS',      // Horarios y canales
+          '7': 'ENCUESTA',      // Encuesta de satisfacción
+          '8': 'DEFAULT',       // Pregunta libre a Nova
+        };
+        const accionMenu = mapMenuNova[bodyNum];
+        console.log(`🎯 Menú numerado interceptado: opción ${bodyNum} → ${accionMenu}`);
+
+        // Actualizar historial con la selección del usuario
+        const histMenu = Array.isArray(sesion?.history) ? sesion.history : [];
+        if (!histMenu.find(m => m.content === nuevoMsg.content && m.ts === nuevoMsg.ts)) {
+          histMenu.push(nuevoMsg);
+        }
+        await supabase.from('wa_sesiones').update({ history: histMenu, updated_at: ahoraISO }).eq('telefono', telefono);
+
+        if (accionMenu === 'MEDICAMENTOS') {
+          // Dar info + menú M/A — NO generar *1*/*2* propios
+          const msgMed = `*${sesion?.nombre?.split(' ')[0] || 'estimado usuario'}*, para consultar el estado de sus medicamentos, entregas pendientes o historial de dispensación, ingrese a nuestra plataforma:
+
+🌐 *App Solicitudes Web:*
+https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb
+
+Si necesita que un asesor verifique directamente en el sistema, marque *A* en el menú de abajo.`;
+          await enviarMeta(telefono, msgMed);
+          await pushHistory(telefono, msgMed, 'nova');
+          await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+          const msgM = `¿En qué más le puedo ayudar?
+
+🏠 Marque *M* → Menú principal
+👤 Marque *A* → Hablar con un asesor`;
+          await enviarMeta(telefono, msgM);
+          await pushHistory(telefono, msgM, 'nova');
+          return;
+        }
+        if (accionMenu === 'SEDES') {
+          const ciudad = sesion?.ciudad || '';
+          if (ciudad) {
+            // Llamar a Nova PHP con una pregunta de sedes explícita
+            body = `¿Dónde puedo recoger mi medicamento en ${ciudad}? [SEDES:${ciudad}]`;
+          } else {
+            const msgSedes = `¿En qué municipio se encuentra para mostrarle las sedes más cercanas?`;
+            await enviarMeta(telefono, msgSedes);
+            await pushHistory(telefono, msgSedes, 'nova');
+            await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+            const msgM = `¿En qué más le puedo ayudar?
+
+🏠 Marque *M* → Menú principal
+👤 Marque *A* → Hablar con un asesor`;
+            await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
+            return;
+          }
+        }
+        if (accionMenu === 'REQUISITOS') {
+          const msgReq = `📋 *Requisitos para reclamar medicamentos:*
+
+• Fórmula médica vigente
+• Documento de identidad
+• Carné de afiliación a la EPS
+• En caso de representante: autorización escrita + copia del documento del paciente
+
+¿Necesita más información? 📞 604 322 2432`;
+          await enviarMeta(telefono, msgReq); await pushHistory(telefono, msgReq, 'nova');
+          await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+          const msgM = `¿En qué más le puedo ayudar?
+
+🏠 Marque *M* → Menú principal
+👤 Marque *A* → Hablar con un asesor`;
+          await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
+          return;
+        }
+        if (accionMenu === 'FORMULARIO') {
+          const cedula = sesion?.cedula || '';
+          const url = cedula ? `https://tododrogas.online/pqr_form.html?cedula=${cedula}` : 'https://tododrogas.online/pqr_form.html';
+          const msgForm = `📋 *Radicar PQRSFD:*
+
+${url}`;
+          await enviarMeta(telefono, msgForm); await pushHistory(telefono, msgForm, 'nova');
+          await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+          const msgM = `¿En qué más le puedo ayudar?
+
+🏠 Marque *M* → Menú principal
+👤 Marque *A* → Hablar con un asesor`;
+          await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
+          return;
+        }
+        if (accionMenu === 'CONSULTAR') {
+          const msgCon = `Por favor indíqueme el número de radicado (formato TD-xxxxx) o su correo electrónico para consultar el estado de su PQRSFD.`;
+          await enviarMeta(telefono, msgCon); await pushHistory(telefono, msgCon, 'nova');
+          await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+          const msgM = `¿En qué más le puedo ayudar?
+
+🏠 Marque *M* → Menú principal
+👤 Marque *A* → Hablar con un asesor`;
+          await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
+          return;
+        }
+        if (accionMenu === 'HORARIOS') {
+          const msgHor = `🕐 *Horarios de atención:*
+
+📅 Lunes a Viernes: 7:00 a.m. – 5:30 p.m.
+📅 Sábados: 8:00 a.m. – 12:00 m.
+
+📞 PBX: 604 322 2432
+💬 WhatsApp: 304 341 2431
+📧 pqrsfd@tododrogas.com.co`;
+          await enviarMeta(telefono, msgHor); await pushHistory(telefono, msgHor, 'nova');
+          await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+          const msgM = `¿En qué más le puedo ayudar?
+
+🏠 Marque *M* → Menú principal
+👤 Marque *A* → Hablar con un asesor`;
+          await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
+          return;
+        }
+        if (accionMenu === 'ENCUESTA') {
+          // Opción 7: disparar flujo de satisfacción
+          const msgEnc = `¿La información que le brindamos resolvió su consulta hoy?
+
+Responda *SI* o *NO*`;
+          await supabase.from('wa_sesiones').update({ estado: 'confirmando_solucion_nova', inactividad_aviso_at: null, updated_at: ahoraISO }).eq('telefono', telefono).not('estado','eq','confirmando_solucion_nova');
+          await enviarMeta(telefono, msgEnc); await pushHistory(telefono, msgEnc, 'nova');
+          return;
+        }
+        // accionMenu === 'DEFAULT' (opción 8 = pregunta libre): cae a Nova PHP normalmente
+        // body ya tiene el número original — Nova lo entenderá como pregunta libre
+      }
+    }
+
     const history = Array.isArray(sesion?.history) ? sesion.history : [];
     if (!history.find(m => m.content === nuevoMsg.content && m.ts === nuevoMsg.ts)) history.push(nuevoMsg);
     if (history.length >= 500) history.splice(0, history.length - 499);
