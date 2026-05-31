@@ -613,8 +613,10 @@ app.post('/webhook/meta', async (req, res) => {
         }
         return '';
       })();
-      // Detectar si el último mensaje de Nova era un menú numerado (contiene 1️⃣ o *1*)
-      const eraMenúNumerado = /1️⃣|2️⃣|\*1\*|\*2\*/.test(ultimoNova);
+      // Solo disparar si el último mensaje de Nova era el menú principal 1-8
+      // (contiene al menos 3 ítems numerados con emoji 1️⃣ 2️⃣ 3️⃣)
+      // EXCLUIR: menú de política (*1* Acepto / *2* No acepto) que solo tiene 2 opciones
+      const eraMenúNumerado = /1️⃣/.test(ultimoNova) && /2️⃣/.test(ultimoNova) && /3️⃣/.test(ultimoNova);
 
       if (eraMenúNumerado && /^[1-8]$/.test(bodyNum)) {
         const mapMenuNova = {
@@ -638,20 +640,11 @@ app.post('/webhook/meta', async (req, res) => {
         await supabase.from('wa_sesiones').update({ history: histMenu, updated_at: ahoraISO }).eq('telefono', telefono);
 
         if (accionMenu === 'MEDICAMENTOS') {
-          // Dar info + menú M/A — NO generar *1*/*2* propios
-          const msgMed = `*${sesion?.nombre?.split(' ')[0] || 'estimado usuario'}*, para consultar el estado de sus medicamentos, entregas pendientes o historial de dispensación, ingrese a nuestra plataforma:
-
-🌐 *App Solicitudes Web:*
-https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb
-
-Si necesita que un asesor verifique directamente en el sistema, marque *A* en el menú de abajo.`;
+          const msgMed = `${trat(sesion?.nombre)}, para consultar el estado de sus medicamentos, entregas pendientes o historial de dispensación, ingrese a nuestra plataforma:\n\n*App Solicitudes Web:*\nhttps://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb\n\nSi necesita que un asesor verifique directamente en el sistema, marque *A* en el menú de abajo.`;
           await enviarMeta(telefono, msgMed);
           await pushHistory(telefono, msgMed, 'nova');
           await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
-          const msgM = `¿En qué más le puedo ayudar?
-
-🏠 Marque *M* → Menú principal
-👤 Marque *A* → Hablar con un asesor`;
+          const msgM = `¿En qué más le puedo ayudar?\n\n📋 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
           await enviarMeta(telefono, msgM);
           await pushHistory(telefono, msgM, 'nova');
           return;
