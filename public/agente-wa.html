@@ -808,7 +808,7 @@ html[data-theme="light"] .wa-input-box{background:#fff;border:1px solid #e9edef}
                 EPS <span class="wa-req">*</span>
               </label>
               <div class="wa-search-wrap">
-                <input id="gWaEpsSearch" class="minput" placeholder="Escribir para buscar EPS..." style="font-size:12px"
+                <input id="gWaEpsSearch" class="minput" placeholder="Seleccionar EPS obligatorio →" style="font-size:12px;border-color:var(--red)"
                   oninput="gWaBuscarEps(this.value)" onfocus="gWaBuscarEps('')" autocomplete="off">
                 <input type="hidden" id="gWaEpsId">
                 <div id="gWaEpsDrop" class="wa-dropdown"></div>
@@ -2223,51 +2223,45 @@ async function abrirCerrar(){
   gWaSetTutela(null);
 
   if(esPrimera){
-    // Limpiar campos de busqueda
+    // ── Limpiar tipificación — el asesor la diligencia ────────────────────
     document.getElementById('gWaTipoSolSearch').value = '';
-    document.getElementById('gWaTipoSolVal').value = '';
+    document.getElementById('gWaTipoSolVal').value    = '';
     document.getElementById('gWaDetalleSearch').value = '';
-    document.getElementById('gWaDetalleVal').value = '';
-    // Pre-llenar con datos de la sesión
-    document.getElementById('gWaCedula').value = ses.cedula||'';
-    document.getElementById('gWaNombre').value = (ses.nombre||'').toUpperCase();
-    // Teléfono: quitar +57 para estandarizar
-    const _telLimpio = (S.selTel||'').replace(/\+?57/,'').replace(/\D/g,'');
-    document.getElementById('gWaTelefono').value = _telLimpio;
-    document.getElementById('gWaCiudad').value = (ses.ciudad||'').toUpperCase();
-    // Departamento: usar ses.departamento si existe, sino vacío (NO usar ciudad)
-    document.getElementById('gWaDepto').value = (ses.departamento||'').toUpperCase();
-    document.getElementById('gWaDireccion').value = (ses.direccion||'').toUpperCase();
-    // Email: usar el del correo activo (wa_xxx@tododrogas.online como fallback)
-    document.getElementById('gWaEmail').value = ses.email || ses.from_email || `wa_${_telLimpio}@tododrogas.online`;
-    // ── Disparar autocomplete por cédula para llenar Dirección, Departamento
-    //    y cualquier otro campo que venga de tabla_usuarios
-    if(ses.cedula && ses.cedula.length >= 4){
-      gWaBuscarPaciente(ses.cedula, true); // inmediato — no esperar 600ms
-    }
-    document.getElementById('gWaEpsSearch').value = ses.eps||'';
-    document.getElementById('gWaEpsId').value = '';
+    document.getElementById('gWaDetalleVal').value    = '';
+    document.getElementById('gWaCategoria').value     = '';
+    // EPS siempre vacía — el asesor la elige
+    document.getElementById('gWaEpsSearch').value     = '';
+    document.getElementById('gWaEpsId').value         = '';
     const nitEl = document.getElementById('gWaNitEps');
     if(nitEl) nitEl.textContent = '—';
-    document.getElementById('gWaTipoDoc').value = ses.tipo_documento||'';
-    document.getElementById('gWaCategoria').value = ses.categoria_sigi||'USUARIO EXTERNO';
-    // Cargar EPS si no están cargadas
+
+    // ── Pre-llenar datos del paciente desde wa_sesiones ───────────────────
+    // Estos los guardó validar-paciente.php cuando Nova validó al usuario
+    document.getElementById('gWaCedula').value    = ses.cedula         || '';
+    document.getElementById('gWaTipoDoc').value   = ses.tipo_documento || '';
+    document.getElementById('gWaNombre').value    = (ses.nombre        || '').toUpperCase();
+    document.getElementById('gWaDireccion').value = (ses.direccion     || '').toUpperCase();
+    document.getElementById('gWaEmail').value     = ses.email          || '';
+    const _telLimpio = (ses.telefono_paciente || S.selTel||'').replace(/\+?57/,'').replace(/\D/g,'');
+    document.getElementById('gWaTelefono').value  = _telLimpio;
+    document.getElementById('gWaCiudad').value    = (ses.ciudad        || '').toUpperCase();
+    document.getElementById('gWaDepto').value     = (ses.departamento  || '').toUpperCase();
+
+    // Si algún campo del paciente falta → intentar completar desde tabla_usuarios
+    const faltaDato = !ses.nombre || !ses.direccion || !ses.tipo_documento;
+    if(ses.cedula && ses.cedula.length >= 4 && faltaDato){
+      gWaBuscarPaciente(ses.cedula, true);
+    }
+
+    // Cargar catálogo EPS si no está cargado
     if(!_gWaEpsData.length){
       try{
         const eps = await sb('eps_catalogo?select=id,nombre,nit&order=nombre.asc&limit=200');
         _gWaEpsData = eps||[];
       }catch(e){}
     }
-    // Si ya tenemos EPS del paciente, preseleccionar
-    if(ses.eps){
-      const found = _gWaEpsData.find(e=>e.nombre.toUpperCase().includes(ses.eps.toUpperCase()));
-      if(found){
-        document.getElementById('gWaEpsId').value = found.id;
-        document.getElementById('gWaEpsSearch').value = found.nombre;
-        if(nitEl) nitEl.textContent = found.nit||'—';
-      }
-    }
-    // Inicializar estado visual de todos los campos
+
+    // Inicializar estado visual — verde si tiene dato, rojo si falta
     setTimeout(() => {
       ['gWaObs','gWaAccion','gWaTipoDoc','gWaCedula','gWaNombre','gWaDireccion',
        'gWaTelefono','gWaEmail','gWaCategoria'].forEach(id => {
@@ -2277,9 +2271,9 @@ async function abrirCerrar(){
         if(v && v!=='') { el.classList.remove('gm-err'); el.classList.add('gm-ok'); }
         else            { el.classList.remove('gm-ok');  el.classList.add('gm-err'); }
       });
-      const epsId = document.getElementById('gWaEpsId')?.value;
+      // EPS siempre roja al abrir — fuerza al asesor a elegirla
       const epsEl = document.getElementById('gWaEpsSearch');
-      if(epsEl) { if(epsId){epsEl.classList.add('gm-ok');epsEl.classList.remove('gm-err');}else{epsEl.classList.add('gm-err');epsEl.classList.remove('gm-ok');} }
+      if(epsEl){ epsEl.classList.add('gm-err'); epsEl.classList.remove('gm-ok'); }
       gWaMkSearchOk('gWaTipoSolSearch','gWaTipoSolVal');
       gWaMkSearchOk('gWaDetalleSearch','gWaDetalleVal');
       ['gWaDepto','gWaCiudad'].forEach(id => {
@@ -2289,7 +2283,7 @@ async function abrirCerrar(){
         else{el.classList.add('gm-err');el.classList.remove('gm-ok');}
       });
       const row = document.getElementById('gWaTutelaRow');
-      if(row) { if(_gWaTutela!==null){row.classList.add('gm-ok');row.classList.remove('gm-err');}else{row.classList.add('gm-err');row.classList.remove('gm-ok');} }
+      if(row){ if(_gWaTutela!==null){row.classList.add('gm-ok');row.classList.remove('gm-err');}else{row.classList.add('gm-err');row.classList.remove('gm-ok');} }
     }, 60);
   }
 
