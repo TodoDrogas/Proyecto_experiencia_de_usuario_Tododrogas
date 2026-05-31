@@ -16,6 +16,27 @@ $nombre   = strtoupper(trim($body['nombre']   ?? ''));
 $telefono = preg_replace('/\D/', '', trim($body['telefono'] ?? ''));
 $debug    = !empty($body['debug']);
 
+// ── CONSULTA DIRECTA A tabla_usuarios ─────────────────────
+// Evita depender de la RPC buscar_paciente y sus alias de campos
+function sbGet($sb_url, $sb_key, $path) {
+    $ch = curl_init($sb_url . '/rest/v1/' . $path);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 10,
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_HTTPHEADER     => [
+            'apikey: '               . $sb_key,
+            'Authorization: Bearer ' . $sb_key,
+            'Content-Type: application/json',
+            'Accept: application/json',
+        ],
+    ]);
+    $resp = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    return ['code'=>$code, 'rows'=>json_decode($resp, true)];
+}
+
 function sbRpc($sb_url, $sb_key, $fn, $params) {
     $ch = curl_init($sb_url . '/rest/v1/rpc/' . $fn);
     curl_setopt_array($ch, [
@@ -32,79 +53,74 @@ function sbRpc($sb_url, $sb_key, $fn, $params) {
         ],
     ]);
     $resp = curl_exec($ch);
-    $err  = curl_error($ch);
     $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return ['code'=>$code, 'rows'=>json_decode($resp,true), 'raw'=>$resp, 'err'=>$err];
+    return ['code'=>$code, 'rows'=>json_decode($resp, true)];
 }
 
-// ── BUSCAR PACIENTE ───────────────────────────────────────
-$r_ced = $cedula   ? sbRpc($SB_URL, $SB_KEY, 'buscar_paciente',     ['p_cedula'   => $cedula])   : null;
-$r_tel = $telefono ? sbRpc($SB_URL, $SB_KEY, 'buscar_paciente_tel', ['p_telefono' => $telefono]) : null;
+// Buscar en tabla_usuarios directamente por cédula
+$row = null;
+if ($cedula) {
+    $enc = urlencode($cedula);
+    $r = sbGet($SB_URL, $SB_KEY,
+        'tabla_usuarios?select=Tipo+De+Documento,Cedula+Pacientes,Nombre+Paciente,Direccion,Telefono,Departamento,Ciudad,EPS,Correo'
+        . '&Cedula+Pacientes=eq.' . $enc . '&limit=1'
+    );
+    if ($r['code'] === 200 && is_array($r['rows']) && count($r['rows']) > 0) {
+        $row = $r['rows'][0];
+    }
+}
+
+// Fallback: buscar por teléfono si no encontró por cédula
+if (!$row && $telefono) {
+    $enc = urlencode($telefono);
+    $r = sbGet($SB_URL, $SB_KEY,
+        'tabla_usuarios?select=Tipo+De+Documento,Cedula+Pacientes,Nombre+Paciente,Direccion,Telefono,Departamento,Ciudad,EPS,Correo'
+        . '&Telefono=eq.' . $enc . '&limit=1'
+    );
+    if ($r['code'] === 200 && is_array($r['rows']) && count($r['rows']) > 0) {
+        $row = $r['rows'][0];
+    }
+}
 
 if ($debug) {
-    echo json_encode(['sb_url'=>$SB_URL,'cedula'=>$cedula,'nombre'=>$nombre,'telefono'=>$telefono,
-        'rpc_ced'=>$r_ced,'rpc_tel'=>$r_tel], JSON_PRETTY_PRINT);
+    echo json_encode(['row' => $row, 'cedula' => $cedula, 'telefono' => $telefono], JSON_PRETTY_PRINT);
     exit;
 }
 
-$rows = null;
-if ($r_ced && $r_ced['code']===200 && is_array($r_ced['rows']) && count($r_ced['rows'])>0)
-    $rows = $r_ced['rows'];
-if (!$rows && $r_tel && $r_tel['code']===200 && is_array($r_tel['rows']) && count($r_tel['rows'])>0)
-    $rows = $r_tel['rows'];
-
-if (!$rows) {
+if (!$row) {
     echo json_encode(['ok'=>false,'razon'=>'no_encontrado',
         'msg'=>'No encontramos su registro en nuestra base de datos. Verifique sus datos, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
     exit;
 }
 
-// ── EVALUAR 1 DE 2 ────────────────────────────────────────
-$tok1   = $nombre ? (array_values(array_filter(explode(' ', $nombre)))[0] ?? '') : '';
-$tok1_4 = substr($tok1, 0, 4);
-
-foreach ($rows as $row) {
-    $puntos = 0;
-    $dbCed  = preg_replace('/\D/', '', $row['Cedula Pacientes'] ?? '');
-    $dbNom  = strtoupper(trim($row['Nombre Paciente'] ?? ''));
-    $dbTel1 = preg_replace('/\D/', '', $row['Telefono'] ?? '');
-
-    if ($cedula   && $dbCed === $cedula)                                    $puntos++;
-    if ($tok1_4   && strlen($tok1_4)>=3 && str_contains($dbNom, $tok1_4))  $puntos++;
-    if ($telefono && $dbTel1 && strlen($dbTel1)>=7 && $dbTel1===$telefono) $puntos++;
-
-    if ($puntos >= 1) {
-        // ── VERIFICAR VIP ─────────────────────────────────
-        $vip_data = null;
-        if ($cedula) {
-            $r_vip = sbRpc($SB_URL, $SB_KEY, 'verificar_vip', ['p_cedula' => $cedula]);
-            if ($r_vip['code']===200 && is_array($r_vip['rows']) && count($r_vip['rows'])>0) {
-                $vip_data = $r_vip['rows'][0];
-            }
-        }
-
-        $resp = [
-            'ok'             => true,
-            'razon'          => 'validado',
-            'nombre'         => $row['Nombre Paciente']   ?? '',
-            'tipo_documento' => $row['Tipo De Documento'] ?? '',
-            'cedula'         => $row['Cedula Pacientes']  ?? '',
-            'direccion'      => $row['Direccion']         ?? '',
-            'telefono'       => $row['Telefono']          ?? '',
-            'email'          => $row['Correo']            ?? '',
-            'ciudad'         => $row['Ciudad']            ?? '',
-            'departamento'   => $row['Departamento']      ?? '',
-            'eps'            => $row['EPS']               ?? '',
-        ];
-        if ($vip_data) {
-            $resp['vip']    = true;
-            $resp['saludo'] = $vip_data['saludo'];
-        }
-        echo json_encode($resp);
-        exit;
+// ── VERIFICAR VIP ─────────────────────────────────────────
+$vip_data = null;
+if ($cedula) {
+    $r_vip = sbRpc($SB_URL, $SB_KEY, 'verificar_vip', ['p_cedula' => $cedula]);
+    if ($r_vip['code']===200 && is_array($r_vip['rows']) && count($r_vip['rows'])>0) {
+        $vip_data = $r_vip['rows'][0];
     }
 }
 
-echo json_encode(['ok'=>false,'razon'=>'datos_no_coinciden',
-    'msg'=>'Sus datos no coinciden con ningún registro. Verifique su documento, comuníquese al 604 322 2432 o escríbanos al WhatsApp 304 341 2431.']);
+// Mapeo exacto desde los campos reales de tabla_usuarios
+$resp = [
+    'ok'             => true,
+    'razon'          => 'validado',
+    'nombre'         => $row['Nombre Paciente']   ?? '',
+    'tipo_documento' => $row['Tipo De Documento'] ?? '',
+    'cedula'         => $row['Cedula Pacientes']  ?? '',
+    'direccion'      => $row['Direccion']         ?? '',
+    'telefono'       => $row['Telefono']          ?? '',
+    'email'          => $row['Correo']            ?? '',
+    'ciudad'         => $row['Ciudad']            ?? '',
+    'departamento'   => $row['Departamento']      ?? '',
+    'eps'            => $row['EPS']               ?? '',
+];
+
+if ($vip_data) {
+    $resp['vip']    = true;
+    $resp['saludo'] = $vip_data['saludo'];
+}
+
+echo json_encode($resp);
