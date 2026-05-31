@@ -1920,7 +1920,7 @@ async function enviarNuevoChat(){
 // ── DETECCIÓN INTELIGENTE DE INACTIVIDAD ─────────────────────
 let _lastActivity = Date.now();
 let _idleTimer = null;
-const _IDLE_MINUTES = 5; // minutos sin actividad → pausa automática
+const _IDLE_MINUTES = 15; // minutos sin actividad → pausa automática
 
 function resetIdleTimer() {
   _lastActivity = Date.now();
@@ -1945,7 +1945,7 @@ async function autoPausarPorInactividad() {
       pausado_at: new Date().toISOString(),
       en_linea: true // sigue en línea pero pausado
     });
-    toast('⏸ Pausa automática por inactividad (5 min sin actividad)', 'warn');
+    toast('⏸ Pausa automática por inactividad (15 min sin actividad)', 'warn');
     // Update UI
     const btn = document.getElementById('btnPausa');
     if (btn) {
@@ -1964,9 +1964,9 @@ async function autoPausarPorInactividad() {
 // Si el agente cambia de pestaña/bloquea pantalla → pausar de inmediato
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    // Iniciar timer corto de 2 min si oculta
+    // Iniciar timer de 5 min si pestaña oculta
     if (_idleTimer) clearTimeout(_idleTimer);
-    _idleTimer = setTimeout(autoPausarPorInactividad, 2 * 60 * 1000);
+    _idleTimer = setTimeout(autoPausarPorInactividad, 5 * 60 * 1000);
   } else {
     // Volvió → resetear
     resetIdleTimer();
