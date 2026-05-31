@@ -2580,27 +2580,28 @@ function gLimpiarMed(idx) {
   if (dd) dd.style.display='none';
 }
 
-// Mantener compatibilidad si algún lugar aún llama gBuscarMedicamento con código
+// Buscar medicamento por código — autocompleta nombre y PBS
+const _gCodTimers = {};
 function gBuscarMedicamento(codigo, idx) {
-  if (!codigo || codigo.length < 3) return;
-  clearTimeout(window._codTimers = window._codTimers || {});
-  window._codTimers[idx] = setTimeout(async () => {
+  clearTimeout(_gCodTimers[idx]);
+  if (!codigo || codigo.length < 2) return;
+  _gCodTimers[idx] = setTimeout(async () => {
     try {
-      const rows = await sb('rpc/buscar_medicamentos', 'POST', { q: codigo });
-      if (!rows || !rows.length) return;
-      // Buscar coincidencia exacta por código primero
-      const exact = rows.find(r => (r.Codigo||r.codigo||'').toLowerCase() === codigo.toLowerCase());
-      const r = exact || rows[0];
-      if (r) {
-        gSelectMedicamento(
-          r.Nombre       || r.nombre       || '',
-          r.Codigo       || r.codigo       || '',
-          r.Articulo_PBS || r.articulo_pbs || '',
-          idx
-        );
+      // Buscar primero por código exacto, luego por prefijo
+      let rows = await sb(`medicamentos?Codigo=eq.${encodeURIComponent(codigo.trim())}&select=Codigo,Nombre,Articulo_PBS&limit=1`);
+      if (!rows || !rows.length) {
+        rows = await sb(`medicamentos?Codigo=ilike.${encodeURIComponent(codigo.trim())}*&select=Codigo,Nombre,Articulo_PBS&limit=5`);
       }
+      if (!rows || !rows.length) return;
+      const r = rows[0];
+      gSelectMedicamento(
+        r.Nombre       || r.nombre       || '',
+        r.Codigo       || r.codigo       || '',
+        r.Articulo_PBS || r.articulo_pbs || '',
+        idx
+      );
     } catch(e) { console.warn('[buscar-cod]', e.message); }
-  }, 500);
+  }, 400);
 }
 
 function gRecolectarMeds() {
