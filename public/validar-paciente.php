@@ -85,11 +85,17 @@ foreach ($rows as $row) {
         }
 
         $resp = [
-            'ok'     => true,
-            'razon'  => 'validado',
-            'nombre' => $row['Nombre Paciente'] ?? '',
-            'ciudad' => $row['Ciudad']          ?? '',
-            'eps'    => $row['EPS']             ?? '',
+            'ok'             => true,
+            'razon'          => 'validado',
+            'nombre'         => $row['Nombre Paciente']   ?? '',
+            'tipo_documento' => $row['Tipo De Documento'] ?? '',
+            'cedula'         => $row['Cedula Pacientes']  ?? '',
+            'direccion'      => $row['Direccion']         ?? '',
+            'telefono'       => $row['Telefono']          ?? '',
+            'email'          => $row['Correo']            ?? '',
+            'ciudad'         => $row['Ciudad']            ?? '',
+            'departamento'   => $row['Departamento']      ?? '',
+            'eps'            => $row['EPS']               ?? '',
         ];
         if ($vip_data) {
             $resp['vip']    = true;
