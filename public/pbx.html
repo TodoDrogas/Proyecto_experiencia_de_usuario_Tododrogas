@@ -755,22 +755,45 @@ function pbxValidarMeds(){
 
 function pbxBuscarMed(q, idx){
   clearTimeout(_medTimers[idx]);
-  const dd = document.getElementById(`pbxMedDd_${idx}`);
-  if(!q || q.length < 2){ if(dd) dd.style.display='none'; return; }
-  _medTimers[idx] = setTimeout(async()=>{
+  const dd=document.getElementById(`pbxMedDd_${idx}`);
+  if(!q||q.length<2){if(dd)dd.style.display='none';return;}
+  dd.innerHTML='<div style="padding:7px 12px;font-size:12px;color:var(--ink3);font-style:italic">Buscando...</div>';
+  dd.style.display='block';
+  _medTimers[idx]=setTimeout(async()=>{
     try{
-      const res = await sb(`medicamentos?or=(Nombre.ilike.*${encodeURIComponent(q)}*,Codigo.ilike.*${encodeURIComponent(q)}*)&limit=15&select=Codigo,Nombre,Articulo_PBS`);
-      if(!res || !res.length){ dd.style.display='none'; return; }
-      dd.innerHTML = res.map(m=>`
-        <div style="padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s"
-          onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''"
-          onmousedown="pbxSelMed(${idx},'${(m.Codigo||'').replace(/'/g,"\\'")}','${(m.Nombre||'').replace(/'/g,"\\'")}','${(m.Articulo_PBS||'').replace(/'/g,"\\'")}')">
-          <div style="font-weight:600;color:var(--ink)">${m.Nombre||''}</div>
-          <div style="font-size:10px;color:var(--ink3)">Cód: ${m.Codigo||'—'} · PBS: ${m.Articulo_PBS||'—'}</div>
-        </div>`).join('');
-      dd.style.display = 'block';
-    }catch(e){ if(dd) dd.style.display='none'; }
-  }, 400);
+      const rows = await sb('rpc/buscar_medicamentos','POST',{q});
+      if(!rows||!rows.length){
+        dd.innerHTML='<div style="padding:7px 12px;font-size:12px;color:var(--ink3);font-style:italic">Sin resultados para "'+q+'"</div>';
+        return;
+      }
+      window._pbxMedRows=window._pbxMedRows||{};
+      window._pbxMedRows[idx]=rows;
+      dd.innerHTML=rows.map((r,i)=>{
+        const nom=r.Nombre||r.nombre||'';
+        const cod=r.Codigo||r.codigo||'';
+        const pbs=r.Articulo_PBS||r.articulo_pbs||'';
+        return `<div style="padding:7px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0"
+          onmouseover="this.style.background='#f5f5f5'" onmouseout="this.style.background=''"
+          onmousedown="pbxSelMedByIndex(${i},${idx})">
+          <div style="font-weight:600;font-size:12px;color:var(--ink)">${nom}</div>
+          <div style="font-size:10px;color:var(--ink3)">Cód: ${cod}${pbs?' · PBS: '+pbs:''}</div>
+        </div>`;
+      }).join('');
+    }catch(e){
+      dd.innerHTML='<div style="padding:7px 12px;font-size:12px;color:var(--red)">Error al buscar</div>';
+    }
+  },300);
+}
+
+function pbxSelMedByIndex(rowIdx, medIdx){
+  const rows=window._pbxMedRows&&window._pbxMedRows[medIdx];
+  if(!rows||!rows[rowIdx]) return;
+  const r=rows[rowIdx];
+  pbxSelMed(medIdx,
+    r.Codigo||r.codigo||'',
+    r.Nombre||r.nombre||'',
+    r.Articulo_PBS||r.articulo_pbs||''
+  );
 }
 
 function pbxSelMed(idx, codigo, nombre, pbs){
@@ -1069,8 +1092,14 @@ function pbxSelDepto(val){
 function pbxFiltrarCiudad(q){
   const dd=document.getElementById('mCiudadDrop');
   const estaticas=Object.values(PBX_CIUDADES).flat();
-  const combinadas=Array.from(new Set([..._pbxCiudadesSedes,...estaticas])).sort();
-  const lista=q.length<1?combinadas:combinadas.filter(c=>c.toLowerCase().includes(q.toLowerCase()));
+  const norm=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+  const vistas=new Map();
+  [..._pbxCiudadesSedes,...estaticas].forEach(c=>{
+    const k=norm(c);
+    if(!vistas.has(k)||c.length>vistas.get(k).length) vistas.set(k,c);
+  });
+  const combinadas=Array.from(vistas.values()).sort();
+  const lista=q.length<1?combinadas:combinadas.filter(c=>norm(c).includes(norm(q)));
   if(!lista.length){dd.style.display='none';return;}
   dd.style.display='block';
   dd.innerHTML=lista.slice(0,25).map(c=>`<div style="padding:7px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid #f0f0f0"
