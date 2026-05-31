@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -2287,11 +2288,12 @@ async function exportarSIGI() {
       const page = await sb(
         `correos?num_gestiones=gt.0&origen=neq.saliente&origen=neq.borrador&estado=neq.informacion&is_draft=is.false`+_dEx+_hEx+
         `&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,tipo_documento,` +
-        `direccion_paciente,telefono_contacto,eps_id,origen,estado,prioridad,agente_id,asignado_a,` +
-        `fecha_resolucion,created_at,num_gestiones,tiene_tutela,categoria_sigi,categoria_ia,` +
+        `direccion_paciente,telefono_contacto,eps_id,origen,canal_contacto,estado,prioridad,agente_id,asignado_a,` +
+        `fecha_resolucion,received_at,created_at,num_gestiones,tiene_tutela,categoria_sigi,categoria_ia,` +
         `nombre_solicitud,detalle_solicitud,tipo_pqr,gestion_compra,usuario_gestion_compra,` +
         `gestion_usuarios_integ,usuarios_integrales,departamento_paciente,ciudad_paciente,` +
-        `calificacion,calificacion_texto,encuesta_enviada_at,fecha_calificacion,conversation_id` +
+        `calificacion,calificacion_texto,encuesta_enviada_at,fecha_calificacion,conversation_id,` +
+        `transcripcion,body_content,descripcion` +
         `&order=created_at.asc&limit=1000&offset=${_off}`
       ) || [];
       if(!page.length) break;
@@ -2565,7 +2567,7 @@ async function exportarSIGI() {
       return {
         'Mes':                     _mes,
         'Fecha Correo':            fSol,
-        'ID Único':                c.id || '',
+        'ID Único':                ticketId,
         'Asunto':                  _up(c.subject || ''),
         '# Gestiones':             c.num_gestiones || 0,
         'Tipo Documento':          _up(dg.tipo_documento || pac?.['Tipo De Documento'] || c.tipo_documento || 'CÉDULA DE CIUDADANÍA'),
@@ -2583,16 +2585,21 @@ async function exportarSIGI() {
         })(),
         'NIT EPS':                 eps?.nit || '',
         'EPS':                     _up(eps?.nombre || ''),
-        'Origen':                  _up(c.origen || ''),
+        'Origen':                  _up((()=>{
+          const canal = (c.canal_contacto||'').toLowerCase();
+          const origen = (c.origen||'').toUpperCase();
+          if(canal==='whatsapp') return 'WHATSAPP';
+          if(canal==='telefono') return 'CONMUTADOR (TELÉFONO)';
+          if(origen) return origen;
+          return 'CORREO ELECTRONICO';
+        })()),
         'Nombre Solicitud':        _up(c.nombre_solicitud || c.tipo_pqr || ''),
         'Detalle Solicitud':       _up(c.detalle_solicitud || ''),
         'Estado Solicitud':        _up(c.estado || ''),
         'Doc. Usuario Asignado':   agEmail,
         'Nombre Usuario Asignado': _up(agNombre),
         'Respuesta Asignación':    _up((()=>{
-          // Primero buscar en correo saliente (texto completo)
           if(respuestaMap[c.id]) return respuestaMap[c.id];
-          // Fallback: historial correo_respondido
           const evResp = histC.find(h => h.evento === 'correo_respondido');
           if(evResp) {
             try {
@@ -2600,12 +2607,13 @@ async function exportarSIGI() {
               return ex.observaciones || evResp.descripcion || '';
             } catch { return evResp.descripcion || ''; }
           }
-          return '';
+          // Fallback para WA/PBX: usar body_content o transcripcion
+          return c.body_content || c.transcripcion || '';
         })()),
         'Fecha PQRSFD Cerrada':    fCierre,
         'Departamento':            _up(dg.departamento || pac?.['Departamento'] || c.departamento_paciente || ''),
         'Ciudad':                  _up(dg.ciudad || pac?.['Ciudad'] || c.ciudad_paciente || ''),
-        'Observación':             _up(obsTexto),
+        'Observación':             _up(obsTexto || c.transcripcion || c.descripcion || ''),
         'Tiene Tutela':            c.tiene_tutela === true ? 'SI' : 'NO',
         'Categoría':               _up(c.categoria_sigi || c.categoria_ia || ''),
         'Hora_Recibido':           _fh(c.received_at || c.created_at),
@@ -2692,25 +2700,26 @@ async function exportarSIGI() {
       const _cedAgente  = ag?.cedula || '';
       const _nomAgente  = _u(ag?.nombre || c?.asignado_a || 'Sin asignar');
       return {
-        'Mes':               _mesM,
-        'Fecha Correo':      _fechaM,
-        'Asunto':            _u(c?.subject || ''),
-        'ID Único':          c?.id || '',
+        'Mes':                _mesM,
+        'Fecha Correo':       _fechaM,
+        'Ticket':             ticketId,
+        'Asunto':             _u(c?.subject || ''),
+        'ID Único':           c?.id || '',
         'Código Medicamento': _u(m.codigo || ''),
-        'Medicamento':       _u(m.descripcion || ''),
-        'PBS':               _u(m.pbs || ''),
-        'Cantidad':          m.cantidad || '',
-        'Tipo solicitud':    _u(c?.tipo_pqr || c?.nombre_solicitud || ''),
-        'Cédula Agente':     _cedAgente,
-        'Nombre Agente':     _nomAgente,
-        'Estado del ticket': _u(c?.estado || ''),
+        'Medicamento':        _u(m.descripcion || m.descripcion_escrita || ''),
+        'PBS':                _u(m.pbs || ''),
+        'Cantidad':           m.cantidad || '',
+        'Tipo solicitud':     _u(c?.tipo_pqr || c?.nombre_solicitud || ''),
+        'Cédula Agente':      _cedAgente,
+        'Nombre Agente':      _nomAgente,
+        'Estado del ticket':  _u(c?.estado || ''),
       };
     });
 
     const ws2 = XLSX.utils.json_to_sheet(
       h2.length ? h2 : [{'Sin datos':'Sin medicamentos en el período — el agente debe añadir medicamentos al ticket para que aparezcan aquí'}]
     );
-    ws2['!cols'] = [{wch:10},{wch:14},{wch:40},{wch:38},{wch:18},{wch:36},{wch:8},{wch:10},{wch:18},{wch:14},{wch:28},{wch:14}];
+    ws2['!cols'] = [{wch:10},{wch:14},{wch:28},{wch:40},{wch:38},{wch:18},{wch:36},{wch:8},{wch:10},{wch:18},{wch:14},{wch:28},{wch:14}];
     _styleSheet(ws2, 9);
     XLSX.utils.book_append_sheet(wb, ws2, 'MEDICAMENTOS');
 
