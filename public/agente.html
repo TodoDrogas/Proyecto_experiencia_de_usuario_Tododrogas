@@ -2339,27 +2339,12 @@ async function gBuscarPaciente(cedula) {
     if(_emailVal) document.getElementById('gEmail').value = _emailVal;
 
     if(data.ok) {
-      // Autocompletar — todos los campos quedan EDITABLES
+      // Autocompletar — solo datos personales del paciente
       document.getElementById('gNombre').value    = data.nombre      || '';
       document.getElementById('gDireccion').value = data.direccion   || data.Direccion || '';
       document.getElementById('gTelefono').value  = data.telefono    || data.Telefono  || '';
-      // EPS del paciente → preseleccionar en buscador si existe en catálogo
-      if(data.eps && state.epsCatalogo) {
-        const epsMatch = state.epsCatalogo.find(e =>
-          e.nombre.toUpperCase().includes(data.eps.toUpperCase()) ||
-          data.eps.toUpperCase().includes(e.nombre.toUpperCase())
-        );
-        if(epsMatch) gSelectEPS(epsMatch.id, epsMatch.nombre, epsMatch.nit||'');
-      }
-      if(data.departamento) {
-        document.getElementById('gDeptoSearch').value = data.departamento;
-        document.getElementById('gDeptoVal').value    = data.departamento;
-      }
-      if(data.ciudad) {
-        document.getElementById('gCiudadSearch').value = data.ciudad;
-        document.getElementById('gCiudadVal').value    = data.ciudad;
-      }
-      // Tipo de documento — mapear abreviatura a valor del select
+      // NO pre-llenar EPS, ciudad ni departamento — el asesor los diligencia
+      // Tipo de documento
       const tipoDoc = data.tipo_documento || '';
       if(tipoDoc) {
         const mapa = {
@@ -2376,7 +2361,7 @@ async function gBuscarPaciente(cedula) {
           if(op.value === val) { op.selected=true; break; }
         }
       }
-      // ── Marcar verde/rojo según lo que llenó el autocomplete ──
+      // Marcar verde/rojo según lo que llenó el autocomplete
       const _gMkOkErr = (id, tipo) => {
         const el = document.getElementById(id);
         if(!el) return;
@@ -2388,9 +2373,9 @@ async function gBuscarPaciente(cedula) {
       _gMkOkErr('gDireccion','input');
       _gMkOkErr('gTelefono', 'input');
       _gMkOkErr('gTipoDoc',  'select');
-      gMarcarSearchOk('gDeptoSearch','gDeptoVal');
-      gMarcarSearchOk('gCiudadSearch','gCiudadVal');
-      // Cédula también se actualiza
+      // EPS siempre roja — asesor la elige
+      const epsEl = document.getElementById('gEpsSearch');
+      if(epsEl){ epsEl.classList.add('gm-err'); epsEl.classList.remove('gm-ok'); }
       gMarcarCampoOk('gCedula');
     } else {
       console.info('[gBuscarPaciente] No encontrado:', cedula, data.razon);
