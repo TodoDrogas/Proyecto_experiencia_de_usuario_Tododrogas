@@ -574,20 +574,19 @@ function buscarPaciente(cedula){
   if(c.length<4) return;
   _pacTimer=setTimeout(async()=>{
     try{
-      const r=await fetch('admin-buscar-paciente.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cedula:c})});
+      const r=await fetch('validar-paciente.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cedula:c})});
       const d=await r.json();
       if(d.ok){
         const up=s=>s?s.toString().toUpperCase().trim():'';
-        if(d.nombre||d.Nombre)      {document.getElementById('mNombre').value=up(d.nombre||d.Nombre);mkOk('mNombre','inp');}
-        if(d.direccion||d.Direccion){document.getElementById('mDireccion').value=up(d.direccion||d.Direccion);mkOk('mDireccion','inp');}
-        if(d.telefono||d.Telefono)  {document.getElementById('mTelefono').value=(d.telefono||d.Telefono).replace(/\D/g,'');mkOk('mTelefono','inp');}
-        if(d.email||d.Correo)       {document.getElementById('mEmail').value=(d.email||d.Correo).toLowerCase();mkOk('mEmail','inp');}
-        if(d.ciudad||d.Ciudad)      {document.getElementById('mCiudad').value=up(d.ciudad||d.Ciudad);mkOk('mCiudad','inp');}
-        if(d.departamento||d.Departamento){document.getElementById('mDepto').value=up(d.departamento||d.Departamento);mkOk('mDepto','inp');}
-        if(d.tipo_documento||d['Tipo De Documento']){
-          const raw=d.tipo_documento||d['Tipo De Documento']||'';
+        if(d.nombre)      {document.getElementById('mNombre').value=up(d.nombre);mkOk('mNombre','inp');}
+        if(d.direccion)   {document.getElementById('mDireccion').value=up(d.direccion);mkOk('mDireccion','inp');}
+        if(d.telefono)    {document.getElementById('mTelefono').value=d.telefono.replace(/\D/g,'');mkOk('mTelefono','inp');}
+        if(d.email)       {document.getElementById('mEmail').value=d.email.toLowerCase();mkOk('mEmail','inp');}
+        if(d.ciudad)      {document.getElementById('mCiudad').value=up(d.ciudad);mkOk('mCiudad','inp');}
+        if(d.departamento){document.getElementById('mDepto').value=up(d.departamento);mkOk('mDepto','inp');}
+        if(d.tipo_documento){
           const mapa={'CC':'CÉDULA DE CIUDADANÍA','CÉDULA DE CIUDADANÍA':'CÉDULA DE CIUDADANÍA','TI':'TARJETA DE IDENTIDAD','CE':'CÉDULA DE EXTRANJERÍA','RC':'REGISTRO CIVIL DE NACIMIENTO','PA':'PASAPORTE','NIT':'NIT'};
-          const tdVal=mapa[raw.toUpperCase()]||raw;
+          const tdVal=mapa[d.tipo_documento.toUpperCase()]||d.tipo_documento;
           const sel=document.getElementById('mTipoDoc');
           for(let op of sel.options){if(op.value===tdVal){op.selected=true;break;}}
           mkOk('mTipoDoc','sel');
