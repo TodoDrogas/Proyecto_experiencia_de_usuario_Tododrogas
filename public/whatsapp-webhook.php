@@ -143,13 +143,20 @@ switch ($action) {
         break;
 
     case 'MENU':
-        $menu  = $text . "\n\n";
-        $menu .= "1️⃣ Información sobre mi medicamento\n";
-        $menu .= "2️⃣ Puntos de dispensación / Sedes\n";
+        // IMPORTANTE: el menú usa números 1-8 que server.js intercepta antes de llegar a GPT.
+        // Los íconos son decorativos — el usuario escribe el número y server.js lo mapea a la acción.
+        // NO usar *1* *2* como respuestas esperadas — solo los iconos numerados para orientar.
+        $menu  = ($text ? $text . "\n\n" : "");
+        $menu .= "¿En qué le puedo ayudar?\n\n";
+        $menu .= "1️⃣ Estado o entrega de medicamentos\n";
+        $menu .= "2️⃣ Puntos de dispensación\n";
         $menu .= "3️⃣ Requisitos para reclamar\n";
         $menu .= "4️⃣ Radicar PQRSFD\n";
-        $menu .= "5️⃣ Estado de mi radicado PQRSFD\n";
-        $menu .= "6️⃣ Hablar con un asesor";
+        $menu .= "5️⃣ Estado de mi radicado\n";
+        $menu .= "6️⃣ Horarios y canales\n";
+        $menu .= "7️⃣ Encuesta de satisfacción\n";
+        $menu .= "8️⃣ 💬 Pregunta a Nova TD\n\n";
+        $menu .= "Escriba el número de su opción.";
         $respuesta = $menu;
         $action    = 'DEFAULT';
         break;
