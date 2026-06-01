@@ -331,8 +331,8 @@ async function cargarDashboard(){
 
   try{
     const [hoy, mes, agentes] = await Promise.all([
-      sb(`correos?select=id,canal_contacto,agente_id,asignado_a&received_at=gte.${hoyIni}&received_at=lte.${hoyFin}&or=(canal_contacto.eq.whatsapp,canal_contacto.eq.telefono,canal_contacto.eq.correo)&limit=2000`),
-      sb(`correos?select=id&received_at=gte.${mesIni}&or=(canal_contacto.eq.whatsapp,canal_contacto.eq.telefono,canal_contacto.eq.correo)&limit=5000`),
+      sb(`correos?select=id,ticket_id,canal_contacto,agente_id,asignado_a&received_at=gte.${hoyIni}&received_at=lte.${hoyFin}&or=(ticket_id.like.WA-*,ticket_id.like.PBX-*,ticket_id.like.CNX-*)&limit=2000`),
+      sb(`correos?select=id,ticket_id&received_at=gte.${mesIni}&or=(ticket_id.like.WA-*,ticket_id.like.PBX-*,ticket_id.like.CNX-*)&limit=5000`),
       sb(`agentes?select=id,nombre,cedula,activo&activo=eq.true&order=nombre.asc`)
     ]);
 
@@ -379,13 +379,21 @@ async function cargarDashboard(){
       agList.innerHTML=agentes.slice(0,12).map(a=>{
         const stats=xAg[a.nombre]||{wa:0,tel:0,mail:0};
         const col=['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316'][Math.floor(Math.random()*8)];
+        const total=stats.wa+stats.tel+stats.mail;
         selAg.innerHTML+=`<option value="${a.nombre}">${a.nombre}</option>`;
-        return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:11px">
-          <div style="width:26px;height:26px;border-radius:50%;background:${col};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0">${a.nombre.charAt(0)}</div>
-          <div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.nombre.split(' ')[0]}</div></div>
-          <span style="font-size:10px;font-weight:700;background:var(--wa-l);color:#15803d;border-radius:99px;padding:1px 6px">${stats.wa}WA</span>
-          <span style="font-size:10px;font-weight:700;background:var(--tel-l);color:#5b21b6;border-radius:99px;padding:1px 6px">${stats.tel}PBX</span>
-          ${stats.mail>0?`<span style="font-size:10px;font-weight:700;background:var(--mail-l);color:#0e7490;border-radius:99px;padding:1px 6px">${stats.mail}MAIL</span>`:''}
+        return `<div style="padding:8px 12px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+            <div style="width:26px;height:26px;border-radius:50%;background:${col};display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;flex-shrink:0">${a.nombre.charAt(0)}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.nombre.split(' ')[0]}</div>
+              <div style="font-size:10px;color:var(--ink3)">${total} gestión${total!==1?'es':''} hoy</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap">
+            <span style="font-size:9px;font-weight:700;background:var(--wa-l);color:#15803d;border-radius:99px;padding:2px 7px">💬 ${stats.wa} WA</span>
+            <span style="font-size:9px;font-weight:700;background:var(--tel-l);color:#5b21b6;border-radius:99px;padding:2px 7px">📞 ${stats.tel} PBX</span>
+            <span style="font-size:9px;font-weight:700;background:var(--mail-l);color:#0e7490;border-radius:99px;padding:2px 7px">✉ ${stats.mail} MAIL</span>
+          </div>
         </div>`;
       }).join('');
     }
@@ -397,12 +405,19 @@ async function cargarDashboard(){
       ?sorted.map(([nombre,stats],i)=>`
         <div class="ag-row">
           <div class="ag-av" style="background:${colors[i%colors.length]}">${nombre.charAt(0)}</div>
-          <div><div class="ag-name">${nombre}</div><div class="ag-sub">${stats.wa+stats.tel+stats.mail} gestiones hoy</div></div>
-          <div class="ag-pills">
-            <span class="ag-pill wa">💬 ${stats.wa} WA</span>
-            <span class="ag-pill tel">📞 ${stats.tel} PBX</span>
-            <span class="ag-pill" style="background:var(--mail-l);color:#0e7490">✉ ${stats.mail} MAIL</span>
-            <span class="ag-pill tot">Total: ${stats.wa+stats.tel+stats.mail}</span>
+          <div style="flex:1;min-width:0">
+            <div class="ag-name">${nombre}</div>
+            <div class="ag-sub">${stats.wa+stats.tel+stats.mail} gestiones hoy</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+            <div style="display:flex;gap:5px">
+              <span class="ag-pill wa">💬 ${stats.wa} WA</span>
+              <span class="ag-pill tel">📞 ${stats.tel} PBX</span>
+            </div>
+            <div style="display:flex;gap:5px">
+              <span class="ag-pill" style="background:var(--mail-l);color:#0e7490">✉ ${stats.mail} MAIL</span>
+              <span class="ag-pill tot">Total: ${stats.wa+stats.tel+stats.mail}</span>
+            </div>
           </div>
         </div>`).join('')
       :'<div class="empty">Sin gestiones registradas hoy</div>';
@@ -422,7 +437,7 @@ async function cargarHistorial(){
     const data=await sb(
       `correos?select=id,ticket_id,subject,nombre,cedula_paciente,correo,nombre_solicitud,detalle_solicitud,categoria_sigi,canal_contacto,origen,asignado_a,received_at,departamento_paciente,ciudad_paciente,eps_id,eps_catalogo(nombre)`
       +`&received_at=gte.${ini}T00:00:00.000Z&received_at=lte.${fin}T23:59:59.999Z`
-      +`&or=(canal_contacto.eq.whatsapp,canal_contacto.eq.telefono,canal_contacto.eq.correo)`
+      +`&or=(ticket_id.like.WA-*,ticket_id.like.PBX-*,ticket_id.like.CNX-*)`
       +`&order=received_at.desc&limit=2000`
     )||[];
     _historial=data;
