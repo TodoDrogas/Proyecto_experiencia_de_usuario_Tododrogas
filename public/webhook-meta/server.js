@@ -758,14 +758,49 @@ ${url}`;
           return;
         }
         if (accionMenu === 'CONSULTAR') {
-          const msgCon = `Por favor indíqueme el número de radicado (formato TD-xxxxx) o su correo electrónico para consultar el estado de su PQRSFD.`;
-          await enviarMeta(telefono, msgCon); await pushHistory(telefono, msgCon, 'nova');
+          const cedSes = sesion?.cedula || '';
+          if (cedSes) {
+            // Consultar radicados por cédula automáticamente
+            const msgEspera = `Permítame un momento, ya estoy buscando sus resultados... 🔍`;
+            await enviarMeta(telefono, msgEspera);
+            await pushHistory(telefono, msgEspera, 'nova');
+            try {
+              const novaConsulta = await fetch('https://tododrogas.online/nova-consulta.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accion: 'radicados_cedula', cedula: cedSes })
+              });
+              const consulta = await novaConsulta.json();
+              let msgCon = '';
+              if (consulta.encontrado && consulta.radicados && consulta.radicados.length > 0) {
+                msgCon = `📋 *Sus radicados PQRSFD:*\n\n`;
+                consulta.radicados.slice(0, 5).forEach(r => {
+                  const fecha = r.creado ? new Date(r.creado).toLocaleDateString('es-CO') : '—';
+                  msgCon += `🔹 *${r.ticket_id || r.id}*\n`;
+                  msgCon += `   Estado: ${r.estado || '—'}\n`;
+                  if (r.tipo) msgCon += `   Tipo: ${r.tipo}\n`;
+                  msgCon += `   Fecha: ${fecha}\n\n`;
+                });
+                msgCon += `🔗 Consulta el detalle completo en:\nhttps://tododrogas.online/consulta.html`;
+              } else {
+                msgCon = `Usted no cuenta con radicados PQRSFD en este momento.\n\n🔗 También puede consultar en:\nhttps://tododrogas.online/consulta.html`;
+              }
+              await enviarMeta(telefono, msgCon);
+              await pushHistory(telefono, msgCon, 'nova');
+            } catch(e) {
+              const msgErr = `En este momento no pude consultar sus radicados. Por favor intente en:\nhttps://tododrogas.online/consulta.html\n\nO llame al 📞 604 322 2432`;
+              await enviarMeta(telefono, msgErr);
+              await pushHistory(telefono, msgErr, 'nova');
+            }
+          } else {
+            const msgCon = `Para consultar el estado de su radicado PQRSFD ingrese aquí:\n\n🔗 https://tododrogas.online/consulta.html\n\nO indíqueme su número de radicado (formato TD-xxxxx).`;
+            await enviarMeta(telefono, msgCon);
+            await pushHistory(telefono, msgCon, 'nova');
+          }
           await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
-          const msgM = `¿En qué más le puedo ayudar?
-
-🏠 Marque *M* → Menú principal
-👤 Marque *A* → Hablar con un asesor`;
-          await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
+          const msgM = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
+          await enviarMeta(telefono, msgM);
+          await pushHistory(telefono, msgM, 'nova');
           return;
         }
         if (accionMenu === 'HORARIOS') {
