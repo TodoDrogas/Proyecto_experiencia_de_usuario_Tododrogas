@@ -2021,7 +2021,7 @@ async function loadSigiMetrics() {
       (async()=>{
         let all=[],off=0;
         while(true){
-          const p=await sb(qS(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&or=(ticket_id.is.null,ticket_id.not.like.CNX-*)` +
+          const p=await sb(qS(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono` +
             `&select=id,estado,agente_id,tiene_respuesta,tiene_tutela&limit=1000&offset=${off}`, 'received_at')).catch(()=>[]);
           if(!p||!p.length) break;
           all=all.concat(p);
@@ -2029,7 +2029,8 @@ async function loadSigiMetrics() {
           off+=1000;
           if(off>10000) break;
         }
-        return all;
+        // Excluir CNX-
+        return all.filter(e=>!(e.ticket_id||'').toUpperCase().startsWith('CNX-'));
       })(),
       // correosInfo — placeholder para no romper destructuring
       Promise.resolve([]),
@@ -2096,9 +2097,10 @@ async function loadSigiMetrics() {
     const conTutela   = correosRecibidos.filter(x=>_asig(x)&&x.tiene_tutela===true).length;
 
     // ── Global Activo — desde state.allEmails si está cargado, sino query liviana ──
-    const _all = (state.allEmails||[]).length > 0 ? (state.allEmails||[]) : (
-      await sb('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&or=(ticket_id.is.null,ticket_id.not.like.CNX-*)&select=id,estado&limit=10000').catch(()=>[])
+    const _allRaw = (state.allEmails||[]).length > 0 ? (state.allEmails||[]) : (
+      await sb('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&select=id,ticket_id,estado&limit=10000').catch(()=>[])
     );
+    const _all = _allRaw.filter(x=>!(x.ticket_id||'').toUpperCase().startsWith('CNX-'));
     const gPend  = _all.filter(x=>x.estado==='pendiente').length;
     const gFirma = _all.filter(x=>x.estado==='pendiente_firma').length;
     const gGest  = _all.filter(x=>x.estado==='gestion').length;
@@ -3188,13 +3190,15 @@ async function loadEmails(horasVentana = 0) {
     let offset = 0;
     const PAGE = 1000;
     while (true) {
-      const page = await sb(`correos?received_at=gte.${desde}&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&or=(ticket_id.is.null,ticket_id.not.like.CNX-*)&order=received_at.desc&limit=${PAGE}&offset=${offset}&select=*,tiene_respuesta`);
+      const page = await sb(`correos?received_at=gte.${desde}&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&order=received_at.desc&limit=${PAGE}&offset=${offset}&select=*,tiene_respuesta`);
       if (!page || page.length === 0) break;
       data = data.concat(page);
       if (page.length < PAGE) break;
       offset += PAGE;
     }
-    const allEmails = (data||[]).map(e=>({
+    // Excluir CNX- en cliente (más seguro que PostgREST con NULLs)
+    const filteredData = (data||[]).filter(e => !(e.ticket_id||'').toUpperCase().startsWith('CNX-'));
+    const allEmails = filteredData.map(e=>({
       id: e.id,
       message_id: e.message_id,
       conversation_id: e.conversation_id || null, // null = sin hilo, se muestra individual
@@ -3351,7 +3355,7 @@ async function loadTicketsActivosAgentes() {
     const PAGE = 1000;
     while(true) {
       const page = await sb(
-        'correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&or=(ticket_id.is.null,ticket_id.not.like.CNX-*)' +
+        'correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono' +
         '&select=id,agente_id,asignado_a,estado,origen' +
         '&order=received_at.desc&limit=' + PAGE + '&offset=' + offset
       ) || [];
@@ -3361,7 +3365,8 @@ async function loadTicketsActivosAgentes() {
       offset += PAGE;
       if(offset >= 50000) break;
     }
-    state._activosAgentes = all;
+    // Excluir CNX- en cliente
+    state._activosAgentes = all.filter(e=>!(e.ticket_id||'').toUpperCase().startsWith('CNX-'));
 
     // IDs con respuesta y con gestión — sobre el total sin filtro fecha
     const ids = all.map(e=>e.id).filter(Boolean);
