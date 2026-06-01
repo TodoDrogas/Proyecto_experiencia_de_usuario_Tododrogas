@@ -869,14 +869,16 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 
       <!-- Topbar con tabs -->
       <div class="metrics-topbar">
-        <div class="metrics-topbar-row">
-          <div style="display:flex;align-items:center;gap:16px">
-            <div>
-              <div style="font-size:15px;font-weight:800;color:#ffffff;letter-spacing:.5px;text-transform:uppercase;text-shadow:0 0 20px rgba(0,196,232,.3)">ECOSISTEMA PQRSFD</div>
-              <div style="font-size:10px;color:rgba(0,196,232,.55);letter-spacing:.3px">Tododrogas · actualizado <span id="metLastUpdate">—</span></div>
-            </div>
+        <div class="metrics-topbar-row" style="position:relative">
+          <!-- Badge izquierda (invisible para balancear) -->
+          <div style="visibility:hidden;display:inline-flex;align-items:center;gap:6px;padding:4px 12px;font-size:9px">SIGI · EN LÍNEA</div>
+          <!-- Título centrado absoluto -->
+          <div style="position:absolute;left:50%;transform:translateX(-50%);text-align:center">
+            <div style="font-size:15px;font-weight:800;color:#ffffff;letter-spacing:.5px;text-transform:uppercase;text-shadow:0 0 20px rgba(0,196,232,.3)">ECOSISTEMA PQRSFD</div>
+            <div style="font-size:10px;color:rgba(0,196,232,.55);letter-spacing:.3px">Tododrogas · actualizado <span id="metLastUpdate">—</span></div>
           </div>
-          <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(0,196,232,.1);border:1px solid rgba(0,196,232,.22);border-radius:6px;padding:4px 12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:#00c4e8">
+          <!-- Badge derecha -->
+          <div style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;background:rgba(0,196,232,.1);border:1px solid rgba(0,196,232,.22);border-radius:6px;padding:4px 12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:#00c4e8">
             <span style="width:6px;height:6px;border-radius:50%;background:#00c4e8;box-shadow:0 0 8px #00c4e8;animation:bdot2 2s ease-in-out infinite;display:inline-block"></span>
             SIGI · EN LÍNEA
           </div>
@@ -9538,11 +9540,11 @@ function renderCentralizadas(){
   if(menuEl){
     menuEl.innerHTML = menuTop.length ? menuTop.map(([k,v])=>`
       <div style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:3px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:4px">
           <span style="color:rgba(200,230,255,.85)">${k}</span>
           <span style="color:#ffffff;font-weight:700;font-family:'DM Mono',monospace">${v} <span style="color:rgba(0,196,232,.5);font-size:10px;font-weight:400">· ${Math.round(v/(allSes.length||1)*100)}%</span></span>
         </div>
-        <div style="background:rgba(255,255,255,.08);border-radius:2px;height:4px;overflow:hidden">
+        <div style="background:rgba(255,255,255,.08);border-radius:2px;height:8px;overflow:hidden">
           <div style="background:linear-gradient(90deg,#2563eb,#00c4e8);width:${Math.round(v/maxM*100)}%;height:100%;border-radius:2px;box-shadow:0 0 6px rgba(0,196,232,.5)"></div>
         </div>
       </div>`).join('')
@@ -9592,11 +9594,19 @@ function renderCentralizadas(){
     const total2=vals.reduce((a,b)=>a+b,0)||1;
     _mCharts.cChartTipos=new Chart(cT.getContext('2d'),{type:'doughnut',data:{
       labels:TIPOS_L,
-      datasets:[{data:vals,backgroundColor:TIPO_CLR,borderWidth:3,borderColor:'var(--surface,#fff)',hoverOffset:6}]
+      datasets:[{data:vals,backgroundColor:TIPO_CLR,borderWidth:3,borderColor:'rgba(10,14,26,.8)',hoverOffset:6}]
     },options:{cutout:'70%',plugins:{
-      legend:{position:'right',labels:{font:{size:10,family:'Poppins'},boxWidth:10,padding:5,
+      legend:{position:'right',labels:{
+        font:{size:10,family:'Poppins'},
+        boxWidth:10,padding:8,
+        color:'rgba(200,230,255,.9)',
         generateLabels:chart=>chart.data.labels.map((l,i)=>({
-          text:l+' ('+vals[i]+')',fillStyle:TIPO_CLR[i],strokeStyle:'transparent',index:i
+          text:l+' ('+vals[i]+')',
+          fillStyle:TIPO_CLR[i],
+          strokeStyle:'transparent',
+          fontColor:'rgba(200,230,255,.9)',
+          color:'rgba(200,230,255,.9)',
+          index:i
         })).filter((_,i)=>vals[i]>0)
       }},
       tooltip:{callbacks:{label:i=>i.label+': '+i.raw+' ('+Math.round(i.raw/total2*100)+'%)'}}
