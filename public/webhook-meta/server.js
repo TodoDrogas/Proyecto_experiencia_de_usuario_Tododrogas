@@ -533,6 +533,24 @@ app.post('/webhook/meta', async (req, res) => {
         return;
       }
 
+      // ── MUNICIPIO PARA SEDES ─────────────────────────────────────────────────
+      if (sesion.fase === 'municipio_sedes') {
+        const municipio = body.trim();
+        const novaSedesRes = await fetch('https://tododrogas.online/nova-wa.php', {
+          method:'POST', headers:{'Content-Type':'application/json','X-Nova-Token':NOVA_TOKEN},
+          body: JSON.stringify({ telefono, mensaje: municipio, sesion: {...sesion, fase:'municipio_sedes'} })
+        });
+        const novaSedesData = await novaSedesRes.json();
+        if (novaSedesData.respuesta) {
+          await enviarMeta(telefono, novaSedesData.respuesta);
+          await pushHistory(telefono, novaSedesData.respuesta, 'nova');
+        }
+        await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+        const msgM = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
+        await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
+        return;
+      }
+
       // ── MENÚ POST-NOVA (M/A) ────────────────────────────────────────────────
       // ── MUNICIPIO PARA SEDES ─────────────────────────────────────────────────
       if (sesion.fase === 'esperando_municipio_sedes') {
@@ -554,8 +572,8 @@ app.post('/webhook/meta', async (req, res) => {
 
       if (sesion.fase === 'esperando_menu_post_nova') {
         const resp = body.trim().toUpperCase();
-        const esM  = ['M','MENU','MENÚ','1'].includes(resp) || resp.startsWith('M');
-        const esA  = ['A','ASESOR','2'].includes(resp) || resp.startsWith('A');
+        const esM  = ['M','MENU','MENÚ'].includes(resp) || resp.startsWith('M');
+        const esA  = ['A','ASESOR'].includes(resp) || resp.startsWith('A');
         if (esM) {
           // Actualizar estado y enviar menú directamente — NO llamar al PHP
           // Si llega "M" a GPT, lo interpreta como texto libre y genera respuestas incorrectas
@@ -693,9 +711,12 @@ app.post('/webhook/meta', async (req, res) => {
       // EXCLUIR: menú de política (*1* Acepto / *2* No acepto) que solo tiene 2 opciones
       const hist = Array.isArray(sesion?.history) ? sesion.history : [];
       const ultimosMensajesNova = hist.filter(m => m.role === 'nova').slice(-5).map(m => m.content || '');
-      const eraMenúNumerado = ultimosMensajesNova.some(msg =>
+      const tieneMenuEnHistorial = ultimosMensajesNova.some(msg =>
         /1️⃣/.test(msg) && /2️⃣/.test(msg) && /3️⃣/.test(msg)
       );
+      // Fallback: si fase es null o esperando_menu_post_nova y body es 1-8, asumir menú
+      const fasePermiteMenu = !sesion?.fase || sesion?.fase === 'esperando_menu_post_nova';
+      const eraMenúNumerado = tieneMenuEnHistorial || fasePermiteMenu;
 
       if (eraMenúNumerado && /^[1-8]$/.test(bodyNum)) {
         const mapMenuNova = {
@@ -730,54 +751,39 @@ app.post('/webhook/meta', async (req, res) => {
         }
         if (accionMenu === 'SEDES') {
           const ciudad = sesion?.ciudad || '';
-          if (ciudad) {
-            // Llamar directamente al PHP con el tag SEDES
-            const novaSedesRes = await fetch('https://tododrogas.online/nova-wa.php', {
-              method:'POST', headers:{'Content-Type':'application/json','X-Nova-Token':NOVA_TOKEN},
-              body: JSON.stringify({ telefono, mensaje:`[SEDES:${ciudad}]`, sesion })
-            });
-            const novaSedesData = await novaSedesRes.json();
-            if (novaSedesData.respuesta) {
-              await enviarMeta(telefono, novaSedesData.respuesta);
-              await pushHistory(telefono, novaSedesData.respuesta, 'nova');
-            }
-          } else {
-            const msgSedes = `¿En qué municipio se encuentra para mostrarle las sedes disponibles para su EPS?`;
-            await enviarMeta(telefono, msgSedes);
-            await pushHistory(telefono, msgSedes, 'nova');
-            await supabase.from('wa_sesiones').update({ fase: 'esperando_municipio_sedes', updated_at: ahoraISO }).eq('telefono', telefono);
-            const msgM = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
-            await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
-          }
-          await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
-          const msgM2 = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
-          await enviarMeta(telefono, msgM2); await pushHistory(telefono, msgM2, 'nova');
+          const nombre = sesion?.nombre || '';
+          const pn = nombre ? nombre.split(' ')[0].toUpperCase() : '';
+          // Siempre preguntar municipio — puede ser diferente a la ciudad registrada
+          const msgSedes = `Con gusto le indico los puntos de dispensación disponibles${pn?', *'+pn+'*':''}.`
+            + `\n\n¿En qué *municipio* desea consultar?\n_(puede ser diferente a su ciudad de registro)_`;
+          await enviarMeta(telefono, msgSedes);
+          await pushHistory(telefono, msgSedes, 'nova');
+          await supabase.from('wa_sesiones').update({ fase: 'municipio_sedes', updated_at: ahoraISO }).eq('telefono', telefono);
           return;
         }
         if (accionMenu === 'REQUISITOS') {
-          const msgReq = `📋 *Requisitos para reclamar medicamentos:*
-
-• Fórmula médica vigente
-• Documento de identidad
-• Carné de afiliación a la EPS
-• En caso de representante: autorización escrita + copia del documento del paciente
-
-¿Necesita más información? 📞 604 322 2432`;
+          const _pnReq = (sesion?.nombre||'').split(' ')[0].toUpperCase();
+          const _mUrl = 'https://dispensacion.tododrogas.com.co:8443/AppSolicitudesWebJavaSQLServer/com.appsolicitudesweb.appsolicitudweb';
+          const msgReq = `Con mucho gusto${_pnReq?', *'+_pnReq+'*':''}. Para retirar sus medicamentos en nuestros puntos de dispensación necesita:\n\n`
+            + `📋 Fórmula médica vigente\n`
+            + `📁 Historia clínica\n`
+            + `🪪 Documento de identidad *original*\n\n`
+            + `*¿Va a recoger en nombre de alguien?*\n`
+            + `📋 Fórmula médica + Historia clínica\n`
+            + `🪪 Su documento original + documento original del usuario\n`
+            + `📝 Carta de autorización firmada por el usuario\n\n`
+            + `Puede consultar el estado de sus medicamentos en:\n🔗 ${_mUrl}`;
           await enviarMeta(telefono, msgReq); await pushHistory(telefono, msgReq, 'nova');
           await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
-          const msgM = `¿En qué más le puedo ayudar?
-
-🏠 Marque *M* → Menú principal
-👤 Marque *A* → Hablar con un asesor`;
-          await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
+          const msgM_req = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
+          await enviarMeta(telefono, msgM_req); await pushHistory(telefono, msgM_req, 'nova');
           return;
         }
         if (accionMenu === 'FORMULARIO') {
           const cedula = sesion?.cedula || '';
+          const _pnForm = (sesion?.nombre||'').split(' ')[0].toUpperCase();
           const url = cedula ? `https://tododrogas.online/pqr_form.html?cedula=${cedula}` : 'https://tododrogas.online/pqr_form.html';
-          const msgForm = `📋 *Radicar PQRSFD:*
-
-${url}`;
+          const msgForm = `${_pnForm?'*'+_pnForm+'*, p':'P'}uede radicar su solicitud PQRSFD directamente en nuestro formulario:\n\n📋 ${url}\n\nTambién puede escribirnos a *pqrsfd@tododrogas.com.co* o llamar al *604 322 2432*.`;
           await enviarMeta(telefono, msgForm); await pushHistory(telefono, msgForm, 'nova');
           await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
           const msgM = `¿En qué más le puedo ayudar?
@@ -834,14 +840,13 @@ ${url}`;
           return;
         }
         if (accionMenu === 'HORARIOS') {
-          const msgHor = `🕐 *Horarios de atención:*
-
-📅 Lunes a Viernes: 7:00 a.m. – 5:30 p.m.
-📅 Sábados: 8:00 a.m. – 12:00 m.
-
-📞 PBX: 604 322 2432
-💬 WhatsApp: 304 341 2431
-📧 pqrsfd@tododrogas.com.co`;
+          const msgHor = `📞 *Canales de contacto PQRSFD · Tododrogas:*\n\n`
+            + `📞 PBX: *604 322 2432* · Opción #2\n`
+            + `📧 pqrsfd@tododrogas.com.co\n`
+            + `🤖 Nova TD: 24/7\n\n`
+            + `🕐 *Horario asesores:*\n`
+            + `Lunes a viernes 7:00 a.m. – 5:30 p.m.\n`
+            + `Sábados 8:00 a.m. – 12:00 m.`;
           await enviarMeta(telefono, msgHor); await pushHistory(telefono, msgHor, 'nova');
           await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
           const msgM = `¿En qué más le puedo ayudar?
@@ -852,12 +857,11 @@ ${url}`;
           return;
         }
         if (accionMenu === 'ENCUESTA') {
-          // Opción 7: disparar flujo de satisfacción
-          const msgEnc = `¿La información que le brindamos resolvió su consulta hoy?
-
-Responda *SI* o *NO*`;
-          await supabase.from('wa_sesiones').update({ estado: 'confirmando_solucion_nova', inactividad_aviso_at: null, updated_at: ahoraISO }).eq('telefono', telefono).not('estado','eq','confirmando_solucion_nova');
+          const msgEnc = `📝 *Encuesta de Satisfacción Tododrogas*\n\nSu opinión es muy importante para nosotros. Por favor califique nuestro servicio:\n\n🔗 https://tododrogas.online/pqr_encuesta.html?origen=whatsapp`;
           await enviarMeta(telefono, msgEnc); await pushHistory(telefono, msgEnc, 'nova');
+          await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+          const msgM = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
+          await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
           return;
         }
         // accionMenu === 'DEFAULT' (opción 8 = pregunta libre): cae a Nova PHP normalmente
