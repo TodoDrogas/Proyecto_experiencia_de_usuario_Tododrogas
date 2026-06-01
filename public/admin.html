@@ -876,13 +876,12 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <span id="novaLastUpdate" class="mfiltros-update"></span>
           </div>
 
-          <!-- KPIs totales -->
-          <div class="mkpi-strip" style="grid-template-columns:repeat(5,1fr)">
+          <!-- KPIs — 4 cards -->
+          <div class="mkpi-strip" style="grid-template-columns:repeat(4,1fr)">
             <div class="mkpi-card mkpi-a1"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiRadTotal">—</div><span class="mkpi-emoji">📋</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Total radicados</div><div class="mkpi-sub">Todos los canales</div></div><div class="mkpi-bar-bottom"></div></div>
-            <div class="mkpi-card mkpi-a2"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiEncTotal">—</div><span class="mkpi-emoji">⭐</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Total encuestas</div><div class="mkpi-sub">Todos los canales</div></div><div class="mkpi-bar-bottom"></div></div>
-            <div class="mkpi-card mkpi-a3"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiSesTotal">—</div><span class="mkpi-emoji">🤖</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Sesiones Nova</div><div class="mkpi-sub">Total conversaciones</div></div><div class="mkpi-bar-bottom"></div></div>
-            <div class="mkpi-card mkpi-a4"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiPromEnc">—</div><span class="mkpi-emoji">📈</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Promedio encuesta</div><div class="mkpi-sub">Satisfacción global</div></div><div class="mkpi-bar-bottom"></div></div>
-            <div class="mkpi-card mkpi-a5"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiDiario">—</div><span class="mkpi-emoji">📅</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Promedio diario</div><div class="mkpi-sub">Interacciones / día</div></div><div class="mkpi-bar-bottom"></div></div>
+            <div class="mkpi-card mkpi-a2"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiEncTotal">—</div><span class="mkpi-emoji">⭐</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Total encuestas</div><div class="mkpi-sub" id="cKpiEncProm">Todos los canales</div></div><div class="mkpi-bar-bottom"></div></div>
+            <div class="mkpi-card mkpi-a3"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiSesTotal">—</div><span class="mkpi-emoji">🤖</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Sesiones Nova TD</div><div class="mkpi-sub">Total conversaciones</div></div><div class="mkpi-bar-bottom"></div></div>
+            <div class="mkpi-card mkpi-a4"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiCanalDom" style="font-size:15px;line-height:1.2">—</div><span class="mkpi-emoji">🏆</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Canal dominante</div><div class="mkpi-sub" id="cKpiMenuTop">Mayor volumen</div></div><div class="mkpi-bar-bottom"></div></div>
           </div>
 
           <!-- Fila 1: Radicados por canal (barras horiz.) + tipo solicitud (donut) -->
@@ -921,21 +920,14 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             </div>
           </div>
 
-          <!-- Fila 3: Sesiones Nova por canal + tendencia radicados -->
+          <!-- Fila 3: Menú más elegido Nova TD -->
           <div class="mcharts-grid-3">
-            <div class="mchart-card">
+            <div class="mchart-card mchart-span3">
               <div class="mchart-header">
-                <div class="mchart-title">🤖 Sesiones Nova por canal</div>
-                <div class="mchart-sub">Nova enlace · directo · QR · bienvenida</div>
+                <div class="mchart-title">📋 Menú más elegido en Nova TD</div>
+                <div class="mchart-sub">Opciones seleccionadas por usuarios en todas las sesiones del período</div>
               </div>
-              <div id="cSesNovaCanalList" class="mbar-list" style="padding:12px 16px"></div>
-            </div>
-            <div class="mchart-card mchart-span2">
-              <div class="mchart-header">
-                <div class="mchart-title">Tendencia de radicados</div>
-                <div class="mchart-sub">Todos los canales combinados por día</div>
-              </div>
-              <div class="mchart-body" style="height:200px"><canvas id="cChartTendencia"></canvas></div>
+              <div id="cMenuNovaList" class="mbar-list" style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:0 32px"></div>
             </div>
           </div>
 
@@ -9523,7 +9515,7 @@ function renderNovaMetrics(){
 }
 
 // ══════════════════════════════════════════════════════════════════
-// MÉTRICAS CENTRALIZADAS — renderiza el tab consolidado
+// MÉTRICAS CENTRALIZADAS
 // ══════════════════════════════════════════════════════════════════
 function renderCentralizadas(){
   if(!document.getElementById('mtab-centralizadas')?.classList.contains('active')) return;
@@ -9533,139 +9525,155 @@ function renderCentralizadas(){
   const d2 = D.hasta ? new Date(D.hasta) : new Date();
   const dias = Math.max(1, Math.round((d2-d1)/864e5)+1);
 
-  // Filtro tipo de solicitud
   const filtroTipo = (document.getElementById('cFiltroTipo')?.value||'').toLowerCase();
   const filT = arr => filtroTipo ? arr.filter(r=>(r.tipo_pqr||'').toLowerCase()===filtroTipo) : arr;
 
-  // Consolidar todos los radicados y encuestas
-  const radWeb   = filT(D.radWeb||[]);
-  const radQr    = filT(D.radQr||[]);
-  const radNova  = filT([...(D.radNovaWeb||[]),...(D.radNovaDir||[])]);
-  const allRad   = [...radWeb,...radQr,...radNova];
-  const allEnc   = [...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
-  const allSes   = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])];
+  const radWeb  = filT(D.radWeb||[]);
+  const radQr   = filT(D.radQr||[]);
+  const radNova = filT([...(D.radNovaWeb||[]),...(D.radNovaDir||[])]);
+  const allRad  = [...radWeb,...radQr,...radNova];
+  const allEnc  = [...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
+  const allSes  = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])];
 
-  // KPIs
   const _s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+
+  // ── KPIs ──
   _s('cKpiRadTotal', allRad.length);
   _s('cKpiEncTotal', allEnc.length);
   _s('cKpiSesTotal', allSes.length);
-  const promEnc = allEnc.length ? (allEnc.reduce((s,e)=>s+(+e.promedio||+e.calificacion||0),0)/allEnc.length).toFixed(2) : '—';
-  _s('cKpiPromEnc', promEnc);
-  _s('cKpiDiario', ((allRad.length+allEnc.length)/dias).toFixed(1));
 
-  // Helper barra horizontal
-  const _bar=(label,val,total,color,extra='')=>{
+  // Promedio encuesta escala 1-3
+  const encConCal = allEnc.filter(e=>(e.calificacion||0)>0);
+  const promEnc = encConCal.length
+    ? (encConCal.reduce((s,e)=>s+(+e.calificacion||0),0)/encConCal.length).toFixed(2)
+    : '—';
+  const promLabel = promEnc==='—'?'Sin calificaciones'
+    : +promEnc>=2.5?'★ '+promEnc+' Satisfactorio'
+    : +promEnc>=1.5?'★ '+promEnc+' Neutro'
+    : '★ '+promEnc+' Insatisfactorio';
+  _s('cKpiEncProm', promLabel);
+
+  // Canal dominante
+  const canales = [{n:'🖥️ Navegador',v:radWeb.length},{n:'📷 QR',v:radQr.length},{n:'🤖 Nova TD',v:radNova.length}];
+  const dom = canales.reduce((a,b)=>b.v>a.v?b:a,{n:'—',v:0});
+  _s('cKpiCanalDom', dom.n);
+  const totalRad=allRad.length||1;
+  _s('cKpiMenuTop', dom.v+' rad · '+Math.round(dom.v/totalRad*100)+'% del total');
+
+  // Menú más elegido Nova TD
+  const menuC={};
+  allSes.forEach(s=>{if(s.menu_elegido)s.menu_elegido.split(',').forEach(m=>{const t=m.trim();if(t)menuC[t]=(menuC[t]||0)+1;});});
+  const menuTop = Object.entries(menuC).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  const menuEl = document.getElementById('cMenuNovaList');
+  const maxM = menuTop[0]?.[1]||1;
+  if(menuEl){
+    menuEl.innerHTML = menuTop.length ? menuTop.map(([k,v])=>`
+      <div style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:3px">
+          <span style="color:var(--ink)">${k}</span>
+          <span style="color:#7c3aed;font-weight:700">${v} <span style="color:var(--ink3);font-size:10px;font-weight:400">· ${Math.round(v/(allSes.length||1)*100)}% sesiones</span></span>
+        </div>
+        <div style="background:var(--bg2);border-radius:99px;height:6px;overflow:hidden">
+          <div style="background:linear-gradient(90deg,#7c3aed,#a855f7);width:${Math.round(v/maxM*100)}%;height:100%;border-radius:99px"></div>
+        </div>
+      </div>`).join('')
+    : '<div style="font-size:12px;color:var(--ink3);padding:8px">Sin sesiones Nova TD en el período</div>';
+  }
+
+  // ── Barra horizontal helper (futurista blanco) ──
+  const _bar=(label,val,total,accent,extra='')=>{
     const pct=total>0?Math.round(val/total*100):0;
-    return `<div style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:3px">
-        <span style="color:var(--ink)">${label}</span>
-        <span style="color:${color};font-weight:700">${val} <span style="color:var(--ink3);font-weight:400;font-size:10px">${extra?'· '+extra:''}</span></span>
+    const w=pct+'%';
+    return `<div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+        <span style="font-size:13px;font-weight:700;color:var(--ink)">${label}</span>
+        <span style="font-size:20px;font-weight:800;color:${accent};font-family:'DM Mono',monospace;letter-spacing:-1px">${val}</span>
       </div>
-      <div style="background:var(--bg2);border-radius:99px;height:8px;overflow:hidden">
-        <div style="background:${color};width:${pct}%;height:100%;border-radius:99px;transition:width .4s"></div>
+      <div style="position:relative;background:var(--bg2);border-radius:2px;height:10px;overflow:hidden">
+        <div style="background:${accent};width:${w};height:100%;border-radius:2px;transition:width .5s cubic-bezier(.4,0,.2,1)"></div>
       </div>
-      <div style="font-size:10px;color:var(--ink3);margin-top:2px">${pct}% del total</div>
+      <div style="display:flex;justify-content:space-between;margin-top:3px">
+        <span style="font-size:10px;color:var(--ink3)">${pct}% del total</span>
+        ${extra?`<span style="font-size:10px;color:var(--ink3)">${extra}</span>`:''}
+      </div>
     </div>`;
   };
 
-  // 1. Radicados por canal
+  // ── Radicados por canal ──
   const rCanal = document.getElementById('cRadCanalList');
-  if(rCanal){
-    const totalR = allRad.length||1;
-    rCanal.innerHTML = [
-      _bar('🖥️ Navegador (enlace)', radWeb.length, totalR, '#2563eb'),
-      _bar('📷 QR directo',         radQr.length,  totalR, '#d97706'),
-      _bar('🤖 Nova (enlace + directo)', radNova.length, totalR, '#7c3aed'),
-    ].join('');
-  }
+  if(rCanal) rCanal.innerHTML=[
+    _bar('🖥️ Navegador (enlace)', radWeb.length, totalRad, '#1d4ed8'),
+    _bar('📷 QR directo',         radQr.length,  totalRad, '#b45309'),
+    _bar('🤖 Nova TD',            radNova.length, totalRad, '#6d28d9'),
+  ].join('');
 
-  // 2. Tipo de solicitud — donut
-  const TIPOS_C = ['solicitud','peticion','queja','reclamo','sugerencia','felicitacion','denuncia','urgente'];
-  const TIPOS_L = ['Solicitud','Petición','Queja','Reclamo','Sugerencia','Felicitación','Denuncia','Urgente'];
-  const TIPO_COLORS = ['#2563eb','#7c3aed','#dc2626','#ea580c','#16a34a','#0891b2','#db2777','#b45309'];
+  // ── Tipo de solicitud — donut sin "Sin tipo" ──
+  const TIPOS_C=['solicitud','peticion','queja','reclamo','sugerencia','felicitacion','denuncia','urgente'];
+  const TIPOS_L=['Solicitud','Petición','Queja','Reclamo','Sugerencia','Felicitación','Denuncia','Urgente'];
+  const TIPO_CLR=['#1d4ed8','#6d28d9','#dc2626','#ea580c','#16a34a','#0891b2','#db2777','#b45309'];
   _mDestroyChart('cChartTipos');
   const cT=document.getElementById('cChartTipos');
   if(cT){
-    const vals = TIPOS_C.map(t=>allRad.filter(r=>(r.tipo_pqr||'').toLowerCase()===t).length);
-    const sinTipo = allRad.filter(r=>!r.tipo_pqr).length;
-    _mCharts.cChartTipos = new Chart(cT.getContext('2d'),{type:'doughnut',data:{
-      labels:[...TIPOS_L,'Sin tipo'],
-      datasets:[{data:[...vals,sinTipo],backgroundColor:[...TIPO_COLORS,'#94a3b8'],borderWidth:2,borderColor:'#fff'}]
-    },options:{cutout:'65%',plugins:{legend:{position:'right',labels:{font:{size:10},boxWidth:12,padding:6}},tooltip:{callbacks:{label:i=>i.label+': '+i.raw}}}}});
+    // Normalizar "solicitud" como fallback cuando tipo_pqr está vacío o es otro valor
+    const normT=t=>{
+      const l=(t||'').toLowerCase().trim();
+      return TIPOS_C.includes(l)?l:(l?'otro':'solicitud');
+    };
+    const vals=TIPOS_C.map(t=>allRad.filter(r=>normT(r.tipo_pqr)===t).length);
+    const total2=vals.reduce((a,b)=>a+b,0)||1;
+    _mCharts.cChartTipos=new Chart(cT.getContext('2d'),{type:'doughnut',data:{
+      labels:TIPOS_L,
+      datasets:[{data:vals,backgroundColor:TIPO_CLR,borderWidth:3,borderColor:'var(--surface,#fff)',hoverOffset:6}]
+    },options:{cutout:'70%',plugins:{
+      legend:{position:'right',labels:{font:{size:10,family:'Poppins'},boxWidth:10,padding:5,
+        generateLabels:chart=>chart.data.labels.map((l,i)=>({
+          text:l+' ('+vals[i]+')',fillStyle:TIPO_CLR[i],strokeStyle:'transparent',index:i
+        })).filter((_,i)=>vals[i]>0)
+      }},
+      tooltip:{callbacks:{label:i=>i.label+': '+i.raw+' ('+Math.round(i.raw/total2*100)+'%)'}}
+    }}});
   }
 
-  // 3. Encuestas por canal
-  const encCanal = document.getElementById('cEncCanalList');
-  if(encCanal){
-    const encW=D.encWeb||[], encQ=D.encQr||[], encN=[...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
-    const totalE=(encW.length+encQ.length+encN.length)||1;
-    const prom=arr=>arr.length?(arr.reduce((s,e)=>s+(+e.promedio||+e.calificacion||0),0)/arr.length).toFixed(2):'—';
-    encCanal.innerHTML = [
-      _bar('🖥️ Navegador', encW.length, totalE, '#2563eb', '★ '+prom(encW)),
-      _bar('📷 QR directo', encQ.length, totalE, '#d97706', '★ '+prom(encQ)),
-      _bar('🤖 Nova',       encN.length, totalE, '#7c3aed', '★ '+prom(encN)),
-    ].join('');
-  }
+  // ── Encuestas por canal (escala 1-3) ──
+  const calLabel3=v=>v>=3?'SATISFACTORIO':v>=2?'NEUTRO':v>0?'INSATISFACTORIO':'';
+  const prom3=arr=>{const v=arr.filter(e=>(e.calificacion||0)>0);return v.length?(v.reduce((s,e)=>s+(+e.calificacion||0),0)/v.length).toFixed(2):'—';};
+  const encW=D.encWeb||[], encQ=D.encQr||[], encN=[...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
+  const totalE=(encW.length+encQ.length+encN.length)||1;
+  const encCanal=document.getElementById('cEncCanalList');
+  if(encCanal) encCanal.innerHTML=[
+    _bar('🖥️ Navegador', encW.length, totalE, '#1d4ed8', '★ '+prom3(encW)+' / 3'),
+    _bar('📷 QR directo', encQ.length, totalE, '#b45309', '★ '+prom3(encQ)+' / 3'),
+    _bar('🤖 Nova TD',    encN.length, totalE, '#6d28d9', '★ '+prom3(encN)+' / 3'),
+  ].join('');
 
-  // 4. Items de encuesta (promedios)
-  const encItems = document.getElementById('cEncItemsList');
+  // ── Items de encuesta (escala 1-3) ──
+  const items=[
+    {key:'instalaciones',label:'🏪 Instalaciones y limpieza',color:'#1d4ed8'},
+    {key:'atencion',     label:'👤 Atención al cliente',      color:'#6d28d9'},
+    {key:'tiempos',      label:'⏱️ Tiempos de espera',        color:'#b45309'},
+    {key:'medicamentos', label:'💊 Disponib. medicamentos',   color:'#16a34a'},
+    {key:'recomendacion',label:'⭐ Recomendaría el servicio', color:'#0891b2'},
+  ];
+  const encItems=document.getElementById('cEncItemsList');
   if(encItems && allEnc.length){
-    const items = [
-      {key:'instalaciones', label:'🏪 Instalaciones y limpieza', color:'#2563eb'},
-      {key:'atencion',      label:'👤 Atención al cliente',       color:'#7c3aed'},
-      {key:'tiempos',       label:'⏱️ Tiempos de espera',         color:'#d97706'},
-      {key:'medicamentos',  label:'💊 Disponib. medicamentos',    color:'#16a34a'},
-      {key:'recomendacion', label:'⭐ Recomendaría el servicio',  color:'#0891b2'},
-    ];
-    const maxP=5;
-    encItems.innerHTML = items.map(it=>{
-      const vals=allEnc.filter(e=>e[it.key]>0);
-      const prom=vals.length?(vals.reduce((s,e)=>s+(+e[it.key]||0),0)/vals.length).toFixed(2):'—';
-      const pct=prom!=='—'?Math.round(+prom/maxP*100):0;
+    const maxI=3;
+    encItems.innerHTML=items.map(it=>{
+      const vs=allEnc.filter(e=>(+e[it.key]||0)>0);
+      const pr=vs.length?(vs.reduce((s,e)=>s+(+e[it.key]||0),0)/vs.length).toFixed(2):'—';
+      const pct=pr!=='—'?Math.round(+pr/maxI*100):0;
+      const col=pr==='—'?'var(--ink3)':+pr>=2.5?'#16a34a':+pr>=1.5?'#b45309':'#dc2626';
       return `<div style="margin-bottom:9px">
         <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:600;margin-bottom:3px">
           <span style="color:var(--ink)">${it.label}</span>
-          <span style="color:${it.color};font-weight:700">${prom} <span style="color:var(--ink3);font-weight:400;font-size:10px">/ 5</span></span>
+          <span style="color:${col};font-weight:800">${pr}<span style="color:var(--ink3);font-weight:400"> / 3</span></span>
         </div>
-        <div style="background:var(--bg2);border-radius:99px;height:7px;overflow:hidden">
-          <div style="background:${it.color};width:${pct}%;height:100%;border-radius:99px;transition:width .4s"></div>
+        <div style="background:var(--bg2);border-radius:2px;height:6px;overflow:hidden">
+          <div style="background:${it.color};width:${pct}%;height:100%;border-radius:2px"></div>
         </div>
       </div>`;
     }).join('');
   } else if(encItems){
     encItems.innerHTML='<div style="font-size:12px;color:var(--ink3);padding:8px">Sin encuestas en el período</div>';
-  }
-
-  // 5. Sesiones Nova por canal
-  const sesCanal = document.getElementById('cSesNovaCanalList');
-  if(sesCanal){
-    const sW=D.sesNovaWeb||[], sD=D.sesNovaDir||[], sQ=D.sesNovaQr||[], sB=D.sesNovaBv||[];
-    const totalS=(sW.length+sD.length+sQ.length+sB.length)||1;
-    sesCanal.innerHTML = [
-      _bar('🤖 Nova enlace',   sW.length, totalS, '#7c3aed'),
-      _bar('🤖 Nova directo',  sD.length, totalS, '#9333ea'),
-      _bar('📷 Nova QR',       sQ.length, totalS, '#d97706'),
-      _bar('👋 Bienvenida',    sB.length, totalS, '#64748b'),
-    ].join('');
-  }
-
-  // 6. Tendencia radicados (todos los canales)
-  _mDestroyChart('cChartTendencia');
-  const cTend=document.getElementById('cChartTendencia');
-  if(cTend){
-    const {labels:lW,data:dW}=_mTend(radWeb,'received_at',dias,d1);
-    const {data:dQ}=_mTend(radQr,'received_at',dias,d1);
-    const {data:dN}=_mTend(radNova,'received_at',dias,d1);
-    const total=dW.map((v,i)=>v+dQ[i]+dN[i]);
-    _mCharts.cChartTendencia=new Chart(cTend.getContext('2d'),{type:'bar',data:{
-      labels:lW,
-      datasets:[
-        {label:'Navegador',data:dW,backgroundColor:'rgba(37,99,235,.7)',stack:'s',borderWidth:0,borderRadius:{topLeft:0,topRight:0,bottomLeft:4,bottomRight:4}},
-        {label:'QR',       data:dQ,backgroundColor:'rgba(217,119,6,.7)', stack:'s',borderWidth:0},
-        {label:'Nova',     data:dN,backgroundColor:'rgba(124,58,237,.7)',stack:'s',borderWidth:0,borderRadius:{topLeft:4,topRight:4,bottomLeft:0,bottomRight:0}},
-      ]
-    },options:{scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:9},maxRotation:0}},y:{stacked:true,beginAtZero:true,grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:9},stepSize:1}}},plugins:{legend:{position:'top',labels:{font:{size:10},boxWidth:10,padding:8}}}}});
   }
 }
 
@@ -9828,46 +9836,110 @@ async function _mExportInit() {
 // EXPORT WEB → WEB_Encuesta + WEB_Radicacion
 // ═══════════════════════════════════════════════════════════════════════
 async function exportCentralizadasExcel() {
-  const D = novaDatos; if(!D) return;
-  const {epsCatMap,sedesMap,histSede} = await _mExportInit();
-  const _u=v=>(v||'').toString().toUpperCase().trim();
-  const _d=v=>v?new Date(v).toLocaleDateString('es-CO'):'';
-  const TIPO_NORM={'solicitud':'SOLICITUD','peticion':'PETICIÓN','queja':'QUEJA','reclamo':'RECLAMO','sugerencia':'SUGERENCIA','felicitacion':'FELICITACIÓN','denuncia':'DENUNCIA','urgente':'URGENTE'};
-  const normTipo=t=>TIPO_NORM[(t||'').toLowerCase()]||_u(t)||'SIN TIPO';
-  const radToRow=(r,canal)=>({
-    'Canal': canal, 'Ticket': r.ticket_id||'', 'Fecha': _d(r.received_at),
-    'Tipo Solicitud': normTipo(r.tipo_pqr), 'Nombre': _u(r.nombre||r.from_name),
-    'Cédula': r.cedula_paciente||r.cedula||'', 'Ciudad': _u(r.ciudad_paciente),
-    'EPS': _u(epsCatMap?.[r.eps_id]||r.eps||''), 'Sentimiento': _u(r.sentimiento),
-    'Prioridad': _u(r.prioridad), 'Estado': _u(r.estado),
+  const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap } = await _mExportInit();
+  if(!D){ showToast('Sin datos — filtre un período primero','error'); return; }
+  const wb = XLSX.utils.book_new();
+  const desde=D.desde||'inicio', hasta=D.hasta||'hoy';
+  const calLabel=v=>v>=3?'SATISFACTORIO':v>=2?'NEUTRO':v>0?'INSATISFACTORIO':'';
+  const canalLabel=o=>o==='web'||o==='formulario_web'?'Navegador (enlace)':o==='qr'?'QR directo':o==='nova_directo'?'Nova directo':o==='nova_web'||o==='nova_td'?'Nova (enlace)':o||'Navegador';
+
+  // ── Filtrar pruebas (misma lógica que exportNovaExcel) ──
+  const _esInterno=r=>{const tid=(r.ticket_id||'').trim();if(tid&&!tid.startsWith('TD-'))return true;if(r.is_draft===true)return true;if((r.origen||'')==='borrador'||(r.estado||'')==='borrador')return true;if((r.origen||'')==='prueba')return true;const tieneNombre=!!(r.nombre||r.nombre_solicitud||'').trim();const tieneTipo=!!(r.tipo_pqr||'').trim();return !tieneNombre&&!tieneTipo&&!tid;};
+
+  // ══ HOJA 1: Todos_Radicados (Web + QR + Nova unificados) ══
+  const normTipo=t=>{const NORM={'solicitud':'SOLICITUD','peticion':'PETICIÓN','queja':'QUEJA','reclamo':'RECLAMO','sugerencia':'SUGERENCIA','felicitacion':'FELICITACIÓN','denuncia':'DENUNCIA','urgente':'URGENTE'};return NORM[(t||'').toLowerCase()]||(t?t.toUpperCase():'SOLICITUD');};
+  const allRadsFlat=[...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])].filter(r=>!_esInterno(r));
+  const h_rad=allRadsFlat.map(r=>{
+    const re=enrichRad(r);
+    const canal=re.origen==='nova_directo'?'Nova directo':re.origen==='nova_web'||re.origen==='nova_td'?'Nova (enlace)':re.origen==='qr'?'QR directo':'Navegador (enlace)';
+    return{
+      'Fecha':fmtD(re.received_at),'Hora':fmtH(re.received_at),'Canal':canal,
+      'Sede':getSede(re),'Cédula':re.cedula||'','Nombre':re.nombre_solicitud||_parseNombreBody(re.body_content)||re.nombre||'',
+      'EPS':re.eps_nombre||getEps(re.cedula||'',{}),'Ticket':re.ticket_id||'',
+      'Tipo_PQR':normTipo(re.tipo_pqr),'Sentimiento':sentLabel(re.sentimiento),
+      'Prioridad':(re.prioridad||'').toUpperCase(),'Estado':(re.estado||'').toUpperCase(),
+    };
   });
-  const allRads=[
-    ...(D.radWeb||[]).map(r=>radToRow(r,'NAVEGADOR')),
-    ...(D.radQr||[]).map(r=>radToRow(r,'QR DIRECTO')),
-    ...([...(D.radNovaWeb||[]),...(D.radNovaDir||[])]).map(r=>radToRow(r,'NOVA')),
-  ];
-  const encToRow=(e,canal)=>({
-    'Canal': canal, 'Fecha': _d(e.created_at), 'Nombre': _u(e.nombre),
-    'Cédula': e.cedula||'', 'EPS': _u(e.eps), 'Sede': _u(e.sede_nombre),
-    'Ciudad': _u(e.sede_ciudad), 'Promedio': e.promedio||e.calificacion||'',
-    'Instalaciones': e.instalaciones||'', 'Atención': e.atencion||'',
-    'Tiempos': e.tiempos||'', 'Medicamentos': e.medicamentos||'',
-    'Recomendación': e.recomendacion||'', 'Comentario': e.comentario||'',
+  const ws_rad=XLSX.utils.json_to_sheet(h_rad.length?h_rad:[{'Sin_datos':'Sin radicados en el período'}]);
+  ws_rad['!cols']=[{wch:12},{wch:8},{wch:18},{wch:32},{wch:13},{wch:28},{wch:24},{wch:18},{wch:13},{wch:12},{wch:10},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws_rad,'Todos_Radicados');
+
+  // ══ HOJA 2: Todas_Encuestas (Web + QR + Nova, escala 1-3) ══
+  const encAll=[...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
+  const h_enc=encAll.map(e=>{
+    const cal=e.calificacion||0;
+    return{
+      'Fecha':fmtD(e.created_at),'Hora':fmtH(e.created_at),'Canal':canalLabel(e.origen||e.canal),
+      'Sede':e.sede_nombre||'','Ciudad':e.sede_ciudad||'','Cédula':e.cedula||'','Nombre':e.nombre||'',
+      'EPS':e.eps||getEps(e.cedula||'',{}),'Ticket_ENC':e.ticket_id||'',
+      'Calificacion':cal,'Resultado':calLabel(cal),'Promedio':e.promedio||'',
+      'Instalaciones':e.instalaciones||'','Atencion':e.atencion||'','Tiempos':e.tiempos||'',
+      'Medicamentos':e.medicamentos||'','Recomendacion':e.recomendacion||'','Comentario':e.comentario||'',
+    };
   });
-  const allEncs=[
-    ...(D.encWeb||[]).map(e=>encToRow(e,'NAVEGADOR')),
-    ...(D.encQr||[]).map(e=>encToRow(e,'QR DIRECTO')),
-    ...([...(D.encNovaWeb||[]),...(D.encNovaDir||[])]).map(e=>encToRow(e,'NOVA')),
+  const ws_enc=XLSX.utils.json_to_sheet(h_enc.length?h_enc:[{'Sin_datos':'Sin encuestas en el período'}]);
+  ws_enc['!cols']=[{wch:12},{wch:8},{wch:18},{wch:28},{wch:14},{wch:13},{wch:26},{wch:24},{wch:18},{wch:10},{wch:16},{wch:10},{wch:14},{wch:10},{wch:10},{wch:14},{wch:14},{wch:40}];
+  XLSX.utils.book_append_sheet(wb,ws_enc,'Todas_Encuestas');
+
+  // ══ HOJA 3: Nova_TD (sesiones con radicado y encuesta cruzados) ══
+  const _esPrueba=r=>(r.cedula||'')==='1152712313';
+  const allSes=[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])].filter(s=>!_esPrueba(s));
+  const novaEncs=[...encByCanal('nova_web'),...encByCanal('nova_directo'),...encByCanal('nova_td')].filter(e=>!_esPrueba(e));
+  const novaRads=[...(D.radNovaWeb||[]),...(D.radNovaDir||[])].filter(r=>!_esPrueba(r));
+  const idxEnc={};novaEncs.forEach(e=>{const k=(e.cedula||'')+'_'+fmtD(e.created_at);if(!idxEnc[k])idxEnc[k]=e;});
+  const idxRad={};novaRads.forEach(r=>{const re=enrichRad(r);const k=(re.cedula||'')+'_'+fmtD(re.received_at);if(!idxRad[k])idxRad[k]=re;});
+  const h_nova=allSes.map(s=>{
+    const fecha=fmtD(s.created_at);const k=(s.cedula||'')+'_'+fecha;
+    const enc=idxEnc[k]||null;const rad=idxRad[k]||null;const cal=enc?(enc.calificacion||0):0;
+    const menus=(s.menu_elegido||'').split(',').map(m=>m.trim()).filter(Boolean);
+    return{
+      'Fecha':fecha,'Hora':fmtH(s.created_at),
+      'Canal':s.origen==='nova_directo'?'Nova directo':s.origen==='nova_qr'?'Nova QR':'Nova (enlace)',
+      'Sede':getSede(s)||s.municipio||'','Municipio':s.municipio||'',
+      'EPS':s.eps_paciente||s.eps||'','Cédula':s.cedula||'','Nombre':s.nombre||'',
+      'Menú_Elegido':menus.join(', '),'Pregunta_Libre':(s.preguntas_libres||0)>0?'Sí':'No',
+      'Pasó_Asesor':(s.motivo_cierre||'').toLowerCase().includes('asesor')?'Sí':'No',
+      'Motivo_Cierre':s.motivo_cierre||'sin_registro',
+      'Radicó':rad?'Sí':'No','Ticket':rad?rad.ticket_id||'':'','Tipo_PQR':rad?normTipo(rad.tipo_pqr):'',
+      'Sentimiento':rad?sentLabel(rad.sentimiento):'','Estado':rad?(rad.estado||'').toUpperCase():'',
+      'Encuestó':enc?'Sí':'No','Ticket_ENC':enc?enc.ticket_id||'':'',
+      'Calificacion':enc?cal||'':'','Resultado':enc?calLabel(cal):'','Promedio':enc?enc.promedio||'':'',
+      'Instalaciones':enc?enc.instalaciones||'':'','Atencion':enc?enc.atencion||'':'',
+      'Tiempos':enc?enc.tiempos||'':'','Medicamentos':enc?enc.medicamentos||'':'',
+      'Recomendacion':enc?enc.recomendacion||'':'','Comentario':enc?enc.comentario||'':'',
+    };
+  });
+  const ws_nova=XLSX.utils.json_to_sheet(h_nova.length?h_nova:[{'Sin_datos':'Sin sesiones Nova TD en el período'}]);
+  ws_nova['!cols']=[{wch:12},{wch:8},{wch:14},{wch:32},{wch:18},{wch:20},{wch:13},{wch:26},{wch:28},{wch:14},{wch:12},{wch:16},{wch:8},{wch:18},{wch:13},{wch:12},{wch:16},{wch:8},{wch:18},{wch:12},{wch:16},{wch:10},{wch:14},{wch:10},{wch:10},{wch:14},{wch:14},{wch:40}];
+  XLSX.utils.book_append_sheet(wb,ws_nova,'Nova_TD');
+
+  // ══ HOJA 4: Resumen_Canal (equivalente a GLOBAL_Canal) ══
+  const ctT=(arr,t)=>arr.filter(r=>(r.tipo_pqr||'').toLowerCase()===t).length;
+  const ePr=arr=>{const v=arr.filter(e=>(e.calificacion||0)>0);return v.length?(v.reduce((a,e)=>a+(e.calificacion||0),0)/v.length).toFixed(2):'N/A';};
+  const pasoA=arr=>arr.filter(s=>(s.motivo_cierre||'').toLowerCase().includes('asesor')).length;
+  const cRows=[
+    {n:'Navegador (enlace)',rads:D.radWeb||[],encs:D.encWeb||[],ses:[]},
+    {n:'QR directo',        rads:D.radQr||[], encs:D.encQr||[], ses:[]},
+    {n:'Nova (enlace)',     rads:D.radNovaWeb||[],encs:D.encNovaWeb||[],ses:D.sesNovaWeb||[]},
+    {n:'Nova Directo',      rads:D.radNovaDir||[],encs:D.encNovaDir||[],ses:D.sesNovaDir||[]},
+    {n:'TOTAL',             rads:[...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])],
+                            encs:[...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])],
+                            ses:allSes},
   ];
-  const wb=XLSX.utils.book_new();
-  const ws1=XLSX.utils.json_to_sheet(allRads.length?allRads:[{'Sin datos':'Sin radicados en el período'}]);
-  ws1['!cols']=[{wch:14},{wch:22},{wch:12},{wch:14},{wch:28},{wch:14},{wch:16},{wch:28},{wch:12},{wch:10},{wch:12}];
-  XLSX.utils.book_append_sheet(wb,ws1,'Radicados');
-  const ws2=XLSX.utils.json_to_sheet(allEncs.length?allEncs:[{'Sin datos':'Sin encuestas en el período'}]);
-  ws2['!cols']=[{wch:14},{wch:12},{wch:28},{wch:14},{wch:28},{wch:28},{wch:16},{wch:10},{wch:14},{wch:10},{wch:10},{wch:14},{wch:14},{wch:40}];
-  XLSX.utils.book_append_sheet(wb,ws2,'Encuestas');
-  const fecha=`${D.desde||'inicio'}_${D.hasta||'hoy'}`.replace(/-/g,'');
-  XLSX.writeFile(wb,`Metricas_Centralizadas_${fecha}.xlsx`);
+  const h_res=cRows.map(c=>({
+    'Canal':c.n,'Radicados':c.rads.length,
+    'Solicitudes':ctT(c.rads,'solicitud'),'Peticiones':ctT(c.rads,'peticion'),'Quejas':ctT(c.rads,'queja'),
+    'Reclamos':ctT(c.rads,'reclamo'),'Sugerencias':ctT(c.rads,'sugerencia'),'Felicitaciones':ctT(c.rads,'felicitacion'),
+    'Denuncias':ctT(c.rads,'denuncia'),'Urgentes':ctT(c.rads,'urgente'),
+    'Encuestas':c.encs.length,'Prom_Satisfaccion':c.encs.length?ePr(c.encs):'N/A',
+    'Sesiones_Nova':c.ses.length||'N/A','Paso_Asesor':c.ses.length?pasoA(c.ses):'N/A',
+    'Total':c.rads.length+c.encs.length+c.ses.length,
+  }));
+  const ws_res=XLSX.utils.json_to_sheet(h_res);
+  ws_res['!cols']=[{wch:20},{wch:11},{wch:11},{wch:11},{wch:8},{wch:10},{wch:12},{wch:14},{wch:10},{wch:10},{wch:10},{wch:17},{wch:14},{wch:13},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws_res,'Resumen_Canal');
+
+  XLSX.writeFile(wb,`Metricas_Centralizadas_${desde}_${hasta}.xlsx`,{bookType:'xlsx',cellStyles:true});
   showToast('Excel consolidado descargado ✓','success');
 }
 
