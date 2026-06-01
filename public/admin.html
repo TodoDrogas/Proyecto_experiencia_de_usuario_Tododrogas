@@ -2072,7 +2072,7 @@ async function loadSigiMetrics() {
       (async()=>{
         let all=[],off=0;
         while(true){
-          const p=await sb(qS(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono` +
+          const p=await sb(qS(`correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&ticket_id=not.like.WA-*&ticket_id=not.like.PBX-*&ticket_id=not.like.CNX-*` +
             `&select=id,estado,agente_id,tiene_respuesta,tiene_tutela&limit=1000&offset=${off}`, 'received_at')).catch(()=>[]);
           if(!p||!p.length) break;
           all=all.concat(p);
@@ -2148,7 +2148,7 @@ async function loadSigiMetrics() {
 
     // ── Global Activo — desde state.allEmails si está cargado, sino query liviana ──
     const _all = (state.allEmails||[]).length > 0 ? (state.allEmails||[]) : (
-      await sb('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&select=id,estado&limit=10000').catch(()=>[])
+      await sb('correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&ticket_id=not.like.WA-*&ticket_id=not.like.PBX-*&ticket_id=not.like.CNX-*&select=id,estado&limit=10000').catch(()=>[])
     );
     const gPend  = _all.filter(x=>x.estado==='pendiente').length;
     const gFirma = _all.filter(x=>x.estado==='pendiente_firma').length;
@@ -3239,7 +3239,7 @@ async function loadEmails(horasVentana = 0) {
     let offset = 0;
     const PAGE = 1000;
     while (true) {
-      const page = await sb(`correos?received_at=gte.${desde}&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&order=received_at.desc&limit=${PAGE}&offset=${offset}&select=*,tiene_respuesta`);
+      const page = await sb(`correos?received_at=gte.${desde}&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&ticket_id=not.like.WA-*&ticket_id=not.like.PBX-*&ticket_id=not.like.CNX-*&order=received_at.desc&limit=${PAGE}&offset=${offset}&select=*,tiene_respuesta`);
       if (!page || page.length === 0) break;
       data = data.concat(page);
       if (page.length < PAGE) break;
@@ -3402,7 +3402,7 @@ async function loadTicketsActivosAgentes() {
     const PAGE = 1000;
     while(true) {
       const page = await sb(
-        'correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono' +
+        'correos?origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&ticket_id=not.like.WA-*&ticket_id=not.like.PBX-*&ticket_id=not.like.CNX-*' +
         '&select=id,agente_id,asignado_a,estado,origen' +
         '&order=received_at.desc&limit=' + PAGE + '&offset=' + offset
       ) || [];
