@@ -91,10 +91,12 @@ if (!$row) {
     exit;
 }
 
-// ── VERIFICAR VIP ─────────────────────────────────────────
+// ── VERIFICAR VIP — consulta directa a usuarios_vip ──────
 $vip_data = null;
 if ($cedula) {
-    $r_vip = sbHttp($SB_URL, $SB_KEY, 'rpc/verificar_vip', 'POST', ['p_cedula' => $cedula]);
+    $r_vip = sbHttp($SB_URL, $SB_KEY,
+        'usuarios_vip?cedula=eq.' . rawurlencode($cedula) . '&select=cedula,nombre,saludo,eps,ciudad&limit=1'
+    );
     if ($r_vip['code'] === 200 && !empty($r_vip['rows'])) {
         $vip_data = $r_vip['rows'][0];
     }
