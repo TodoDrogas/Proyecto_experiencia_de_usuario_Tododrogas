@@ -202,20 +202,18 @@ textarea.fi{resize:vertical;min-height:72px}
     <div class="lp-title">Mis gestiones hoy</div>
 
     <!-- Stats -->
-    <div class="stats-row">
+    <div class="stats-row" style="grid-template-columns:1fr 1fr 1fr">
       <div class="stat-mini wa">
         <div class="stat-mini-num" id="cntWa">—</div>
-        <div class="stat-mini-lbl">💬 WhatsApp</div>
+        <div class="stat-mini-lbl">💬 WA</div>
       </div>
       <div class="stat-mini tel">
         <div class="stat-mini-num" id="cntTel">—</div>
-        <div class="stat-mini-lbl">📞 Teléfono</div>
+        <div class="stat-mini-lbl">📞 Tel.</div>
       </div>
-    </div>
-    <div class="stats-row" style="margin-top:-6px">
-      <div class="stat-mini" style="grid-column:1/-1">
+      <div class="stat-mini" style="background:var(--mail-l)">
         <div class="stat-mini-num" id="cntMail" style="color:var(--mail)">—</div>
-        <div class="stat-mini-lbl">✉ Correo</div>
+        <div class="stat-mini-lbl" style="color:var(--mail)">✉ Mail</div>
       </div>
     </div>
 
@@ -265,7 +263,9 @@ textarea.fi{resize:vertical;min-height:72px}
         <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Nueva gestión Mail
       </button>
-    </div>
+    </div><!-- /act-card mail -->
+
+  </div><!-- /left-panel -->
 
   <!-- PANEL DERECHO -->
   <div class="right-panel">
@@ -1037,13 +1037,31 @@ async function guardarGestion(){
       // Estos eventos permiten que las columnas de tiempo y observación
       // se llenen correctamente en el export Excel
       const _agenteId = AGENT_ID||null;
+      // datos_extra completos para que el SIGI no tenga campos vacíos
+      const _datosExtra = JSON.stringify({
+        observaciones:     obs,
+        canal:             _canalActivo,
+        cedula_paciente:   document.getElementById('mCedula').value,
+        nombre_paciente:   document.getElementById('mNombre').value,
+        tipo_documento:    document.getElementById('mTipoDoc').value,
+        direccion:         document.getElementById('mDireccion').value,
+        telefono:          _tel,
+        eps_id:            document.getElementById('mEpsId').value||null,
+        nombre_solicitud:  document.getElementById('mTipoSol').value,
+        detalle_solicitud: document.getElementById('mDetalle').value,
+        categoria_sigi:    document.getElementById('mCategoria').value,
+        departamento:      document.getElementById('mDeptoVal').value,
+        ciudad:            document.getElementById('mCiudadVal').value,
+        tiene_tutela:      _tutela,
+        origen:            _canalActivo,
+      });
       const _eventos = [
         // Hora_Asignacion
         { evento:'asignacion_automatica', descripcion:`Gestión ${_canalActivo} registrada` },
-        // Hora_Primera_Gestion + Observación
-        { evento:'gestion_pbx',           descripcion:obs, datos_extra: JSON.stringify({observaciones: obs, canal: _canalActivo}) },
+        // Hora_Primera_Gestion + Observación + datos paciente para SIGI
+        { evento:'gestion_pbx',           descripcion:obs, datos_extra: _datosExtra },
         // Respuesta Asignación + Hora_Primera_Respuesta
-        { evento:'correo_respondido',     descripcion:obs, datos_extra: JSON.stringify({observaciones: obs}) },
+        { evento:'correo_respondido',     descripcion:obs, datos_extra: _datosExtra },
         // Hora_Cierre
         { evento:'solucionado',           descripcion:'Gestión solucionada' },
       ];
