@@ -350,13 +350,14 @@ async function cargarDashboard(){
     document.getElementById('nb-total').textContent=hoy.length;
     document.getElementById('dashSub').textContent=`Datos del ${new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'})}`;
 
-    // Agrupar por agente
+    // Agrupar por agente — 3 canales completamente separados
     const xAg={};
     hoy.forEach(g=>{
       const k=g.asignado_a||g.agente_id||'Sin asignar';
-      if(!xAg[k]) xAg[k]={wa:0,tel:0};
-      if(g.canal_contacto==='whatsapp') xAg[k].wa++;
-      else xAg[k].tel++;
+      if(!xAg[k]) xAg[k]={wa:0,tel:0,mail:0};
+      if(g.canal_contacto==='whatsapp')     xAg[k].wa++;
+      else if(g.canal_contacto==='telefono') xAg[k].tel++;
+      else if(g.canal_contacto==='correo')   xAg[k].mail++;
     });
 
     // Sidebar agentes
@@ -365,7 +366,7 @@ async function cargarDashboard(){
     selAg.innerHTML='<option value="">Todos los agentes</option>';
     if(agentes&&agentes.length){
       agList.innerHTML=agentes.slice(0,12).map(a=>{
-        const stats=xAg[a.nombre]||{wa:0,tel:0};
+        const stats=xAg[a.nombre]||{wa:0,tel:0,mail:0};
         const col=['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316'][Math.floor(Math.random()*8)];
         selAg.innerHTML+=`<option value="${a.nombre}">${a.nombre}</option>`;
         return `<div style="display:flex;align-items:center;gap:8px;padding:6px 10px;font-size:11px">
@@ -373,22 +374,24 @@ async function cargarDashboard(){
           <div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${a.nombre.split(' ')[0]}</div></div>
           <span style="font-size:10px;font-weight:700;background:var(--wa-l);color:#15803d;border-radius:99px;padding:1px 6px">${stats.wa}WA</span>
           <span style="font-size:10px;font-weight:700;background:var(--tel-l);color:#5b21b6;border-radius:99px;padding:1px 6px">${stats.tel}PBX</span>
+          ${stats.mail>0?`<span style="font-size:10px;font-weight:700;background:var(--mail-l);color:#0e7490;border-radius:99px;padding:1px 6px">${stats.mail}MAIL</span>`:''}
         </div>`;
       }).join('');
     }
 
     // Panel agentes hoy
-    const sorted=Object.entries(xAg).sort((a,b)=>(b[1].wa+b[1].tel)-(a[1].wa+a[1].tel));
+    const sorted=Object.entries(xAg).sort((a,b)=>(b[1].wa+b[1].tel+b[1].mail)-(a[1].wa+a[1].tel+a[1].mail));
     const colors=['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316'];
     document.getElementById('agentesHoy').innerHTML=sorted.length
       ?sorted.map(([nombre,stats],i)=>`
         <div class="ag-row">
           <div class="ag-av" style="background:${colors[i%colors.length]}">${nombre.charAt(0)}</div>
-          <div><div class="ag-name">${nombre}</div><div class="ag-sub">${stats.wa+stats.tel} gestiones hoy</div></div>
+          <div><div class="ag-name">${nombre}</div><div class="ag-sub">${stats.wa+stats.tel+stats.mail} gestiones hoy</div></div>
           <div class="ag-pills">
             <span class="ag-pill wa">💬 ${stats.wa} WA</span>
             <span class="ag-pill tel">📞 ${stats.tel} PBX</span>
-            <span class="ag-pill tot">Total: ${stats.wa+stats.tel}</span>
+            <span class="ag-pill" style="background:var(--mail-l);color:#0e7490">✉ ${stats.mail} MAIL</span>
+            <span class="ag-pill tot">Total: ${stats.wa+stats.tel+stats.mail}</span>
           </div>
         </div>`).join('')
       :'<div class="empty">Sin gestiones registradas hoy</div>';
