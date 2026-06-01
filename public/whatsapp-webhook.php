@@ -71,6 +71,27 @@ if (!$from || !$userMsg) {
 $history  = $sesion['history']  ?? [];
 $userData = [];
 $eps      = $sesion['eps']      ?? '';
+
+// ── Normalizar EPS ────────────────────────────────────────────────────
+$_epsNorm = strtoupper(preg_replace('/\s+/', ' ', $eps));
+$_epsMap  = [
+    'PREVENTIVA'              => 'COOSALUD',
+    'PREVENTIVA SALUD'        => 'COOSALUD',
+    'CEM'                     => 'SAVIA',
+    'COMITE DE ESTUDIOS'      => 'SAVIA',
+    'ANGIOSUR'                => 'SAVIA',
+    'ANGIOSUR S.A.S'          => 'SAVIA',
+    'SAVIA'                   => 'SAVIA',
+    'SAVIA SALUD'             => 'SAVIA',
+    'ALIANZA MEDELLIN'        => 'SAVIA',
+    'NUEVA EPS'               => 'NUEVA EPS',
+    'NUEVA EMPRESA PROMOTORA' => 'NUEVA EPS',
+    'SALUD TOTAL'             => 'SALUD TOTAL',
+    'COOSALUD'                => 'COOSALUD',
+];
+foreach ($_epsMap as $k => $v) {
+    if (str_starts_with($_epsNorm, $k)) { $eps = $v; break; }
+}
 $sedes    = loadSedes();
 
 // Si hay cédula en la sesión, buscar datos del usuario
