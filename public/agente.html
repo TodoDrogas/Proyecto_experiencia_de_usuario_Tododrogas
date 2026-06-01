@@ -999,7 +999,7 @@ async function loadEmails() {
     let data = [], offset = 0;
     const PAGE = 500;
     while(true) {
-      const page = await sb(`correos?or=(agente_id.eq.${AGENT_ID},asignado_a.eq.${encodeURIComponent(AGENT_NAME)})&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&order=received_at.desc&limit=${PAGE}&offset=${offset}`);
+      const page = await sb(`correos?or=(agente_id.eq.${AGENT_ID},asignado_a.eq.${encodeURIComponent(AGENT_NAME)})&origen=neq.saliente&estado=neq.enviado&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&and=(or(ticket_id.is.null,ticket_id.not.like.CNX-*))&order=received_at.desc&limit=${PAGE}&offset=${offset}`);
       if(!page || page.length === 0) break;
       data = data.concat(page);
       if(page.length < PAGE) break;
@@ -6892,7 +6892,7 @@ async function cargarMetricasAgente() {
     var _agQ = 'correos?or=(agente_id.eq.'+AGENT_ID+',asignado_a.eq.'+encodeURIComponent(AGENT_NAME)+')' +
       '&received_at=gte.' + desde + 'T00:00:00-05:00' +
       '&received_at=lte.' + hasta + 'T23:59:59-05:00' +
-      '&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono' +
+      '&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.informacion&estado=neq.borrador&is_draft=is.false&canal_contacto=neq.whatsapp&canal_contacto=neq.telefono&or=(ticket_id.is.null,ticket_id.not.like.CNX-*)' +
       '&select=id,ticket_id,subject,from_email,from_name,nombre,cedula,cedula_paciente,'+
         'estado,num_gestiones,received_at,fecha_resolucion,eps_id,ciudad_paciente,'+
         'tiene_tutela,categoria_sigi,tipo_pqr,canal_contacto,origen,prioridad,horas_sla' +
