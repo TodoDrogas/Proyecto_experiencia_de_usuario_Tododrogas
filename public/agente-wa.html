@@ -826,13 +826,22 @@ html[data-theme="light"] .wa-input-box{background:#fff;border:1px solid #e9edef}
               <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">
                 Tipo de solicitud <span class="wa-req">*</span>
               </label>
-              <div class="wa-search-wrap">
-                <input id="gWaTipoSolSearch" class="minput" placeholder="Buscar tipo de solicitud..." style="font-size:12px;text-transform:uppercase"
-                  oninput="this.value=this.value.toUpperCase();gWaFiltrarTipoSol(this.value)"
-                  onfocus="gWaFiltrarTipoSol('')" autocomplete="off">
-                <input type="hidden" id="gWaTipoSolVal">
-                <div id="gWaTipoSolDrop" class="wa-dropdown"></div>
-              </div>
+              <select id="gWaTipoSolVal" class="minput" style="font-size:12px"
+                onchange="gWaSelectTipoSol(this.value);gWaValidarCampo('gWaTipoSolVal','select')">
+                <option value="">— Seleccionar tipo —</option>
+                <option value="PETICIÓN">Petición</option>
+                <option value="QUEJA">Queja</option>
+                <option value="RECLAMO">Reclamo</option>
+                <option value="SUGERENCIA">Sugerencia</option>
+                <option value="FELICITACIÓN">Felicitación</option>
+                <option value="DENUNCIA">Denuncia</option>
+                <option value="SOLICITUD">Solicitud</option>
+                <option value="TUTELA">Tutela</option>
+                <option value="FALLO/SENTENCIA">Fallo/Sentencia</option>
+                <option value="REQUERIMIENTO PREVIO">Requerimiento Previo</option>
+                <option value="INCIDENTE DESACATO">Incidente Desacato</option>
+                <option value="SANCIÓN INCIDENTE DESACATO">Sanción Incidente Desacato</option>
+              </select>
             </div>
             <div>
               <label style="font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.3px;display:block;margin-bottom:3px">
@@ -1996,7 +2005,7 @@ async function togglePausa(){
 // ── Catálogos SIGI (igual que agente correo) ────────────────────
 const GWA_NOMBRES_SOL = [
   'Petición','Queja','Reclamo','Sugerencia','Felicitación','Denuncia',
-  'Solicitud','Información','Tutela','Fallo/Sentencia','Requerimiento Previo',
+  'Solicitud','Tutela','Fallo/Sentencia','Requerimiento Previo',
   'Incidente Desacato','Sanción Incidente Desacato'
 ];
 const GWA_DETALLES = [
@@ -2043,23 +2052,14 @@ function gWaMkSearchOk(searchId, valId) {
 }
 
 // ── Dropdown Tipo de solicitud ────────────────────────────────────
-function gWaFiltrarTipoSol(q) {
-  const dd = document.getElementById('gWaTipoSolDrop');
-  if(!dd) return;
-  const matches = q.length < 1
-    ? GWA_NOMBRES_SOL
-    : GWA_NOMBRES_SOL.filter(n => n.toLowerCase().includes(q.toLowerCase()));
-  if(!matches.length) { dd.style.display='none'; return; }
-  dd.style.display = 'block';
-  dd.innerHTML = matches.map(n =>
-    `<div class="wa-dropdown-item" onmousedown="gWaSelectTipoSol('${n.replace(/'/g,"\'")}')">` + n + '</div>'
-  ).join('');
-}
 function gWaSelectTipoSol(val) {
-  document.getElementById('gWaTipoSolSearch').value = val;
-  document.getElementById('gWaTipoSolVal').value = val;
-  document.getElementById('gWaTipoSolDrop').style.display = 'none';
-  gWaMkSearchOk('gWaTipoSolSearch','gWaTipoSolVal');
+  // Limpiar detalle si ya no es válido
+  const detalleActual = document.getElementById('gWaDetalleVal').value;
+  if(detalleActual && !GWA_DETALLES.map(d=>d.toUpperCase()).includes(detalleActual.toUpperCase())) {
+    document.getElementById('gWaDetalleSearch').value = '';
+    document.getElementById('gWaDetalleVal').value = '';
+    gWaMkSearchOk('gWaDetalleSearch','gWaDetalleVal');
+  }
 }
 
 // ── Dropdown Detalle solicitud ────────────────────────────────────
@@ -2085,7 +2085,7 @@ function gWaSelectDetalle(val) {
 // Cerrar dropdowns al clic fuera
 document.addEventListener('mousedown', function(e) {
   if(!e.target.closest('.wa-search-wrap')) {
-    ['gWaTipoSolDrop','gWaDetalleDrop','gWaEpsDrop'].forEach(id => {
+    ['gWaDetalleDrop','gWaEpsDrop'].forEach(id => {
       const el = document.getElementById(id);
       if(el) el.style.display = 'none';
     });
@@ -2224,8 +2224,7 @@ async function abrirCerrar(){
 
   if(esPrimera){
     // ── Limpiar tipificación — el asesor la diligencia ────────────────────
-    document.getElementById('gWaTipoSolSearch').value = '';
-    document.getElementById('gWaTipoSolVal').value    = '';
+    document.getElementById('gWaTipoSolVal').value = '';
     document.getElementById('gWaDetalleSearch').value = '';
     document.getElementById('gWaDetalleVal').value    = '';
     document.getElementById('gWaCategoria').value     = '';
@@ -2275,7 +2274,7 @@ async function abrirCerrar(){
       // EPS siempre roja al abrir — fuerza al asesor a elegirla
       const epsEl = document.getElementById('gWaEpsSearch');
       if(epsEl){ epsEl.classList.add('gm-err'); epsEl.classList.remove('gm-ok'); }
-      gWaMkSearchOk('gWaTipoSolSearch','gWaTipoSolVal');
+      gWaMkSearchOk('gWaTipoSolVal','gWaTipoSolVal');
       gWaMkSearchOk('gWaDetalleSearch','gWaDetalleVal');
       ['gWaDepto','gWaCiudad'].forEach(id => {
         const el=document.getElementById(id);
@@ -2428,8 +2427,8 @@ async function confirmarCerrar(){
       if(!document.getElementById('gWaEmail')?.value?.trim())        { _vFail('Email es obligatorio','gWaEmail'); return; }
       if(!document.getElementById('gWaEpsId')?.value)                { _vFail('EPS es obligatoria','gWaEpsSearch'); return; }
       const _nomSolVal = document.getElementById('gWaTipoSolVal')?.value||'';
-      if(!_nomSolVal)                                                 { _vFail('Tipo de solicitud es obligatorio','gWaTipoSolSearch'); return; }
-      if(!GWA_NOMBRES_SOL.map(n=>n.toUpperCase()).includes(_nomSolVal.trim().toUpperCase())) { _vFail('Tipo de solicitud debe ser del catálogo','gWaTipoSolSearch'); return; }
+      if(!_nomSolVal)                                                 { _vFail('Tipo de solicitud es obligatorio','gWaTipoSolVal'); return; }
+      if(!GWA_NOMBRES_SOL.map(n=>n.toUpperCase()).includes(_nomSolVal.trim().toUpperCase())) { _vFail('Tipo de solicitud debe ser del catálogo','gWaTipoSolVal'); return; }
       const _detVal = document.getElementById('gWaDetalleVal')?.value||'';
       if(!_detVal)                                                    { _vFail('Detalle solicitud es obligatorio','gWaDetalleSearch'); return; }
       if(!GWA_DETALLES.map(d=>d.toUpperCase()).includes(_detVal.trim().toUpperCase())) { _vFail('Detalle debe ser del catálogo','gWaDetalleSearch'); return; }
