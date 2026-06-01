@@ -615,12 +615,21 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
           </div>
           <div class="gm-field">
             <label class="gm-label">Tipo de solicitud <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
-            <div class="gm-search-wrap">
-              <input class="gm-input" id="gNombreSolSearch" type="text" placeholder="BUSCAR TIPO DE SOLICITUD…" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase();gFiltrarNombreSol(this.value)" onfocus="gMostrarTipoSolicitud()" autocomplete="off">
-              <button class="gm-clear" onclick="gLimpiarNombreSol()">×</button>
-              <div id="gNombreSolDropdown" class="gm-dropdown"></div>
-            </div>
-            <input type="hidden" id="gNombreSolVal">
+            <select class="gm-input" id="gNombreSolVal" onchange="gSelectNombreSol(this.value);gValidarCampo('gNombreSolVal','select')">
+              <option value="">— Seleccionar tipo —</option>
+              <option value="PETICIÓN">Petición</option>
+              <option value="QUEJA">Queja</option>
+              <option value="RECLAMO">Reclamo</option>
+              <option value="SUGERENCIA">Sugerencia</option>
+              <option value="FELICITACIÓN">Felicitación</option>
+              <option value="DENUNCIA">Denuncia</option>
+              <option value="SOLICITUD">Solicitud</option>
+              <option value="TUTELA">Tutela</option>
+              <option value="FALLO/SENTENCIA">Fallo/Sentencia</option>
+              <option value="REQUERIMIENTO PREVIO">Requerimiento Previo</option>
+              <option value="INCIDENTE DESACATO">Incidente Desacato</option>
+              <option value="SANCIÓN INCIDENTE DESACATO">Sanción Incidente Desacato</option>
+            </select>
           </div>
           <div class="gm-field">
             <label class="gm-label">Detalle solicitud <span class="gm-req">*</span> <span class="gm-req-txt">Campo obligatorio</span></label>
@@ -2169,40 +2178,15 @@ const G_DETALLES = [
   'Usuario Quibdó',
   'Infraestructura',
 ];
-function gFiltrarNombreSol(q) {
-  const dd = document.getElementById('gNombreSolDropdown');
-  const nombres = Object.keys(G_NOMBRES_SOL);
-  const matches = q.length < 1 ? nombres : nombres.filter(n => n.toLowerCase().includes(q.toLowerCase()));
-  if(!matches.length) { dd.style.display='none'; return; }
-  dd.style.display = 'block';
-  dd.innerHTML = matches.map(n =>
-    `<div class="gm-dd-item" onmousedown="gSelectNombreSol('${esc(n)}')">${esc(n)}</div>`
-  ).join('');
-}
-function gMostrarTipoSolicitud() { gFiltrarNombreSol(''); }
 function gSelectNombreSol(val) {
-  document.getElementById('gNombreSolSearch').value = val;
-  document.getElementById('gNombreSolVal').value = val;
-  document.getElementById('gNombreSolDropdown').style.display = 'none';
-  // Filtrar detalles según nombre elegido
-  const mapped = G_NOMBRES_SOL[val];
-  const detalles = (mapped && mapped.length > 0) ? mapped : G_DETALLES;
-  // Redefinir G_DETALLES_ACTIVOS para que gFiltrarDetalle los use
-  window._gDetallesActivos = detalles;
+  // Limpiar detalle si el valor actual no es válido
+  window._gDetallesActivos = G_DETALLES;
   const detalleActual = document.getElementById('gDetalleVal').value;
-  if(detalleActual && !detalles.includes(detalleActual)) {
+  if(detalleActual && !G_DETALLES.map(d=>d.toUpperCase()).includes(detalleActual.toUpperCase())) {
     document.getElementById('gDetalleSearch').value = '';
     document.getElementById('gDetalleVal').value = '';
     gMarcarSearchOk('gDetalleSearch','gDetalleVal');
   }
-  gMarcarSearchOk('gNombreSolSearch','gNombreSolVal');
-}
-function gLimpiarNombreSol() {
-  document.getElementById('gNombreSolSearch').value = '';
-  document.getElementById('gNombreSolVal').value = '';
-  document.getElementById('gNombreSolDropdown').style.display = 'none';
-  window._gDetallesActivos = null;
-  gMarcarSearchOk('gNombreSolSearch','gNombreSolVal');
 }
 
 // ── Búsqueda Detalle solicitud ────────────────
@@ -2911,7 +2895,6 @@ async function openGestionModal(mode) {
     // ── TIPIFICACIÓN / EPS / CATEGORÍA / ORIGEN — siempre vacíos ─────────
     // El asesor los diligencia obligatoriamente en cada gestión
     gLimpiarEPS();
-    document.getElementById('gNombreSolSearch').value = '';
     document.getElementById('gNombreSolVal').value    = '';
     document.getElementById('gDetalleSearch').value   = '';
     document.getElementById('gDetalleVal').value      = '';
@@ -2933,7 +2916,7 @@ async function openGestionModal(mode) {
       // EPS siempre roja al abrir — el asesor la elige
       const epsEl = document.getElementById('gEpsSearch');
       if(epsEl){ epsEl.classList.add('gm-err'); epsEl.classList.remove('gm-ok'); }
-      ['gNombreSolSearch:gNombreSolVal','gDetalleSearch:gDetalleVal','gDeptoSearch:gDeptoVal','gCiudadSearch:gCiudadVal'].forEach(pair => {
+      ['gNombreSolVal:gNombreSolVal','gDetalleSearch:gDetalleVal','gDeptoSearch:gDeptoVal','gCiudadSearch:gCiudadVal'].forEach(pair => {
         const [sId,vId] = pair.split(':');
         gMarcarSearchOk(sId, vId);
       });
@@ -2971,7 +2954,7 @@ async function openGestionModal(mode) {
       const epsId = document.getElementById('gEpsId')?.value;
       const epsEl = document.getElementById('gEpsSearch');
       if(epsEl) { if(epsId){epsEl.classList.add('gm-ok');epsEl.classList.remove('gm-err');}else{epsEl.classList.add('gm-err');epsEl.classList.remove('gm-ok');} }
-      ['gNombreSolSearch:gNombreSolVal','gDetalleSearch:gDetalleVal','gDeptoSearch:gDeptoVal','gCiudadSearch:gCiudadVal'].forEach(pair => {
+      ['gNombreSolVal:gNombreSolVal','gDetalleSearch:gDetalleVal','gDeptoSearch:gDeptoVal','gCiudadSearch:gCiudadVal'].forEach(pair => {
         const [sId,vId] = pair.split(':');
         gMarcarSearchOk(sId,vId);
       });
@@ -3074,9 +3057,9 @@ async function saveGestion() {
     if(!document.getElementById('gOrigen')?.value)               { _vFail('Origen es obligatorio','gOrigen'); return; }
     // Nombre Solicitud — obligatorio y en catálogo
     const _nomSolVal = document.getElementById('gNombreSolVal')?.value||'';
-    if(!_nomSolVal)                                               { _vFail('Tipo de solicitud es obligatorio','gNombreSolSearch'); return; }
+    if(!_nomSolVal)                                               { _vFail('Tipo de solicitud es obligatorio','gNombreSolVal'); return; }
     if(!Object.keys(G_NOMBRES_SOL).map(n=>n.toUpperCase()).includes(_nomSolVal.trim().toUpperCase())) {
-      _vFail('Tipo de solicitud debe ser del catálogo (Queja, Tutela, Petición…)','gNombreSolSearch'); return;
+      _vFail('Tipo de solicitud debe ser del catálogo (Queja, Tutela, Petición…)','gNombreSolVal'); return;
     }
     // Detalle Solicitud — obligatorio y en catálogo
     const _detSolVal = document.getElementById('gDetalleVal')?.value||'';
@@ -3102,12 +3085,12 @@ async function saveGestion() {
     _toUpper('gNombre');
     _toUpper('gCedula');
     _toUpper('gDireccion');
-    _toUpper('gNombreSolSearch');
+    // gNombreSolVal es select, valor ya en mayúsculas
     _toUpper('gDetalleSearch');
     // Actualizar hidden vals tras normalizar
     const _nsvEl = document.getElementById('gNombreSolVal');
     const _dsvEl = document.getElementById('gDetalleVal');
-    if(_nsvEl) _nsvEl.value = _nsvEl.value.toUpperCase().trim();
+    // gNombreSolVal es select — valor fijo en mayúsculas
     if(_dsvEl) _dsvEl.value = _dsvEl.value.toUpperCase().trim();
     // Normalizar ciudad y depto hidden vals
     const _cityEl = document.getElementById('gCiudadVal');
