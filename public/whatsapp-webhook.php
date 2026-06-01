@@ -232,30 +232,44 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
     $nombre = $usuario['nombre'] ?? '?';
     $epsU   = strtoupper($eps);
 
-    // ── Catálogo completo: dirección, teléfono, horario, EPS por sede ──────────
-    // GPT necesita la dirección completa para poder responder directamente
-    // sin necesidad de emitir el tag [SEDES] en consultas sencillas de ubicación
-    $catalogo = "CATÁLOGO COMPLETO DE SEDES ACTIVAS:\n";
-    foreach ($sedes as $s) {
-        $epsArr  = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
-        $modelo  = strtoupper($s['modelo'] ?? '');
-        $horario = $s['horario'] ?? '';
-        if (!$horario) {
-            $horario = ($modelo === 'IN HOUSE')
-                ? 'Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am'
-                : 'Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m';
+    // ── Catálogo filtrado: solo sedes del municipio del usuario si está disponible ──
+    // Si no hay municipio, no incluir catálogo (GPT usará [SEDES] para consultar BD)
+    $catalogo = '';
+    $norm_mun = fn($s) => strtoupper(trim(preg_replace(
+        ['/[áàäâã]/u','/[éèëê]/u','/[íìïî]/u','/[óòöôõ]/u','/[úùüû]/u'],
+        ['A','E','I','O','U'], $s
+    )));
+    $ciudadUsuario = strtoupper(trim($usuario['ciudad'] ?? ''));
+    $sedesFiltradas = $ciudadUsuario
+        ? array_filter($sedes, fn($s) =>
+            $norm_mun($s['municipio_norm'] ?? '') === $norm_mun($ciudadUsuario) ||
+            $norm_mun($s['ciudad'] ?? '') === $norm_mun($ciudadUsuario)
+          )
+        : [];
+
+    if (!empty($sedesFiltradas)) {
+        $catalogo = "SEDES EN " . $ciudadUsuario . ":\n";
+        foreach ($sedesFiltradas as $s) {
+            $epsArr  = is_array($s['eps']) ? $s['eps'] : json_decode($s['eps'] ?? '[]', true);
+            $modelo  = strtoupper($s['modelo'] ?? '');
+            $horario = $s['horario'] ?? '';
+            if (!$horario) {
+                $horario = ($modelo === 'IN HOUSE')
+                    ? 'Lun-Vie 7:00am-3:30pm | Sáb 8:00am-11:00am'
+                    : 'Lun-Vie 7:00am-5:30pm | Sáb 8:00am-12:00m';
+            }
+            $epsList = implode(' / ', array_map('trim', $epsArr));
+            $linea   = '• ' . ($s['nombre'] ?? '');
+            $linea  .= ' | Dir: '  . ($s['direccion'] ?? 'consultar');
+            if (!empty($s['telefono'])) $linea .= ' | Tel: ' . $s['telefono'];
+            $linea  .= ' | Horario: ' . $horario;
+            $linea  .= ' | EPS: ' . ($epsList ?: 'TODAS');
+            if (!empty($s['lat']) && !empty($s['lng'])) {
+                $linea .= ' | Maps: https://maps.google.com/?q=' . $s['lat'] . ',' . $s['lng'];
+            }
+            $catalogo .= $linea . "\n";
         }
-        $epsList = implode(' / ', array_map('trim', $epsArr));
-        $linea   = '• ' . ($s['nombre'] ?? '');
-        $linea  .= ' | ' . ($s['municipio'] ?? $s['ciudad'] ?? '');
-        $linea  .= ' | Dir: '  . ($s['direccion'] ?? 'consultar');
-        if (!empty($s['telefono'])) $linea .= ' | Tel: ' . $s['telefono'];
-        $linea  .= ' | Horario: ' . $horario;
-        $linea  .= ' | EPS: ' . ($epsList ?: 'TODAS');
-        if (!empty($s['lat']) && !empty($s['lng'])) {
-            $linea .= ' | Maps: https://maps.google.com/?q=' . $s['lat'] . ',' . $s['lng'];
-        }
-        $catalogo .= $linea . "\n";
+        $catalogo .= "\n";
     }
 
     $s  = "Eres Nova TD, asistente virtual de Tododrogas CIA SAS.\n";
@@ -382,7 +396,7 @@ function parseAction(string $raw): array {
 
 function buscarUsuarioPorCedula(string $cedula): array {
     if (!$cedula) return [];
-    $url = SB_URL . '/rest/v1/tabla_usuarios?Cedula%20Pacientes=eq.' . urlencode($cedula) . '&select=*&limit=1';
+    $url = SB_URL . '/rest/v1/tabla_usuarios?' . rawurlencode('"Cedula Pacientes"') . '=eq.' . rawurlencode($cedula) . '&select=' . implode(',', array_map('rawurlencode', ['Tipo De Documento','Cedula Pacientes','Nombre Paciente','Direccion','Telefono','Ciudad','EPS','Correo'])) . '&limit=1';
     $ch  = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -491,7 +505,14 @@ function buscarSedes(string $municipio, string $eps, array $sedes): string {
     }
 
     // ── Encabezado ────────────────────────────────────────────────────────
+    $resultado = array_values($encontradas);
     $munLabel = ucfirst(strtolower($municipio));
+
+    // Una sola sede → respuesta directa sin encabezado
+    if (count($resultado) === 1) {
+        return _formatearSede($resultado[0], $epsNorm);
+    }
+
     if ($avisarEpsNoEncontrada) {
         $txt  = "📍 No encontré sede exclusiva de *" . ucfirst(strtolower($eps)) . "* en *$munLabel*.\n";
         $txt .= "Estas sedes del municipio pueden atenderle (verifique su EPS):\n\n";
@@ -500,7 +521,7 @@ function buscarSedes(string $municipio, string $eps, array $sedes): string {
         $txt = "📍 *Sedes en $munLabel*$epsLabel:\n\n";
     }
 
-    foreach (array_slice($encontradas, 0, 4) as $s) {
+    foreach (array_slice($resultado, 0, 4) as $s) {
         $txt .= _formatearSede($s, $epsNorm);
     }
     return rtrim($txt);
@@ -525,9 +546,11 @@ function _formatearSede(array $s, string $epsUsuario = ''): string {
     if (!empty($s['telefono'])) $txt .= "📞 " . $s['telefono'] . "\n";
     $txt .= "🕐 " . $horario . "\n";
 
-    // Mostrar EPS atendidas — si es TODAS simplificarlo
+    // EPS: si el usuario tiene EPS conocida mostrar solo confirmación, no listar todas
     if ($esTotal) {
         $txt .= "✅ Atiende todas las EPS\n";
+    } elseif ($epsUsuario && $epsUsuario !== 'TODAS') {
+        $txt .= "✅ Válido para su EPS\n";
     } else {
         $epsMostrar = array_slice($epsArr, 0, 5);
         $txt .= "✅ EPS: " . implode(', ', $epsMostrar);
