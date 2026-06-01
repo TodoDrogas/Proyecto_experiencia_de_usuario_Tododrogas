@@ -837,9 +837,7 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 
         </div>
         <div class="metrics-tabs">
-          <button class="mtab active" onclick="showMTab('web',this)">🖥️ Navegador</button>
-          <button class="mtab" onclick="showMTab('qr',this)">📷 QR directo</button>
-          <button class="mtab" onclick="showMTab('nova',this)">🤖 Nova (Enlace y Directo)</button>
+          <button class="mtab active" onclick="showMTab('centralizadas',this)">📊 Métricas centralizadas</button>
           <button class="mtab" onclick="showMTab('global',this)">🌐 Global</button>
           <button class="mtab" onclick="showMTab('asesores',this)">👥 Asesores</button>
           <button class="mtab" onclick="showMTab('sigi',this)" style="background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border-radius:6px;font-weight:800;letter-spacing:.3px">📋 SIGI</button>
@@ -848,205 +846,120 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
 
       <div class="metrics-content">
 
-        <!-- ══ TAB: WEB ══ -->
-      <div class="mtab-page active" id="mtab-web">
+        <!-- ══ TAB: MÉTRICAS CENTRALIZADAS ══ -->
+        <div class="mtab-page active" id="mtab-centralizadas">
 
-        <!-- Barra filtros Web -->
-        <div class="mfiltros-bar">
-          <div class="mfiltros-group">
-            <span class="mfiltros-label">PERÍODO</span>
-            <input type="date" id="novaDesde" class="mfiltros-input">
-            <span class="mfiltros-sep">→</span>
-            <input type="date" id="novaHasta" class="mfiltros-input">
+          <!-- Filtros únicos -->
+          <div class="mfiltros-bar">
+            <div class="mfiltros-group">
+              <span class="mfiltros-label">PERÍODO</span>
+              <input type="date" id="novaDesde" class="mfiltros-input">
+              <span class="mfiltros-sep">→</span>
+              <input type="date" id="novaHasta" class="mfiltros-input">
+            </div>
+            <div class="mfiltros-group">
+              <span class="mfiltros-label">TIPO SOLICITUD</span>
+              <select id="cFiltroTipo" class="mfiltros-select" onchange="renderCentralizadas()">
+                <option value="">Todos</option>
+                <option value="solicitud">Solicitud</option>
+                <option value="peticion">Petición</option>
+                <option value="queja">Queja</option>
+                <option value="reclamo">Reclamo</option>
+                <option value="sugerencia">Sugerencia</option>
+                <option value="felicitacion">Felicitación</option>
+                <option value="denuncia">Denuncia</option>
+                <option value="urgente">Urgente</option>
+              </select>
+            </div>
+            <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary">🔍 Filtrar</button>
+            <button onclick="exportCentralizadasExcel()" class="mfiltros-btn-export">⬇ Excel consolidado</button>
+            <span id="novaLastUpdate" class="mfiltros-update"></span>
           </div>
-          <div class="mfiltros-group">
-            <span class="mfiltros-label">SEDE</span>
-            <input type="text" id="webFiltroSede" list="webFiltroSedeList" class="mfiltros-input" placeholder="Buscar sede..." oninput="renderNovaMetrics()" style="min-width:200px">
-            <datalist id="webFiltroSedeList"></datalist>
-          </div>
-          <div class="mfiltros-group">
-            <span class="mfiltros-label">TIPO</span>
-            <select id="webFiltroTipo" class="mfiltros-select" onchange="renderNovaMetrics()">
-              <option value="">Todos</option>
-              <option value="peticion">Petición</option>
-              <option value="queja">Queja</option>
-              <option value="reclamo">Reclamo</option>
-              <option value="sugerencia">Sugerencia</option>
-              <option value="felicitacion">Felicitación</option>
-              <option value="denuncia">Denuncia</option>
-            </select>
-          </div>
-          <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary">🔍 Filtrar</button>
-          <button onclick="exportWebExcel()" class="mfiltros-btn-export">⬇ Excel Web</button>
-          <span id="novaLastUpdate" class="mfiltros-update"></span>
-        </div>
 
-        <!-- KPI strip Web -->
-        <div class="mkpi-strip">
-          <div class="mkpi-card mkpi-a1"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="wKpiRad">—</div><span class="mkpi-emoji">📋</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Radicados Web</div><div class="mkpi-sub">PQRSFD vía formulario<br><span id="wKpiRadGlobal" style="color:#2563eb;font-weight:700"></span></div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a2"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="wKpiEnc">—</div><span class="mkpi-emoji">⭐</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Encuestas Web</div><div class="mkpi-sub">Satisfacción respondidas<br><span id="wKpiEncGlobal" style="color:#2563eb;font-weight:700"></span></div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a3"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="wKpiTotal">—</div><span class="mkpi-emoji">📊</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Total interacciones</div><div class="mkpi-sub">Radicados + Encuestas<br><span id="wKpiTotalGlobal" style="color:#2563eb;font-weight:700"></span></div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a4"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="wKpiProm">—</div><span class="mkpi-emoji">📈</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Promedio diario</div><div class="mkpi-sub">Interacciones / días</div></div><div class="mkpi-bar-bottom"></div></div>
-        </div>
+          <!-- KPIs totales -->
+          <div class="mkpi-strip" style="grid-template-columns:repeat(5,1fr)">
+            <div class="mkpi-card mkpi-a1"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiRadTotal">—</div><span class="mkpi-emoji">📋</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Total radicados</div><div class="mkpi-sub">Todos los canales</div></div><div class="mkpi-bar-bottom"></div></div>
+            <div class="mkpi-card mkpi-a2"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiEncTotal">—</div><span class="mkpi-emoji">⭐</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Total encuestas</div><div class="mkpi-sub">Todos los canales</div></div><div class="mkpi-bar-bottom"></div></div>
+            <div class="mkpi-card mkpi-a3"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiSesTotal">—</div><span class="mkpi-emoji">🤖</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Sesiones Nova</div><div class="mkpi-sub">Total conversaciones</div></div><div class="mkpi-bar-bottom"></div></div>
+            <div class="mkpi-card mkpi-a4"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiPromEnc">—</div><span class="mkpi-emoji">📈</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Promedio encuesta</div><div class="mkpi-sub">Satisfacción global</div></div><div class="mkpi-bar-bottom"></div></div>
+            <div class="mkpi-card mkpi-a5"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="cKpiDiario">—</div><span class="mkpi-emoji">📅</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Promedio diario</div><div class="mkpi-sub">Interacciones / día</div></div><div class="mkpi-bar-bottom"></div></div>
+          </div>
 
-        <!-- Gráficas Web -->
-        <div class="mcharts-grid-3">
-          <div class="mchart-card mchart-span2">
-            <div class="mchart-header">
-              <div>
-                <div class="mchart-title">Radicados por tipo PQRSFD</div>
-                <div class="mchart-sub">Distribución real de casos recibidos</div>
+          <!-- Fila 1: Radicados por canal (barras horiz.) + tipo solicitud (donut) -->
+          <div class="mcharts-grid-3">
+            <div class="mchart-card mchart-span2">
+              <div class="mchart-header">
+                <div class="mchart-title">📋 Radicados por canal</div>
+                <div class="mchart-sub">Navegador · QR · Nova TD — total del período</div>
               </div>
+              <div id="cRadCanalList" class="mbar-list" style="padding:12px 16px"></div>
             </div>
-            <div class="mchart-body" style="height:220px"><canvas id="chartWebTipos"></canvas></div>
-          </div>
-          <div class="mchart-card">
-            <div class="mchart-header">
-              <div>
-                <div class="mchart-title">Radicados vs Encuestas</div>
-                <div class="mchart-sub">Proporción del canal Web</div>
+            <div class="mchart-card">
+              <div class="mchart-header">
+                <div class="mchart-title">Tipo de solicitud</div>
+                <div class="mchart-sub">Distribución estandarizada</div>
               </div>
+              <div class="mchart-body" style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="cChartTipos"></canvas></div>
             </div>
-            <div class="mchart-body" style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="chartWebDist"></canvas></div>
           </div>
-        </div>
 
-
-      </div><!-- /mtab-web -->
-
-      <!-- ══ TAB: QR ══ -->
-      <div class="mtab-page" id="mtab-qr">
-
-        <div class="mfiltros-bar" style="border-color:#fde68a;background:linear-gradient(135deg,#fffbeb,#fef9c3)">
-          <div class="mfiltros-group">
-            <span class="mfiltros-label" style="color:#92400e">PERÍODO</span>
-            <input type="date" id="novaDesde2" class="mfiltros-input">
-            <span class="mfiltros-sep">→</span>
-            <input type="date" id="novaHasta2" class="mfiltros-input">
-          </div>
-          <div class="mfiltros-group">
-            <span class="mfiltros-label" style="color:#92400e">SEDE</span>
-            <input type="text" id="qrFiltroSede" list="qrFiltroSedeList" class="mfiltros-input" placeholder="Buscar sede..." oninput="renderNovaMetrics()" style="min-width:200px">
-            <datalist id="qrFiltroSedeList"></datalist>
-          </div>
-          <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#d97706">🔍 Filtrar</button>
-          <button onclick="exportQrExcel()" class="mfiltros-btn-export">⬇ Excel QR</button>
-        </div>
-
-        <div class="mkpi-strip mkpi-strip-5">
-          <div class="mkpi-card mkpi-a1"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="qrKpiRad">—</div><span class="mkpi-emoji">📷</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Radicados QR</div><div class="mkpi-sub">Código físico escaneado<br><span id="qrKpiRadGlobal" style="color:#d97706;font-weight:700"></span></div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a2"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="qrKpiEnc">—</div><span class="mkpi-emoji">⭐</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Encuestas QR</div><div class="mkpi-sub">Satisfacción vía QR<br><span id="qrKpiEncGlobal" style="color:#d97706;font-weight:700"></span></div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a3"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="qrKpiTotal">—</div><span class="mkpi-emoji">📊</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Total QR</div><div class="mkpi-sub">Interacciones totales<br><span id="qrKpiTotalGlobal" style="color:#d97706;font-weight:700"></span></div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a4"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="qrKpiPct">—</div><span class="mkpi-emoji">🔢</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">% del total</div><div class="mkpi-sub">QR vs todos los canales</div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a5"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="qrKpiProm">—</div><span class="mkpi-emoji">📈</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Promedio diario</div><div class="mkpi-sub">Interacciones / días</div></div><div class="mkpi-bar-bottom"></div></div>
-        </div>
-
-        <div class="mcharts-grid-3">
-          <div class="mchart-card mchart-span2">
-            <div class="mchart-header">
-              <div class="mchart-title">Radicados QR por tipo PQRSFD</div>
-              <div class="mchart-sub">Distribución real de casos QR</div>
+          <!-- Fila 2: Encuestas por canal (barras horiz.) + items encuesta -->
+          <div class="mcharts-grid-3">
+            <div class="mchart-card mchart-span2">
+              <div class="mchart-header">
+                <div class="mchart-title">⭐ Encuestas por canal</div>
+                <div class="mchart-sub">Cantidad y promedio por origen</div>
+              </div>
+              <div id="cEncCanalList" class="mbar-list" style="padding:12px 16px"></div>
             </div>
-            <div class="mchart-body" style="height:200px"><canvas id="chartQrTipos"></canvas></div>
-          </div>
-          <div class="mchart-card">
-            <div class="mchart-header">
-              <div class="mchart-title">Radicados vs Encuestas QR</div>
-              <div class="mchart-sub">Proporción del canal QR</div>
+            <div class="mchart-card">
+              <div class="mchart-header">
+                <div class="mchart-title">Items de encuesta</div>
+                <div class="mchart-sub">Promedio por categoría · escala 1–5</div>
+              </div>
+              <div id="cEncItemsList" class="mbar-list" style="padding:12px 16px"></div>
             </div>
-            <div class="mchart-body" style="height:220px;display:flex;align-items:center;justify-content:center"><canvas id="chartQrDist"></canvas></div>
           </div>
-        </div>
 
-
-      </div><!-- /mtab-qr -->
-
-      <!-- ══ TAB: NOVA TD ══ -->
-      <div class="mtab-page" id="mtab-nova">
-
-        <div class="mfiltros-bar" style="border-color:#ddd6fe;background:linear-gradient(135deg,#f5f3ff,#faf5ff)">
-          <div class="mfiltros-group">
-            <span class="mfiltros-label" style="color:#5b21b6">PERÍODO</span>
-            <input type="date" id="novaDesde3" class="mfiltros-input">
-            <span class="mfiltros-sep">→</span>
-            <input type="date" id="novaHasta3" class="mfiltros-input">
-          </div>
-          <div class="mfiltros-group">
-            <span class="mfiltros-label" style="color:#5b21b6">MUNICIPIO</span>
-            <input type="text" id="novaFiltroMun" list="novaFiltroMunList" class="mfiltros-input" placeholder="Buscar municipio..." oninput="renderNovaMetrics()" style="min-width:180px">
-            <datalist id="novaFiltroMunList"></datalist>
-          </div>
-          <div class="mfiltros-group">
-            <span class="mfiltros-label" style="color:#5b21b6">EPS</span>
-            <input type="text" id="novaFiltroEps" list="novaFiltroEpsList" class="mfiltros-input" placeholder="Buscar EPS..." oninput="renderNovaMetrics()" style="min-width:160px">
-            <datalist id="novaFiltroEpsList"></datalist>
-          </div>
-          <button onclick="loadNovaMetrics()" class="mfiltros-btn-primary" style="background:#7c3aed">🔍 Filtrar</button>
-          <button onclick="exportNovaExcel()" class="mfiltros-btn-export">⬇ Excel Nova (enlace)</button>
-          <span id="novaLastUpdate2" class="mfiltros-update"></span>
-        </div>
-
-        <!-- KPIs principales Nova -->
-        <div class="mkpi-strip mkpi-strip-4">
-          <div class="mkpi-card mkpi-a1"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="ntKpiSes">—</div><span class="mkpi-emoji">💬</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Sesiones Nova</div><div class="mkpi-sub">Total conversaciones<br><span id="ntKpiSesGlobal" style="color:#7c3aed;font-weight:700"></span></div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a2"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="ntKpiRad">—</div><span class="mkpi-emoji">📋</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Radicados</div><div class="mkpi-sub">PQR desde Nova<br><span id="ntKpiRadGlobal" style="color:#7c3aed;font-weight:700"></span></div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a3"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="ntKpiAuto">—</div><span class="mkpi-emoji">🤖</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Autogestión</div><div class="mkpi-sub">Sin escalar asesor</div></div><div class="mkpi-bar-bottom"></div></div>
-          <div class="mkpi-card mkpi-a5"><div class="mkpi-card-top"><div class="mkpi-card-row"><div class="mkpi-val" id="ntKpiEnc">—</div><span class="mkpi-emoji">⭐</span></div></div><div class="mkpi-card-bot"><div class="mkpi-label">Encuestas</div><div class="mkpi-sub">Satisfacción Nova<br><span id="ntKpiEncGlobal" style="color:#7c3aed;font-weight:700"></span></div></div><div class="mkpi-bar-bottom"></div></div>
-        </div>
-
-        <!-- Gráficas principales Nova -->
-        <div class="mcharts-grid-3">
-          <div class="mchart-card mchart-span2">
-            <div class="mchart-header">
-              <div class="mchart-title">Tendencia de sesiones Nova (enlace)</div>
-              <div class="mchart-sub">Conversaciones diarias en el período</div>
+          <!-- Fila 3: Sesiones Nova por canal + tendencia radicados -->
+          <div class="mcharts-grid-3">
+            <div class="mchart-card">
+              <div class="mchart-header">
+                <div class="mchart-title">🤖 Sesiones Nova por canal</div>
+                <div class="mchart-sub">Nova enlace · directo · QR · bienvenida</div>
+              </div>
+              <div id="cSesNovaCanalList" class="mbar-list" style="padding:12px 16px"></div>
             </div>
-            <div class="mchart-body" style="height:180px"><canvas id="chartNovaTend"></canvas></div>
-          </div>
-          <div class="mchart-card">
-            <div class="mchart-header">
-              <div class="mchart-title">Satisfacción Nova</div>
-              <div class="mchart-sub">Calificación de usuarios</div>
+            <div class="mchart-card mchart-span2">
+              <div class="mchart-header">
+                <div class="mchart-title">Tendencia de radicados</div>
+                <div class="mchart-sub">Todos los canales combinados por día</div>
+              </div>
+              <div class="mchart-body" style="height:200px"><canvas id="cChartTendencia"></canvas></div>
             </div>
-            <div class="mchart-body" style="height:180px"><canvas id="chartNovaCal"></canvas></div>
-          </div>
-        </div>
-
-        <!-- Fila stats Nova -->
-        <div class="mcharts-grid-3">
-
-          <!-- Menú más usado -->
-          <div class="mchart-card">
-            <div class="mchart-header">
-              <div class="mchart-title">📋 Menú más elegido</div>
-              <div class="mchart-sub">Opciones seleccionadas por usuarios</div>
-            </div>
-            <div id="ntMenuList" class="mbar-list"></div>
           </div>
 
-          <!-- Top municipios -->
-          <div class="mchart-card">
-            <div class="mchart-header">
-              <div class="mchart-title">🏙️ Top municipios</div>
-              <div class="mchart-sub">Sesiones por municipio</div>
-            </div>
-            <div id="ntMunList" class="mbar-list"></div>
-          </div>
+          <!-- inputs ocultos para compatibilidad con código existente -->
+          <input type="hidden" id="novaDesde2" value="">
+          <input type="hidden" id="novaHasta2" value="">
+          <input type="hidden" id="novaDesde3" value="">
+          <input type="hidden" id="novaHasta3" value="">
+          <input type="hidden" id="novaDesde4" value="">
+          <input type="hidden" id="novaHasta4" value="">
+          <datalist id="webFiltroSedeList"></datalist>
+          <datalist id="qrFiltroSedeList"></datalist>
+          <datalist id="novaFiltroMunList"></datalist>
+          <datalist id="novaFiltroEpsList"></datalist>
+          <input type="hidden" id="webFiltroSede" value="">
+          <input type="hidden" id="qrFiltroSede" value="">
+          <input type="hidden" id="novaFiltroMun" value="">
+          <input type="hidden" id="novaFiltroEps" value="">
+          <select id="webFiltroTipo" style="display:none"><option value=""></option></select>
+          <span id="novaLastUpdate2" style="display:none"></span>
 
-          <!-- EPS más activa -->
-          <div class="mchart-card">
-            <div class="mchart-header">
-              <div class="mchart-title">🏥 Uso por EPS</div>
-              <div class="mchart-sub">Sesiones por EPS del paciente</div>
-            </div>
-            <div id="ntEpsList" class="mbar-list"></div>
-          </div>
-        </div>
+        </div><!-- /mtab-centralizadas -->
 
 
-
-
-      </div><!-- /mtab-nova -->
 
       <!-- ══ TAB: GLOBAL ══ -->
       <div class="mtab-page" id="mtab-global">
@@ -1990,14 +1903,15 @@ function destroyChart(c){if(c){try{c.destroy();}catch{}}return null;}
 
 // ── Tab navigation ──────────────────────────
 function showMTab(tab, el) {
-  document.querySelectorAll('.mtab').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.mtab-page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.mtab').forEach(b=>b.classList.remove('active'));
+  const page = document.getElementById('mtab-'+tab);
+  if(page) page.classList.add('active');
   if(el) el.classList.add('active');
-  document.getElementById('mtab-'+tab).classList.add('active');
   renderMTab(tab);
 }
 function renderMTab(tab){
-  if(tab==='web' || tab==='qr' || tab==='nova' || tab==='global') loadNovaMetrics();
+  if(tab==='centralizadas' || tab==='global') loadNovaMetrics();
   if(tab==='asesores') { initAsesorFechas(); loadAgentesMetrics(); }
   if(tab==='sigi') {
     initSigiFechas();
@@ -9605,6 +9519,154 @@ function renderNovaMetrics(){
   if(gTB){gTB.innerHTML=cRows.map(c=>`<tr><td style="font-weight:600;color:var(--ink);white-space:nowrap">${c.n}</td><td style="text-align:center;font-weight:700;color:#1558d4">${c.rads.length}</td><td style="text-align:center">${ctT(c.rads,'peticion')||''}</td><td style="text-align:center">${ctT(c.rads,'queja')||''}</td><td style="text-align:center">${ctT(c.rads,'reclamo')||''}</td><td style="text-align:center">${ctT(c.rads,'sugerencia')||''}</td><td style="text-align:center">${ctT(c.rads,'felicitacion')||''}</td><td style="text-align:center">${ctT(c.rads,'denuncia')||''}</td><td style="text-align:center;color:var(--ink3)">${c.rads.filter(r=>!r.tipo_pqr).length||''}</td><td style="text-align:center;color:#7c3aed">${c.encs.length||''}</td><td style="text-align:center;color:#059669">${ePr(c.encs)||'—'}</td><td style="text-align:center;color:#9333ea">${c.ses.length||''}</td><td style="text-align:center;color:#dc2626">${pasoA(c.ses)||''}</td><td style="text-align:center;font-weight:700;color:var(--ink)">${c.rads.length+c.encs.length+c.ses.length}</td></tr>`).join('');}
 
   ['novaLastUpdate','novaLastUpdate2','gLastUpdate'].forEach(id=>set(id,'Act. '+new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})));
+  renderCentralizadas();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÉTRICAS CENTRALIZADAS — renderiza el tab consolidado
+// ══════════════════════════════════════════════════════════════════
+function renderCentralizadas(){
+  if(!document.getElementById('mtab-centralizadas')?.classList.contains('active')) return;
+  const D = novaDatos;
+  if(!D) return;
+  const d1 = D.desde ? new Date(D.desde) : new Date(Date.now()-30*864e5);
+  const d2 = D.hasta ? new Date(D.hasta) : new Date();
+  const dias = Math.max(1, Math.round((d2-d1)/864e5)+1);
+
+  // Filtro tipo de solicitud
+  const filtroTipo = (document.getElementById('cFiltroTipo')?.value||'').toLowerCase();
+  const filT = arr => filtroTipo ? arr.filter(r=>(r.tipo_pqr||'').toLowerCase()===filtroTipo) : arr;
+
+  // Consolidar todos los radicados y encuestas
+  const radWeb   = filT(D.radWeb||[]);
+  const radQr    = filT(D.radQr||[]);
+  const radNova  = filT([...(D.radNovaWeb||[]),...(D.radNovaDir||[])]);
+  const allRad   = [...radWeb,...radQr,...radNova];
+  const allEnc   = [...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
+  const allSes   = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])];
+
+  // KPIs
+  const _s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  _s('cKpiRadTotal', allRad.length);
+  _s('cKpiEncTotal', allEnc.length);
+  _s('cKpiSesTotal', allSes.length);
+  const promEnc = allEnc.length ? (allEnc.reduce((s,e)=>s+(+e.promedio||+e.calificacion||0),0)/allEnc.length).toFixed(2) : '—';
+  _s('cKpiPromEnc', promEnc);
+  _s('cKpiDiario', ((allRad.length+allEnc.length)/dias).toFixed(1));
+
+  // Helper barra horizontal
+  const _bar=(label,val,total,color,extra='')=>{
+    const pct=total>0?Math.round(val/total*100):0;
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:600;margin-bottom:3px">
+        <span style="color:var(--ink)">${label}</span>
+        <span style="color:${color};font-weight:700">${val} <span style="color:var(--ink3);font-weight:400;font-size:10px">${extra?'· '+extra:''}</span></span>
+      </div>
+      <div style="background:var(--bg2);border-radius:99px;height:8px;overflow:hidden">
+        <div style="background:${color};width:${pct}%;height:100%;border-radius:99px;transition:width .4s"></div>
+      </div>
+      <div style="font-size:10px;color:var(--ink3);margin-top:2px">${pct}% del total</div>
+    </div>`;
+  };
+
+  // 1. Radicados por canal
+  const rCanal = document.getElementById('cRadCanalList');
+  if(rCanal){
+    const totalR = allRad.length||1;
+    rCanal.innerHTML = [
+      _bar('🖥️ Navegador (enlace)', radWeb.length, totalR, '#2563eb'),
+      _bar('📷 QR directo',         radQr.length,  totalR, '#d97706'),
+      _bar('🤖 Nova (enlace + directo)', radNova.length, totalR, '#7c3aed'),
+    ].join('');
+  }
+
+  // 2. Tipo de solicitud — donut
+  const TIPOS_C = ['solicitud','peticion','queja','reclamo','sugerencia','felicitacion','denuncia','urgente'];
+  const TIPOS_L = ['Solicitud','Petición','Queja','Reclamo','Sugerencia','Felicitación','Denuncia','Urgente'];
+  const TIPO_COLORS = ['#2563eb','#7c3aed','#dc2626','#ea580c','#16a34a','#0891b2','#db2777','#b45309'];
+  _mDestroyChart('cChartTipos');
+  const cT=document.getElementById('cChartTipos');
+  if(cT){
+    const vals = TIPOS_C.map(t=>allRad.filter(r=>(r.tipo_pqr||'').toLowerCase()===t).length);
+    const sinTipo = allRad.filter(r=>!r.tipo_pqr).length;
+    _mCharts.cChartTipos = new Chart(cT.getContext('2d'),{type:'doughnut',data:{
+      labels:[...TIPOS_L,'Sin tipo'],
+      datasets:[{data:[...vals,sinTipo],backgroundColor:[...TIPO_COLORS,'#94a3b8'],borderWidth:2,borderColor:'#fff'}]
+    },options:{cutout:'65%',plugins:{legend:{position:'right',labels:{font:{size:10},boxWidth:12,padding:6}},tooltip:{callbacks:{label:i=>i.label+': '+i.raw}}}}});
+  }
+
+  // 3. Encuestas por canal
+  const encCanal = document.getElementById('cEncCanalList');
+  if(encCanal){
+    const encW=D.encWeb||[], encQ=D.encQr||[], encN=[...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
+    const totalE=(encW.length+encQ.length+encN.length)||1;
+    const prom=arr=>arr.length?(arr.reduce((s,e)=>s+(+e.promedio||+e.calificacion||0),0)/arr.length).toFixed(2):'—';
+    encCanal.innerHTML = [
+      _bar('🖥️ Navegador', encW.length, totalE, '#2563eb', '★ '+prom(encW)),
+      _bar('📷 QR directo', encQ.length, totalE, '#d97706', '★ '+prom(encQ)),
+      _bar('🤖 Nova',       encN.length, totalE, '#7c3aed', '★ '+prom(encN)),
+    ].join('');
+  }
+
+  // 4. Items de encuesta (promedios)
+  const encItems = document.getElementById('cEncItemsList');
+  if(encItems && allEnc.length){
+    const items = [
+      {key:'instalaciones', label:'🏪 Instalaciones y limpieza', color:'#2563eb'},
+      {key:'atencion',      label:'👤 Atención al cliente',       color:'#7c3aed'},
+      {key:'tiempos',       label:'⏱️ Tiempos de espera',         color:'#d97706'},
+      {key:'medicamentos',  label:'💊 Disponib. medicamentos',    color:'#16a34a'},
+      {key:'recomendacion', label:'⭐ Recomendaría el servicio',  color:'#0891b2'},
+    ];
+    const maxP=5;
+    encItems.innerHTML = items.map(it=>{
+      const vals=allEnc.filter(e=>e[it.key]>0);
+      const prom=vals.length?(vals.reduce((s,e)=>s+(+e[it.key]||0),0)/vals.length).toFixed(2):'—';
+      const pct=prom!=='—'?Math.round(+prom/maxP*100):0;
+      return `<div style="margin-bottom:9px">
+        <div style="display:flex;justify-content:space-between;font-size:11px;font-weight:600;margin-bottom:3px">
+          <span style="color:var(--ink)">${it.label}</span>
+          <span style="color:${it.color};font-weight:700">${prom} <span style="color:var(--ink3);font-weight:400;font-size:10px">/ 5</span></span>
+        </div>
+        <div style="background:var(--bg2);border-radius:99px;height:7px;overflow:hidden">
+          <div style="background:${it.color};width:${pct}%;height:100%;border-radius:99px;transition:width .4s"></div>
+        </div>
+      </div>`;
+    }).join('');
+  } else if(encItems){
+    encItems.innerHTML='<div style="font-size:12px;color:var(--ink3);padding:8px">Sin encuestas en el período</div>';
+  }
+
+  // 5. Sesiones Nova por canal
+  const sesCanal = document.getElementById('cSesNovaCanalList');
+  if(sesCanal){
+    const sW=D.sesNovaWeb||[], sD=D.sesNovaDir||[], sQ=D.sesNovaQr||[], sB=D.sesNovaBv||[];
+    const totalS=(sW.length+sD.length+sQ.length+sB.length)||1;
+    sesCanal.innerHTML = [
+      _bar('🤖 Nova enlace',   sW.length, totalS, '#7c3aed'),
+      _bar('🤖 Nova directo',  sD.length, totalS, '#9333ea'),
+      _bar('📷 Nova QR',       sQ.length, totalS, '#d97706'),
+      _bar('👋 Bienvenida',    sB.length, totalS, '#64748b'),
+    ].join('');
+  }
+
+  // 6. Tendencia radicados (todos los canales)
+  _mDestroyChart('cChartTendencia');
+  const cTend=document.getElementById('cChartTendencia');
+  if(cTend){
+    const {labels:lW,data:dW}=_mTend(radWeb,'received_at',dias,d1);
+    const {data:dQ}=_mTend(radQr,'received_at',dias,d1);
+    const {data:dN}=_mTend(radNova,'received_at',dias,d1);
+    const total=dW.map((v,i)=>v+dQ[i]+dN[i]);
+    _mCharts.cChartTendencia=new Chart(cTend.getContext('2d'),{type:'bar',data:{
+      labels:lW,
+      datasets:[
+        {label:'Navegador',data:dW,backgroundColor:'rgba(37,99,235,.7)',stack:'s',borderWidth:0,borderRadius:{topLeft:0,topRight:0,bottomLeft:4,bottomRight:4}},
+        {label:'QR',       data:dQ,backgroundColor:'rgba(217,119,6,.7)', stack:'s',borderWidth:0},
+        {label:'Nova',     data:dN,backgroundColor:'rgba(124,58,237,.7)',stack:'s',borderWidth:0,borderRadius:{topLeft:4,topRight:4,bottomLeft:0,bottomRight:0}},
+      ]
+    },options:{scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:9},maxRotation:0}},y:{stacked:true,beginAtZero:true,grid:{color:'rgba(0,0,0,.04)'},ticks:{font:{size:9},stepSize:1}}},plugins:{legend:{position:'top',labels:{font:{size:10},boxWidth:10,padding:8}}}}});
+  }
 }
 
 // ── Chart helpers ────────────────────────────────────────────────────
@@ -9765,6 +9827,50 @@ async function _mExportInit() {
 // ═══════════════════════════════════════════════════════════════════════
 // EXPORT WEB → WEB_Encuesta + WEB_Radicacion
 // ═══════════════════════════════════════════════════════════════════════
+async function exportCentralizadasExcel() {
+  const D = novaDatos; if(!D) return;
+  const {epsCatMap,sedesMap,histSede} = await _mExportInit();
+  const _u=v=>(v||'').toString().toUpperCase().trim();
+  const _d=v=>v?new Date(v).toLocaleDateString('es-CO'):'';
+  const TIPO_NORM={'solicitud':'SOLICITUD','peticion':'PETICIÓN','queja':'QUEJA','reclamo':'RECLAMO','sugerencia':'SUGERENCIA','felicitacion':'FELICITACIÓN','denuncia':'DENUNCIA','urgente':'URGENTE'};
+  const normTipo=t=>TIPO_NORM[(t||'').toLowerCase()]||_u(t)||'SIN TIPO';
+  const radToRow=(r,canal)=>({
+    'Canal': canal, 'Ticket': r.ticket_id||'', 'Fecha': _d(r.received_at),
+    'Tipo Solicitud': normTipo(r.tipo_pqr), 'Nombre': _u(r.nombre||r.from_name),
+    'Cédula': r.cedula_paciente||r.cedula||'', 'Ciudad': _u(r.ciudad_paciente),
+    'EPS': _u(epsCatMap?.[r.eps_id]||r.eps||''), 'Sentimiento': _u(r.sentimiento),
+    'Prioridad': _u(r.prioridad), 'Estado': _u(r.estado),
+  });
+  const allRads=[
+    ...(D.radWeb||[]).map(r=>radToRow(r,'NAVEGADOR')),
+    ...(D.radQr||[]).map(r=>radToRow(r,'QR DIRECTO')),
+    ...([...(D.radNovaWeb||[]),...(D.radNovaDir||[])]).map(r=>radToRow(r,'NOVA')),
+  ];
+  const encToRow=(e,canal)=>({
+    'Canal': canal, 'Fecha': _d(e.created_at), 'Nombre': _u(e.nombre),
+    'Cédula': e.cedula||'', 'EPS': _u(e.eps), 'Sede': _u(e.sede_nombre),
+    'Ciudad': _u(e.sede_ciudad), 'Promedio': e.promedio||e.calificacion||'',
+    'Instalaciones': e.instalaciones||'', 'Atención': e.atencion||'',
+    'Tiempos': e.tiempos||'', 'Medicamentos': e.medicamentos||'',
+    'Recomendación': e.recomendacion||'', 'Comentario': e.comentario||'',
+  });
+  const allEncs=[
+    ...(D.encWeb||[]).map(e=>encToRow(e,'NAVEGADOR')),
+    ...(D.encQr||[]).map(e=>encToRow(e,'QR DIRECTO')),
+    ...([...(D.encNovaWeb||[]),...(D.encNovaDir||[])]).map(e=>encToRow(e,'NOVA')),
+  ];
+  const wb=XLSX.utils.book_new();
+  const ws1=XLSX.utils.json_to_sheet(allRads.length?allRads:[{'Sin datos':'Sin radicados en el período'}]);
+  ws1['!cols']=[{wch:14},{wch:22},{wch:12},{wch:14},{wch:28},{wch:14},{wch:16},{wch:28},{wch:12},{wch:10},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Radicados');
+  const ws2=XLSX.utils.json_to_sheet(allEncs.length?allEncs:[{'Sin datos':'Sin encuestas en el período'}]);
+  ws2['!cols']=[{wch:14},{wch:12},{wch:28},{wch:14},{wch:28},{wch:28},{wch:16},{wch:10},{wch:14},{wch:10},{wch:10},{wch:14},{wch:14},{wch:40}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Encuestas');
+  const fecha=`${D.desde||'inicio'}_${D.hasta||'hoy'}`.replace(/-/g,'');
+  XLSX.writeFile(wb,`Metricas_Centralizadas_${fecha}.xlsx`);
+  showToast('Excel consolidado descargado ✓','success');
+}
+
 async function exportWebExcel() {
   const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap, correoMap, sedesNombreMap } = await _mExportInit();
   const wb = XLSX.utils.book_new();
