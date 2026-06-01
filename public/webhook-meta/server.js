@@ -534,6 +534,24 @@ app.post('/webhook/meta', async (req, res) => {
       }
 
       // ── MENÚ POST-NOVA (M/A) ────────────────────────────────────────────────
+      // ── MUNICIPIO PARA SEDES ─────────────────────────────────────────────────
+      if (sesion.fase === 'esperando_municipio_sedes') {
+        const municipio = body.trim();
+        const novaSedesRes = await fetch('https://tododrogas.online/nova-wa.php', {
+          method:'POST', headers:{'Content-Type':'application/json','X-Nova-Token':NOVA_TOKEN},
+          body: JSON.stringify({ telefono, mensaje:`[SEDES:${municipio}]`, sesion })
+        });
+        const novaSedesData = await novaSedesRes.json();
+        if (novaSedesData.respuesta) {
+          await enviarMeta(telefono, novaSedesData.respuesta);
+          await pushHistory(telefono, novaSedesData.respuesta, 'nova');
+        }
+        await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+        const msgM = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
+        await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
+        return;
+      }
+
       if (sesion.fase === 'esperando_menu_post_nova') {
         const resp = body.trim().toUpperCase();
         const esM  = ['M','MENU','MENÚ','1'].includes(resp) || resp.startsWith('M');
@@ -670,10 +688,14 @@ app.post('/webhook/meta', async (req, res) => {
         }
         return '';
       })();
-      // Solo disparar si el último mensaje de Nova era el menú principal 1-8
+      // Solo disparar si alguno de los últimos 5 mensajes de Nova era el menú principal 1-8
       // (contiene al menos 3 ítems numerados con emoji 1️⃣ 2️⃣ 3️⃣)
       // EXCLUIR: menú de política (*1* Acepto / *2* No acepto) que solo tiene 2 opciones
-      const eraMenúNumerado = /1️⃣/.test(ultimoNova) && /2️⃣/.test(ultimoNova) && /3️⃣/.test(ultimoNova);
+      const hist = Array.isArray(sesion?.history) ? sesion.history : [];
+      const ultimosMensajesNova = hist.filter(m => m.role === 'nova').slice(-5).map(m => m.content || '');
+      const eraMenúNumerado = ultimosMensajesNova.some(msg =>
+        /1️⃣/.test(msg) && /2️⃣/.test(msg) && /3️⃣/.test(msg)
+      );
 
       if (eraMenúNumerado && /^[1-8]$/.test(bodyNum)) {
         const mapMenuNova = {
@@ -709,20 +731,28 @@ app.post('/webhook/meta', async (req, res) => {
         if (accionMenu === 'SEDES') {
           const ciudad = sesion?.ciudad || '';
           if (ciudad) {
-            // Llamar a Nova PHP con una pregunta de sedes explícita
-            body = `¿Dónde puedo recoger mi medicamento en ${ciudad}? [SEDES:${ciudad}]`;
+            // Llamar directamente al PHP con el tag SEDES
+            const novaSedesRes = await fetch('https://tododrogas.online/nova-wa.php', {
+              method:'POST', headers:{'Content-Type':'application/json','X-Nova-Token':NOVA_TOKEN},
+              body: JSON.stringify({ telefono, mensaje:`[SEDES:${ciudad}]`, sesion })
+            });
+            const novaSedesData = await novaSedesRes.json();
+            if (novaSedesData.respuesta) {
+              await enviarMeta(telefono, novaSedesData.respuesta);
+              await pushHistory(telefono, novaSedesData.respuesta, 'nova');
+            }
           } else {
-            const msgSedes = `¿En qué municipio se encuentra para mostrarle las sedes más cercanas?`;
+            const msgSedes = `¿En qué municipio se encuentra para mostrarle las sedes disponibles para su EPS?`;
             await enviarMeta(telefono, msgSedes);
             await pushHistory(telefono, msgSedes, 'nova');
-            await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
-            const msgM = `¿En qué más le puedo ayudar?
-
-🏠 Marque *M* → Menú principal
-👤 Marque *A* → Hablar con un asesor`;
+            await supabase.from('wa_sesiones').update({ fase: 'esperando_municipio_sedes', updated_at: ahoraISO }).eq('telefono', telefono);
+            const msgM = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
             await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
-            return;
           }
+          await supabase.from('wa_sesiones').update({ fase: 'esperando_menu_post_nova', updated_at: ahoraISO }).eq('telefono', telefono);
+          const msgM2 = `¿En qué más le puedo ayudar?\n\n🏠 Marque *M* → Menú principal\n👤 Marque *A* → Hablar con un asesor`;
+          await enviarMeta(telefono, msgM2); await pushHistory(telefono, msgM2, 'nova');
+          return;
         }
         if (accionMenu === 'REQUISITOS') {
           const msgReq = `📋 *Requisitos para reclamar medicamentos:*
