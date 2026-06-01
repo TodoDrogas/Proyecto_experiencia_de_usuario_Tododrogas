@@ -105,6 +105,27 @@ function primerNombre(string $nombre): string {
 $cedula        = trim($sesion['cedula']          ?? '');
 $nombre        = trim($sesion['nombre']          ?? '');
 $eps           = trim($sesion['eps']             ?? '');
+
+// ── Normalizar EPS — nombres informales → nombres del catálogo ────────
+$_epsNorm = strtoupper(preg_replace('/\s+/', ' ', $eps));
+$_epsMap = [
+    'PREVENTIVA'              => 'COOSALUD',
+    'PREVENTIVA SALUD'        => 'COOSALUD',
+    'CEM'                     => 'SAVIA',
+    'COMITE DE ESTUDIOS'      => 'SAVIA',
+    'ANGIOSUR'                => 'SAVIA',
+    'ANGIOSUR S.A.S'          => 'SAVIA',
+    'SAVIA'                   => 'SAVIA',
+    'SAVIA SALUD'             => 'SAVIA',
+    'ALIANZA MEDELLIN'        => 'SAVIA',
+    'NUEVA EPS'               => 'NUEVA EPS',
+    'NUEVA EMPRESA PROMOTORA' => 'NUEVA EPS',
+    'SALUD TOTAL'             => 'SALUD TOTAL',
+    'COOSALUD'                => 'COOSALUD',
+];
+foreach ($_epsMap as $k => $v) {
+    if (str_starts_with($_epsNorm, $k)) { $eps = $v; break; }
+}
 $ciudad        = trim($sesion['ciudad']          ?? '');
 $fase          = trim($sesion['fase']            ?? 'politica');
 $intentos      = (int)($sesion['intentos_nova']  ?? 0);
@@ -399,7 +420,11 @@ function cargarSedesActualizadas(array $sedesLocal): array {
 
 function buscarSedes(string $municipio, string $epsFilter, array $sedes): string {
     $munN = ntdNormMun($municipio);
-    $epsN = strtoupper(trim(str_replace(['SAVIA SALUD','PREVENTIVA SALUD'],['SAVIA','PREVENTIVA'], $epsFilter)));
+    $epsN = strtoupper(trim(str_replace(
+        ['SAVIA SALUD','PREVENTIVA SALUD','PREVENTIVA','ANGIOSUR S.A.S.','ANGIOSUR','CEM','COMITE DE ESTUDIOS MEDICOS S.A.S'],
+        ['SAVIA',      'COOSALUD',       'COOSALUD', 'SAVIA',           'SAVIA',  'SAVIA','SAVIA'],
+        $epsFilter
+    )));
     $todas = strtoupper($epsFilter) === 'TODAS';
 
     $encontradas = array_filter($sedes, function($s) use ($munN, $epsN, $todas) {
@@ -411,7 +436,11 @@ function buscarSedes(string $municipio, string $epsFilter, array $sedes): string
         if ($todas) return true;
         $epsArr = is_array($s['eps']) ? $s['eps'] : [$s['eps']];
         foreach ($epsArr as $e) {
-            $en = strtoupper(str_replace(['SAVIA SALUD','PREVENTIVA SALUD'],['SAVIA','PREVENTIVA'], $e));
+            $en = strtoupper(str_replace(
+                ['SAVIA SALUD','PREVENTIVA SALUD','PREVENTIVA','ANGIOSUR S.A.S.','ANGIOSUR','CEM','COMITE DE ESTUDIOS MEDICOS S.A.S'],
+                ['SAVIA',      'COOSALUD',       'COOSALUD', 'SAVIA',           'SAVIA',  'SAVIA','SAVIA'],
+                $e
+            ));
             if (str_contains($en, $epsN) || str_contains($epsN, $en)) return true;
         }
         return false;
@@ -545,7 +574,10 @@ if ($fase === 'ident_ced' || ($origenCanal==='whatsapp_directo' && !$cedula)) {
     if ($r['code']===200 && ($r['body']['ok']??false)) {
         $p = $r['body'];
         $nombre  = $p['nombre'] ?? '';
-        $eps     = str_replace(['SAVIA SALUD','PREVENTIVA SALUD'],['SAVIA','PREVENTIVA'], $p['eps']??'');
+        $eps     = strtoupper(trim($p['eps'] ?? ''));
+        $eps     = str_replace(['SAVIA SALUD','PREVENTIVA SALUD','ALIANZA MEDELLIN ANTIOQUIA EPS S.A.S'],['SAVIA','COOSALUD','SAVIA'], $eps);
+        $eps     = str_replace(['COMITE DE ESTUDIOS MEDICOS S.A.S','ANGIOSUR S.A.S.','ANGIOSUR'],['SAVIA','SAVIA','SAVIA'], $eps);
+        $eps     = str_replace(['NUEVA EMPRESA PROMOTORA DE SALUD S.A.','ENTIDAD PROMOTORA SALUD TOTAL'],['NUEVA EPS','SALUD TOTAL'], $eps);
         $eps     = trim(preg_replace('/\s*\([^)]*\)\s*/','', $eps));
         $ciudad  = $p['ciudad'] ?? '';
         $vip     = (bool)($p['vip']??false);
