@@ -864,8 +864,14 @@ app.post('/webhook/meta', async (req, res) => {
           await enviarMeta(telefono, msgM); await pushHistory(telefono, msgM, 'nova');
           return;
         }
-        // accionMenu === 'DEFAULT' (opción 8 = pregunta libre): cae a Nova PHP normalmente
-        // body ya tiene el número original — Nova lo entenderá como pregunta libre
+        // accionMenu === 'DEFAULT' (opción 8 = pregunta libre): invitar y pasar a Nova PHP
+        if (accionMenu === 'DEFAULT') {
+          const _pn8 = (sesion?.nombre||'').split(' ')[0].toUpperCase();
+          const msg8 = `Con gusto${_pn8?', *'+_pn8+'*':''}. ¿Cuál es su pregunta? Estoy aquí para ayudarle. 🙂`;
+          await enviarMeta(telefono, msg8); await pushHistory(telefono, msg8, 'nova');
+          await supabase.from('wa_sesiones').update({ fase: 'libre', updated_at: ahoraISO }).eq('telefono', telefono);
+          return;
+        }
       }
     }
 
