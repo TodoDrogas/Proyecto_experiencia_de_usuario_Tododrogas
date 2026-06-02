@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIGI + Nova TD · Ecosistema Digital Único en Colombia</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100vh;overflow:hidden;background:#020d1f;font-family:'Poppins',sans-serif;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+@keyframes scan{0%{top:0%;opacity:0}5%{opacity:1}93%{opacity:1}100%{top:100%;opacity:0}}
+@keyframes shine{to{background-position:200% center}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes pglow{from{opacity:.5;transform:scale(1)}to{opacity:1;transform:scale(1.08)}}
+@keyframes fu{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse-orb{0%,100%{transform:scale(1)}50%{transform:scale(1.2)}}
+
+/* ══ NAV ══ */
+#nav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;
+  display:flex;align-items:center;gap:7px;
+  background:rgba(2,8,24,.88);backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.08);border-radius:99px;padding:7px 14px;}
+.ndot{width:8px;height:8px;border-radius:50%;border:none;cursor:pointer;
+  background:rgba(255,255,255,.18);transition:all .3s;}
+.ndot.active{background:#00c4e8;box-shadow:0 0 9px rgba(0,196,232,.7);transform:scale(1.3);}
+#np,#nn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+  color:rgba(255,255,255,.6);border-radius:99px;padding:4px 13px;font-size:11px;
+  cursor:pointer;font-family:'Poppins',sans-serif;transition:all .2s;}
+#np:hover,#nn:hover{background:rgba(0,196,232,.2);color:#00c4e8;border-color:#00c4e8;}
+#sname{font-family:'DM Mono',monospace;font-size:10px;color:rgba(200,215,255,.3);white-space:nowrap;}
+
+/* ══ SLIDES ══ */
+.slide{position:fixed;inset:0;opacity:0;pointer-events:none;transition:opacity .6s cubic-bezier(.4,0,.2,1);}
+.slide.active{opacity:1;pointer-events:all;}
+
+/* ══ SHARED ══ */
+.hl{background:linear-gradient(135deg,#00c4e8,#4f8fff,#00c4e8);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shine 3s linear infinite;}
+.scanline{position:absolute;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,220,255,.22),transparent);animation:scan 10s linear infinite;pointer-events:none;z-index:1;}
+.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(0,196,232,.1);border:1px solid rgba(0,196,232,.25);border-radius:99px;padding:4px 16px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(0,220,255,.8);}
+.bdot{width:5px;height:5px;border-radius:50%;background:#00dcff;box-shadow:0 0 6px #00dcff;animation:blink 2s infinite;}
+
+/* ══ S1 HERO ══ */
+#s1bg{position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/H.jpeg');background-size:cover;background-position:center;opacity:.68;}
+#s1ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(1,8,24,.5) 0%,rgba(1,8,24,.2) 30%,rgba(1,8,24,.5) 70%,rgba(1,8,24,.92) 100%);}
+#s1c{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 48px;}
+canvas#s1px{position:absolute;inset:0;pointer-events:none;}
+.s1title{font-family:'Orbitron',monospace;font-size:clamp(24px,4.5vw,54px);font-weight:900;letter-spacing:5px;text-transform:uppercase;color:#fff;text-shadow:0 0 40px rgba(0,200,255,.4);line-height:1.08;margin-bottom:6px;animation:fu .9s .3s both;}
+.s1sub{font-family:'Orbitron',monospace;font-size:12px;font-weight:400;letter-spacing:8px;text-transform:uppercase;color:rgba(0,220,255,.55);margin-bottom:22px;animation:fu .8s .55s both;}
+.s1div{display:flex;align-items:center;gap:10px;margin-bottom:18px;animation:fu .7s .7s both;}
+.dl{width:60px;height:1px;background:linear-gradient(90deg,transparent,rgba(0,220,255,.5));}.dlr{width:60px;height:1px;background:linear-gradient(90deg,rgba(0,220,255,.5),transparent);}
+.dc{width:6px;height:6px;border-radius:50%;background:#00dcff;box-shadow:0 0 10px #00dcff;animation:blink 2s infinite;}
+.s1desc{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;letter-spacing:1px;color:rgba(180,210,255,.6);line-height:1.7;max-width:500px;margin-bottom:26px;animation:fu .8s .85s both;}
+.s1btn{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:#00dcff;background:transparent;border:1px solid rgba(0,220,255,.5);border-radius:4px;padding:12px 34px;cursor:pointer;transition:all .25s;animation:fu .8s 1.05s both;}
+.s1btn:hover{background:rgba(0,220,255,.12);border-color:rgba(0,220,255,.9);color:#fff;}
+
+/* ══ S2 ÉRAMOS ANTES ══ */
+#s2bg{position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/ROJO.jpg');background-size:cover;background-position:center;opacity:.6;}
+#s2ov{position:absolute;inset:0;background:linear-gradient(135deg,rgba(6,1,1,.78),rgba(18,3,3,.72));}
+#s2c{position:absolute;inset:0;z-index:2;overflow-y:auto;padding:42px 48px 60px;display:flex;flex-direction:column;align-items:center;}
+#s2c::-webkit-scrollbar{width:3px;}
+#s2c::-webkit-scrollbar-thumb{background:rgba(220,38,38,.2);border-radius:3px;}
+.s2badge{display:inline-flex;align-items:center;gap:7px;background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.28);border-radius:99px;padding:5px 18px;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(185,28,28,.8);margin-bottom:14px;}
+.s2dot{width:6px;height:6px;border-radius:50%;background:#ef4444;box-shadow:0 0 10px #ef4444;animation:blink 2s infinite;}
+.s2title{font-family:'Poppins',sans-serif;font-size:clamp(22px,3.5vw,40px);font-weight:900;color:#fff;letter-spacing:-1.5px;line-height:1.1;text-align:center;margin-bottom:8px;text-shadow:0 2px 20px rgba(0,0,0,.6);}
+.s2title .red{color:#dc2626;}
+.s2sub{font-family:'Poppins',sans-serif;font-size:14px;color:rgba(255,190,190,.72);text-align:center;max-width:620px;line-height:1.75;margin-bottom:30px;}
+.s2grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:940px;}
+.s2card{background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(220,38,38,.05));backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(220,38,38,.2);border-top:1px solid rgba(255,255,255,.15);border-radius:14px;padding:20px 18px;position:relative;overflow:hidden;transition:all .25s;box-shadow:0 8px 28px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.1);}
+.s2card:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(0,0,0,.5),0 4px 14px rgba(220,38,38,.15);border-color:rgba(220,38,38,.38);}
+.s2card::before{content:'';position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(220,38,38,.65),rgba(255,150,150,.4),transparent);transition:.2s;}
+.s2card:hover::before{opacity:1;}
+.s2ico{font-size:1.3rem;width:42px;height:42px;border-radius:10px;background:rgba(220,38,38,.07);border:1px solid rgba(220,38,38,.14);display:flex;align-items:center;justify-content:center;margin-bottom:10px;}
+.s2card h4{font-size:13px;font-weight:700;color:#fff;margin-bottom:5px;}
+.s2card p{font-size:11.5px;color:rgba(255,190,190,.62);line-height:1.65;}
+.s2tag{display:inline-block;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border-radius:99px;background:rgba(220,38,38,.08);color:#dc2626;border:1px solid rgba(220,38,38,.15);margin-top:8px;font-family:'DM Mono',monospace;}
+
+/* ══ S3 8 CANALES ══ */
+#s3bgimg{position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/LO%20QUE.jpg');background-size:cover;background-position:center;opacity:.82;}
+#s3ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,8,24,.78) 0%,rgba(2,8,24,.12) 18%,rgba(2,8,24,.08) 55%,rgba(2,8,24,.18) 75%,rgba(2,8,24,.92) 100%);}
+#s3c{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;padding:28px 20px 0;text-align:center;overflow-y:auto;}
+.s3img{width:100%;max-width:min(96vw,900px);height:auto;display:block;margin:8px auto 0;filter:drop-shadow(0 0 60px rgba(0,196,232,.35));}
+.chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;padding:12px 16px 44px;max-width:1000px;}
+.chip{display:inline-flex;align-items:center;gap:7px;background:rgba(2,8,22,.78);border:1px solid rgba(0,196,232,.22);border-radius:10px;padding:8px 16px;font-family:'Rajdhani',sans-serif;font-size:12.5px;font-weight:700;color:rgba(200,230,255,.88);backdrop-filter:blur(14px);letter-spacing:.4px;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:all .22s;}
+.chip:hover{background:rgba(0,196,232,.12);border-color:rgba(0,196,232,.4);color:#fff;transform:translateY(-2px);}
+.cdg{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#22c55e;box-shadow:0 0 8px #22c55e;}
+.cdw{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#f59e0b;box-shadow:0 0 8px #f59e0b;animation:blink 1.2s infinite;}
+
+/* ══ S4 3 PILARES ══ */
+#s4bgimg{position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/FONDO%20AZUL.jpeg');background-size:cover;background-position:center;opacity:.6;}
+#s4ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,8,24,.78) 0%,rgba(2,8,24,.5) 35%,rgba(2,8,24,.58) 70%,rgba(2,8,24,.94) 100%);}
+#s4c{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 36px;}
+.ben-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:1060px;margin-top:16px;}
+.ben-card{background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(0,196,232,.04));backdrop-filter:blur(20px);border:1px solid rgba(0,196,232,.18);border-top:1px solid rgba(255,255,255,.14);border-radius:16px;padding:22px 20px;position:relative;overflow:hidden;transition:all .25s;box-shadow:0 8px 32px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.1);}
+.ben-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.55),transparent);}
+.ben-card::after{content:'';position:absolute;top:0;right:0;width:70px;height:70px;background:radial-gradient(circle,rgba(0,196,232,.1),transparent 70%);pointer-events:none;}
+.ben-card:hover{transform:translateY(-4px);border-color:rgba(0,196,232,.35);box-shadow:0 16px 48px rgba(0,0,0,.5),0 4px 16px rgba(0,196,232,.12);}
+.ben-ico{font-size:2.2rem;margin-bottom:12px;display:block;}
+.ben-title{font-size:15px;font-weight:800;color:#fff;margin-bottom:8px;}
+.ben-list{display:flex;flex-direction:column;gap:7px;}
+.ben-item{display:flex;gap:8px;align-items:flex-start;font-size:11px;color:rgba(200,215,255,.65);}
+.bico{font-size:.85rem;flex-shrink:0;margin-top:1px;color:#00c4e8;}
+.ben-bar{height:2px;border-radius:2px;margin-top:14px;background:linear-gradient(90deg,#00c4e8,rgba(0,196,232,.3),transparent);opacity:.7;}
+
+/* ══ S5 EL NÚMERO ══ */
+#s5bgimg{position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/LO%20QUE.jpg');background-size:cover;background-position:center;opacity:.6;}
+#s5ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,8,24,.7) 0%,rgba(2,8,24,.45) 30%,rgba(2,8,24,.55) 70%,rgba(2,8,24,.88) 100%);}
+canvas#s5px{position:absolute;inset:0;pointer-events:none;}
+#s5c{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;}
+.s5-kicker{font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:5px;text-transform:uppercase;color:rgba(200,215,255,.35);margin-bottom:20px;}
+.s5-stmt{font-family:'Poppins',sans-serif;font-size:clamp(18px,2.5vw,32px);font-weight:900;color:#fff;line-height:1.3;max-width:820px;letter-spacing:-.5px;margin-bottom:12px;}
+.s5-stmt .d{background:linear-gradient(135deg,#ef4444,#f87171);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.s5-stmt .h{background:linear-gradient(135deg,#00c4e8,#4f8fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.s5-sub{font-family:'Rajdhani',sans-serif;font-size:15px;color:rgba(200,215,255,.5);max-width:700px;line-height:1.75;margin-bottom:36px;letter-spacing:.5px;}
+.s5-sub .cy{color:rgba(0,220,255,.8);font-weight:700;}
+.s5-big-val{font-family:'Bebas Neue',sans-serif;font-size:clamp(100px,16vw,180px);font-weight:400;color:#fff;line-height:1;letter-spacing:6px;text-shadow:0 0 60px rgba(0,196,232,.7),0 0 120px rgba(0,196,232,.4),0 0 200px rgba(0,100,255,.2);}
+.s5-big-val .acc{color:#00e5ff;text-shadow:0 0 40px rgba(0,229,255,.9),0 0 80px rgba(0,196,232,.6);}
+.s5-big-lbl{font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:600;letter-spacing:6px;text-transform:uppercase;color:rgba(0,220,255,.6);margin-top:6px;}
+.s5-sub-lbl{font-family:'DM Mono',monospace;font-size:12px;color:rgba(200,215,255,.3);letter-spacing:2px;margin-top:4px;margin-bottom:32px;}
+.s5-stats{display:flex;gap:0;justify-content:center;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px 0;}
+.s5-stat{text-align:center;padding:0 26px;}
+.s5-stat-val{font-family:'DM Mono',monospace;font-size:clamp(18px,3vw,30px);font-weight:700;color:#fff;line-height:1;}
+.s5-stat-val.cy{color:#00c4e8;text-shadow:0 0 20px rgba(0,196,232,.4);}
+.s5-stat-val.gr{color:#4ade80;text-shadow:0 0 20px rgba(34,197,94,.4);}
+.s5-stat-lbl{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(200,215,255,.32);margin-top:5px;font-family:'DM Mono',monospace;}
+.s5-sep{width:1px;background:rgba(255,255,255,.08);align-self:stretch;margin:4px 0;}
+
+/* ══ S6 NOVA TD ══ */
+#s6bgimg{position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/FONDO%20AZUL.jpeg');background-size:cover;background-position:center;opacity:.65;}
+#s6ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,8,24,.78) 0%,rgba(2,8,24,.5) 35%,rgba(2,8,24,.58) 70%,rgba(2,8,24,.94) 100%);}
+#s6c{position:absolute;inset:0;z-index:2;padding:28px 36px 60px;display:flex;flex-direction:column;align-items:center;overflow-y:auto;}
+#s6c::-webkit-scrollbar{width:3px;}
+.nova-layout{display:grid;grid-template-columns:300px 1fr;gap:22px;width:100%;max-width:1040px;}
+.holo-glow{position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(0,196,232,.22),transparent 70%);top:10px;left:50%;transform:translateX(-50%);animation:pglow 3s ease-in-out infinite alternate;pointer-events:none;}
+.holo-img{width:260px;height:auto;display:block;position:relative;z-index:2;filter:drop-shadow(0 0 40px rgba(0,196,232,.55)) drop-shadow(0 0 80px rgba(37,99,235,.35));animation:float 4s ease-in-out infinite;}
+.nova-id-card{background:linear-gradient(135deg,rgba(255,255,255,.08),rgba(0,196,232,.05));border:1px solid rgba(0,196,232,.25);border-top:1px solid rgba(255,255,255,.18);border-radius:16px;padding:16px 18px;backdrop-filter:blur(20px);width:100%;margin-top:14px;box-shadow:0 8px 32px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.12);position:relative;}
+.nova-id-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.6),transparent);border-radius:16px 16px 0 0;}
+.nova-spec2{display:flex;flex-direction:column;gap:8px;}
+.nspec2{display:flex;align-items:flex-start;gap:9px;font-size:10px;color:rgba(180,210,255,.7);}
+.nspec2-ico{width:26px;height:26px;border-radius:7px;background:rgba(0,196,232,.12);border:1px solid rgba(0,196,232,.22);display:flex;align-items:center;justify-content:center;font-size:.78rem;flex-shrink:0;}
+.nspec2 strong{color:#fff;display:block;font-size:10.5px;margin-bottom:1px;}
+.nspec2 span{font-size:9.5px;color:rgba(180,210,255,.45);}
+.nova-links{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;}
+.nlink{font-size:9px;font-family:'DM Mono',monospace;font-weight:500;color:rgba(0,220,255,.7);background:rgba(0,196,232,.08);border:1px solid rgba(0,196,232,.18);border-radius:6px;padding:4px 10px;text-decoration:none;transition:.2s;}
+.nlink:hover{background:rgba(0,196,232,.18);color:#fff;}
+.func-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;}
+.func-card{background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(0,196,232,.03));border:1px solid rgba(0,196,232,.16);border-top:1px solid rgba(255,255,255,.12);border-radius:13px;padding:13px 14px;cursor:pointer;transition:all .25s;backdrop-filter:blur(12px);position:relative;overflow:hidden;}
+.func-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.5),transparent);opacity:0;transition:.3s;}
+.func-card:hover{background:rgba(0,196,232,.1);border-color:rgba(0,196,232,.38);transform:translateY(-3px);box-shadow:0 8px 28px rgba(0,196,232,.15);}
+.func-card:hover::before{opacity:1;}
+.func-num{font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:rgba(0,196,232,.55);letter-spacing:1px;margin-bottom:4px;}
+.func-ico{font-size:1.3rem;margin-bottom:6px;display:block;}
+.func-card h5{font-size:11px;font-weight:700;color:#fff;margin-bottom:4px;line-height:1.3;}
+.func-card p{font-size:9.5px;color:rgba(180,210,255,.5);line-height:1.55;}
+.func-tag{display:inline-block;font-size:8px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:99px;background:rgba(0,196,232,.1);color:#67e8f9;border:1px solid rgba(0,196,232,.2);margin-top:6px;font-family:'DM Mono',monospace;}
+
+/* ══ S7 SEGURIDAD ══ */
+#s7bg{position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/SEGURIDAD.JPG');background-size:cover;background-position:center;opacity:.5;}
+#s7ov{position:absolute;inset:0;background:linear-gradient(135deg,rgba(2,8,24,.85),rgba(2,8,24,.68) 50%,rgba(2,8,24,.85));}
+#s7c{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;}
+#s7inner{width:100%;max-width:1160px;display:flex;flex-direction:column;align-items:center;padding:16px 28px;}
+.s7tabs{display:flex;gap:6px;margin-bottom:11px;}
+.s7tab{padding:5px 18px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid rgba(255,255,255,.09);background:rgba(2,8,20,.6);backdrop-filter:blur(10px);color:rgba(200,215,255,.5);transition:all .2s;font-family:'Poppins',sans-serif;}
+.s7tab.on{background:rgba(0,196,232,.15);border-color:rgba(0,196,232,.4);color:#00c4e8;box-shadow:0 0 16px rgba(0,196,232,.12);}
+.s7tab:hover:not(.on){background:rgba(255,255,255,.08);color:#fff;}
+.s7panel{display:none;width:100%;}
+.s7panel.show{display:flex;flex-direction:column;align-items:center;gap:8px;}
+.cgrid,.igrid{display:grid;grid-template-columns:repeat(3,minmax(0,380px));gap:12px;width:100%;justify-content:center;}
+.dgrid{display:grid;grid-template-columns:repeat(4,minmax(0,240px));gap:8px;width:100%;justify-content:center;}
+.scard{background:linear-gradient(145deg,rgba(255,255,255,.09),rgba(0,196,232,.06),rgba(255,255,255,.04));backdrop-filter:blur(22px);border:1px solid rgba(0,196,232,.2);border-top:1px solid rgba(255,255,255,.2);border-radius:15px;padding:13px 15px 11px;position:relative;overflow:hidden;transition:all .28s cubic-bezier(.4,0,.2,1);box-shadow:0 6px 24px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.13);display:flex;flex-direction:column;gap:7px;}
+.scard::before{content:'';position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.6),rgba(150,200,255,.4),transparent);}
+.scard::after{content:'';position:absolute;top:0;right:0;width:55px;height:55px;background:radial-gradient(circle,rgba(0,196,232,.12),transparent 70%);pointer-events:none;}
+.scard:hover{transform:translateY(-4px);border-color:rgba(0,196,232,.4);box-shadow:0 16px 40px rgba(0,0,0,.5),0 4px 14px rgba(0,196,232,.16);}
+.chead{display:flex;align-items:center;gap:10px;}
+.cnum{width:44px;height:44px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.3);}
+.ctitle{font-size:13.5px;font-weight:800;color:#fff;line-height:1.25;}
+.cdesc{font-size:12px;color:rgba(200,215,255,.68);line-height:1.65;font-family:'Rajdhani',sans-serif;flex:1;}
+.cfoot{display:flex;align-items:center;justify-content:space-between;padding-top:10px;border-top:1px solid rgba(255,255,255,.07);margin-top:6px;}
+.cstatus{display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#86efac;}
+.dg{width:6px;height:6px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e;}
+.ctech{font-size:10px;color:rgba(0,196,232,.65);font-family:'DM Mono',monospace;text-align:right;line-height:1.4;}
+.dstep{background:linear-gradient(145deg,rgba(255,255,255,.08),rgba(0,196,232,.05));backdrop-filter:blur(20px);border:1px solid rgba(0,196,232,.18);border-top:1px solid rgba(255,255,255,.16);border-radius:13px;padding:14px 15px;position:relative;overflow:hidden;transition:all .25s;box-shadow:0 5px 18px rgba(0,0,0,.4);}
+.dstep::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.5),transparent);}
+.dstep:hover{border-color:rgba(0,196,232,.35);transform:translateY(-3px);}
+.dnum{font-family:'DM Mono',monospace;font-size:7.5px;font-weight:700;color:rgba(0,196,232,.55);letter-spacing:1px;margin-bottom:3px;}
+.dico{font-size:1.4rem;display:block;margin-bottom:4px;}
+.dname{font-size:12px;font-weight:700;color:#fff;margin-bottom:3px;line-height:1.25;}
+.ddesc{font-size:10.5px;color:rgba(200,215,255,.52);line-height:1.55;}
+.dtag{display:inline-block;font-size:7px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:99px;background:rgba(0,196,232,.1);color:#67e8f9;border:1px solid rgba(0,196,232,.18);margin-top:4px;font-family:'DM Mono',monospace;}
+.srow{display:flex;gap:0;background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(0,196,232,.04));backdrop-filter:blur(16px);border:1px solid rgba(0,196,232,.15);border-top:1px solid rgba(255,255,255,.14);border-radius:11px;overflow:hidden;width:100%;box-shadow:0 4px 18px rgba(0,0,0,.3);}
+.sstat{flex:1;text-align:center;padding:11px 8px;border-right:1px solid rgba(255,255,255,.07);}
+.sstat:last-child{border-right:none;}
+.sstat:hover{background:rgba(0,196,232,.06);}
+.sv{font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:#00c4e8;line-height:1;text-shadow:0 0 14px rgba(0,196,232,.4);}
+.sl{font-size:8.5px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:rgba(200,215,255,.3);margin-top:4px;}
+
+/* ══ S9 PBX ══ */
+#s9bgimg{position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/FONDO%20AZUL.jpeg');background-size:cover;background-position:center;opacity:.6;}
+#s9ov{position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,8,24,.78) 0%,rgba(2,8,24,.5) 35%,rgba(2,8,24,.6) 70%,rgba(2,8,24,.94) 100%);}
+#s9c{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px;}
+.pbx-alert{width:100%;max-width:880px;background:linear-gradient(135deg,rgba(245,158,11,.08),rgba(245,158,11,.04));border:1px solid rgba(245,158,11,.28);border-radius:14px;padding:20px 26px;display:flex;align-items:center;justify-content:space-between;gap:20px;backdrop-filter:blur(12px);margin-bottom:18px;}
+.pbx-orb{width:12px;height:12px;border-radius:50%;background:#f59e0b;box-shadow:0 0 0 4px rgba(245,158,11,.15);animation:pulse-orb 2s infinite;flex-shrink:0;}
+.pbx-title{font-size:15px;font-weight:700;color:#fff;margin-bottom:3px;}
+.pbx-sub{font-size:11px;color:rgba(200,215,255,.5);}
+.pbx-btn{background:linear-gradient(135deg,#1a56db,#1e80ff);color:#fff;border:none;border-radius:8px;padding:11px 22px;font-size:12px;font-family:'Poppins',sans-serif;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:7px;white-space:nowrap;transition:all .2s;box-shadow:0 4px 14px rgba(37,99,235,.35);}
+.pbx-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(37,99,235,.5);}
+.pbx-btn.approved{background:linear-gradient(135deg,#16a34a,#22c55e);}
+.cmp-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;max-width:880px;}
+.cmp-col{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px;}
+.cmp-col.red{background:rgba(239,68,68,.04);border-color:rgba(239,68,68,.18);}
+.cmp-col.grn{background:rgba(34,197,94,.04);border-color:rgba(34,197,94,.18);}
+.cbadge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:3px 12px;border-radius:20px;margin-bottom:12px;font-family:'DM Mono',monospace;}
+.cb-r{background:rgba(239,68,68,.12);color:#fca5a5;border:1px solid rgba(239,68,68,.2);}
+.cb-g{background:rgba(34,197,94,.12);color:#86efac;border:1px solid rgba(34,197,94,.2);}
+.cmp-item{display:flex;gap:9px;margin-bottom:10px;align-items:flex-start;}
+.cmp-item h5{font-size:11px;font-weight:700;color:#fff;margin-bottom:2px;}
+.cmp-item p{font-size:10px;color:rgba(200,215,255,.45);line-height:1.5;}
+.ci-x{color:#f87171;font-size:1rem;flex-shrink:0;margin-top:1px;}
+.ci-c{color:#86efac;font-size:1rem;flex-shrink:0;margin-top:1px;}
+
+/* ══ S10 CIERRE ══ */
+canvas#s10px{position:absolute;inset:0;pointer-events:none;}
+#s10c{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px;text-align:center;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+.c10s{width:100%;display:flex;flex-direction:column;align-items:center;}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<div id="nav">
+  <button id="np">← Ant</button>
+  <button class="ndot active" data-s="0"></button>
+  <button class="ndot" data-s="1"></button>
+  <button class="ndot" data-s="2"></button>
+  <button class="ndot" data-s="3"></button>
+  <button class="ndot" data-s="4"></button>
+  <button class="ndot" data-s="5"></button>
+  <button class="ndot" data-s="6"></button>
+  <button class="ndot" data-s="7"></button>
+  <button class="ndot" data-s="8"></button>
+  <button id="nn">Sig →</button>
+  <div id="sname">Inicio</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- S1 HERO -->
+<div class="slide active" id="s1">
+  <div id="s1bg"></div><div id="s1ov"></div><div class="scanline"></div><canvas id="s1px"></canvas>
+  <div id="s1c">
+    <div class="badge" style="margin-bottom:14px;animation:fu .7s .1s both"><span class="bdot"></span>Presentación Gerencial · Innovación y Tecnología · 2026</div>
+    <div class="s1title">El Ecosistema Digital<br><span class="hl">Único en Colombia</span></div>
+    <div class="s1sub">SIGI + Nova TD</div>
+    <div class="s1div"><div class="dl"></div><div class="dc"></div><div class="dlr"></div></div>
+    <div class="s1desc"><strong style="color:rgba(0,220,255,.85)">SIGI</strong> — Sistema de Gestión Inteligente<br>Plataforma omnicanal con IA propia que diseñé desde cero,<br>unifica 8 canales, atiende 24/7 y opera sin pagar licencias de terceros.</div>
+    <button class="s1btn" onclick="goTo(1)">EXPLORE</button>
+  </div>
+</div>
+
+<!-- S2 ¿Y SI PUDIERAS? -->
+<div class="slide" id="s2">
+  <div style="position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/LO%20QUE.jpg');background-size:cover;background-position:center;opacity:.65;"></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,8,24,.75) 0%,rgba(2,8,24,.45) 35%,rgba(2,8,24,.5) 70%,rgba(2,8,24,.92) 100%);"></div>
+  <div class="scanline"></div>
+  <div style="position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px;text-align:center;">
+
+    <div class="badge" style="margin-bottom:20px"><span class="bdot"></span>El punto de partida</div>
+
+    <!-- PREGUNTA GANCHO -->
+    <div style="font-family:'Poppins',sans-serif;font-size:clamp(20px,3.2vw,42px);font-weight:900;color:#fff;line-height:1.25;max-width:860px;letter-spacing:-.5px;margin-bottom:18px;">
+      ¿Y si pudieras ver cada correo,<br>
+      cada WhatsApp y cada llamada...<br>
+      <span style="background:linear-gradient(135deg,#00c4e8,#4f8fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">en un solo informe estandarizado?</span>
+    </div>
+
+    <div style="font-family:'Rajdhani',sans-serif;font-size:clamp(14px,1.8vw,20px);color:rgba(200,215,255,.6);max-width:680px;line-height:1.75;margin-bottom:36px;letter-spacing:.5px;">
+      Imagina tener el control total de la experiencia de cada paciente —<br>quién atendió, cuándo, cómo se resolvió y qué tan satisfecho quedó.
+    </div>
+
+    <!-- 3 columnas impacto -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:860px;margin-bottom:32px;">
+      <div style="background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(0,196,232,.04));backdrop-filter:blur(16px);border:1px solid rgba(0,196,232,.18);border-top:1px solid rgba(255,255,255,.14);border-radius:14px;padding:20px 16px;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.5),transparent);"></div>
+        <div style="font-size:2rem;margin-bottom:8px;">📧</div>
+        <div style="font-size:13px;font-weight:800;color:#fff;margin-bottom:5px;">Cada correo trazado</div>
+        <div style="font-size:11px;color:rgba(200,215,255,.55);line-height:1.65;">Ticket único, SLA medido, asesor responsable. Nunca más un correo perdido.</div>
+      </div>
+      <div style="background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(37,211,102,.04));backdrop-filter:blur(16px);border:1px solid rgba(37,211,102,.2);border-top:1px solid rgba(255,255,255,.14);border-radius:14px;padding:20px 16px;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(37,211,102,.5),transparent);"></div>
+        <div style="font-size:2rem;margin-bottom:8px;">💬</div>
+        <div style="font-size:13px;font-weight:800;color:#fff;margin-bottom:5px;">Cada WhatsApp atendido</div>
+        <div style="font-size:11px;color:rgba(200,215,255,.55);line-height:1.65;">Nova TD responde 24/7, clasifica con IA y escala al asesor con el contexto listo.</div>
+      </div>
+      <div style="background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(245,158,11,.04));backdrop-filter:blur(16px);border:1px solid rgba(245,158,11,.2);border-top:1px solid rgba(255,255,255,.14);border-radius:14px;padding:20px 16px;position:relative;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(245,158,11,.5),transparent);"></div>
+        <div style="font-size:2rem;margin-bottom:8px;">📞</div>
+        <div style="font-size:13px;font-weight:800;color:#fff;margin-bottom:5px;">Cada llamada registrada</div>
+        <div style="font-size:11px;color:rgba(200,215,255,.55);line-height:1.65;">Ticket PBX-, historial del paciente, evidencia legal. $0 adicional. Listo para activar.</div>
+      </div>
+    </div>
+
+    <div style="font-family:'Orbitron',monospace;font-size:clamp(13px,1.8vw,20px);font-weight:700;letter-spacing:4px;text-transform:uppercase;color:rgba(0,220,255,.7);">Eso es SIGI.</div>
+
+  </div>
+</div>
+
+<!-- S2B ANTES VS HOY -->
+<div class="slide" id="s2b">
+  <div style="position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/FONDO%20AZUL.jpeg');background-size:cover;background-position:center;opacity:.55;"></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,8,24,.8) 0%,rgba(2,8,24,.5) 35%,rgba(2,8,24,.55) 70%,rgba(2,8,24,.94) 100%);"></div>
+  <div class="scanline"></div>
+  <div style="position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px;text-align:center;">
+
+    <div class="badge" style="margin-bottom:14px"><span class="bdot"></span>La transformación — en 10 segundos</div>
+    <div style="font-family:'Orbitron',monospace;font-size:clamp(16px,2.4vw,30px);font-weight:900;letter-spacing:3px;text-transform:uppercase;color:#fff;text-shadow:0 0 30px rgba(0,196,232,.3);margin-bottom:22px;">
+      Antes vs. <span class="hl">Hoy con SIGI</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 70px 1fr;gap:0;width:100%;max-width:1060px;align-items:stretch;">
+
+      <!-- ANTES -->
+      <div style="background:linear-gradient(135deg,rgba(220,38,38,.08),rgba(180,20,20,.05));border:1px solid rgba(220,38,38,.22);border-radius:18px 0 0 18px;padding:32px 34px;text-align:left;">
+        <div style="display:inline-flex;align-items:center;gap:7px;background:rgba(220,38,38,.12);border:1px solid rgba(220,38,38,.25);border-radius:99px;padding:4px 14px;margin-bottom:18px;">
+          <div style="width:6px;height:6px;border-radius:50%;background:#ef4444;"></div>
+          <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:#fca5a5;letter-spacing:2px;text-transform:uppercase;">Antes de SIGI</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <span style="font-size:1.4rem;flex-shrink:0;margin-top:2px;">📁</span>
+            <div><div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:4px;">8 canales aislados</div><div style="font-size:11px;color:rgba(255,180,180,.65);line-height:1.65;font-size:12.5px;">Cada canal con su propio Excel. Sin número de caso, sin evidencia, sin responsable.</div></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <span style="font-size:1.4rem;flex-shrink:0;margin-top:2px;">⏳</span>
+            <div><div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:4px;">Sin métricas reales</div><div style="font-size:11px;color:rgba(255,180,180,.65);line-height:1.65;font-size:12.5px;">Las decisiones se tomaban por percepción. Sin saber quién atendía bien o mal.</div></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <span style="font-size:1.4rem;flex-shrink:0;margin-top:2px;">⚠️</span>
+            <div><div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:4px;">Exposición legal total</div><div style="font-size:11px;color:rgba(255,180,180,.65);line-height:1.65;font-size:12.5px;">Sin evidencia ante EPS ni Supersalud. Cada auditoría era un riesgo real.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEPARADOR -->
+      <div style="display:flex;align-items:center;justify-content:center;position:relative;">
+        <div style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:linear-gradient(180deg,transparent,rgba(255,255,255,.15),transparent);"></div>
+        <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#020d1f,#041428);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:14px;z-index:1;box-shadow:0 0 20px rgba(0,0,0,.5);">⚡</div>
+      </div>
+
+      <!-- HOY -->
+      <div style="background:linear-gradient(135deg,rgba(0,196,232,.08),rgba(0,150,180,.05));border:1px solid rgba(0,196,232,.22);border-radius:0 18px 18px 0;padding:32px 34px;text-align:left;">
+        <div style="display:inline-flex;align-items:center;gap:7px;background:rgba(0,196,232,.12);border:1px solid rgba(0,196,232,.25);border-radius:99px;padding:4px 14px;margin-bottom:18px;">
+          <div style="width:6px;height:6px;border-radius:50%;background:#00dcff;box-shadow:0 0 8px #00dcff;animation:blink 2s infinite;"></div>
+          <span style="font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:#67e8f9;letter-spacing:2px;text-transform:uppercase;">Hoy con SIGI</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <span style="font-size:1.4rem;flex-shrink:0;margin-top:2px;">✅</span>
+            <div><div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:4px;">Un solo sistema — 8 canales</div><div style="font-size:11px;color:rgba(180,220,255,.7);line-height:1.65;font-size:12.5px;">Correo, WhatsApp, QR, verbal, buzón. Mismo ticket, mismo historial, misma evidencia.</div></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <span style="font-size:1.4rem;flex-shrink:0;margin-top:2px;">📊</span>
+            <div><div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:4px;">Métricas automáticas en tiempo real</div><div style="font-size:11px;color:rgba(180,220,255,.7);line-height:1.65;font-size:12.5px;">1.958 asignados · 69% satisfacción · 8 asesores medidos. Sin intervención manual.</div></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <span style="font-size:1.4rem;flex-shrink:0;margin-top:2px;">🛡️</span>
+            <div><div style="font-size:16px;font-weight:800;color:#fff;margin-bottom:4px;">Trazabilidad legal absoluta</div><div style="font-size:11px;color:rgba(180,220,255,.7);line-height:1.65;font-size:12.5px;">Cada acción con timestamp irrevocable. Firma digital adjunta. Blindado ante cualquier auditoría.</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quote bottom -->
+    <div style="margin-top:20px;font-family:'Rajdhani',sans-serif;font-size:14px;color:rgba(200,215,255,.45);letter-spacing:1px;">
+      Diseñé SIGI para que <strong style="color:rgba(0,220,255,.7);">ninguna solicitud pueda perderse</strong> — ni hoy, ni mañana.
+    </div>
+
+  </div>
+</div>
+
+<!-- S3 8 CANALES -->
+<div class="slide" id="s3">
+  <div id="s3bgimg"></div><div id="s3ov"></div><div class="scanline"></div>
+  <div id="s3c">
+    <div class="badge" style="margin-bottom:10px"><span class="bdot"></span>La Transformación — SIGI en acción</div>
+    <div style="font-family:'Orbitron',monospace;font-size:clamp(18px,2.8vw,34px);font-weight:900;letter-spacing:3px;text-transform:uppercase;color:#fff;text-shadow:0 0 50px rgba(0,200,255,.4);text-align:center;margin-bottom:4px;">8 Canales. <span class="hl">Un Solo Cerebro.</span></div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:13px;color:rgba(180,210,255,.5);text-align:center;margin-bottom:0;letter-spacing:.8px;">Construí Nova TD en el centro — cada canal conectado, trazado y medido en tiempo real.</div>
+    <img class="s3img" src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/CANALES.jpeg" alt="8 canales SIGI">
+    <div class="chips">
+      <div class="chip"><span class="cdg"></span>🌐 Web — tododrogas.com.co</div>
+      <div class="chip"><span class="cdg"></span>🤖 Nova TD Digital — 24/7</div>
+      <div class="chip"><span class="cdg"></span>✉️ Email — pqrsfd@tododrogas.com.co</div>
+      <div class="chip"><span class="cdg"></span>📷 Código QR — TD-</div>
+      <div class="chip"><span class="cdw"></span>📞 PBX Op. 2 — 604 322 2432 ⚡</div>
+      <div class="chip"><span class="cdg"></span>💬 WhatsApp — 304 341 2431</div>
+      <div class="chip"><span class="cdg"></span>🗣️ Verbal Presencial — TD-</div>
+      <div class="chip"><span class="cdg"></span>📬 Buzón Físico — TD-</div>
+    </div>
+  </div>
+</div>
+
+<!-- S4 FUSION: TRES PILARES + TRES CANALES -->
+<div class="slide" id="s4">
+  <div id="s4bgimg"></div><div id="s4ov"></div><div class="scanline"></div>
+  <div style="position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 36px 16px;">
+
+    <!-- Header -->
+    <div class="badge" style="margin-bottom:8px"><span class="bdot"></span>Lo que SIGI le da a Tododrogas · El ecosistema completo</div>
+    <div style="font-family:'Orbitron',monospace;font-size:clamp(15px,2.1vw,26px);font-weight:900;letter-spacing:3px;text-transform:uppercase;color:#fff;text-shadow:0 0 30px rgba(0,196,232,.3);text-align:center;margin-bottom:4px;">
+      Tres Pilares. <span class="hl">Un Solo Sistema.</span>
+    </div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:12px;color:rgba(180,210,255,.45);text-align:center;margin-bottom:14px;letter-spacing:.8px;">
+      El mismo ticket · El mismo dashboard · La misma evidencia legal
+    </div>
+
+    <!-- 3 COLUMNS -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:1100px;">
+
+      <!-- COLUMN 1: Correo + Control -->
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <!-- CANAL CORREO -->
+        <div style="background:linear-gradient(145deg,rgba(255,255,255,.09),rgba(34,197,94,.06));backdrop-filter:blur(20px);border:1px solid rgba(34,197,94,.25);border-top:1px solid rgba(255,255,255,.16);border-radius:14px;padding:14px 16px;position:relative;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.35);">
+          <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(34,197,94,.7),transparent);"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-size:1.3rem;">✉️</span>
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:7.5px;font-weight:700;color:rgba(34,197,94,.8);letter-spacing:2px;text-transform:uppercase;">CANAL CORREO · EN PRODUCCIÓN</div>
+              <div style="font-size:13px;font-weight:800;color:#fff;">Canal Correo</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px;">
+            <div style="background:rgba(0,0,0,.3);border-radius:7px;padding:6px 8px;text-align:center;"><div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:#4ade80;">1.958</div><div style="font-size:7.5px;color:rgba(200,215,255,.4);text-transform:uppercase;letter-spacing:.8px;margin-top:1px;">Tickets</div></div>
+            <div style="background:rgba(0,0,0,.3);border-radius:7px;padding:6px 8px;text-align:center;"><div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:#4ade80;">69%</div><div style="font-size:7.5px;color:rgba(200,215,255,.4);text-transform:uppercase;letter-spacing:.8px;margin-top:1px;">Satisfacción</div></div>
+            <div style="background:rgba(0,0,0,.3);border-radius:7px;padding:6px 8px;text-align:center;"><div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:#4ade80;">4.524</div><div style="font-size:7.5px;color:rgba(200,215,255,.4);text-transform:uppercase;letter-spacing:.8px;margin-top:1px;">Gestiones</div></div>
+            <div style="background:rgba(0,0,0,.3);border-radius:7px;padding:6px 8px;text-align:center;"><div style="font-family:'DM Mono',monospace;font-size:18px;font-weight:700;color:#4ade80;">516</div><div style="font-size:7.5px;color:rgba(200,215,255,.4);text-transform:uppercase;letter-spacing:.8px;margin-top:1px;">Tutelas</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <div style="width:6px;height:6px;border-radius:50%;background:#22c55e;box-shadow:0 0 7px #22c55e;"></div>
+            <span style="font-family:'DM Mono',monospace;font-size:8px;font-weight:700;color:#86efac;letter-spacing:1px;">OPERANDO EN PRODUCCIÓN</span>
+          </div>
+          <div style="margin-top:6px;height:2px;background:linear-gradient(90deg,#22c55e,rgba(34,197,94,.2),transparent);border-radius:2px;"></div>
+        </div>
+        <!-- PILAR -->
+        <div style="background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(0,196,232,.04));backdrop-filter:blur(20px);border:1px solid rgba(0,196,232,.18);border-top:1px solid rgba(255,255,255,.14);border-radius:14px;padding:16px 16px 12px;position:relative;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.4);">
+          <div style="position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.55),transparent);"></div>
+          <div style="font-size:1.6rem;margin-bottom:8px;">🛡️</div>
+          <div style="font-size:13px;font-weight:800;color:#fff;margin-bottom:8px;">Control Total en Tiempo Real</div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>Admin ve pantalla de cualquier asesor en vivo</div>
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>SLA medido desde el primer minuto, todos los canales</div>
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>Alerta automática si un caso lleva demasiado tiempo</div>
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>Nova TD — resuelve sola, 24/7, sin intervención humana</div>
+          </div>
+          <div style="margin-top:10px;height:1.5px;background:linear-gradient(90deg,#00c4e8,rgba(0,196,232,.2),transparent);border-radius:2px;"></div>
+        </div>
+      </div>
+
+      <!-- COLUMN 2: WhatsApp Nova TD + Trazabilidad Legal -->
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <!-- CANAL WHATSAPP -->
+        <div style="background:linear-gradient(145deg,rgba(255,255,255,.09),rgba(0,196,232,.06));backdrop-filter:blur(20px);border:1px solid rgba(0,196,232,.28);border-top:1px solid rgba(255,255,255,.16);border-radius:14px;padding:14px 16px;position:relative;overflow:hidden;box-shadow:0 6px 24px rgba(0,196,232,.07);">
+          <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.8),transparent);"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-size:1.3rem;">💬</span>
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:7.5px;font-weight:700;color:rgba(0,196,232,.85);letter-spacing:2px;text-transform:uppercase;animation:blink 2s infinite;">CANAL WHATSAPP · NOVA TD</div>
+              <div style="font-size:13px;font-weight:800;color:#fff;">WhatsApp + Nova TD</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+            <div style="font-size:11px;color:rgba(200,215,255,.75);display:flex;gap:7px;align-items:flex-start;font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;font-size:13px;">✓</span>Nova TD atiende, clasifica y radica con IA — 24/7</div>
+            <div style="font-size:11px;color:rgba(200,215,255,.75);display:flex;gap:7px;align-items:flex-start;font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;font-size:13px;">✓</span>149 sesiones · $0 en licencias de bot a terceros</div>
+            <div style="font-size:11px;color:rgba(200,215,255,.75);display:flex;gap:7px;align-items:flex-start;font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;font-size:13px;">✓</span>Voz + texto + GPS + encuesta automática</div>
+          </div>
+          <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.28);border-radius:7px;padding:4px 10px;">
+            <div style="width:5px;height:5px;border-radius:50%;background:#f59e0b;box-shadow:0 0 6px #f59e0b;animation:blink 1.5s infinite;"></div>
+            <span style="font-family:'DM Mono',monospace;font-size:7.5px;font-weight:700;color:#fcd34d;letter-spacing:1px;">⏳ PDTE. APROBACIÓN TIC CONEXION</span>
+          </div>
+          <div style="margin-top:6px;height:2px;background:linear-gradient(90deg,#00c4e8,rgba(0,196,232,.2),transparent);border-radius:2px;"></div>
+        </div>
+        <!-- PILAR TRAZABILIDAD -->
+        <div style="background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(0,196,232,.04));backdrop-filter:blur(20px);border:1px solid rgba(0,196,232,.18);border-top:1px solid rgba(255,255,255,.14);border-radius:14px;padding:16px 16px 12px;position:relative;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.4);">
+          <div style="position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.55),transparent);"></div>
+          <div style="font-size:1.6rem;margin-bottom:8px;">⚖️</div>
+          <div style="font-size:13px;font-weight:800;color:#fff;margin-bottom:8px;">Trazabilidad Legal Absoluta</div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>Cada acción con timestamp — quién, qué, cuándo</div>
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>Firma digital irrevocable — no puede editarse ni eliminarse</div>
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>Evidencia completa ante auditorías EPS y Supersalud</div>
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>Historial del paciente en todos los canales — nunca repite su caso</div>
+          </div>
+          <div style="margin-top:10px;height:1.5px;background:linear-gradient(90deg,#00c4e8,rgba(0,196,232,.2),transparent);border-radius:2px;"></div>
+        </div>
+      </div>
+
+      <!-- COLUMN 3: Canal PBX + Métricas -->
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <!-- CANAL PBX -->
+        <div style="background:linear-gradient(145deg,rgba(255,255,255,.08),rgba(245,158,11,.05));backdrop-filter:blur(20px);border:1px solid rgba(245,158,11,.25);border-top:1px solid rgba(255,255,255,.14);border-radius:14px;padding:14px 16px;position:relative;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.35);">
+          <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(245,158,11,.7),transparent);animation:shine 3s linear infinite;"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+            <span style="font-size:1.3rem;">📞</span>
+            <div>
+              <div style="font-family:'DM Mono',monospace;font-size:7.5px;font-weight:700;color:rgba(245,158,11,.85);letter-spacing:2px;text-transform:uppercase;animation:blink 2s infinite;">CANAL PBX · PDTE. APROBACIÓN</div>
+              <div style="font-size:13px;font-weight:800;color:#fff;">Canal PBX</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;">
+            <div style="font-size:11px;color:rgba(200,215,255,.75);display:flex;gap:7px;align-items:flex-start;font-family:'Rajdhani',sans-serif;"><span style="color:#fbbf24;flex-shrink:0;font-size:13px;">→</span>100% construido e integrado en SIGI</div>
+            <div style="font-size:11px;color:rgba(200,215,255,.75);display:flex;gap:7px;align-items:flex-start;font-family:'Rajdhani',sans-serif;"><span style="color:#fbbf24;flex-shrink:0;font-size:13px;">→</span>Ticket PBX- · Mismo dashboard · Mismas métricas</div>
+            <div style="font-size:11px;color:rgba(200,215,255,.75);display:flex;gap:7px;align-items:flex-start;font-family:'Rajdhani',sans-serif;"><span style="color:#fbbf24;flex-shrink:0;font-size:13px;">→</span>Evidencia legal ante EPS · Inversión adicional: <strong style="color:#fcd34d;">$0 COP</strong></div>
+          </div>
+          <div style="display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25);border-radius:7px;padding:4px 10px;">
+            <div style="width:5px;height:5px;border-radius:50%;background:#f59e0b;box-shadow:0 0 6px #f59e0b;animation:blink 1.5s infinite;"></div>
+            <span style="font-family:'DM Mono',monospace;font-size:7.5px;font-weight:700;color:#fcd34d;letter-spacing:1px;">SOLO FALTA APROBACIÓN GERENCIAL</span>
+          </div>
+          <div style="margin-top:6px;height:2px;background:linear-gradient(90deg,#f59e0b,rgba(245,158,11,.2),transparent);border-radius:2px;"></div>
+        </div>
+        <!-- PILAR MÉTRICAS -->
+        <div style="background:linear-gradient(135deg,rgba(255,255,255,.07),rgba(0,196,232,.04));backdrop-filter:blur(20px);border:1px solid rgba(0,196,232,.18);border-top:1px solid rgba(255,255,255,.14);border-radius:14px;padding:16px 16px 12px;position:relative;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.4);">
+          <div style="position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.55),transparent);"></div>
+          <div style="font-size:1.6rem;margin-bottom:8px;">📊</div>
+          <div style="font-size:13px;font-weight:800;color:#fff;margin-bottom:8px;">Métricas que se Generan Solas</div>
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>1.958 asignados · 1.619 cerrados · 4.524 gestiones — automático</div>
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>Rendimiento: Valentina 92% · Andrea 85% · Daysi 87%</div>
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>Satisfacción 69% Buena — dato real, no percepción</div>
+            <div style="display:flex;gap:7px;align-items:flex-start;font-size:10.5px;color:rgba(200,215,255,.65);font-family:'Rajdhani',sans-serif;"><span style="color:#00c4e8;flex-shrink:0;">→</span>516 tutelas con evidencia · Exportación Excel un clic</div>
+          </div>
+          <div style="margin-top:10px;height:1.5px;background:linear-gradient(90deg,#00c4e8,rgba(0,196,232,.2),transparent);border-radius:2px;"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Bottom bar -->
+    <div style="margin-top:12px;background:linear-gradient(135deg,rgba(255,255,255,.05),rgba(0,196,232,.03));backdrop-filter:blur(14px);border:1px solid rgba(0,196,232,.13);border-radius:10px;padding:9px 22px;width:100%;max-width:1100px;text-align:center;">
+      <span style="font-family:'Rajdhani',sans-serif;font-size:13px;color:rgba(200,215,255,.6);">Correo + WhatsApp ya operan en producción. <strong style="color:#fff;">PBX: construido, $0, esperando aprobación.</strong> Todo bajo un solo sistema, una sola base de datos, un solo informe.</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- S5 EL NÚMERO -->
+<div class="slide" id="s5">
+  <div id="s5bgimg"></div><div id="s5ov"></div><div class="scanline"></div><canvas id="s5px"></canvas>
+  <div id="s5c">
+    <div class="s5-kicker">La magnitud de lo construido</div>
+    <div class="s5-stmt">Antes: <span class="d">8 canales, cero control, cero trazabilidad.</span><br>Hoy: <span class="h">un solo sistema que no duerme.</span></div>
+    <div class="s5-sub">Cada solicitud tiene número. Cada acción tiene evidencia. Ninguna llamada, ningún correo, ningún WhatsApp puede perderse.<br><span class="cy">La diseñé para que ninguna solicitud pueda perderse — eso es SIGI.</span></div>
+    <div class="s5-big-val"><span class="acc" id="cnt">0</span></div>
+    <div class="s5-big-lbl">Horas de Desarrollo</div>
+    <div class="s5-sub-lbl">3 meses · Construido desde cero · Sin licencias externas del núcleo</div>
+    <div class="s5-stats">
+      <div class="s5-stat"><div class="s5-stat-val cy">8</div><div class="s5-stat-lbl">Canales</div></div>
+      <div class="s5-sep"></div>
+      <div class="s5-stat"><div class="s5-stat-val gr">12</div><div class="s5-stat-lbl">Interfaces</div></div>
+      <div class="s5-sep"></div>
+      <div class="s5-stat"><div class="s5-stat-val cy">$3.5M</div><div class="s5-stat-lbl">Inversión</div></div>
+      <div class="s5-sep"></div>
+      <div class="s5-stat"><div class="s5-stat-val gr">$0</div><div class="s5-stat-lbl">Licencias núcleo</div></div>
+      <div class="s5-sep"></div>
+      <div class="s5-stat"><div class="s5-stat-val cy">24/7</div><div class="s5-stat-lbl">Disponibilidad</div></div>
+      <div class="s5-sep"></div>
+      <div class="s5-stat"><div class="s5-stat-val gr">100%</div><div class="s5-stat-lbl">Trazabilidad</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- S6 NOVA TD -->
+<div class="slide" id="s6">
+  <div id="s6bgimg"></div><div id="s6ov"></div><div class="scanline"></div>
+  <div id="s6c" style="position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;padding:10px 20px 6px;overflow:hidden;">
+
+    <!-- HEADER -->
+    <div class="badge" style="margin-bottom:8px"><span class="bdot"></span>La IA que Diseñé</div>
+    <div style="font-family:'Orbitron',monospace;font-size:clamp(16px,2.5vw,32px);font-weight:900;letter-spacing:4px;text-transform:uppercase;color:#fff;text-shadow:0 0 60px rgba(0,200,255,.55);text-align:center;margin-bottom:6px;">
+      Nova TD — <span class="hl">La IA que Siente al Paciente</span>
+    </div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:13px;color:rgba(180,210,255,.55);text-align:center;max-width:680px;margin-bottom:14px;">La diseñé para que sienta al paciente — desde el primer mensaje ya sabe quién es, su EPS y municipio. Sin filas, sin música de espera.</div>
+
+    <!-- LAYOUT: info izquierda + iPhone derecha -->
+    <div style="display:grid;grid-template-columns:1fr 360px;gap:12px;width:100%;max-width:1180px;flex:1;min-height:0;align-items:start;">
+
+      <!-- IZQUIERDA: holograma + ficha + funciones -->
+      <div style="display:grid;grid-template-columns:190px 1fr;gap:10px;height:100%;">
+
+        <!-- Holo + ID card -->
+        <div style="display:flex;flex-direction:column;align-items:center;position:relative;">
+          <div style="position:absolute;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(0,196,232,.22),transparent 70%);top:10px;left:50%;transform:translateX(-50%);animation:pglow 3s ease-in-out infinite alternate;pointer-events:none;"></div>
+          <img style="width:170px;height:auto;display:block;position:relative;z-index:2;filter:drop-shadow(0 0 35px rgba(0,196,232,.55)) drop-shadow(0 0 70px rgba(37,99,235,.35));animation:float 4s ease-in-out infinite;"
+            src="https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/OLOGRAMA.jpg" alt="Nova TD">
+          <div style="background:linear-gradient(135deg,rgba(255,255,255,.08),rgba(0,196,232,.05));border:1px solid rgba(0,196,232,.25);border-top:1px solid rgba(255,255,255,.18);border-radius:14px;padding:12px 14px;backdrop-filter:blur(20px);width:100%;margin-top:8px;position:relative;box-shadow:0 6px 24px rgba(0,0,0,.35);">
+            <div style="position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,196,232,.6),transparent);border-radius:14px 14px 0 0;"></div>
+            <div style="font-family:'Orbitron',monospace;font-size:14px;font-weight:900;color:#fff;letter-spacing:3px;text-shadow:0 0 20px rgba(0,196,232,.5);margin-bottom:1px;">NOVA TD</div>
+            <div style="font-size:8.5px;font-weight:700;color:rgba(0,220,255,.7);letter-spacing:2px;text-transform:uppercase;font-family:'Rajdhani',sans-serif;margin-bottom:10px;">Asistente Virtual Inteligente</div>
+            <div style="display:flex;flex-direction:column;gap:7px;">
+              <div style="display:flex;align-items:flex-start;gap:8px;font-size:9.5px;color:rgba(180,210,255,.7);">
+                <div style="width:22px;height:22px;border-radius:6px;background:rgba(0,196,232,.12);border:1px solid rgba(0,196,232,.22);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;">🕐</div>
+                <div><strong style="color:#fff;display:block;font-size:10px;">24/7 — No duerme, no descansa</strong><span style="font-size:9px;color:rgba(180,210,255,.45);">Disponible todos los días</span></div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;font-size:9.5px;color:rgba(180,210,255,.7);">
+                <div style="width:22px;height:22px;border-radius:6px;background:rgba(0,196,232,.12);border:1px solid rgba(0,196,232,.22);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;">🧠</div>
+                <div><strong style="color:#fff;display:block;font-size:10px;">GPT-4o mini + Whisper + TTS</strong><span style="font-size:9px;color:rgba(180,210,255,.45);">Voz y texto en español colombiano</span></div>
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;font-size:9.5px;color:rgba(180,210,255,.7);">
+                <div style="width:22px;height:22px;border-radius:6px;background:rgba(0,196,232,.12);border:1px solid rgba(0,196,232,.22);display:flex;align-items:center;justify-content:center;font-size:.7rem;flex-shrink:0;">⚡</div>
+                <div><strong style="color:#fff;display:block;font-size:10px;">Escalamiento con resumen GPT</strong><span style="font-size:9px;color:rgba(180,210,255,.45);">El agente recibe el contexto completo</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 8 Funciones -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;align-content:start;height:100%;">
+          <div class="func-card"><div class="func-num">FUNCIÓN 01</div><span class="func-ico">💊</span><h5>Estado de Medicamentos</h5><p>Consulta tiempo real. Sin llamar.</p><span class="func-tag">⚡ Segundos</span></div>
+          <div class="func-card"><div class="func-num">FUNCIÓN 02</div><span class="func-ico">📍</span><h5>Puntos de Dispensación</h5><p>Sede más cercana por GPS y Maps.</p><span class="func-tag">📡 GPS real</span></div>
+          <div class="func-card"><div class="func-num">FUNCIÓN 03</div><span class="func-ico">📋</span><h5>Requisitos para Reclamar</h5><p>Instrucciones exactas al instante.</p><span class="func-tag">✅ Precisión</span></div>
+          <div class="func-card"><div class="func-num">FUNCIÓN 04</div><span class="func-ico">📝</span><h5>Radicar PQRSFD</h5><p>Texto o audio. GPT clasifica. Ticket único.</p><span class="func-tag">🤖 IA</span></div>
+          <div class="func-card"><div class="func-num">FUNCIÓN 05</div><span class="func-ico">🔍</span><h5>Estado del Radicado</h5><p>Tiempo real por cédula. 24/7.</p><span class="func-tag">🗄️ Real-time</span></div>
+          <div class="func-card"><div class="func-num">FUNCIÓN 06</div><span class="func-ico">📞</span><h5>Horarios y Contacto</h5><p>Conecta por WA, PBX o correo.</p><span class="func-tag">🔗 Directo</span></div>
+          <div class="func-card"><div class="func-num">FUNCIÓN 07</div><span class="func-ico">⭐</span><h5>Encuesta de Satisfacción</h5><p>7 pasos. Sede por GPS automático.</p><span class="func-tag">📊 7 pasos</span></div>
+          <div class="func-card"><div class="func-num">FUNCIÓN 08</div><span class="func-ico">💬</span><h5>Pregunta Libre</h5><p>Fórmula vencida, error en entrega.</p><span class="func-tag">🧠 Libre</span></div>
+        </div>
+      </div>
+
+      <!-- DERECHA: iPhone con nova.html en vivo -->
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:0;align-self:start;">
+        <!-- TABS selector -->
+        <div style="display:flex;gap:4px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.1);border-radius:99px;padding:3px;margin-bottom:5px;" id="phone-tabs">
+          <button onclick="switchPhone('wa')" id="tab-wa"
+            style="display:flex;align-items:center;gap:5px;padding:5px 14px;border-radius:99px;font-size:10px;font-weight:700;cursor:pointer;border:none;font-family:'Poppins',sans-serif;background:rgba(37,211,102,.2);color:#25d366;box-shadow:0 0 12px rgba(37,211,102,.2);transition:all .2s;">
+            <span style="width:6px;height:6px;border-radius:50%;background:#25d366;box-shadow:0 0 6px #25d366;animation:blink 1.5s infinite;display:inline-block;"></span>
+            WhatsApp
+          </button>
+          <button onclick="switchPhone('nova')" id="tab-nova"
+            style="display:flex;align-items:center;gap:5px;padding:5px 14px;border-radius:99px;font-size:10px;font-weight:700;cursor:pointer;border:none;font-family:'Poppins',sans-serif;background:rgba(255,255,255,.06);color:rgba(200,215,255,.5);transition:all .2s;">
+            <span style="width:6px;height:6px;border-radius:50%;background:rgba(0,196,232,.5);display:inline-block;"></span>
+            Nova Directo
+          </button>
+        </div>
+
+        <!-- iPhone shell -->
+        <div style="position:relative;width:310px;">
+          <div style="background:linear-gradient(145deg,#161616,#272727,#161616);border-radius:42px;padding:12px 11px;
+            box-shadow:0 0 0 1px rgba(255,255,255,.14),0 0 0 2px rgba(0,0,0,.8),
+              0 30px 80px rgba(0,0,0,.75),0 0 60px rgba(0,196,232,.18),
+              0 0 100px rgba(0,100,255,.08),inset 0 1px 0 rgba(255,255,255,.1);
+            position:relative;" id="iphone-shell">
+            <!-- Notch -->
+            <div style="position:absolute;top:15px;left:50%;transform:translateX(-50%);width:95px;height:27px;background:#000;border-radius:20px;z-index:10;display:flex;align-items:center;justify-content:center;gap:7px;">
+              <div style="width:9px;height:9px;border-radius:50%;background:#1a1a1a;border:1.5px solid #2a2a2a;"></div>
+              <div style="width:3.5px;height:3.5px;border-radius:50%;background:#222;"></div>
+            </div>
+            <!-- Side buttons -->
+            <div style="position:absolute;left:-2.5px;top:75px;width:2.5px;height:26px;background:linear-gradient(180deg,#252525,#333);border-radius:3px 0 0 3px;"></div>
+            <div style="position:absolute;left:-2.5px;top:112px;width:2.5px;height:46px;background:linear-gradient(180deg,#252525,#333);border-radius:3px 0 0 3px;"></div>
+            <div style="position:absolute;left:-2.5px;top:170px;width:2.5px;height:46px;background:linear-gradient(180deg,#252525,#333);border-radius:3px 0 0 3px;"></div>
+            <div style="position:absolute;right:-2.5px;top:120px;width:2.5px;height:60px;background:linear-gradient(180deg,#252525,#333);border-radius:0 3px 3px 0;"></div>
+            <!-- Screen -->
+            <div style="border-radius:32px;overflow:hidden;height:500px;position:relative;background:#03060f;box-shadow:inset 0 0 0 1px rgba(0,196,232,.12);">
+              <!-- Status bar + WA header overlay -->
+              <div style="position:absolute;top:0;left:0;right:0;z-index:5;pointer-events:none;">
+                <!-- iOS status bar -->
+                <div style="height:38px;background:rgba(3,6,15,.97);display:flex;align-items:flex-end;justify-content:space-between;padding:0 16px 4px;">
+                  <span style="font-size:8.5px;font-weight:700;color:#fff;font-family:'DM Mono',monospace;">9:41</span>
+                  <div style="display:flex;align-items:center;gap:3px;">
+                    <div style="display:flex;align-items:flex-end;gap:1px;height:7px;">
+                      <div style="width:2px;height:3px;background:#fff;border-radius:1px;"></div>
+                      <div style="width:2px;height:4px;background:#fff;border-radius:1px;"></div>
+                      <div style="width:2px;height:6px;background:#fff;border-radius:1px;"></div>
+                      <div style="width:2px;height:7px;background:#fff;border-radius:1px;"></div>
+                    </div>
+                    <svg width="11" height="8" viewBox="0 0 24 18" fill="#fff"><path d="M12 0C6.477 0 2.022 2.262 0 5.543L12 18 24 5.543C21.978 2.262 17.523 0 12 0z"/></svg>
+                    <div style="width:16px;height:8px;border:1.5px solid #fff;border-radius:3px;display:flex;align-items:center;padding:1px;"><div style="flex:1;background:#fff;border-radius:1px;height:4px;"></div></div>
+                  </div>
+                </div>
+                <!-- WhatsApp header (visible solo en modo WA) -->
+                <div id="wa-header" style="background:#075e54;padding:8px 12px;display:flex;align-items:center;gap:8px;transition:all .3s;opacity:1;">
+                  <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#128c7e,#25d366);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">🤖</div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:12px;font-weight:700;color:#fff;">Nova TD · Tododrogas</div>
+                    <div style="font-size:10px;color:rgba(255,255,255,.65);display:flex;align-items:center;gap:4px;">
+                      <span style="width:5px;height:5px;border-radius:50%;background:#4caf50;display:inline-block;"></span>
+                      en línea · PQRSFD 24/7
+                    </div>
+                  </div>
+                  <div style="display:flex;gap:10px;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="rgba(255,255,255,.75)"><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="rgba(255,255,255,.75)"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+                  </div>
+                </div>
+              </div>
+              <!-- IFRAME WA -->
+              <iframe id="iframe-wa"
+                src="https://tododrogas.online/nova.html"
+                style="width:100%;height:100%;border:none;display:block;padding-top:96px;transition:opacity .3s;"
+                title="WhatsApp Nova TD" loading="lazy" allow="microphone;geolocation"></iframe>
+              <!-- IFRAME NOVA DIRECTO (oculto al inicio) -->
+              <iframe id="iframe-nova"
+                src="about:blank"
+                style="width:100%;height:100%;border:none;display:none;padding-top:38px;"
+                title="Nova TD Directo" allow="microphone;geolocation"></iframe>
+            </div>
+          </div>
+          <!-- Glow dinámico -->
+          <div id="phone-glow" style="position:absolute;bottom:-20px;left:50%;transform:translateX(-50%);width:260px;height:30px;background:radial-gradient(ellipse,rgba(37,211,102,.3),transparent 70%);pointer-events:none;transition:background .4s;"></div>
+          <div style="width:72px;height:5px;background:rgba(255,255,255,.32);border-radius:4px;margin:9px auto 0;"></div>
+        </div>
+
+        <!-- Label dinámico -->
+        <div id="phone-label" style="margin-top:9px;background:rgba(37,211,102,.07);border:1px solid rgba(37,211,102,.2);border-radius:8px;padding:6px 14px;text-align:center;max-width:260px;transition:all .3s;">
+          <div id="phone-label-title" style="font-family:'DM Mono',monospace;font-size:8px;font-weight:700;color:rgba(37,211,102,.85);letter-spacing:1.5px;text-transform:uppercase;">✅ Nova TD — Activa 24/7</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- S7 SEGURIDAD -->
+<div class="slide" id="s7">
+  <div id="s7bg"></div><div id="s7ov"></div><div class="scanline"></div>
+  <div id="s7c">
+    <div id="s7inner">
+      <div class="badge" style="margin-bottom:7px"><span class="bdot"></span>07 — Lo que Construí · Seguridad e Infraestructura</div>
+      <div style="font-family:'Orbitron',monospace;font-size:clamp(16px,2.4vw,28px);font-weight:900;letter-spacing:4px;text-transform:uppercase;color:#fff;text-shadow:0 0 40px rgba(0,196,232,.4);margin-bottom:12px;text-align:center;">6 Capas de Seguridad. <span class="hl">Todo Protegido.</span></div>
+      <div class="s7tabs">
+        <div class="s7tab on" onclick="s7Tab('seg',this)">🔐 Seguridad</div>
+        <div class="s7tab" onclick="s7Tab('dep',this)">🚀 Deploy CI/CD</div>
+        <div class="s7tab" onclick="s7Tab('inf',this)">🏗️ Infraestructura</div>
+      </div>
+      <!-- SEGURIDAD -->
+      <div class="s7panel show" id="s7p-seg">
+        <div class="cgrid">
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);">C1</div><div class="ctitle">HTTPS + SSL · Cifrado en tránsito</div></div><div class="cdesc">Todo el tráfico viaja cifrado entre el usuario y el servidor. Ningún dato puede ser interceptado en el camino. Certificado activo en tododrogas.online.</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>ACTIVO</div><div class="ctech">SSL · TLS 1.3 · Nginx</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#7c3aed,#a855f7);">C2</div><div class="ctitle">Acceso al servidor por llave criptográfica</div></div><div class="cdesc">El servidor no acepta contraseñas — solo una llave criptográfica única registrada. Si alguien intenta entrar sin ella, el sistema lo rechaza. No hay contraseña que hackear porque no existe.</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>ACTIVO</div><div class="ctech">SSH ed25519 · GitHub Secrets</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#0f766e,#14b8a6);">C3</div><div class="ctitle">20 credenciales — nunca en el código fuente</div></div><div class="cdesc">Las claves de OpenAI, Microsoft, Meta y Supabase no existen en ningún archivo del repositorio. Se inyectan automáticamente al hacer deploy. Si alguien accede al código, no ve nada sensible.</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>ACTIVO</div><div class="ctech">Inyección en deploy · CI/CD</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#b45309,#f59e0b);">C4</div><div class="ctitle">Control de acceso por rol en la base de datos</div></div><div class="cdesc">El sistema distingue entre lo que puede ver un paciente, un asesor y un administrador. Cada perfil tiene permisos distintos. Nadie accede a información que no le corresponde, aunque lo intente.</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>ACTIVO</div><div class="ctech">Supabase RLS · Roles separados</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#0369a1,#0ea5e9);">C5</div><div class="ctitle">Correo corporativo con autenticación Microsoft</div></div><div class="cdesc">pqrsfd@tododrogas.com.co se conecta mediante un token temporal que Microsoft genera y valida. No existe una contraseña fija — cada conexión usa un permiso que expira automáticamente.</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>ACTIVO</div><div class="ctech">Microsoft Graph · Azure AD OAuth2</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#9f1239,#f43f5e);">C6</div><div class="ctitle">Las claves de la IA nunca llegan al usuario</div></div><div class="cdesc">Cuando Nova TD responde, las claves que la activan permanecen en el servidor. Todas las solicitudes pasan por un intermediario que verifica la identidad antes de ejecutar cualquier acción.</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>ACTIVO</div><div class="ctech">Proxy seguro · Token validado</div></div></div>
+        </div>
+      </div>
+      <!-- DEPLOY -->
+      <div class="s7panel" id="s7p-dep">
+        <div class="dgrid">
+          <div class="dstep"><div class="dnum">PASO 01</div><span class="dico">📥</span><div class="dname">Checkout + Config.js</div><div class="ddesc">Automaticé el deploy: git push → producción. config.js generado en vuelo — nunca en el repo.</div><span class="dtag">GitHub Actions</span></div>
+          <div class="dstep"><div class="dnum">PASO 02-03</div><span class="dico">🔑</span><div class="dname">20 Secrets → 19 PHP</div><div class="ddesc">sed reemplaza placeholders. Placeholder vacío = deploy fallido.</div><span class="dtag">Validación estricta</span></div>
+          <div class="dstep"><div class="dnum">PASO 04</div><span class="dico">🔐</span><div class="dname">Generar api-token.php</div><div class="ddesc">Construido en el runner con Azure al vuelo. No existe en el repo.</div><span class="dtag">Zero-repo</span></div>
+          <div class="dstep"><div class="dnum">PASO 05-06</div><span class="dico">📦</span><div class="dname">SCP + Backup timestamp</div><div class="ddesc">Archivos al VPS por SSH. Backup automático antes de sobreescribir.</div><span class="dtag">Reversible</span></div>
+          <div class="dstep"><div class="dnum">PASO 07</div><span class="dico">⚡</span><div class="dname">PM2 · Sin downtime</div><div class="ddesc">Webhook WhatsApp reiniciado por PM2 sin interrumpir el servicio.</div><span class="dtag">Sin downtime</span></div>
+          <div class="dstep"><div class="dnum">PASO 08</div><span class="dico">🗄️</span><div class="dname">Migraciones Supabase</div><div class="ddesc">ALTER TABLE automáticos vía API REST. Idempotente.</div><span class="dtag">Automático</span></div>
+          <div class="dstep"><div class="dnum">PASO 09</div><span class="dico">⏱️</span><div class="dname">Cron cada minuto</div><div class="ddesc">sincronizar-correos.php en cron * * * * *. Log activo.</div><span class="dtag">1 min ciclo</span></div>
+          <div class="dstep"><div class="dnum">PASO 10</div><span class="dico">✅</span><div class="dname">PHP lint + Verificación</div><div class="ddesc">Lint en archivos críticos. Placeholder residual = rollback.</div><span class="dtag">&lt;2 min total</span></div>
+        </div>
+        <div class="srow" style="margin-top:8px;">
+          <div class="sstat"><div class="sv">20</div><div class="sl">Secrets</div></div>
+          <div class="sstat"><div class="sv">19</div><div class="sl">PHP inyectados</div></div>
+          <div class="sstat"><div class="sv">&lt;2m</div><div class="sl">Push → prod</div></div>
+          <div class="sstat"><div class="sv">0</div><div class="sl">Manual</div></div>
+          <div class="sstat"><div class="sv">10</div><div class="sl">Pasos auto</div></div>
+        </div>
+      </div>
+      <!-- INFRAESTRUCTURA -->
+      <div class="s7panel" id="s7p-inf">
+        <div class="igrid">
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#1d4ed8,#3b82f6);font-size:9px;">VPS</div><div class="ctitle">VPS Web · Hostinger · srv1490830</div></div><div class="cdesc">72.62.104.113 · Ubuntu · Nginx + SSL · PHP 8.3-FPM · /var/www/pqr/ · tododrogas.online · Único servidor en producción</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>EN LÍNEA</div><div class="ctech">72.62.104.113</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#6d28d9,#8b5cf6);font-size:9px;">PHP</div><div class="ctitle">Backend PHP 8.3 + Node.js webhook</div></div><div class="cdesc">15+ archivos PHP: nova-proxy · nova-wa · radicar-pqr · sincronizar-correos · encuesta. Node.js únicamente para el webhook Meta WhatsApp con PM2.</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>EN PRODUCCIÓN</div><div class="ctech">PHP 8.3-FPM · PM2</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#0f766e,#14b8a6);font-size:9px;">BD</div><div class="ctitle">Supabase PostgreSQL</div></div><div class="cdesc">6 tablas · 4 Storage buckets · RLS activo · Realtime · 10.000 eventos · 463 encuestas cargadas</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>EN LÍNEA</div><div class="ctech">PostgreSQL · Realtime</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#0369a1,#0ea5e9);font-size:9px;">CRON</div><div class="ctitle">Sincronización automática — cron 1 min</div></div><div class="cdesc">sincronizar-correos.php cada minuto via Microsoft Graph API. Sin intervención humana. Log en /var/log/sync-correos.log.</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>ACTIVO</div><div class="ctech">cron * * * * *</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#9f1239,#f43f5e);font-size:9px;">Git</div><div class="ctitle">GitHub Actions CI/CD · 10 pasos</div></div><div class="cdesc">git push → producción en &lt;2 min · Sin acceso manual al servidor jamás · Backup automático antes de cada deploy</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>AUTOMATIZADO</div><div class="ctech">GitHub Actions</div></div></div>
+          <div class="scard"><div class="chead"><div class="cnum" style="background:linear-gradient(135deg,#065f46,#34d399);font-size:9px;">API</div><div class="ctitle">6 Integraciones Externas</div></div><div class="cdesc">Microsoft Graph (Azure AD) · Meta WhatsApp Business · OpenAI GPT-4o mini · Whisper · TTS shimmer · Supabase Realtime</div><div class="cfoot"><div class="cstatus"><span class="dg"></span>6 ACTIVAS</div><div class="ctech">6 APIs integradas</div></div></div>
+        </div>
+        <div class="srow" style="margin-top:8px;">
+          <div class="sstat"><div class="sv">1</div><div class="sl">VPS</div></div>
+          <div class="sstat"><div class="sv">15+</div><div class="sl">Archivos PHP</div></div>
+          <div class="sstat"><div class="sv">6</div><div class="sl">APIs activas</div></div>
+          <div class="sstat"><div class="sv">6</div><div class="sl">Tablas BD</div></div>
+          <div class="sstat"><div class="sv">1min</div><div class="sl">Ciclo cron</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- S10 CIERRE -->
+<div class="slide" id="s10">
+  <div style="position:absolute;inset:0;background-image:url('https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/final%202.jpg');background-size:cover;background-position:center;opacity:.72;"></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,8,24,.72) 0%,rgba(2,8,24,.35) 30%,rgba(2,8,24,.45) 65%,rgba(2,8,24,.92) 100%);"></div>
+  <canvas id="s10px" style="position:absolute;inset:0;pointer-events:none;z-index:1;"></canvas>
+  <div class="scanline"></div>
+
+  <div id="s10c" style="position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:36px;text-align:center;" id="c10-0">
+
+    <!-- BADGE PIONERO -->
+    <div style="display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(245,158,11,.08));border:1px solid rgba(245,158,11,.4);border-radius:99px;padding:6px 24px;font-family:'DM Mono',monospace;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:rgba(253,224,71,.95);margin-bottom:18px;box-shadow:0 0 28px rgba(245,158,11,.2);">
+      <span style="width:7px;height:7px;border-radius:50%;background:#fbbf24;box-shadow:0 0 10px #fbbf24;animation:blink 2s infinite;flex-shrink:0;"></span>
+      🏆 Pioneros en Colombia
+    </div>
+
+    <!-- SUBTÍTULO -->
+    <div style="font-family:'Orbitron',monospace;font-size:clamp(11px,1.6vw,18px);font-weight:700;letter-spacing:5px;text-transform:uppercase;text-align:center;margin-bottom:10px;">
+      <span style="background:linear-gradient(135deg,#00c4e8,#4f8fff,#a78bfa);background-size:200% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shine 3s linear infinite;">Primer Sistema PQRSFD con IA Propio en Colombia</span>
+    </div>
+
+    <!-- TÍTULO PRINCIPAL -->
+    <div style="font-family:'Orbitron',monospace;font-size:clamp(28px,6vw,76px);font-weight:900;letter-spacing:4px;text-transform:uppercase;color:#fff;text-shadow:0 0 60px rgba(0,200,255,.45),0 0 120px rgba(0,150,255,.2);line-height:1.0;margin-bottom:10px;">Tododrogas</div>
+
+    <!-- TAGLINE -->
+    <div style="font-family:'Rajdhani',sans-serif;font-size:clamp(13px,1.8vw,20px);color:rgba(200,215,255,.6);letter-spacing:4px;text-transform:uppercase;margin-bottom:24px;">Un Paso Más Hacia el Futuro</div>
+
+    <!-- DIVIDER -->
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
+      <div style="width:80px;height:1px;background:linear-gradient(90deg,transparent,rgba(0,220,255,.4));"></div>
+      <div style="width:6px;height:6px;border-radius:50%;background:#00dcff;box-shadow:0 0 10px #00dcff;animation:blink 2s infinite;"></div>
+      <div style="width:80px;height:1px;background:linear-gradient(90deg,rgba(0,220,255,.4),transparent);"></div>
+    </div>
+
+    <!-- KPIs -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.07);border-radius:16px;overflow:hidden;width:100%;max-width:780px;margin-bottom:22px;box-shadow:0 8px 40px rgba(0,0,0,.45);">
+      <div style="padding:18px 10px;background:rgba(255,255,255,.04);text-align:center;">
+        <div style="font-family:'DM Mono',monospace;font-size:clamp(24px,4vw,44px);font-weight:700;color:#00c4e8;line-height:1;text-shadow:0 0 25px rgba(0,196,232,.5);">1.176</div>
+        <div style="font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(200,215,255,.35);margin-top:5px;font-family:'DM Mono',monospace;">Horas construidas</div>
+      </div>
+      <div style="padding:18px 10px;background:rgba(255,255,255,.04);text-align:center;">
+        <div style="font-family:'DM Mono',monospace;font-size:clamp(24px,4vw,44px);font-weight:700;color:#4ade80;line-height:1;text-shadow:0 0 25px rgba(34,197,94,.5);">8</div>
+        <div style="font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(200,215,255,.35);margin-top:5px;font-family:'DM Mono',monospace;">Canales integrados</div>
+      </div>
+      <div style="padding:18px 10px;background:rgba(255,255,255,.04);text-align:center;">
+        <div style="font-family:'DM Mono',monospace;font-size:clamp(24px,4vw,44px);font-weight:700;color:#fcd34d;line-height:1;text-shadow:0 0 25px rgba(245,158,11,.5);">$0</div>
+        <div style="font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(200,215,255,.35);margin-top:5px;font-family:'DM Mono',monospace;">Licencias del núcleo</div>
+      </div>
+      <div style="padding:18px 10px;background:rgba(255,255,255,.04);text-align:center;">
+        <div style="font-family:'DM Mono',monospace;font-size:clamp(24px,4vw,44px);font-weight:700;color:#00c4e8;line-height:1;text-shadow:0 0 25px rgba(0,196,232,.5);">24/7</div>
+        <div style="font-size:8px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(200,215,255,.35);margin-top:5px;font-family:'DM Mono',monospace;">Nova TD activa</div>
+      </div>
+    </div>
+
+    <!-- QUOTE -->
+    <div style="max-width:740px;background:linear-gradient(135deg,rgba(255,255,255,.06),rgba(0,196,232,.04));border:1px solid rgba(0,196,232,.2);border-left:4px solid #00c4e8;border-radius:0 14px 14px 0;padding:14px 22px;backdrop-filter:blur(16px);margin-bottom:20px;text-align:left;">
+      <p style="font-size:13px;color:rgba(200,215,255,.8);line-height:1.85;font-style:italic;font-family:'Rajdhani',sans-serif;letter-spacing:.5px;">
+        "Diseñé e implementé lo que el mercado no ofrecía. <strong style="color:#fff;font-style:normal;">Un sistema omnicanal con IA propia, sin licencias perpetuas, blindado legalmente, construido para este negocio.</strong> El futuro de la atención al paciente ya opera en Tododrogas."
+      </p>
+      <div style="font-size:9px;color:rgba(200,215,255,.3);margin-top:8px;font-family:'DM Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;">Desarrolladora · Área de Innovación y Tecnología · Tododrogas</div>
+    </div>
+
+    <!-- GRACIAS -->
+    <div style="font-family:'Orbitron',monospace;font-size:clamp(20px,3.5vw,42px);font-weight:900;letter-spacing:8px;text-transform:uppercase;color:#fff;text-shadow:0 0 50px rgba(0,196,232,.35);margin-bottom:6px;">Gracias.</div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:clamp(12px,1.5vw,16px);color:rgba(200,215,255,.45);letter-spacing:4px;text-transform:uppercase;margin-bottom:14px;">Seguimos construyendo. Seguimos avanzando.</div>
+    <div style="font-family:'DM Mono',monospace;font-size:clamp(12px,1.4vw,16px);font-weight:500;color:rgba(0,196,232,.65);letter-spacing:3px;">tododrogas.online</div>
+
+  </div>
+</div>
+
+<script>
+const BASE='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/public/MEDIOS%20H/';
+const NAMES=['Inicio','¿Y si pudieras?','Antes vs Hoy','8 Canales','Tres Pilares','1.176 Horas','Nova TD','Seguridad','Cierre'];
+let CUR=0;
+const slides=document.querySelectorAll('.slide');
+const dots=document.querySelectorAll('.ndot');
+function goTo(i){
+  if(i<0||i>=slides.length)return;
+  slides[CUR].classList.remove('active');dots[CUR].classList.remove('active');
+  CUR=i;slides[CUR].classList.add('active');dots[CUR].classList.add('active');
+  document.getElementById('sname').textContent=NAMES[CUR];
+  if(CUR===5&&!counted)startCount();
+  if(CUR===slides.length-1)animateClosing();
+}
+
+let closingDone=false;
+function animateClosing(){
+  if(closingDone)return;
+  closingDone=true;
+  // Sequence: pioneer badge → title → divider → KPIs → quote → gracias
+  const el=document.getElementById('c10-0');
+  if(!el)return;
+  // Animate each child with staggered delay
+  const children=[...el.children];
+  children.forEach((c,i)=>{
+    c.style.opacity='0';
+    c.style.transform='translateY(26px)';
+    c.style.transition=`opacity .75s ${i*0.18}s cubic-bezier(.4,0,.2,1), transform .75s ${i*0.18}s cubic-bezier(.4,0,.2,1)`;
+    setTimeout(()=>{c.style.opacity='1';c.style.transform='translateY(0)';},50);
+  });
+  el.style.opacity='1';
+}
+document.getElementById('nn').onclick=()=>goTo(CUR+1);
+document.getElementById('np').onclick=()=>goTo(CUR-1);
+dots.forEach(d=>d.onclick=()=>goTo(parseInt(d.dataset.s)));
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight')goTo(CUR+1);if(e.key==='ArrowLeft')goTo(CUR-1);});
+
+// Particles
+function makeParticles(id){
+  const c=document.getElementById(id),ctx=c.getContext('2d');
+  c.width=window.innerWidth;c.height=window.innerHeight;
+  const pts=Array.from({length:50},()=>({x:Math.random()*c.width,y:Math.random()*c.height,vx:(Math.random()-.5)*.2,vy:(Math.random()-.5)*.2,r:Math.random()*1.2+.3,a:Math.random()*.25+.06}));
+  (function tick(){ctx.clearRect(0,0,c.width,c.height);pts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;if(p.x<0)p.x=c.width;if(p.x>c.width)p.x=0;if(p.y<0)p.y=c.height;if(p.y>c.height)p.y=0;});for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<110){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle=`rgba(0,200,255,${(1-d/110)*.07})`;ctx.lineWidth=.5;ctx.stroke();}}pts.forEach(p=>{ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=`rgba(80,180,255,${p.a})`;ctx.fill();});requestAnimationFrame(tick);})();
+}
+makeParticles('s1px');makeParticles('s5px');makeParticles('s10px');
+
+// Counter
+let counted=false;
+function startCount(){counted=true;const el=document.getElementById('cnt');let n=0;const t=setInterval(()=>{n=Math.min(n+Math.ceil(1176/55),1176);el.textContent=n.toLocaleString('es-CO');if(n>=1176){el.textContent='1.176';clearInterval(t);}},22);}
+
+// S7 Tabs
+function s7Tab(id,el){document.querySelectorAll('.s7panel').forEach(p=>p.classList.remove('show'));document.querySelectorAll('.s7tab').forEach(t=>t.classList.remove('on'));document.getElementById('s7p-'+id).classList.add('show');el.classList.add('on');}
+
+// S8 Admin Tour
+const ADMIN=[
+  {ico:'📊',name:'Métricas Centralizadas',sub:'Vista Admin · ECOSISTEMA PQRSFD',img:BASE+'METRICAS%20CENTRALIZADAS.png',desc:'12 radicados, 463 encuestas (2.96 satisfactorio), 149 sesiones Nova TD. Radicados por canal y tipo. Filtrable por período y sede.',tags:[{t:'Tiempo real',c:'vtc'},{t:'Excel consolidado',c:'vtg'},{t:'Todos los canales',c:'vtc'}]},
+  {ico:'👥',name:'Rendimiento Asesores',sub:'8 asesores · 1.958 tickets',img:BASE+'AGENTES%201.png',desc:'Valentina 92% · Andrea 85% · Daysi 87%. Asignados, pendientes, resueltos, % resolución, gestiones por asesor.',tags:[{t:'% Resolución',c:'vtg'},{t:'8 asesores',c:'vtc'},{t:'Exportable',c:'vtg'}]},
+  {ico:'📈',name:'Métricas SIGI',sub:'1.958 asignados · 69% satisfacción',img:BASE+'AGENTES%202.png',desc:'1.958 asignados · 1.619 cerrados · 4.524 gestiones · 2.3 promedio/caso · 516 tutelas · 69% Buena.',tags:[{t:'1.619 cerrados',c:'vtg'},{t:'516 tutelas',c:'vta'},{t:'69% Buena',c:'vtg'}]},
+  {ico:'📋',name:'Informe Excel SIGI',sub:'5 hojas · Exportación completa',img:BASE+'INFORME%20EXCEL%20SIGI.png',desc:'5 pestañas: INFORME SIGI · MEDICAMENTOS · EPS CATÁLOGO · SATISFACCIÓN CORREOS · SATISFACCIÓN WHATSAPP.',tags:[{t:'5 hojas',c:'vtg'},{t:'Datos completos',c:'vtc'},{t:'Trazabilidad',c:'vtg'}]},
+  {ico:'💬',name:'Histórico WA + PDF',sub:'Descarga PDF · Evidencia legal',img:BASE+'HISTORICO%20CONVERSACION.png',desc:'Historial de conversaciones con búsqueda por nombre, teléfono o cédula. Descarga PDF de cualquier conversación con un clic.',tags:[{t:'Descarga PDF',c:'vtg'},{t:'Búsqueda avanzada',c:'vtc'},{t:'Evidencia legal',c:'vtg'}]},
+  {ico:'📞',name:'Gestión PBX · Próximamente',sub:'100% construido · $0 adicional',img:BASE+'GESTION%20PBX%2C%20PROXIMAMENTE.png',desc:'Módulo 100% construido. Ticket PBX-, paciente, cédula, EPS, municipio, asesor. Mismas métricas. Solo requiere aprobación.',tags:[{t:'100% construido',c:'vtg'},{t:'$0 adicional',c:'vtg'},{t:'Pdte. aprobación',c:'vta'}]}
+];
+const AGENTE=[
+  {ico:'🏠',name:'Página de Bienvenida',sub:'tododrogas.online/pqr_bienvenida.html',img:BASE+'PAGINA%20BIENVENIDA.png',desc:'Portal omnicanal con Nova TD y los 8 canales de contacto. QR encuesta y QR radicado. En línea 24/7.',tags:[{t:'8 canales',c:'vtc'},{t:'Nova TD 24/7',c:'vtg'},{t:'En línea',c:'vtg'}]},
+  {ico:'📧',name:'Correo Acuse de Recibo',sub:'Automático · Personalizado',img:BASE+'PRIMER%20RADICADO.png',desc:'Correo automático al radicar con número TD- destacado, tipo de solicitud, sede detectada y próximos pasos.',tags:[{t:'Automático',c:'vtg'},{t:'Personalizado',c:'vtc'},{t:'Radicado único',c:'vtg'}]},
+  {ico:'📨',name:'Correo Gestión Activa',sub:'Seguimiento automático',img:BASE+'SEGUNDO%20RADICADO.png',desc:'"Su solicitud está en las mejores manos". Mensaje personalizado con nombre y número de radicado.',tags:[{t:'Seguimiento activo',c:'vtg'},{t:'Automático',c:'vtc'},{t:'Sin llamadas',c:'vtg'}]},
+  {ico:'🔍',name:'Consulta Estado Radicado',sub:'Tiempo real · Por cédula · 24/7',img:BASE+'CONSULTA%20RADICADO.png',desc:'El paciente ingresa su cédula y ve todos sus radicados: estado, fecha y resolución. Sin llamar, sin esperar.',tags:[{t:'Tiempo real',c:'vtg'},{t:'Por cédula',c:'vtc'},{t:'24/7',c:'vtg'}]},
+  {ico:'⭐',name:'Encuesta de Satisfacción',sub:'7 pasos · GPS automático',img:BASE+'ENCUESTA%20SERVICIO.png',desc:'7 pasos digitales. Sede detectada por GPS o búsqueda manual. Anti-doble respuesta. Exportable a Excel.',tags:[{t:'7 pasos',c:'vtp'},{t:'GPS automático',c:'vtg'},{t:'Mide asesores',c:'vtc'}]},
+  {ico:'📱',name:'WhatsApp · Nova TD Activa',sub:'Panel agentes · Admin v2.0',img:BASE+'METRICAS%20WHATSAPP.png',desc:'Panel con sidebar de agentes y Nova TD. Estados en tiempo real: activas Nova, escaladas, activas, solucionadas.',tags:[{t:'10 agentes',c:'vtc'},{t:'Real-time',c:'vtg'},{t:'Nova TD activa',c:'vtg'}]}
+];
+let s8mode='admin',s8cur=0;
+function s8Build(data){
+  const sb=document.getElementById('s8sb'),dt=document.getElementById('s8dots');
+  sb.innerHTML='';dt.innerHTML='';
+  data.forEach((d,i)=>{
+    const el=document.createElement('div');const ac=s8mode==='admin'?'sa':'sg';
+    el.className='sitem'+(i===0?(' '+ac):'');
+    el.innerHTML=`<span class="si-ico">${d.ico}</span><div><div class="si-n">${d.name}</div><div class="si-d">${d.sub.split('·')[0]}</div></div>`;
+    el.onclick=()=>s8Show(i);sb.appendChild(el);
+    const b=document.createElement('button');const bc=s8mode==='admin'?'bna':'bng';
+    b.className='bndot'+(i===0?(' '+bc):'');b.onclick=()=>s8Show(i);dt.appendChild(b);
+  });
+}
+function s8Show(i){
+  const data=s8mode==='admin'?ADMIN:AGENTE;if(i<0||i>=data.length)return;
+  s8cur=i;const d=data[i];const ac=s8mode==='admin'?'sa':'sg';const bc=s8mode==='admin'?'bna':'bng';
+  document.querySelectorAll('.sitem').forEach((el,j)=>{el.classList.remove('sa','sg');if(j===i)el.classList.add(ac);});
+  document.querySelectorAll('#s8dots .bndot').forEach((b,j)=>{b.classList.remove('bna','bng');if(j===i)b.classList.add(bc);});
+  document.getElementById('s8sc').textContent=`${i+1}/${data.length}`;
+  document.getElementById('tvt').textContent=d.name;document.getElementById('tvs').textContent=d.sub;
+  document.getElementById('tvbg').textContent=s8mode==='admin'?'ADMIN':'ASESOR';
+  document.getElementById('tvbg').className='tvbadge '+(s8mode==='admin'?'tvba':'tvbg');
+  document.getElementById('tvimg').src=d.img;document.getElementById('tvd').textContent=d.desc;
+  document.getElementById('tvtg').innerHTML=d.tags.map(t=>`<span class="vtag ${t.c}">${t.t}</span>`).join('');
+}
+function s8Mode(m){
+  s8mode=m;s8cur=0;
+  document.getElementById('s8adm').classList.toggle('mon',m==='admin');
+  document.getElementById('s8age').classList.toggle('mon',m==='agente');
+  s8Build(m==='admin'?ADMIN:AGENTE);s8Show(0);
+}
+function s8Nav(dir){const data=s8mode==='admin'?ADMIN:AGENTE;s8Show((s8cur+dir+data.length)%data.length);}
+
+
+
+</script>
+</body>
+</html>
