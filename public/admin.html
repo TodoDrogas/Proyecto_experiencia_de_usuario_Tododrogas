@@ -9179,7 +9179,14 @@ async function loadNovaMetrics(){
     if (esPHP && !prevEsPHP) { _ticketMap.set(c.ticket_id, c); return; }
     if (!prevEsPHP && !esPHP && !prev._canal && c._canal) _ticketMap.set(c.ticket_id, c);
   });
-  const _radicadosUnicos = [..._ticketMap.values()].filter(c => c._canal);
+  // Excluir pruebas desde la fuente — aplica a pantalla y Excel por igual
+  const _CEDS_PRUEBA = new Set(['1152712313','1214722978']);
+  const _radicadosUnicos = [..._ticketMap.values()].filter(c =>
+    c._canal &&
+    !_CEDS_PRUEBA.has(c.cedula||'') &&
+    (c.origen||'') !== 'prueba' &&
+    c.is_draft !== true
+  );
 
   const radWebOld  = [];
   const radWeb     = _radicadosUnicos.filter(c => c._canal === 'web');
@@ -9861,9 +9868,18 @@ async function _mExportInit() {
   // ── Mapas de enriquecimiento ────────────────────────────────────────
   // sedesNombreMap: sede_id → nombre
   const sedesNombreMap = {};
+  const sedesMunicipioMap = {};
   try {
-    const sedesR = await fetch(`${sbUrl}/rest/v1/sedes?select=id,nombre&activa=eq.true&limit=200`,sbH).then(r=>r.json()).catch(()=>[]);
-    (sedesR||[]).forEach(s=>{ if(s.id) sedesNombreMap[s.id]=s.nombre; });
+    const sedesR = await fetch(`${sbUrl}/rest/v1/sedes?select=id,nombre,municipio_norm,ciudad&activa=eq.true&limit=200`,sbH).then(r=>r.json()).catch(()=>[]);
+    (sedesR||[]).forEach(s=>{
+      if(s.id) sedesNombreMap[s.id]=s.nombre;
+      if(s.nombre){
+        const mun=s.municipio_norm||(s.ciudad||'').split(',')[0].trim();
+        const k=s.nombre.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+        sedesMunicipioMap[k]=mun;
+        sedesMunicipioMap[s.nombre.toUpperCase().trim()]=mun;
+      }
+    });
   } catch(_){}
 
   // correoMap: id → {ticket_id, cedula, nombre, eps_id, ciudad_paciente}
@@ -9925,14 +9941,14 @@ async function _mExportInit() {
     return true;
   }).map(enrichEnc);
 
-  return { D, fmtD, fmtH, getSede, getEps, encAll, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap, correoMap, sedesNombreMap };
+  return { D, fmtD, fmtH, getSede, getEps, encAll, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap, correoMap, sedesNombreMap, sedesMunicipioMap, usuariosMap };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // EXPORT WEB → WEB_Encuesta + WEB_Radicacion
 // ═══════════════════════════════════════════════════════════════════════
 async function exportCentralizadasExcel() {
-  const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap } = await _mExportInit();
+  const { D, fmtD, fmtH, getSede, getEps, encByCanal, tipoLabel, sentLabel, _parseNombreBody, enrichRad, epsMap, usuariosMap, sedesMunicipioMap } = await _mExportInit();
   if(!D){ showToast('Sin datos — filtre un período primero','error'); return; }
   const wb = XLSX.utils.book_new();
   const desde=D.desde||'inicio', hasta=D.hasta||'hoy';
@@ -9957,35 +9973,60 @@ async function exportCentralizadasExcel() {
   const _canalLabel=c=>c==='nova_directo'?'Nova directo':c==='nova_web'?'Nova (enlace)':c==='qr'?'QR directo':'Navegador (enlace)';
   const h_rad=allRadsFlat.map(r=>{
     const re=enrichRad(r);
-    // Usar _canal calculado (clasifica por subject+origen), fallback a origen técnico
     const canal=_canalLabel(re._canal || re.origen);
+    // Municipio: sede->municipio_norm -> ciudad_paciente -> tabla_usuarios
+    const ced = String(re.cedula||re.cedula_paciente||'').trim();
+    const _sNom=(getSede(re)||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+    const municipio=sedesMunicipioMap?.[_sNom]||sedesMunicipioMap?.[(getSede(re)||'').toUpperCase().trim()]||re.ciudad_paciente||usuariosMap?.[ced]?.ciudad||'';
+    // EPS: eps_id → datos_legales → tabla_usuarios → vacío
+    const eps = re.eps_nombre || getEps(ced, re.datos_legales||{}) || '';
+    // Cédula: cedula → cedula_paciente
+    const cedula = ced || '';
+    // Asunto limpio — quitar el prefijo [TD-...] del subject
+    const asunto = (re.subject||'').replace(/^\[TD-\d{8}-\d{4}\]\s*/,'').trim();
     return{
       'Fecha':fmtD(re.received_at),'Hora':fmtH(re.received_at),'Canal':canal,
-      'Sede':getSede(re),'Cédula':re.cedula||'','Nombre':re.nombre||_parseNombreBody(re.body_content)||re.from_name||'',
-      'EPS':re.eps_nombre||getEps(re.cedula||'',{}),'Ticket':re.ticket_id||'',
-      'Tipo_PQR':normTipo(re.tipo_pqr),'Sentimiento':sentLabel(re.sentimiento),
-      'Prioridad':(re.prioridad||'').toUpperCase(),'Estado':(re.estado||'').toUpperCase(),
+      'Municipio':municipio,
+      'Cédula':cedula,
+      'Nombre':re.nombre||_parseNombreBody(re.body_content)||re.from_name||'',
+      'EPS':eps,
+      'Ticket':re.ticket_id||'',
+      'Tipo_PQR':normTipo(re.tipo_pqr||re._tipoSubject||''),
+      'Sentimiento':sentLabel(re.sentimiento),
+      'Prioridad':(re.prioridad||'').toUpperCase(),
+      'Estado':(re.estado||'').toUpperCase(),
+      'Asunto':asunto,
     };
   });
   const ws_rad=XLSX.utils.json_to_sheet(h_rad.length?h_rad:[{'Sin_datos':'Sin radicados en el período'}]);
-  ws_rad['!cols']=[{wch:12},{wch:8},{wch:18},{wch:32},{wch:13},{wch:28},{wch:24},{wch:18},{wch:13},{wch:12},{wch:10},{wch:14}];
+  ws_rad['!cols']=[{wch:12},{wch:8},{wch:18},{wch:20},{wch:13},{wch:28},{wch:28},{wch:18},{wch:13},{wch:12},{wch:10},{wch:14},{wch:50}];
   XLSX.utils.book_append_sheet(wb,ws_rad,'Todos_Radicados');
 
   // ══ HOJA 2: Todas_Encuestas (Web + QR + Nova, escala 1-3) ══
-  const encAll=[...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
+  const encAll=[...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])].filter(e=>!_CEDULAS_PRUEBA.has(e.cedula||''));
   const h_enc=encAll.map(e=>{
     const cal=e.calificacion||0;
+    const eCed=String(e.cedula||'').trim();
+    // Municipio: sede_ciudad del registro → sedesMunicipioMap por nombre sede → tabla_usuarios
+    const _sNomEnc=(e.sede_nombre||'').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+    const municipioEnc=sedesMunicipioMap?.[_sNomEnc]||sedesMunicipioMap?.[(e.sede_nombre||'').toUpperCase().trim()]||e.sede_ciudad||usuariosMap?.[eCed]?.ciudad||'';
+    // EPS: campo eps → tabla_usuarios por cédula
+    const epsEnc=e.eps||getEps(eCed,{})||usuariosMap?.[eCed]?.eps||'';
     return{
       'Fecha':fmtD(e.created_at),'Hora':fmtH(e.created_at),'Canal':canalLabel(e.origen||e.canal),
-      'Sede':e.sede_nombre||'','Ciudad':e.sede_ciudad||'','Cédula':e.cedula||'','Nombre':e.nombre||'',
-      'EPS':e.eps||getEps(e.cedula||'',{}),'Ticket_ENC':e.ticket_id||'',
+      'Sede':e.sede_nombre||'',
+      'Municipio':municipioEnc,
+      'Cédula':eCed,
+      'Nombre':e.nombre||'',
+      'EPS':epsEnc,
+      'Ticket_ENC':e.ticket_id||'',
       'Calificacion':cal,'Resultado':calLabel(cal),'Promedio':e.promedio||'',
       'Instalaciones':e.instalaciones||'','Atencion':e.atencion||'','Tiempos':e.tiempos||'',
       'Medicamentos':e.medicamentos||'','Recomendacion':e.recomendacion||'','Comentario':e.comentario||'',
     };
   });
   const ws_enc=XLSX.utils.json_to_sheet(h_enc.length?h_enc:[{'Sin_datos':'Sin encuestas en el período'}]);
-  ws_enc['!cols']=[{wch:12},{wch:8},{wch:18},{wch:28},{wch:14},{wch:13},{wch:26},{wch:24},{wch:18},{wch:10},{wch:16},{wch:10},{wch:14},{wch:10},{wch:10},{wch:14},{wch:14},{wch:40}];
+  ws_enc['!cols']=[{wch:12},{wch:8},{wch:18},{wch:32},{wch:18},{wch:13},{wch:26},{wch:28},{wch:18},{wch:10},{wch:16},{wch:10},{wch:14},{wch:10},{wch:10},{wch:14},{wch:14},{wch:40}];
   XLSX.utils.book_append_sheet(wb,ws_enc,'Todas_Encuestas');
 
   // ══ HOJA 3: Nova_TD (sesiones con radicado y encuesta cruzados) ══
