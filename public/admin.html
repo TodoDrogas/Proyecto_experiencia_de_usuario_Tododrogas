@@ -9685,15 +9685,19 @@ function renderCentralizadas(){
     // Enriquecer tipo desde subject si tipo_pqr está vacío (registros sincronizados)
     const _getTipo=r=>{
       if(r.tipo_pqr) return r.tipo_pqr;
-      const s=(r.subject||'').toLowerCase();
-      if(s.includes('queja')) return 'queja';
-      if(s.includes('reclamo')) return 'reclamo';
-      if(s.includes('peticion')||s.includes('petición')) return 'peticion';
-      if(s.includes('sugerencia')) return 'sugerencia';
-      if(s.includes('felicitacion')||s.includes('felicitación')) return 'felicitacion';
-      if(s.includes('denuncia')) return 'denuncia';
-      if(s.includes('solicitud')) return 'solicitud';
-      return '';
+      // Subject del PHP: [TD-...] 🖥️ NAVEGADOR | 📝 ESCRITO | QUEJA | 😤 NEGATIVO
+      // Buscar el tipo entre los pipes del subject
+      const s=(r.subject||r.nombre_solicitud||'').toLowerCase();
+      if(s.includes('| queja') || s.includes('queja |') || s.includes(' queja')) return 'queja';
+      if(s.includes('| reclamo') || s.includes('reclamo |') || s.includes(' reclamo')) return 'reclamo';
+      if(s.includes('| petici') || s.includes('petici')) return 'peticion';
+      if(s.includes('| sugerencia') || s.includes('sugerencia')) return 'sugerencia';
+      if(s.includes('| felicit') || s.includes('felicit')) return 'felicitacion';
+      if(s.includes('| denuncia') || s.includes('denuncia')) return 'denuncia';
+      if(s.includes('| solicitud') || s.includes('solicitud')) return 'solicitud';
+      // Fallback: nombre_solicitud
+      if(r.nombre_solicitud) return r.nombre_solicitud;
+      return 'solicitud'; // fallback final
     };
     const vals=TIPOS_C.map(t=>allRad.filter(r=>normT(_getTipo(r))===t).length);
     const total2=vals.reduce((a,b)=>a+b,0)||1;
