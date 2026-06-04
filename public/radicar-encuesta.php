@@ -362,7 +362,7 @@ if ($correo && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
 </body></html>";
 
         $correo_enviado = sendMail($token, $GRAPH_USER_ID, [
-            'subject'      => "Su evaluacion fue recibida · {$ticket_enc} · Tododrogas CIA SAS",
+            'subject'      => "Su evaluacion fue recibida · {$ticket_enc} · Tododrogas",
             'importance'   => 'normal',
             'body'         => ['contentType' => 'HTML', 'content' => $cuerpo_usuario],
             'toRecipients' => [['emailAddress' => ['address' => $correo, 'name' => $nombre]]],
