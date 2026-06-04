@@ -9682,7 +9682,20 @@ function renderCentralizadas(){
       const l=(t||'').toLowerCase().trim();
       return TIPOS_C.includes(l)?l:(l?'otro':'solicitud');
     };
-    const vals=TIPOS_C.map(t=>allRad.filter(r=>normT(r.tipo_pqr)===t).length);
+    // Enriquecer tipo desde subject si tipo_pqr está vacío (registros sincronizados)
+    const _getTipo=r=>{
+      if(r.tipo_pqr) return r.tipo_pqr;
+      const s=(r.subject||'').toLowerCase();
+      if(s.includes('queja')) return 'queja';
+      if(s.includes('reclamo')) return 'reclamo';
+      if(s.includes('peticion')||s.includes('petición')) return 'peticion';
+      if(s.includes('sugerencia')) return 'sugerencia';
+      if(s.includes('felicitacion')||s.includes('felicitación')) return 'felicitacion';
+      if(s.includes('denuncia')) return 'denuncia';
+      if(s.includes('solicitud')) return 'solicitud';
+      return '';
+    };
+    const vals=TIPOS_C.map(t=>allRad.filter(r=>normT(_getTipo(r))===t).length);
     const total2=vals.reduce((a,b)=>a+b,0)||1;
     _mCharts.cChartTipos=new Chart(cT.getContext('2d'),{type:'doughnut',data:{
       labels:TIPOS_L,
@@ -9915,8 +9928,8 @@ async function exportCentralizadasExcel() {
   const canalLabel=o=>o==='web'||o==='formulario_web'?'Navegador (enlace)':o==='qr'?'QR directo':o==='nova_directo'?'Nova directo':o==='nova_web'||o==='nova_td'?'Nova (enlace)':o||'Navegador';
 
   // ── Filtrar pruebas (misma lógica que exportNovaExcel) ──
-  const _esInterno=r=>{const tid=(r.ticket_id||'').trim();if(tid&&!tid.startsWith('TD-'))return true;if(r.is_draft===true)return true;if((r.origen||'')==='borrador'||(r.estado||'')==='borrador')return true;if((r.origen||'')==='prueba')return true;
-    if(_CEDULAS_PRUEBA&&_CEDULAS_PRUEBA.has(r.cedula||''))return true;const tieneNombre=!!(r.nombre||r.nombre_solicitud||'').trim();const tieneTipo=!!(r.tipo_pqr||'').trim();return !tieneNombre&&!tieneTipo&&!tid;};
+  const _CEDULAS_PRUEBA = new Set(['1152712313','1214722978']);
+  const _esInterno=r=>{const tid=(r.ticket_id||'').trim();if(tid&&!tid.startsWith('TD-'))return true;if(r.is_draft===true)return true;if((r.origen||'')==='borrador'||(r.estado||'')==='borrador')return true;if((r.origen||'')==='prueba')return true;if(_CEDULAS_PRUEBA.has(r.cedula||''))return true;const tieneNombre=!!(r.nombre||r.nombre_solicitud||'').trim();const tieneTipo=!!(r.tipo_pqr||'').trim();return !tieneNombre&&!tieneTipo&&!tid;};
 
   // ══ HOJA 1: Todos_Radicados (Web + QR + Nova unificados) ══
   const normTipo=t=>{const NORM={'solicitud':'SOLICITUD','peticion':'PETICIÓN','queja':'QUEJA','reclamo':'RECLAMO','sugerencia':'SUGERENCIA','felicitacion':'FELICITACIÓN','denuncia':'DENUNCIA','urgente':'URGENTE'};return NORM[(t||'').toLowerCase()]||(t?t.toUpperCase():'SOLICITUD');};
@@ -9956,7 +9969,6 @@ async function exportCentralizadasExcel() {
   XLSX.utils.book_append_sheet(wb,ws_enc,'Todas_Encuestas');
 
   // ══ HOJA 3: Nova_TD (sesiones con radicado y encuesta cruzados) ══
-  const _CEDULAS_PRUEBA = new Set(['1152712313','1214722978']);
   const _esPrueba=r=>_CEDULAS_PRUEBA.has(r.cedula||'');
   const allSes=[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])].filter(s=>!_esPrueba(s));
   const novaEncs=[...encByCanal('nova_web'),...encByCanal('nova_directo'),...encByCanal('nova_td')].filter(e=>!_esPrueba(e));
