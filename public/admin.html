@@ -9269,6 +9269,7 @@ async function loadNovaMetrics(){
   });
 
   novaDatos={
+    radicadosUnicos: _radicadosUnicos||[],
     radWeb: radWeb||[],
     radNovaWeb: radNovaWeb||[], radNovaDir: radNovaDir||[], radQr: radQr||[],
     todosCorreos: _todosCorreos||[],
@@ -9586,15 +9587,11 @@ function renderCentralizadas(){
   const filtroTipo = (document.getElementById('cFiltroTipo')?.value||'').toLowerCase();
   const filT = arr => filtroTipo ? arr.filter(r=>(r.tipo_pqr||'').toLowerCase()===filtroTipo) : arr;
 
-  const radWeb    = filT(D.radWeb||[]);
-  const radQr     = filT(D.radQr||[]);
-  const radNova   = filT([...(D.radNovaWeb||[]),...(D.radNovaDir||[])]);
-  const radCorreo = filT(D.radCorreo||[]);
-  const radWa     = filT(D.radWa||[]);
-  const radTel    = filT(D.radTel||[]);
-  const radFisico = filT(D.radFisico||[]);
-  // Total radicados = solo los que vienen del PHP (web, qr, nova)
-  const allRad = filT([...radWeb, ...radQr, ...radNova]);
+  // Fuente única: _radicadosUnicos — deduplicado y clasificado en loadNovaMetrics
+  const allRad    = filT(D.radicadosUnicos||[]);
+  const radWeb    = allRad.filter(c => c._canal === 'web');
+  const radQr     = allRad.filter(c => c._canal === 'qr');
+  const radNova   = allRad.filter(c => c._canal === 'nova_web' || c._canal === 'nova_directo');
   const allEnc  = [...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
   const allSes  = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])];
 
@@ -9859,7 +9856,7 @@ async function _mExportInit() {
   } catch(_){}
 
   // correoMap: id → {ticket_id, cedula, nombre, eps_id, ciudad_paciente}
-  const allRadsFlat = [...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])];
+  const allRadsFlat = (D.radicadosUnicos||[]);
   const correoMap = {};
   allRadsFlat.forEach(r => { if(r.id) correoMap[r.id] = r; });
 
@@ -9937,7 +9934,8 @@ async function exportCentralizadasExcel() {
 
   // ══ HOJA 1: Todos_Radicados (Web + QR + Nova unificados) ══
   const normTipo=t=>{const NORM={'solicitud':'SOLICITUD','peticion':'PETICIÓN','queja':'QUEJA','reclamo':'RECLAMO','sugerencia':'SUGERENCIA','felicitacion':'FELICITACIÓN','denuncia':'DENUNCIA','urgente':'URGENTE'};return NORM[(t||'').toLowerCase()]||(t?t.toUpperCase():'SOLICITUD');};
-  const allRadsFlat=[...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])].filter(r=>!_esInterno(r));
+  // Usar radicadosUnicos — misma fuente que pantalla y donut
+  const allRadsFlat=(D.radicadosUnicos||[]).filter(r=>!_esInterno(r));
   const _canalLabel=c=>c==='nova_directo'?'Nova directo':c==='nova_web'?'Nova (enlace)':c==='qr'?'QR directo':'Navegador (enlace)';
   const h_rad=allRadsFlat.map(r=>{
     const re=enrichRad(r);
@@ -10364,7 +10362,7 @@ async function exportGlobalExcel() {
   XLSX.utils.book_append_sheet(wb, ws_aEnc, 'TODAS_Encuestas');
 
   // ── TODOS_Radicados ─────────────────────────────────────────────────
-  const allRadsFlat = [...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])];
+  const allRadsFlat = (D.radicadosUnicos||[]);
   const h_aRad = allRadsFlat.map(r => {
     const re = enrichRad(r);
     const canal = re.origen==='nova_directo'?'Nova directo':re.origen==='nova_web'?'Nova (enlace)':re.canal_contacto==='qr'?'QR directo':'Navegador (enlace)';
