@@ -9941,7 +9941,13 @@ async function exportCentralizadasExcel() {
 
   // ── Filtrar pruebas (misma lógica que exportNovaExcel) ──
   const _CEDULAS_PRUEBA = new Set(['1152712313','1214722978']);
-  const _esInterno=r=>{const tid=(r.ticket_id||'').trim();if(tid&&!tid.startsWith('TD-'))return true;if(r.is_draft===true)return true;if((r.origen||'')==='borrador'||(r.estado||'')==='borrador')return true;if((r.origen||'')==='prueba')return true;if(_CEDULAS_PRUEBA.has(r.cedula||''))return true;const tieneNombre=!!(r.nombre||r.nombre_solicitud||'').trim();const tieneTipo=!!(r.tipo_pqr||'').trim();return !tieneNombre&&!tieneTipo&&!tid;};
+  // radicadosUnicos ya viene deduplicado y clasificado — solo excluir pruebas y cédulas de prueba
+  const _esInterno=r=>{
+    if(_CEDULAS_PRUEBA.has(r.cedula||'')) return true;
+    if((r.origen||'')==='prueba') return true;
+    if(r.is_draft===true) return true;
+    return false;
+  };
 
   // ══ HOJA 1: Todos_Radicados (Web + QR + Nova unificados) ══
   const _normStr=v=>(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
