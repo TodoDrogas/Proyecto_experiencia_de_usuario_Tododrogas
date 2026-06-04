@@ -10580,11 +10580,13 @@ async function renderAgentes(){
   const sum = (f) => rowData.reduce((s,r)=>s+f(r),0);
 
   const _cardAsig     = sum(r=>r.tot);
-  // Fetch count directo a BD para coincidir con SIGI
+  // Fetch count directo a BD — respeta filtro de fecha igual que la tabla
   let _cardAsigReal = _cardAsig;
   try {
-    const _countRes = await fetch(
-      `${SB_URL}/rest/v1/correos?agente_id=not.is.null&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&estado=neq.informacion&is_draft=is.false&select=id`,
+    let _qCount = `${SB_URL}/rest/v1/correos?agente_id=not.is.null&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&estado=neq.informacion&is_draft=is.false&select=id`;
+    if(dISO) _qCount += `&received_at=gte.${encodeURIComponent(dISO)}`;
+    if(hISO) _qCount += `&received_at=lte.${encodeURIComponent(hISO)}`;
+    const _countRes = await fetch(_qCount,
       { method:'HEAD', headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Prefer':'count=exact'} }
     );
     const _cr = _countRes.headers.get('content-range');
