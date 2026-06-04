@@ -9122,47 +9122,117 @@ async function loadNovaMetrics(){
   const qE=base=>q(base,'created_at');    // encuestas
   const qS=base=>q(base,'created_at');    // sesiones
 
-  // Helper paginado para correos — evita el límite de 1000 de PostgREST
-  const _fetchRadPag = async (filtro) => {
-    const _FIELDS = 'id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales';
-    const PAGE = 1000;
-    let all = [], off = 0;
-    while(true) {
-      const page = await sb(qC(`correos?${filtro}&select=${_FIELDS}&order=received_at.desc&limit=${PAGE}&offset=${off}`)).catch(()=>[]);
-      if(!page||!page.length) break;
-      all = all.concat(page);
-      if(page.length < PAGE) break;
-      off += PAGE;
-      if(off >= 50000) break;
-    }
-    return all;
+  // ── CLASIFICADOR DE CANAL ─────────────────────────────────────────────
+  // Un radicado genuino tiene ticket_id con formato TD-YYYYMMDD-XXXX
+  // Canal: primero por origen técnico del PHP, luego por íconos del subject
+  const _canalRadicado = (c) => {
+    const oL = (c.origen||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+    const s  = (c.subject||c.body_content||'').toLowerCase();
+    // Excluir correos salientes y respuestas (RE:, FW:, RV:, acuses)
+    if (s.startsWith('re:') || s.startsWith('fw:') || s.startsWith('rv:') || s.startsWith('res:')) return null;
+    if (s.includes('su solicitud fue recibida') || s.includes('acuse de recibo')) return null;
+    if ((c.origen||'') === 'saliente' || (c.estado||'') === 'enviado') return null;
+    // 1. Origen técnico directo del PHP
+    if (oL === 'web' || oL === 'formulario_web') return 'web';
+    if (oL === 'qr') return 'qr';
+    if (oL === 'nova_web' || oL === 'nova_td') return 'nova_web';
+    if (oL === 'nova_directo') return 'nova_directo';
+    if (oL === 'nova_bienvenida') return 'nova_bienvenida';
+    // 2. Subject del correo sincronizado desde Outlook
+    if (s.includes('nova td directo') || s.includes('nova directo') || s.includes('nova_directo')) return 'nova_directo';
+    if (s.includes('nova td') || s.includes('nova_td') || s.includes('nova (enlace)')) return 'nova_web';
+    if (s.includes('qr directo') || s.includes('qr |') || s.includes('\ud83d\udcf7')) return 'qr';
+    if (s.includes('navegador (enlace)') || s.includes('navegador') ||
+        s.includes('web |') || s.includes('\ud83d\udcbb') || s.includes('\ud83d\udda5')) return 'web';
+    return null;
   };
 
-  const [
-    radWeb, radWebOld,
-    radNovaWeb, radNovaDir,
-    radQr,
-    encWeb, encWebOld,
-    encNovaWeb, encNovaDir,
-    encQr,
-    sesNovaWeb, sesNovaDir, sesNovaBv, sesNovaQr,
-  ] = await Promise.all([
-    _fetchRadPag('origen=eq.web'),
-    _fetchRadPag('origen=eq.formulario_web'),
+  // ── QUERY PAGINADA — solo radicados TD- ───────────────────────────────
+  const _RAD_FIELDS = 'id,received_at,ticket_id,subject,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales';
+  const _todosCorreos = [];
+  {
+    const PAGE = 1000; let off = 0;
+    while(true){
+      // Solo correos entrantes: excluir salientes, borradores y acuses enviados por el sistema
+      const page = await sb(qC(`correos?ticket_id=like.TD-*&is_draft=is.false&origen=neq.saliente&origen=neq.borrador&estado=neq.enviado&estado=neq.borrador&select=${_RAD_FIELDS}&order=received_at.desc&limit=${PAGE}&offset=${off}`)).catch(()=>[]);
+      if(!page||!page.length) break;
+      _todosCorreos.push(...page);
+      if(page.length < PAGE) break;
+      off += PAGE;
+      if(off >= 100000) break;
+    }
+  }
 
-    _fetchRadPag('or=(origen.eq.nova_web,origen.eq.nova_td)'),
-    _fetchRadPag('origen=eq.nova_directo'),
-    _fetchRadPag('origen=eq.qr'),
-    sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?canal=eq.web&origen=is.null&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?or=(origen.eq.nova_web,origen.eq.nova_td)&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?origen=eq.nova_directo&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
-    sb(qE('encuestas_satisfaccion?origen=eq.qr&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
-    sb(qS('nova_sesiones?or=(origen.eq.nova_web,origen.eq.web,origen.eq.nova_td)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_directo&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
-    sb(qS('nova_sesiones?origen=eq.nova_bienvenida&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
-    sb(qS('nova_sesiones?or=(origen.eq.nova_qr,origen.eq.qr)&select=id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip&limit=10000')).catch(()=>[]),
-  ]);
+  // Clasificar canal y deduplicar por ticket_id
+  // Para cada ticket_id, quedarse con el registro que SÍ tiene canal (no RE:)
+  _todosCorreos.forEach(c => { c._canal = _canalRadicado(c); });
+  // Orígenes técnicos directos del PHP — tienen prioridad sobre los sincronizados
+  const _ORIG_PHP = new Set(['web','formulario_web','qr','nova_web','nova_td','nova_directo','nova_bienvenida']);
+  const _ticketMap = new Map();
+  _todosCorreos.forEach(c => {
+    if (!c.ticket_id) return;
+    const prev = _ticketMap.get(c.ticket_id);
+    const esPHP     = _ORIG_PHP.has(c.origen||'');
+    const prevEsPHP = prev ? _ORIG_PHP.has(prev.origen||'') : false;
+    // Prioridad: 1) origen técnico PHP, 2) tiene canal, 3) más reciente
+    if (!prev) { _ticketMap.set(c.ticket_id, c); return; }
+    if (esPHP && !prevEsPHP) { _ticketMap.set(c.ticket_id, c); return; }
+    if (!prevEsPHP && !esPHP && !prev._canal && c._canal) _ticketMap.set(c.ticket_id, c);
+  });
+  const _radicadosUnicos = [..._ticketMap.values()].filter(c => c._canal);
+
+  const radWebOld  = [];
+  const radWeb     = _radicadosUnicos.filter(c => c._canal === 'web');
+  const radNovaWeb = _radicadosUnicos.filter(c => c._canal === 'nova_web');
+  const radNovaDir = _radicadosUnicos.filter(c => c._canal === 'nova_directo');
+  const radQr      = _radicadosUnicos.filter(c => c._canal === 'qr');
+
+  // Encuestas — paginadas
+  const [encWeb, encWebOld, encNovaWeb, encNovaDir, encQr] = await (async()=>{
+    const _ENC_FIELDS = 'id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen';
+    const _fetchEncPag = async (filtro) => {
+      const PAGE = 1000; let all = [], off = 0;
+      while(true){
+        const page = await sb(qE(`encuestas_satisfaccion?${filtro}&select=${_ENC_FIELDS}&order=created_at.desc&limit=${PAGE}&offset=${off}`)).catch(()=>[]);
+        if(!page||!page.length) break;
+        all = all.concat(page);
+        if(page.length < PAGE) break;
+        off += PAGE;
+        if(off >= 50000) break;
+      }
+      return all;
+    };
+    return Promise.all([
+      _fetchEncPag('origen=eq.web'),
+      _fetchEncPag('canal=eq.web&origen=is.null'),
+      _fetchEncPag('or=(origen.eq.nova_web,origen.eq.nova_td)'),
+      _fetchEncPag('origen=eq.nova_directo'),
+      _fetchEncPag('origen=eq.qr'),
+    ]);
+  })();
+
+  // Sesiones Nova — paginadas
+  const [sesNovaWeb, sesNovaDir, sesNovaBv, sesNovaQr] = await (async()=>{
+    const _SES_FIELDS = 'id,created_at,cedula,nombre,turnos,motivo_cierre,calificacion,menu_elegido,municipio,eps,eps_paciente,duracion_seg,consultas_count,preguntas_libres,es_vip';
+    const _fetchSesPag = async (filtro) => {
+      const PAGE = 1000; let all = [], off = 0;
+      while(true){
+        const page = await sb(qS(`nova_sesiones?${filtro}&select=${_SES_FIELDS}&order=created_at.desc&limit=${PAGE}&offset=${off}`)).catch(()=>[]);
+        if(!page||!page.length) break;
+        all = all.concat(page);
+        if(page.length < PAGE) break;
+        off += PAGE;
+        if(off >= 50000) break;
+      }
+      return all;
+    };
+    return Promise.all([
+      _fetchSesPag('or=(origen.eq.nova_web,origen.eq.web,origen.eq.nova_td)'),
+      _fetchSesPag('origen=eq.nova_directo'),
+      _fetchSesPag('origen=eq.nova_bienvenida'),
+      _fetchSesPag('or=(origen.eq.nova_qr,origen.eq.qr)'),
+    ]);
+  })();
 
   // Cargar mapas de referencia (sedes, usuarios, historial) en paralelo
   const sbUrl2=(window.SUPABASE_URL||'').replace(/\/$/,'');
@@ -9199,8 +9269,9 @@ async function loadNovaMetrics(){
   });
 
   novaDatos={
-    radWeb:[...(radWeb||[]),...(radWebOld||[])],
-    radNovaWeb:radNovaWeb||[], radNovaDir:radNovaDir||[], radQr:radQr||[],
+    radWeb: radWeb||[],
+    radNovaWeb: radNovaWeb||[], radNovaDir: radNovaDir||[], radQr: radQr||[],
+    todosCorreos: _todosCorreos||[],
     encWeb:[...(encWeb||[]),...(encWebOld||[])],
     encNovaWeb:encNovaWeb||[], encNovaDir:encNovaDir||[], encQr:encQr||[],
     sesNovaWeb:sesNovaWeb||[], sesNovaDir:sesNovaDir||[], sesNovaBv:sesNovaBv||[], sesNovaQr:sesNovaQr||[],
@@ -9515,10 +9586,15 @@ function renderCentralizadas(){
   const filtroTipo = (document.getElementById('cFiltroTipo')?.value||'').toLowerCase();
   const filT = arr => filtroTipo ? arr.filter(r=>(r.tipo_pqr||'').toLowerCase()===filtroTipo) : arr;
 
-  const radWeb  = filT(D.radWeb||[]);
-  const radQr   = filT(D.radQr||[]);
-  const radNova = filT([...(D.radNovaWeb||[]),...(D.radNovaDir||[])]);
-  const allRad  = [...radWeb,...radQr,...radNova];
+  const radWeb    = filT(D.radWeb||[]);
+  const radQr     = filT(D.radQr||[]);
+  const radNova   = filT([...(D.radNovaWeb||[]),...(D.radNovaDir||[])]);
+  const radCorreo = filT(D.radCorreo||[]);
+  const radWa     = filT(D.radWa||[]);
+  const radTel    = filT(D.radTel||[]);
+  const radFisico = filT(D.radFisico||[]);
+  // Total radicados = solo los que vienen del PHP (web, qr, nova)
+  const allRad = filT([...radWeb, ...radQr, ...radNova]);
   const allEnc  = [...(D.encWeb||[]),...(D.encQr||[]),...(D.encNovaWeb||[]),...(D.encNovaDir||[])];
   const allSes  = [...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])];
 
@@ -9589,9 +9665,13 @@ function renderCentralizadas(){
   // ── Radicados por canal ──
   const rCanal = document.getElementById('cRadCanalList');
   if(rCanal) rCanal.innerHTML=[
-    _bar('🖥️ Navegador (enlace)', radWeb.length, totalRad, '#1d4ed8'),
-    _bar('📷 QR directo',         radQr.length,  totalRad, '#b45309'),
-    _bar('🤖 Nova TD',            radNova.length, totalRad, '#6d28d9'),
+    _bar('🖥️ Navegador (enlace)', radWeb.length,    totalRad, '#1d4ed8'),
+    _bar('📷 QR directo',         radQr.length,    totalRad, '#b45309'),
+    _bar('🤖 Nova TD',            radNova.length,  totalRad, '#6d28d9'),
+    _bar('📧 Correo electrónico', radCorreo.length,totalRad, '#0891b2'),
+    _bar('💬 WhatsApp',           radWa.length,    totalRad, '#16a34a'),
+    _bar('📞 Teléfono / PBX',     radTel.length,   totalRad, '#7c3aed'),
+    _bar('📬 Buzón físico',        radFisico.length,totalRad, '#ca8a04'),
   ].join('');
 
   // ── Tipo de solicitud — donut sin "Sin tipo" ──
@@ -9844,9 +9924,11 @@ async function exportCentralizadasExcel() {
   // ══ HOJA 1: Todos_Radicados (Web + QR + Nova unificados) ══
   const normTipo=t=>{const NORM={'solicitud':'SOLICITUD','peticion':'PETICIÓN','queja':'QUEJA','reclamo':'RECLAMO','sugerencia':'SUGERENCIA','felicitacion':'FELICITACIÓN','denuncia':'DENUNCIA','urgente':'URGENTE'};return NORM[(t||'').toLowerCase()]||(t?t.toUpperCase():'SOLICITUD');};
   const allRadsFlat=[...(D.radWeb||[]),...(D.radQr||[]),...(D.radNovaWeb||[]),...(D.radNovaDir||[])].filter(r=>!_esInterno(r));
+  const _canalLabel=c=>c==='nova_directo'?'Nova directo':c==='nova_web'?'Nova (enlace)':c==='qr'?'QR directo':'Navegador (enlace)';
   const h_rad=allRadsFlat.map(r=>{
     const re=enrichRad(r);
-    const canal=re.origen==='nova_directo'?'Nova directo':re.origen==='nova_web'||re.origen==='nova_td'?'Nova (enlace)':re.origen==='qr'?'QR directo':'Navegador (enlace)';
+    // Usar _canal calculado (clasifica por subject+origen), fallback a origen técnico
+    const canal=_canalLabel(re._canal || re.origen);
     return{
       'Fecha':fmtD(re.received_at),'Hora':fmtH(re.received_at),'Canal':canal,
       'Sede':getSede(re),'Cédula':re.cedula||'','Nombre':re.nombre_solicitud||_parseNombreBody(re.body_content)||re.nombre||'',
