@@ -9668,8 +9668,8 @@ function renderCentralizadas(){
   ].join('');
 
   // ── Tipo de solicitud — donut sin "Sin tipo" ──
-  const TIPOS_C=['solicitud','peticion','queja','reclamo','sugerencia','felicitacion','denuncia','urgente'];
-  const TIPOS_L=['Solicitud','Petición','Queja','Reclamo','Sugerencia','Felicitación','Denuncia','Urgente'];
+  const TIPOS_C=['solicitud','peticion','queja','reclamo','sugerencia','felicitacion','denuncia','informacion','urgente'];
+  const TIPOS_L=['Solicitud','Petición','Queja','Reclamo','Sugerencia','Felicitación','Denuncia','Información','Urgente'];
   const TIPO_CLR=['#1d4ed8','#6d28d9','#dc2626','#ea580c','#16a34a','#0891b2','#db2777','#b45309'];
   _mDestroyChart('cChartTipos');
   const cT=document.getElementById('cChartTipos');
@@ -9680,21 +9680,32 @@ function renderCentralizadas(){
       return TIPOS_C.includes(l)?l:(l?'otro':'solicitud');
     };
     // Enriquecer tipo desde subject si tipo_pqr está vacío (registros sincronizados)
+    const _normTipo=v=>{
+      const l=(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+      if(l==='peticion'||l.startsWith('petic')) return 'peticion';
+      if(l==='queja') return 'queja';
+      if(l==='reclamo') return 'reclamo';
+      if(l==='solicitud') return 'solicitud';
+      if(l==='sugerencia') return 'sugerencia';
+      if(l.startsWith('felicit')) return 'felicitacion';
+      if(l==='denuncia') return 'denuncia';
+      if(l.startsWith('inform')) return 'informacion';
+      if(l==='urgente') return 'urgente';
+      return 'solicitud';
+    };
     const _getTipo=r=>{
-      if(r.tipo_pqr) return r.tipo_pqr;
-      // Subject del PHP: [TD-...] 🖥️ NAVEGADOR | 📝 ESCRITO | QUEJA | 😤 NEGATIVO
-      // Buscar el tipo entre los pipes del subject
-      const s=(r.subject||r.nombre_solicitud||'').toLowerCase();
-      if(s.includes('| queja') || s.includes('queja |') || s.includes(' queja')) return 'queja';
-      if(s.includes('| reclamo') || s.includes('reclamo |') || s.includes(' reclamo')) return 'reclamo';
-      if(s.includes('| petici') || s.includes('petici')) return 'peticion';
-      if(s.includes('| sugerencia') || s.includes('sugerencia')) return 'sugerencia';
-      if(s.includes('| felicit') || s.includes('felicit')) return 'felicitacion';
-      if(s.includes('| denuncia') || s.includes('denuncia')) return 'denuncia';
-      if(s.includes('| solicitud') || s.includes('solicitud')) return 'solicitud';
-      // Fallback: nombre_solicitud
-      if(r.nombre_solicitud) return r.nombre_solicitud;
-      return 'solicitud'; // fallback final
+      if(r.tipo_pqr) return _normTipo(r.tipo_pqr);
+      const s=(r.subject||r.nombre_solicitud||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      if(s.includes('| queja')||s.includes(' queja')) return 'queja';
+      if(s.includes('| reclamo')||s.includes(' reclamo')) return 'reclamo';
+      if(s.includes('petici')) return 'peticion';
+      if(s.includes('sugerencia')) return 'sugerencia';
+      if(s.includes('felicit')) return 'felicitacion';
+      if(s.includes('denuncia')) return 'denuncia';
+      if(s.includes('inform')) return 'informacion';
+      if(s.includes('solicitud')) return 'solicitud';
+      if(r.nombre_solicitud) return _normTipo(r.nombre_solicitud);
+      return 'solicitud';
     };
     const vals=TIPOS_C.map(t=>allRad.filter(r=>normT(_getTipo(r))===t).length);
     const total2=vals.reduce((a,b)=>a+b,0)||1;
@@ -9933,7 +9944,8 @@ async function exportCentralizadasExcel() {
   const _esInterno=r=>{const tid=(r.ticket_id||'').trim();if(tid&&!tid.startsWith('TD-'))return true;if(r.is_draft===true)return true;if((r.origen||'')==='borrador'||(r.estado||'')==='borrador')return true;if((r.origen||'')==='prueba')return true;if(_CEDULAS_PRUEBA.has(r.cedula||''))return true;const tieneNombre=!!(r.nombre||r.nombre_solicitud||'').trim();const tieneTipo=!!(r.tipo_pqr||'').trim();return !tieneNombre&&!tieneTipo&&!tid;};
 
   // ══ HOJA 1: Todos_Radicados (Web + QR + Nova unificados) ══
-  const normTipo=t=>{const NORM={'solicitud':'SOLICITUD','peticion':'PETICIÓN','queja':'QUEJA','reclamo':'RECLAMO','sugerencia':'SUGERENCIA','felicitacion':'FELICITACIÓN','denuncia':'DENUNCIA','urgente':'URGENTE'};return NORM[(t||'').toLowerCase()]||(t?t.toUpperCase():'SOLICITUD');};
+  const _normStr=v=>(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  const normTipo=t=>{const NORM={'solicitud':'SOLICITUD','peticion':'PETICIÓN','queja':'QUEJA','reclamo':'RECLAMO','sugerencia':'SUGERENCIA','felicitacion':'FELICITACIÓN','denuncia':'DENUNCIA','informacion':'INFORMACIÓN','urgente':'URGENTE'};return NORM[_normStr(t)]||(t?t.toUpperCase():'SOLICITUD');};
   // Usar radicadosUnicos — misma fuente que pantalla y donut
   const allRadsFlat=(D.radicadosUnicos||[]).filter(r=>!_esInterno(r));
   const _canalLabel=c=>c==='nova_directo'?'Nova directo':c==='nova_web'?'Nova (enlace)':c==='qr'?'QR directo':'Navegador (enlace)';
