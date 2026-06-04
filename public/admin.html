@@ -9665,13 +9665,9 @@ function renderCentralizadas(){
   // ── Radicados por canal ──
   const rCanal = document.getElementById('cRadCanalList');
   if(rCanal) rCanal.innerHTML=[
-    _bar('🖥️ Navegador (enlace)', radWeb.length,    totalRad, '#1d4ed8'),
-    _bar('📷 QR directo',         radQr.length,    totalRad, '#b45309'),
-    _bar('🤖 Nova TD',            radNova.length,  totalRad, '#6d28d9'),
-    _bar('📧 Correo electrónico', radCorreo.length,totalRad, '#0891b2'),
-    _bar('💬 WhatsApp',           radWa.length,    totalRad, '#16a34a'),
-    _bar('📞 Teléfono / PBX',     radTel.length,   totalRad, '#7c3aed'),
-    _bar('📬 Buzón físico',        radFisico.length,totalRad, '#ca8a04'),
+    _bar('🖥️ Navegador (enlace)', radWeb.length,   totalRad, '#1d4ed8'),
+    _bar('📷 QR directo',         radQr.length,   totalRad, '#b45309'),
+    _bar('🤖 Nova TD',            radNova.length, totalRad, '#6d28d9'),
   ].join('');
 
   // ── Tipo de solicitud — donut sin "Sin tipo" ──
@@ -9919,7 +9915,8 @@ async function exportCentralizadasExcel() {
   const canalLabel=o=>o==='web'||o==='formulario_web'?'Navegador (enlace)':o==='qr'?'QR directo':o==='nova_directo'?'Nova directo':o==='nova_web'||o==='nova_td'?'Nova (enlace)':o||'Navegador';
 
   // ── Filtrar pruebas (misma lógica que exportNovaExcel) ──
-  const _esInterno=r=>{const tid=(r.ticket_id||'').trim();if(tid&&!tid.startsWith('TD-'))return true;if(r.is_draft===true)return true;if((r.origen||'')==='borrador'||(r.estado||'')==='borrador')return true;if((r.origen||'')==='prueba')return true;const tieneNombre=!!(r.nombre||r.nombre_solicitud||'').trim();const tieneTipo=!!(r.tipo_pqr||'').trim();return !tieneNombre&&!tieneTipo&&!tid;};
+  const _esInterno=r=>{const tid=(r.ticket_id||'').trim();if(tid&&!tid.startsWith('TD-'))return true;if(r.is_draft===true)return true;if((r.origen||'')==='borrador'||(r.estado||'')==='borrador')return true;if((r.origen||'')==='prueba')return true;
+    if(_CEDULAS_PRUEBA&&_CEDULAS_PRUEBA.has(r.cedula||''))return true;const tieneNombre=!!(r.nombre||r.nombre_solicitud||'').trim();const tieneTipo=!!(r.tipo_pqr||'').trim();return !tieneNombre&&!tieneTipo&&!tid;};
 
   // ══ HOJA 1: Todos_Radicados (Web + QR + Nova unificados) ══
   const normTipo=t=>{const NORM={'solicitud':'SOLICITUD','peticion':'PETICIÓN','queja':'QUEJA','reclamo':'RECLAMO','sugerencia':'SUGERENCIA','felicitacion':'FELICITACIÓN','denuncia':'DENUNCIA','urgente':'URGENTE'};return NORM[(t||'').toLowerCase()]||(t?t.toUpperCase():'SOLICITUD');};
@@ -9959,7 +9956,8 @@ async function exportCentralizadasExcel() {
   XLSX.utils.book_append_sheet(wb,ws_enc,'Todas_Encuestas');
 
   // ══ HOJA 3: Nova_TD (sesiones con radicado y encuesta cruzados) ══
-  const _esPrueba=r=>(r.cedula||'')==='1152712313';
+  const _CEDULAS_PRUEBA = new Set(['1152712313','1214722978']);
+  const _esPrueba=r=>_CEDULAS_PRUEBA.has(r.cedula||'');
   const allSes=[...(D.sesNovaWeb||[]),...(D.sesNovaDir||[]),...(D.sesNovaBv||[]),...(D.sesNovaQr||[])].filter(s=>!_esPrueba(s));
   const novaEncs=[...encByCanal('nova_web'),...encByCanal('nova_directo'),...encByCanal('nova_td')].filter(e=>!_esPrueba(e));
   const novaRads=[...(D.radNovaWeb||[]),...(D.radNovaDir||[])].filter(r=>!_esPrueba(r));
