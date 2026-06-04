@@ -9122,6 +9122,22 @@ async function loadNovaMetrics(){
   const qE=base=>q(base,'created_at');    // encuestas
   const qS=base=>q(base,'created_at');    // sesiones
 
+  // Helper paginado para correos — evita el límite de 1000 de PostgREST
+  const _fetchRadPag = async (filtro) => {
+    const _FIELDS = 'id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales';
+    const PAGE = 1000;
+    let all = [], off = 0;
+    while(true) {
+      const page = await sb(qC(`correos?${filtro}&select=${_FIELDS}&order=received_at.desc&limit=${PAGE}&offset=${off}`)).catch(()=>[]);
+      if(!page||!page.length) break;
+      all = all.concat(page);
+      if(page.length < PAGE) break;
+      off += PAGE;
+      if(off >= 50000) break;
+    }
+    return all;
+  };
+
   const [
     radWeb, radWebOld,
     radNovaWeb, radNovaDir,
@@ -9131,12 +9147,12 @@ async function loadNovaMetrics(){
     encQr,
     sesNovaWeb, sesNovaDir, sesNovaBv, sesNovaQr,
   ] = await Promise.all([
-    sb(qC('correos?origen=eq.web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
-    sb(qC('correos?origen=eq.formulario_web&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
+    _fetchRadPag('origen=eq.web'),
+    _fetchRadPag('origen=eq.formulario_web'),
 
-    sb(qC('correos?or=(origen.eq.nova_web,origen.eq.nova_td)&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
-    sb(qC('correos?origen=eq.nova_directo&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
-    sb(qC('correos?origen=eq.qr&select=id,received_at,ticket_id,tipo_pqr,nombre,from_name,from_email,cedula,sentimiento,prioridad,estado,canal_contacto,origen,agente_id,ciudad_paciente,body_content,nombre_solicitud,eps_id,cedula_paciente,datos_legales')).catch(()=>[]),
+    _fetchRadPag('or=(origen.eq.nova_web,origen.eq.nova_td)'),
+    _fetchRadPag('origen=eq.nova_directo'),
+    _fetchRadPag('origen=eq.qr'),
     sb(qE('encuestas_satisfaccion?origen=eq.web&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?canal=eq.web&origen=is.null&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
     sb(qE('encuestas_satisfaccion?or=(origen.eq.nova_web,origen.eq.nova_td)&select=id,created_at,calificacion,instalaciones,atencion,tiempos,medicamentos,recomendacion,promedio,nombre,cedula,eps,sede_nombre,sede_ciudad,ticket_id,comentario,origen')).catch(()=>[]),
