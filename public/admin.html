@@ -9132,16 +9132,16 @@ async function loadNovaMetrics(){
     if (s.startsWith('re:') || s.startsWith('fw:') || s.startsWith('rv:') || s.startsWith('res:')) return null;
     if (s.includes('su solicitud fue recibida') || s.includes('acuse de recibo')) return null;
     if ((c.origen||'') === 'saliente' || (c.estado||'') === 'enviado') return null;
-    // 1. Origen técnico directo del PHP
-    if (oL === 'web' || oL === 'formulario_web') return 'web';
-    if (oL === 'qr') return 'qr';
-    if (oL === 'nova_web' || oL === 'nova_td') return 'nova_web';
-    if (oL === 'nova_directo') return 'nova_directo';
-    if (oL === 'nova_bienvenida') return 'nova_bienvenida';
-    // 2. Subject del correo sincronizado desde Outlook
+    // 1. Origen técnico del PHP (guion bajo) y texto libre del sincronizador
+    if (oL === 'web' || oL === 'formulario_web' || oL === 'pagina web') return 'web';
+    if (oL === 'qr' || oL === 'codigo qr' || oL === 'qr directo') return 'qr';
+    if (oL === 'nova_web' || oL === 'nova_td' || oL === 'nova td') return 'nova_web';
+    if (oL === 'nova_directo' || oL === 'nova td directo' || oL === 'nova directo') return 'nova_directo';
+    if (oL === 'nova_bienvenida' || oL === 'nova bienvenida') return 'nova_bienvenida';
+    // 2. Subject — Nova PRIMERO para evitar falso positivo con web
     if (s.includes('nova td directo') || s.includes('nova directo') || s.includes('nova_directo')) return 'nova_directo';
     if (s.includes('nova td') || s.includes('nova_td') || s.includes('nova (enlace)')) return 'nova_web';
-    if (s.includes('qr directo') || s.includes('qr |') || s.includes('\ud83d\udcf7')) return 'qr';
+    if (s.includes('qr directo') || s.includes('\ud83d\udcf7') || s.includes('qr |')) return 'qr';
     if (s.includes('navegador (enlace)') || s.includes('navegador') ||
         s.includes('web |') || s.includes('\ud83d\udcbb') || s.includes('\ud83d\udda5')) return 'web';
     return null;
