@@ -147,13 +147,36 @@ async function enviarMeta(telefono, mensaje) {
   return res.json();
 }
 
-async function pushHistory(telefono, contenido, role = 'nova') {
+async function pushHistory(telefono, contenido, role = 'nova', extra = {}) {
+  const ts = new Date().toISOString();
   try {
+    // 1. Actualizar wa_sesiones.history (cache activo)
     const { data: ses } = await supabase.from('wa_sesiones').select('history').eq('telefono', telefono).single();
     const hist = Array.isArray(ses?.history) ? ses.history : [];
-    hist.push({ role, content: contenido, ts: new Date().toISOString() });
+    hist.push({ role, content: contenido, ts, ...extra });
     await supabase.from('wa_sesiones').update({ history: hist }).eq('telefono', telefono);
-  } catch(e) { console.error('❌ pushHistory:', e.message); }
+  } catch(e) { console.error('❌ pushHistory (sesion):', e.message); }
+  try {
+    // 2. INSERT inmutable en logs_conversacion — historico permanente
+    const { data: ses2 } = await supabase.from('wa_sesiones').select('agente_id,agente_nombre,cedula,nombre,eps').eq('telefono', telefono).maybeSingle();
+    await supabase.from('logs_conversacion').insert({
+      telefono,
+      agente_id:     ses2?.agente_id     || null,
+      agente_nombre: ses2?.agente_nombre  || null,
+      evento:        'mensaje',
+      created_at:    ts,
+      metadata: {
+        role,
+        content:   contenido,
+        tipo:      extra.tipo      || 'text',
+        audio_url: extra.audio_url || null,
+        media_url: extra.media_url || null,
+        nombre:    ses2?.nombre    || null,
+        cedula:    ses2?.cedula    || null,
+        eps:       ses2?.eps       || null,
+      }
+    });
+  } catch(e) { console.error('❌ pushHistory (log):', e.message); }
 }
 
 async function logConv(telefono, agenteId, agenteNombre, evento, duracion = null, meta = {}) {
@@ -1151,6 +1174,13 @@ app.post('/send', requireAgentToken, async (req, res) => {
       await logConv(telefono, agente_id||sesion?.agente_id, agente_nombre, 'primera_respuesta', dur);
     } else { upd.estado = 'activo'; await logConv(telefono, agente_id||sesion?.agente_id, agente_nombre, 'mensaje_agente'); }
     await supabase.from('wa_sesiones').update(upd).eq('telefono', telefono);
+    // Registro inmutable del mensaje del agente en logs_conversacion
+    await supabase.from('logs_conversacion').insert({
+      telefono, agente_id: agente_id||sesion?.agente_id||null,
+      agente_nombre: agente_nombre||'Agente', evento:'mensaje', created_at:ahoraISO,
+      metadata:{ role:'assistant', sender:'agent', content:mensaje, tipo:'text',
+        nombre:sesion?.nombre||null, cedula:sesion?.cedula||null, eps:sesion?.eps||null }
+    }).then(()=>{}).catch(e=>console.error('❌ log /send:', e.message));
     res.json({ ok:true, message_id:metaData.messages?.[0]?.id });
   } catch(err) { console.error('❌ /send:', err.message); res.status(500).json({ error:err.message }); }
 });
@@ -1265,6 +1295,12 @@ app.post('/send-audio', requireAgentToken, upload.single('audio'), async (req, r
     hist.push({ role:'assistant',sender:'agent',tipo:'audio',content:'[Audio de voz]',audio_url:audioUrl,duracion:parseInt(duracion)||0,agente_nombre:agente_nombre||'Agente',ts:ahoraISO });
     await supabase.from('wa_sesiones').update({history:hist,updated_at:ahoraISO}).eq('telefono',telefono);
     await logConv(telefono,agente_id||null,agente_nombre||'Agente','mensaje_agente');
+    // Registro inmutable del audio del agente
+    await supabase.from('logs_conversacion').insert({
+      telefono, agente_id:null, agente_nombre:agente_nombre||'Agente', evento:'mensaje', created_at:ahoraISO,
+      metadata:{ role:'assistant', sender:'agent', tipo:'audio', content:'[Audio de voz]',
+        audio_url:audioUrl, duracion:parseInt(duracion)||0 }
+    }).then(()=>{}).catch(e=>console.error('❌ log /send-audio:', e.message));
     res.json({ ok:true, audio_url:audioUrl });
   } catch(err) { console.error('❌ /send-audio:', err.message); res.status(500).json({ error:err.message }); }
 });
