@@ -1485,7 +1485,9 @@ async function subirAdjunto(input, tipo){
     fd.append('caption', '');
 
     const res=await fetch('https://tododrogas.online/wa/send-media',{
-      method:'POST', body:fd
+      method:'POST',
+      headers:{'x-agent-token':window.AGENT_TOKEN||''},
+      body:fd
     });
     if(!res.ok) throw new Error(await res.text());
 
@@ -1548,30 +1550,37 @@ function iniciarOndas(stream){
   if(!wave) return;
   wave.innerHTML='';
   const ctx=new (window.AudioContext||window.webkitAudioContext)();
-  const analyser=ctx.createAnalyser();
-  const src=ctx.createMediaStreamSource(stream);
-  src.connect(analyser);
-  analyser.fftSize=64;
-  const data=new Uint8Array(analyser.frequencyBinCount);
-  const bars=20;
-  for(let i=0;i<bars;i++){
-    const b=document.createElement('div');
-    b.className='wa-rec-wave-bar';
-    b.style.height='4px';
-    wave.appendChild(b);
-  }
-  function drawWave(){
-    if(!_mediaRec||_mediaRec.state==='inactive') return;
-    analyser.getByteFrequencyData(data);
-    const barEls=wave.querySelectorAll('.wa-rec-wave-bar');
-    barEls.forEach((b,i)=>{
-      const val=data[i]||0;
-      b.style.height=Math.max(4,Math.min(28,val/4))+'px';
-      b.style.background=val>80?'#00a884':'#aebac1';
-    });
-    requestAnimationFrame(drawWave);
-  }
-  drawWave();
+  // Chrome suspende el AudioContext hasta gesto del usuario — forzar resume
+  ctx.resume().then(()=>{
+    const analyser=ctx.createAnalyser();
+    const src=ctx.createMediaStreamSource(stream);
+    src.connect(analyser);
+    analyser.fftSize=128; // más resolución de frecuencias
+    analyser.smoothingTimeConstant=0.7;
+    const data=new Uint8Array(analyser.frequencyBinCount);
+    const bars=20;
+    for(let i=0;i<bars;i++){
+      const b=document.createElement('div');
+      b.className='wa-rec-wave-bar';
+      b.style.cssText='width:3px;border-radius:3px;min-height:4px;transition:height .08s;background:#aebac1';
+      wave.appendChild(b);
+    }
+    function drawWave(){
+      if(!_mediaRec||_mediaRec.state==='inactive') return;
+      analyser.getByteFrequencyData(data);
+      const barEls=wave.querySelectorAll('.wa-rec-wave-bar');
+      barEls.forEach((b,i)=>{
+        // Distribuir las frecuencias en las 20 barras
+        const idx=Math.floor(i*(data.length/bars));
+        const val=data[idx]||0;
+        const h=Math.max(4,Math.min(30,(val/255)*28));
+        b.style.height=h+'px';
+        b.style.background=val>60?'#00a884':'#aebac1';
+      });
+      requestAnimationFrame(drawWave);
+    }
+    drawWave();
+  });
 }
 
 function togglePausarGrabacion(){
@@ -1635,6 +1644,7 @@ async function enviarAudio(){
 
     const res=await fetch('https://tododrogas.online/wa/send-audio',{
       method:'POST',
+      headers:{'x-agent-token':window.AGENT_TOKEN||''},
       body: fd
     });
 
@@ -1643,19 +1653,20 @@ async function enviarAudio(){
 
     // Quitar el mensaje temporal
     document.getElementById(tmpId)?.remove();
-    // Agregar el audio al historial local inmediatamente (no esperar polling)
-    const audioMsgLocal = {
+    // Fetch fresco de Supabase (igual que enviar()) para no pisar el historial
+    const freshSesA = await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}&select=history&limit=1`);
+    const histBaseA = parseHist(freshSesA?.[0]?.history || S.selSesion?.history);
+    histBaseA.push({
       role:'assistant', sender:'agent', tipo:'audio',
       content:'[Audio de voz]',
       audio_url: d.audio_url || '',
-      duracion: duracion,
+      duracion: parseInt(duracion)||0,
       agente_nombre: AGENT_NAME,
       ts: new Date().toISOString()
-    };
-    S.msgs.push(audioMsgLocal);
-    renderMsgs(S.msgs);
-    // Confirmar con el servidor después de 1.5s
-    setTimeout(()=>{ if(S.selTel) refreshChat(S.selTel); }, 1500);
+    });
+    if(S.selSesion) S.selSesion.history = histBaseA;
+    S.msgs = histBaseA;
+    renderMsgs(histBaseA);
 
   }catch(err){
     document.getElementById(tmpId)?.remove();
@@ -1678,7 +1689,7 @@ async function enviar(){
     // Enviar por Twilio (webhook propio)
     const waR=await fetch('https://tododrogas.online/wa/send',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','x-agent-token':window.AGENT_TOKEN||''},
       body:JSON.stringify({telefono:S.selTel,mensaje:txt,agente_nombre:AGENT_NAME}),
     });
     if(!waR.ok) throw new Error('Error WA: '+await waR.text());
