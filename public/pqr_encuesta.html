@@ -758,6 +758,7 @@ html,body{height:100%;font-family:'Poppins',sans-serif;overflow:hidden;backgroun
 
 <div id="toasts"></div>
 
+<script src="/config.js"></script>
 <script>
 
 // ══════════════════════════════════════════
@@ -796,9 +797,14 @@ let SEDES = [];
 
 async function _cargarSedesEnc() {
   try {
-    const sbUrl = (window.SUPABASE_URL||'__SB_URL__'||'').replace(/\/$/,'');
-    const sbKey = window.SUPABASE_KEY||'__SB_KEY__'||'';
-    if(!sbUrl||!sbKey||sbUrl.includes('__SB')||sbKey.includes('__SB')){ console.warn('Credenciales Supabase no disponibles'); return; }
+    let _tries = 0;
+    while((!window.SUPABASE_URL || !window.SUPABASE_KEY) && _tries < 30) {
+      await new Promise(r => setTimeout(r, 100));
+      _tries++;
+    }
+    const sbUrl = (window.SUPABASE_URL||'').replace(/\/$/,'');
+    const sbKey = window.SUPABASE_KEY||'';
+    if(!sbUrl||!sbKey){ console.warn('Credenciales Supabase no disponibles tras espera'); return; }
     const r = await fetch(
       `${sbUrl}/rest/v1/sedes?activa=eq.true&select=id,nombre,ciudad,municipio_norm,direccion&order=nombre.asc&limit=200`,
       { headers: { apikey: sbKey, Authorization: 'Bearer '+sbKey } }
