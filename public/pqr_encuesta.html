@@ -794,25 +794,31 @@ const LOGO_URL='https://lyosqaqhiwhgvjigvqtc.supabase.co/storage/v1/object/publi
 
 let SEDES = [];
 
-// Cargar sedes dinámicamente desde Supabase
-(async () => {
+async function _cargarSedesEnc() {
   try {
     const sbUrl = (window.SUPABASE_URL||'').replace(/\/$/,'');
     const sbKey = window.SUPABASE_KEY||'';
-    if(!sbUrl||!sbKey) return;
+    if(!sbUrl||!sbKey){ console.warn('SUPABASE no disponible aún'); return; }
     const r = await fetch(
       `${sbUrl}/rest/v1/sedes?activa=eq.true&select=id,nombre,ciudad,municipio_norm,direccion&order=nombre.asc&limit=200`,
       { headers: { apikey: sbKey, Authorization: 'Bearer '+sbKey } }
     );
     const data = await r.json();
-    SEDES = (data||[]).map(s => ({
+    if(!Array.isArray(data)){ console.warn('Sedes respuesta inválida:', data); return; }
+    SEDES = data.map(s => ({
       id:        s.id,
       nombre:    s.nombre||'',
       municipio: s.municipio_norm || (s.ciudad||'').split(',')[0].trim(),
       direccion: s.direccion||'',
     }));
+    console.log('Sedes encuesta cargadas:', SEDES.length);
   } catch(e) { console.warn('Error cargando sedes:', e); }
-})();
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', _cargarSedesEnc);
+} else {
+  _cargarSedesEnc();
+}
 
 
 const QUESTIONS=[
