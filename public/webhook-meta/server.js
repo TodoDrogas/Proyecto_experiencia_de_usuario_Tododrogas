@@ -246,31 +246,51 @@ async function subirASupabase(buffer, fileName, mimeType) {
 async function procesarAudio(msg, telefono) {
   const mediaId = msg.audio?.id;
   if (!mediaId) return { content: '[Audio recibido]', tipo: 'audio', audio_url: null };
+
+  let audio_url = null;
+  let buffer, mimeType, ext;
+
+  // ── PASO 1: Descargar y subir a Supabase SIEMPRE (independiente de Whisper) ──
   try {
-    const { buffer, mimeType } = await descargarMediaMeta(mediaId);
+    const d = await descargarMediaMeta(mediaId);
+    buffer   = d.buffer;
+    mimeType = d.mimeType;
     const extMap = { 'audio/ogg':'ogg','audio/mpeg':'mp3','audio/mp4':'m4a','audio/wav':'wav','audio/webm':'webm','audio/aac':'aac' };
-    const ext      = extMap[mimeType] || 'ogg';
+    ext        = extMap[mimeType] || 'ogg';
     const fileName = `audios/${telefono.replace('+','')}/${Date.now()}.${ext}`;
-    const audio_url = await subirASupabase(buffer, fileName, mimeType);
-    let transcripcion = '[Audio recibido]';
-    if (OPENAI_KEY) {
+    audio_url  = await subirASupabase(buffer, fileName, mimeType);
+    console.log(`🎙️ Audio subido: ${fileName}`);
+  } catch(err) {
+    console.error('❌ procesarAudio — descarga/subida:', err.message);
+    return { content: '[Audio recibido — error al subir]', tipo: 'audio', audio_url: null };
+  }
+
+  // ── PASO 2: Transcripción con Whisper (opcional — si falla igual se entrega el audio) ──
+  let transcripcion = '[Audio recibido]';
+  if (OPENAI_KEY && buffer) {
+    try {
       const form = new FormData();
       form.append('file', buffer, { filename: `audio.${ext}`, contentType: mimeType });
       form.append('model', 'whisper-1');
       form.append('language', 'es');
       form.append('response_format', 'text');
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000); // 15s max
       const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${OPENAI_KEY}`, ...form.getHeaders() },
-        body: form
+        body: form,
+        signal: controller.signal
       });
+      clearTimeout(timeout);
       if (res.ok) transcripcion = (await res.text()).trim() || '[Audio sin voz]';
+    } catch(err) {
+      // Whisper falló o timeout — no pasa nada, el audio_url ya está guardado
+      console.warn('⚠️ Whisper falló (audio igual disponible):', err.message);
     }
-    return { content: transcripcion, tipo: 'audio', audio_url, duracion: msg.audio?.duration || null, mime_type: mimeType };
-  } catch(err) {
-    console.error('❌ procesarAudio:', err.message);
-    return { content: '[Audio recibido — error al procesar]', tipo: 'audio', audio_url: null };
   }
+
+  return { content: transcripcion, tipo: 'audio', audio_url, duracion: msg.audio?.duration || null, mime_type: mimeType };
 }
 
 async function procesarMedia(msg, telefono, tipo) {
