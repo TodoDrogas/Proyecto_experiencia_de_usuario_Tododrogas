@@ -1678,10 +1678,13 @@ async function enviarAudio(){
 // tomar() eliminado — asignación automática del sistema
 
 // ── ENVIAR ───────────────────────────────────────
+let _sending=false;
 async function enviar(){
+  if(_sending) return;
   const ta=document.getElementById('msgTa');
   const txt=(ta?.value||'').trim();
   if(!txt||!S.selTel)return;
+  _sending=true;
   const btn=document.getElementById('btnSend');
   if(btn) btn.disabled=true;
   ta.value='';ta.style.height='auto';
@@ -1701,7 +1704,7 @@ async function enviar(){
     if(S.selSesion) S.selSesion.history = histBase;
     S.msgs=histBase;renderMsgs(histBase);
   }catch(e){toast('Error al enviar: '+e.message,'err');if(ta)ta.value=txt;}
-  finally{if(btn)btn.disabled=false;if(ta)ta.focus();}
+  finally{_sending=false;if(btn)btn.disabled=false;if(ta)ta.focus();}
 }
 
 // ── TRANSFERIR A AGENTE ───────────────────────────────────────────
