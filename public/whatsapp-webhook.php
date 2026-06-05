@@ -77,8 +77,9 @@ $_epsNorm = strtoupper(preg_replace('/\s+/', ' ', $eps));
 $_epsMap  = [
     'PREVENTIVA'              => 'COOSALUD',
     'PREVENTIVA SALUD'        => 'COOSALUD',
-    'CEM'                     => 'SAVIA',
-    'COMITE DE ESTUDIOS'      => 'SAVIA',
+    // CEM se conserva como 'CEM' — pertenece a Savia pero accede a TODAS las sedes
+    'CEM'                     => 'CEM',
+    'COMITE DE ESTUDIOS'      => 'CEM',
     'ANGIOSUR'                => 'SAVIA',
     'ANGIOSUR S.A.S'          => 'SAVIA',
     'SAVIA'                   => 'SAVIA',
@@ -92,6 +93,8 @@ $_epsMap  = [
 foreach ($_epsMap as $k => $v) {
     if (str_starts_with($_epsNorm, $k)) { $eps = $v; break; }
 }
+// CEM → se muestra como 'Savia Salud' al usuario, pero $eps='CEM' para buscarSedes
+$epsDisplay = ($eps === 'CEM') ? 'Savia Salud' : $eps;
 $sedes    = loadSedes();
 
 // Si hay cédula en la sesión, buscar datos del usuario
@@ -295,7 +298,12 @@ function buildSystemPrompt(array $usuario, string $eps, array $sedes): string {
 
     $s  = "Eres Nova TD, asistente virtual de Tododrogas CIA SAS.\n";
     $s .= "FECHA DE HOY: $hoy\n";
-    $s .= "USUARIO: $nombre | EPS: " . ($epsU ?: 'Sin EPS') . "\n";
+    $esCEM      = ($epsU === 'CEM');
+    $epsDisplay = $esCEM ? 'Savia Salud' : ($epsU ?: 'Sin EPS');
+    $s .= "USUARIO: $nombre | EPS: $epsDisplay\n";
+    if ($esCEM) {
+        $s .= "NOTA CEM: Usuario pertenece a Savia Salud (Comite de Estudios Medicos). Identifícalo como Savia Salud. Tiene acceso a TODAS las sedes del municipio.\n";
+    }
     $s .= "CANAL: WhatsApp — texto plano, sin HTML. Emojis con moderación. Trato de USTED.\n\n";
     $s .= $catalogo . "\n";
 
@@ -481,6 +489,11 @@ function buscarSedes(string $municipio, string $eps, array $sedes): string {
     $munNorm = $norm($municipio);
     $epsNorm = strtoupper(trim($eps));
 
+    // CEM: pertenece a Savia pero accede a TODAS las sedes sin restricción
+    $esCEM = ($epsNorm === 'CEM');
+    if ($esCEM) $epsNorm = 'TODAS';
+    $epsLabel = $esCEM ? 'Savia Salud' : $eps; // para mostrar al usuario
+
     // ── Paso 1: filtrar por municipio + EPS ───────────────────────────────
     $encontradas = array_filter($sedes, function($s) use ($munNorm, $epsNorm, $norm) {
         // Match municipio
@@ -538,7 +551,7 @@ function buscarSedes(string $municipio, string $eps, array $sedes): string {
         $txt  = "📍 No encontré sede exclusiva de *" . ucfirst(strtolower($eps)) . "* en *$munLabel*.\n";
         $txt .= "Estas sedes del municipio pueden atenderle (verifique su EPS):\n\n";
     } else {
-        $epsLabel = ($epsNorm && $epsNorm !== 'TODAS') ? " para *" . ucfirst(strtolower($eps)) . "*" : '';
+        $epsLabel = ($epsNorm && $epsNorm !== 'TODAS') ? " para *" . ucfirst(strtolower($eps)) . "*" : ($esCEM ? " para *Savia Salud*" : '');
         $txt = "📍 *Sedes en $munLabel*$epsLabel:\n\n";
     }
 
