@@ -589,10 +589,15 @@ if ($fase === 'ident_ced' || ($origenCanal==='whatsapp_directo' && !$cedula)) {
         $p = $r['body'];
         $nombre  = $p['nombre'] ?? '';
         $eps     = strtoupper(trim($p['eps'] ?? ''));
-        $eps     = str_replace(['SAVIA SALUD','PREVENTIVA SALUD','ALIANZA MEDELLIN ANTIOQUIA EPS S.A.S'],['SAVIA','COOSALUD','SAVIA'], $eps);
-        $eps     = str_replace(['COMITE DE ESTUDIOS MEDICOS S.A.S','ANGIOSUR S.A.S.','ANGIOSUR'],['SAVIA','SAVIA','SAVIA'], $eps);
+        // Normalizar EPS — CEM se conserva como 'CEM' (acceso total a sedes, se muestra como Savia Salud)
+        $eps     = str_replace(['SAVIA SALUD','ALIANZA MEDELLIN ANTIOQUIA EPS S.A.S'],['SAVIA','SAVIA'], $eps);
+        $eps     = str_replace(['PREVENTIVA SALUD','PREVENTIVA SALUD'],['COOSALUD','COOSALUD'], $eps);
+        $eps     = str_replace(['COMITE DE ESTUDIOS MEDICOS S.A.S'],['CEM'], $eps);
+        $eps     = str_replace(['ANGIOSUR S.A.S.','ANGIOSUR'],['SAVIA','SAVIA'], $eps);
         $eps     = str_replace(['NUEVA EMPRESA PROMOTORA DE SALUD S.A.','ENTIDAD PROMOTORA SALUD TOTAL'],['NUEVA EPS','SALUD TOTAL'], $eps);
         $eps     = trim(preg_replace('/\s*\([^)]*\)\s*/','', $eps));
+        // Para mostrar al usuario: CEM → 'Savia Salud'
+        $epsDisplay = ($eps === 'CEM') ? 'Savia Salud' : $eps;
         $ciudad  = $p['ciudad'] ?? '';
         $vip     = (bool)($p['vip']??false);
         $pn      = primerNombre($nombre);
@@ -617,7 +622,7 @@ if ($fase === 'ident_ced' || ($origenCanal==='whatsapp_directo' && !$cedula)) {
         } else {
             $saludo = "✅ *¡Bienvenido/a, $pn!*\n\n"
                     . "Es un gusto atenderle. Soy *Nova TD*.\n\n"
-                    . "Identificamos que usted está afiliado/a a *$eps*.\n\n"
+                    . "Identificamos que usted está afiliado/a a *$epsDisplay*.\n\n"
                     . "⏱ Si hay más de 5 minutos de inactividad, la conversación se cerrará automáticamente.\n\n"
                     . "¿En qué le puedo ayudar?\n\n"
                     . "1️⃣ Estado o entrega de medicamentos\n"
