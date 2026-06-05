@@ -1,4 +1,4 @@
-name: 🚀 Deploy PQR Producción — Tododrogas
+name:  Deploy PQR Producción — Tododrogas
 
 on:
   push:
@@ -24,13 +24,14 @@ jobs:
           window.N8N_WEBHOOK_BASE    = '${{ secrets.N8N_WEBHOOK_BASE }}';
           window.ADMIN_PASS          = '${{ secrets.ADMIN_TOKEN }}';
           window.NOVA_PROXY          = '/nova-proxy.php';
+          window.AGENT_TOKEN         = '${{ secrets.NOVA_TOKEN }}';
           window.VALIDAR_URL         = '/validar-paciente.php';
           window.NOVA_URL            = '/nova-consulta.php';
           window.PQR_FORM_URL        = '/pqr_form.html';
           window.ENC_URL             = '/pqr_encuesta.html';
           window.NOVA_HTML_URL       = '/nova.html';
           CONFIGEOF
-          echo "✅ config.js generado"
+          echo " config.js generado"
 
       # ── 2b. OFUSCAR TODOS LOS HTML ─────────────────────────────
       - name: Ofuscar código JS en todos los HTML
@@ -52,10 +53,10 @@ jobs:
             # Agregar banner al inicio y reemplazar
             cat /tmp/banner.txt "$f.min" > "$f"
             rm "$f.min"
-            echo "✅ $f protegido"
+            echo " $f protegido"
             COUNT=$((COUNT+1))
           done
-          echo "✅ Total protegidos: $COUNT archivos HTML"
+          echo " Total protegidos: $COUNT archivos HTML"
 
       # ── 3. INYECTAR SECRETS EN PHP ──────────────────────────────
       - name: Inyectar secrets en PHP
@@ -82,7 +83,7 @@ jobs:
             public/clasificador-proxy.php
           )
           for f in "${PHP_FILES[@]}"; do
-            [ -f "$f" ] || { echo "⚠️  $f no existe — omitiendo"; continue; }
+            [ -f "$f" ] || { echo "  $f no existe — omitiendo"; continue; }
             sed -i "s|__SB_URL__|${{ secrets.SUPABASE_URL }}|g"                     "$f"
             sed -i "s|__SB_KEY__|${{ secrets.SUPABASE_KEY_SERVICE }}|g"             "$f"
             sed -i "s|__OPENAI_KEY__|${{ secrets.OPENAI_KEY }}|g"                   "$f"
@@ -101,7 +102,7 @@ jobs:
             sed -i "s|__APP_SECRET__|${{ secrets.APP_SECRET }}|g"                   "$f"
             sed -i "s|__ANTHROPIC_KEY__|${{ secrets.ANTHROPIC_KEY }}|g"             "$f"
             sed -i "s|__NOVA_TOKEN__|${{ secrets.NOVA_TOKEN }}|g"                   "$f"
-            echo "✅ $f inyectado"
+            echo " $f inyectado"
           done
 
       # ── 4. GENERAR api-token.php ────────────────────────────────
@@ -136,7 +137,7 @@ jobs:
           sed -i "s|AZURE_TENANT_ID_VAL|${{ secrets.AZURE_TENANT_ID }}|g"         public/api-token.php
           sed -i "s|AZURE_CLIENT_ID_VAL|${{ secrets.AZURE_CLIENT_ID }}|g"         public/api-token.php
           sed -i "s|AZURE_CLIENT_SECRET_VAL|${{ secrets.AZURE_CLIENT_SECRET }}|g" public/api-token.php
-          echo "✅ api-token.php generado"
+          echo " api-token.php generado"
 
       # ── 5. GENERAR adj-proxy.php ────────────────────────────────
       - name: Generar adj-proxy.php
@@ -182,7 +183,7 @@ jobs:
           sed -i "s|AZURE_TENANT_ID_VAL|${{ secrets.AZURE_TENANT_ID }}|g"         public/adj-proxy.php
           sed -i "s|AZURE_CLIENT_ID_VAL|${{ secrets.AZURE_CLIENT_ID }}|g"         public/adj-proxy.php
           sed -i "s|AZURE_CLIENT_SECRET_VAL|${{ secrets.AZURE_CLIENT_SECRET }}|g" public/adj-proxy.php
-          echo "✅ adj-proxy.php generado"
+          echo " adj-proxy.php generado"
 
       # ── 6. VALIDAR SECRETS ──────────────────────────────────────
       - name: Validar secrets
@@ -190,7 +191,7 @@ jobs:
           ERRORS=0
           EMPTY=$(grep -P "= '';" public/config.js || true)
           if [ -n "$EMPTY" ]; then
-            echo "❌ Secrets vacíos en config.js:"
+            echo " Secrets vacíos en config.js:"
             echo "$EMPTY"
             ERRORS=$((ERRORS+1))
           fi
@@ -198,18 +199,18 @@ jobs:
           for f in public/radicar-pqr.php public/radicar-encuesta.php public/transcribir-audio.php public/procesar-canvas.php public/sincronizar-correos.php public/nova-td-respuesta.php public/nova-proxy.php public/nova-consulta.php public/cargar-plantillas.php public/validar-paciente.php public/admin-buscar-paciente.php public/admin-buscar-medicamento.php public/whatsapp-webhook.php public/clasificador-proxy.php; do
             [ -f "$f" ] || continue
             if grep -q "$PLACEHOLDERS" "$f"; then
-              echo "❌ Placeholders sin reemplazar en $f"
+              echo " Placeholders sin reemplazar en $f"
               grep "$PLACEHOLDERS" "$f"
               ERRORS=$((ERRORS+1))
             else
-              echo "✅ $f limpio"
+              echo " $f limpio"
             fi
           done
           if [ $ERRORS -gt 0 ]; then
-            echo "❌ $ERRORS error(es). Revisa GitHub → Settings → Secrets."
+            echo " $ERRORS error(es). Revisa GitHub → Settings → Secrets."
             exit 1
           fi
-          echo "✅ Todos los secrets validados"
+          echo " Todos los secrets validados"
 
       # ── 7. COPIAR ARCHIVOS ──────────────────────────────────────
       - name: Copiar archivos
@@ -235,7 +236,7 @@ jobs:
               [ -f /opt/webhook-meta/$f ] && cp /opt/webhook-meta/$f /opt/webhook-meta/$f.bak.$TS 2>/dev/null || true
               [ -f /var/www/pqr/$f ]      && cp /var/www/pqr/$f      /var/www/pqr/$f.bak.$TS      2>/dev/null || true
             done
-            echo "✅ Backups $TS creados" 
+            echo " Backups $TS creados" 
 
       # ── 7f. GENERAR webhook-meta/.env ───────────────────────────
       - name: Generar webhook-meta/.env
@@ -252,7 +253,7 @@ jobs:
           NOVA_TOKEN=${{ secrets.NOVA_TOKEN }}
           PORT=3000
           ENVEOF
-          echo "✅ webhook-meta/.env generado"
+          echo " webhook-meta/.env generado"
 
       # ── 7g. COPIAR server.js a VPS ─────────────────────────────
       - name: Copiar server.js al VPS
@@ -276,17 +277,17 @@ jobs:
             cd /opt/webhook-meta
             npm install --omit=dev
             npm list form-data > /dev/null 2>&1 || npm install form-data multer --save
-            echo "✅ Dependencias OK" 
+            echo " Dependencias OK" 
             if pm2 list | grep -q "webhook-meta"; then
               pm2 reload webhook-meta --update-env
-              echo "✅ PM2 webhook-meta recargado (sin downtime)"
+              echo " PM2 webhook-meta recargado (sin downtime)"
             else
               pm2 start server.js --name webhook-meta
               pm2 save
-              echo "✅ PM2 webhook-meta iniciado por primera vez"
+              echo " PM2 webhook-meta iniciado por primera vez"
             fi
             sleep 3
-            curl -sf http://localhost:3000 && echo "✅ webhook-meta OK" || echo "❌ No responde"
+            curl -sf http://localhost:3000 && echo " webhook-meta OK" || echo " No responde"
             pm2 logs webhook-meta --lines 10 --nostream 2>/dev/null | tail -10 || true
             pm2 save
 
@@ -305,29 +306,29 @@ jobs:
               -H "Content-Type: application/json" -d "$json_body"
           }
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS origen text DEFAULT 'web';")
-          [ "$CODE" = "200" ] && echo "✅ correos.origen OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " correos.origen OK" || echo " $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS resumen_ia text;")
-          [ "$CODE" = "200" ] && echo "✅ correos.resumen_ia OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " correos.resumen_ia OK" || echo " $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS fecha_resolucion timestamptz;")
-          [ "$CODE" = "200" ] && echo "✅ correos.fecha_resolucion OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " correos.fecha_resolucion OK" || echo " $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS adjuntos_pendientes boolean DEFAULT false;")
-          [ "$CODE" = "200" ] && echo "✅ correos.adjuntos_pendientes OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " correos.adjuntos_pendientes OK" || echo " $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS is_draft boolean DEFAULT false;")
-          [ "$CODE" = "200" ] && echo "✅ correos.is_draft OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " correos.is_draft OK" || echo " $CODE"
           CODE=$(run_sql "ALTER TABLE correos ADD COLUMN IF NOT EXISTS sent_at timestamptz;")
-          [ "$CODE" = "200" ] && echo "✅ correos.sent_at OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " correos.sent_at OK" || echo " $CODE"
           # ── Migrar wa_sesiones — nuevas columnas Nova TD ──
           CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS cedula text;")
-          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.cedula OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " wa_sesiones.cedula OK" || echo " $CODE"
           CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS ciudad text DEFAULT '';")
-          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.ciudad OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " wa_sesiones.ciudad OK" || echo " $CODE"
           CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS intentos_nova integer DEFAULT 0;")
-          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.intentos_nova OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " wa_sesiones.intentos_nova OK" || echo " $CODE"
           CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS resumen_nova text;")
-          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.resumen_nova OK" || echo "⚠️ $CODE"
+          [ "$CODE" = "200" ] && echo " wa_sesiones.resumen_nova OK" || echo " $CODE"
           CODE=$(run_sql "ALTER TABLE wa_sesiones ADD COLUMN IF NOT EXISTS origen_canal text DEFAULT 'whatsapp_directo';")
-          [ "$CODE" = "200" ] && echo "✅ wa_sesiones.origen_canal OK" || echo "⚠️ $CODE"
-          echo "✅ Migración completada"
+          [ "$CODE" = "200" ] && echo " wa_sesiones.origen_canal OK" || echo " $CODE"
+          echo " Migración completada"
 
       # ── 9. CONFIGURAR CRON ──────────────────────────────────────
       - name: Configurar cron sync
@@ -340,9 +341,9 @@ jobs:
             CRON_LINE="* * * * * php /var/www/pqr/sincronizar-correos.php >> /var/log/sync-correos.log 2>&1"
             if ! crontab -l 2>/dev/null | grep -q "sincronizar-correos.php"; then
               (crontab -l 2>/dev/null; echo "$CRON_LINE") | crontab -
-              echo "✅ Cron configurado"
+              echo " Cron configurado"
             else
-              echo "✅ Cron ya existía"
+              echo " Cron ya existía"
             fi
             touch /var/log/sync-correos.log && chmod 644 /var/log/sync-correos.log
 
@@ -362,19 +363,19 @@ jobs:
               [ -f "$f" ] || continue
               OUT=$(php -l "$f" 2>&1)
               if echo "$OUT" | grep -q "No syntax errors"; then
-                echo "✅ $(basename $f)"
+                echo " $(basename $f)"
               else
-                echo "❌ $(basename $f): $OUT"
+                echo " $(basename $f): $OUT"
                 ERRORS=$((ERRORS+1))
               fi
             done
             FOUND=$(grep -rl '__SB_URL__\|__SB_KEY__\|__ADMIN_TOKEN__\|__OPENAI_KEY__' \
               /var/www/pqr/*.php 2>/dev/null || true)
             if [ -n "$FOUND" ]; then
-              echo "❌ Placeholders en: $FOUND"
+              echo " Placeholders en: $FOUND"
               ERRORS=$((ERRORS+1))
             else
-              echo "✅ Sin placeholders residuales"
+              echo " Sin placeholders residuales"
             fi
             [ $ERRORS -gt 0 ] && exit 1
-            echo "✅ Deploy OK — $(date '+%d/%m/%Y %H:%M') hora Colombia"
+            echo " Deploy OK — $(date '+%d/%m/%Y %H:%M') hora Colombia"
