@@ -604,13 +604,14 @@ html[data-theme="sunset"] .email-item,html[data-theme="sunset"] .gestion-modal,h
             <select class="gm-input" id="gOrigen" onchange="gValidarCampo('gOrigen','select')">
               <option value="">— Seleccionar —</option>
               <option value="CORREO ELECTRONICO">Correo electrónico</option>
-              <option value="WHATSAPP">WhatsApp</option>
-              <option value="CONMUTADOR (TELEFONO)">Conmutador (teléfono)</option>
-              <option value="PAGINA WEB">Página web</option>
-              <option value="CODIGO QR">Código QR</option>
               <option value="NOVA TD">Nova TD</option>
+              <option value="NOVA TD DIRECTO">Nova TD directo</option>
               <option value="BUZON DE SUGERENCIAS FISICO">Buzón de sugerencias físico</option>
-              <option value="VERBAL">Verbal</option>
+              <option value="PAGINA WEB">Página web</option>
+              <option value="WHATSAPP" disabled>🔒 WhatsApp</option>
+              <option value="CONMUTADOR (TELEFONO)" disabled>🔒 Conmutador (teléfono)</option>
+              <option value="CODIGO QR" disabled>🔒 Código QR</option>
+              <option value="VERBAL" disabled>🔒 Verbal</option>
             </select>
           </div>
           <div class="gm-field">
@@ -2901,8 +2902,36 @@ async function openGestionModal(mode) {
     window._gDetallesActivos = null;
     const catSel = document.getElementById('gCategoria');
     if(catSel) catSel.value = '';
+    // ── AUTODETECTAR ORIGEN según email.origen o subject ─────────────────
     const origSel = document.getElementById('gOrigen');
-    if(origSel) origSel.value = '';
+    if(origSel) {
+      const _rawOrigen = (email?.origen||'').toLowerCase().trim();
+      const _subj = (email?.subject||'').toLowerCase();
+      let _autoOrigen = '';
+      // Detectar por origen técnico del PHP
+      if(_rawOrigen==='web'||_rawOrigen==='formulario_web'||_subj.includes('mensaje tododrogas web')||_subj.includes('pagina web')||_subj.includes('navegador')) {
+        _autoOrigen = 'PAGINA WEB';
+      } else if(_rawOrigen==='nova_directo'||_rawOrigen==='nova td directo'||_subj.includes('nova td directo')||_subj.includes('nova directo')) {
+        _autoOrigen = 'NOVA TD DIRECTO';
+      } else if(_rawOrigen==='nova_td'||_rawOrigen==='nova_web'||_rawOrigen==='nova td'||_subj.includes('nova td')||_subj.includes('nova (enlace)')) {
+        _autoOrigen = 'NOVA TD';
+      } else if(_rawOrigen==='qr'||_subj.includes('qr |')||_subj.includes('código qr')) {
+        _autoOrigen = 'CODIGO QR';
+      } else if(_rawOrigen==='correo'||_rawOrigen==='correo electronico'||_rawOrigen==='email_directo'||_rawOrigen==='correo_electronico') {
+        _autoOrigen = 'CORREO ELECTRONICO';
+      } else if(_subj && !_subj.startsWith('re:') && !_subj.startsWith('fw:')) {
+        // Si llega por correo sin origen técnico → correo electrónico
+        _autoOrigen = 'CORREO ELECTRONICO';
+      }
+      origSel.value = _autoOrigen;
+      // Solo sugerir — el asesor puede cambiar siempre
+      origSel.disabled = false;
+      if(_autoOrigen) {
+        origSel.classList.add('gm-ok'); origSel.classList.remove('gm-err');
+      } else {
+        origSel.classList.add('gm-err'); origSel.classList.remove('gm-ok');
+      }
+    }
 
     // Marcar verde los campos con dato, rojo los vacíos
     setTimeout(() => {
@@ -7495,6 +7524,10 @@ document.getElementById('celBtnS').onclick=function(){document.getElementById('c
 .gm-search-wrap.gm-ok  .gm-input { border-color: #16a34a !important; }
 .gm-search-wrap.gm-err .gm-input { border-color: #dc2626 !important; }
 #gCedulaMsg { font-size: 10px; color: var(--red); display: none; margin-top: 2px; }
+  .gm-origen-manual { color: #aaa; }
+  select#gOrigen option.gm-origen-manual { border-top: 1px solid #444; }
+  .gm-lock { font-size: 0.85em; opacity: 0.7; cursor: default; }
+  select#gOrigen:disabled { opacity: 0.85; cursor: not-allowed; background: #1a1a2e; }
 </style>
 <div id="modalObsDispensa" style="display:none;position:fixed;inset:0;z-index:2100;background:rgba(10,14,26,.45);align-items:center;justify-content:center" onmousedown="if(event.target===this)cerrarObsDispensa()">
   <div class="obs-modal-box">
