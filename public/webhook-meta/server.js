@@ -1233,7 +1233,7 @@ app.post('/send-audio', upload.single('audio'), async (req, res) => {
       }
     }
     const audioUrl = await subirASupabase(audioBuffer, `audios-agente/${telefono.replace('+','')}/${Date.now()}.${ext}`, audioMime);
-    const mr = await fetch(`https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${META_TOKEN}`},body:JSON.stringify({messaging_product:'whatsapp',to:telefono.replace('+',''),type:'audio',audio:{link:audioUrl}})});
+    const mr = await fetch(`https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${META_TOKEN}`},body:JSON.stringify({messaging_product:'whatsapp',to:telefono.replace('+',''),type:'audio',audio:{link:audioUrl,voice:true}})});
     if (!mr.ok) throw new Error(await mr.text());
     const { data: ses } = await supabase.from('wa_sesiones').select('history').eq('telefono',telefono).single();
     const hist = Array.isArray(ses?.history)?ses.history:[];
