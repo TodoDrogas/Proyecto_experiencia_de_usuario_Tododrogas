@@ -1210,8 +1210,29 @@ app.post('/send-audio', upload.single('audio'), async (req, res) => {
     const file = req.file;
     if (!telefono || !file) return res.status(400).json({ error:'telefono y audio requeridos' });
     const ahoraISO = new Date().toISOString();
-    const ext = file.mimetype.includes('webm')?'webm':'ogg';
-    const audioUrl = await subirASupabase(file.buffer, `audios-agente/${telefono.replace('+','')}/${Date.now()}.${ext}`, file.mimetype);
+    // Convertir webm→ogg si es necesario (Meta no acepta webm)
+    let audioBuffer = file.buffer;
+    let audioMime   = file.mimetype;
+    let ext         = 'ogg';
+    if (file.mimetype.includes('webm')) {
+      try {
+        const { execSync } = require('child_process');
+        const os  = require('os');
+        const fs  = require('fs');
+        const tmp = require('path').join(os.tmpdir(), `aud_${Date.now()}`);
+        fs.writeFileSync(`${tmp}.webm`, file.buffer);
+        execSync(`ffmpeg -y -i ${tmp}.webm -c:a libopus -b:a 64k ${tmp}.ogg 2>/dev/null`);
+        audioBuffer = fs.readFileSync(`${tmp}.ogg`);
+        audioMime   = 'audio/ogg; codecs=opus';
+        fs.unlinkSync(`${tmp}.webm`);
+        fs.unlinkSync(`${tmp}.ogg`);
+        console.log('🔄 webm→ogg convertido OK');
+      } catch(convErr) {
+        console.warn('⚠️ Conversión webm→ogg falló, usando original:', convErr.message);
+        ext = 'webm';
+      }
+    }
+    const audioUrl = await subirASupabase(audioBuffer, `audios-agente/${telefono.replace('+','')}/${Date.now()}.${ext}`, audioMime);
     const mr = await fetch(`https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${META_TOKEN}`},body:JSON.stringify({messaging_product:'whatsapp',to:telefono.replace('+',''),type:'audio',audio:{link:audioUrl}})});
     if (!mr.ok) throw new Error(await mr.text());
     const { data: ses } = await supabase.from('wa_sesiones').select('history').eq('telefono',telefono).single();
