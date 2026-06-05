@@ -2728,10 +2728,9 @@ function renderInfo(){
       <div class="info-row"><div class="info-lbl">Estado</div><div><span class="itag ${s.estado==='nova'?'itag-nova':s.estado==='cerrado'?'itag-cer':s.estado==='pte_gestion'?'itag-pte':'itag-esc'}">${s.estado==='nova'?'🤖 Nova TD':s.estado==='escalado'?'👤 Escalado':s.estado==='esperando'?'⏳ Esperando':s.estado==='pte_gestion'?'⚠️ Pte. Gestión':'✅ Solucionado'}</span></div></div>
       ${s.agente_nombre?`<div class="info-row"><div class="info-lbl">Agente</div><div class="info-val">${escH(s.agente_nombre)}</div></div>`:''}
       ${s.resumen_nova?`
-        <div style="margin:8px 0;padding:10px 12px;background:var(--nova-l);border-radius:8px;border-left:3px solid var(--nova)">
-          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--nova);margin-bottom:5px">📋 Resumen Nova TD</div>
-          <div style="font-size:12px;line-height:1.6;color:var(--ink)">${escH(s.resumen_nova)}</div>
-          ${s.sentimiento?`<div style="margin-top:6px;font-size:11px;color:var(--ink3)">Sentimiento: <span style="font-weight:600;color:${s.sentimiento?.toLowerCase().includes('negativ')||s.sentimiento?.toLowerCase().includes('molest')?'var(--red)':s.sentimiento?.toLowerCase().includes('positiv')?'var(--green)':'var(--ink2)'}">${escH(s.sentimiento)}</span></div>`:''}
+        <div style="margin:8px 0;padding:10px 12px;background:#1e293b;border-radius:8px;border-left:3px solid #60a5fa">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#60a5fa;margin-bottom:5px">📋 Resumen Nova TD</div>
+          <div style="font-size:12px;line-height:1.6;color:#f1f5f9">${escH(s.resumen_nova)}</div>
         </div>`:''}
       <div id="resumenNovaPanel" style="display:none;margin-top:8px;padding:8px;background:var(--nova-l);border-radius:6px;border-left:3px solid var(--nova)"></div>
       ${s.ciudad?`<div class="info-row"><div class="info-lbl">Ciudad</div><div class="info-val">${escH(s.ciudad)}</div></div>`:''}
@@ -2809,34 +2808,26 @@ function renderSaludoSugerido(){
   if(!ses||!ses.saludo_sugerido||ses.estado==='cerrado'||ses.estado==='nova') return;
   if(ses.agente_id!==AGENT_ID) return;
   if(ses.primera_respuesta_at) return;
-  if(document.getElementById('saludoBanner')) return;
-  const chatEl=document.getElementById('chatMsgs');
-  if(!chatEl) return;
-  const banner=document.createElement('div');
-  banner.id='saludoBanner';
-  banner.style.cssText='background:var(--surface);border-top:2px solid var(--blue);padding:10px 12px;border-radius:0 0 10px 10px;box-shadow:0 -4px 16px rgba(0,0,0,.08)';
-  banner.innerHTML=`
-    <div style="font-size:9px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">💬 Saludo sugerido por Nova TD</div>
-    <div style="font-size:12px;color:var(--ink);line-height:1.5;background:var(--bg);padding:8px 10px;border-radius:8px;border-left:3px solid var(--blue);margin-bottom:8px;white-space:pre-line" id="saludoTexto">${escH(ses.saludo_sugerido)}</div>
-    <div style="display:flex;gap:6px">
-      <button onclick="enviarSaludoSugerido()" style="flex:1;background:var(--blue);color:#fff;border:none;border-radius:6px;padding:7px;font-size:11px;font-weight:700;font-family:'Poppins',sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px">
-        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        Enviar saludo
-      </button>
-      <button onclick="editarSaludoSugerido()" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-size:11px;font-weight:600;font-family:'Poppins',sans-serif;cursor:pointer;color:var(--ink2)">✏ Editar</button>
-      <button onclick="cerrarSaludoBanner()" style="background:none;border:none;font-size:14px;cursor:pointer;color:var(--ink3);padding:4px 6px">✕</button>
-    </div>`;
-  const parent=chatEl.parentElement||chatEl;
-  parent.appendChild(banner);
+  // Cargar directamente en el textarea — el agente solo revisa y envía
+  const ta=document.getElementById('msgTa');
+  if(ta && !ta.value.trim()){
+    ta.value=ses.saludo_sugerido;
+    autoH(ta);
+    ta.focus();
+    ta.selectionStart=ta.selectionEnd=ta.value.length;
+    // Indicador visual sutil de que es sugerido
+    ta.style.borderColor='var(--blue)';
+    ta.setAttribute('title','Saludo sugerido por Nova TD — edita si necesitas y envía');
+    setTimeout(()=>{ if(ta) ta.style.borderColor=''; }, 3000);
+  }
 }
 
 function enviarSaludoSugerido(){
   const ses=S.selSesion;
   if(!ses||!ses.saludo_sugerido) return;
-  cerrarSaludoBanner();
   const ta=document.getElementById('msgTa');
   if(ta){ ta.value=ses.saludo_sugerido; autoH(ta); }
-  enviarMsg();
+  enviar();
 }
 
 function editarSaludoSugerido(){
@@ -2844,7 +2835,6 @@ function editarSaludoSugerido(){
   if(!ses||!ses.saludo_sugerido) return;
   const ta=document.getElementById('msgTa');
   if(ta){ ta.value=ses.saludo_sugerido; autoH(ta); ta.focus(); ta.selectionStart=ta.selectionEnd=ta.value.length; }
-  cerrarSaludoBanner();
 }
 
 function cerrarSaludoBanner(){
