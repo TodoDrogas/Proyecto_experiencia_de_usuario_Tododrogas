@@ -1157,30 +1157,25 @@ async function refreshChat(tel){
     // Si el bot cerró la sesión (estado='cerrado') pero el agente no ha registrado la gestión
     // → convertir a 'pte_gestion' para que el agente sepa que debe actuar
     // Solo verificar pte_gestion si NO se está guardando en este momento
-    if(ses.estado==='cerrado' && ses.agente_id && !_gWaGuardando){
-      const telWA = tel.replace(/\+?57/,'').replace(/\D/g,'');
-      const hoyR2 = new Date().toISOString().slice(0,10).replace(/-/g,'');
-      const ticketIdR = `WA-${telWA}-${hoyR2}`;
-      try{
-        const r = await sb(`correos?ticket_id=eq.${enc(ticketIdR)}&select=num_gestiones,estado&limit=1`);
-        const numG = r&&r[0] ? r[0].num_gestiones||0 : 0;
-        const estG = r&&r[0] ? r[0].estado||'' : '';
-        // Solo pte_gestion si no hay gestiones Y el correo no está solucionado
-        if(numG===0 && estG!=='solucionado'){
-          ses = {...ses, estado:'pte_gestion'};
-          await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{estado:'pte_gestion'});
-        }
-      }catch(e){}
+    // Si la sesión está cerrada con agente humano asignado → siempre pte_gestion
+    // hasta que el agente registre la gestión manualmente
+    if(ses.estado==='cerrado' && ses.agente_id && ses.agente_id !== 'nova' && !_gWaGuardando){
+      ses = {...ses, estado:'pte_gestion'};
+      await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{estado:'pte_gestion',updated_at:new Date().toISOString()}).catch(()=>{});
+      const idxPG=S.sesiones.findIndex(s=>s.telefono===tel);
+      if(idxPG>=0) S.sesiones[idxPG].estado='pte_gestion';
     }
     const idx=S.sesiones.findIndex(s=>s.telefono===tel);
     if(idx>=0) S.sesiones[idx]=ses;
     S.selSesion=ses;
     const hist=parseHist(ses.history);
-    const nuevosMensajes = hist.length !== S.msgs.length ||
-      JSON.stringify(hist.slice(-3)) !== JSON.stringify(S.msgs.slice(-3));
+    // Solo usar hist de Supabase si tiene MÁS mensajes que el local
+    // Si tiene menos, Supabase está desincronizado — respetar el local
+    const histFinal = hist.length >= S.msgs.length ? hist : S.msgs;
+    const nuevosMensajes = histFinal.length !== S.msgs.length ||
+      JSON.stringify(histFinal.slice(-3)) !== JSON.stringify(S.msgs.slice(-3));
 
     // Si el usuario volvió a escribir mientras estaba pte_gestion → pasar a activo
-    // (misma sesión del día — segunda gestión)
     if(nuevosMensajes && ses.estado==='pte_gestion' && !_gWaGuardando){
       ses = {...ses, estado:'activo'};
       await sb(`wa_sesiones?telefono=eq.${enc(tel)}`,'PATCH',{estado:'activo',updated_at:new Date().toISOString()}).catch(()=>{});
@@ -1189,7 +1184,7 @@ async function refreshChat(tel){
     }
 
     if(nuevosMensajes || ses.estado!==S.selSesion?.estado){
-      S.msgs=hist;renderMsgs(hist);renderHdr(ses);renderInput(ses);renderInfo();updateCtrs();renderLista();
+      S.msgs=histFinal;renderMsgs(histFinal);renderHdr(ses);renderInput(ses);renderInfo();updateCtrs();renderLista();
     }
   }catch(e){}
 }
@@ -2732,7 +2727,12 @@ function renderInfo(){
       ${s.eps?`<div class="info-row"><div class="info-lbl">EPS</div><div class="info-val"><span class="itag itag-eps">${escH(s.eps)}</span></div></div>`:''}
       <div class="info-row"><div class="info-lbl">Estado</div><div><span class="itag ${s.estado==='nova'?'itag-nova':s.estado==='cerrado'?'itag-cer':s.estado==='pte_gestion'?'itag-pte':'itag-esc'}">${s.estado==='nova'?'🤖 Nova TD':s.estado==='escalado'?'👤 Escalado':s.estado==='esperando'?'⏳ Esperando':s.estado==='pte_gestion'?'⚠️ Pte. Gestión':'✅ Solucionado'}</span></div></div>
       ${s.agente_nombre?`<div class="info-row"><div class="info-lbl">Agente</div><div class="info-val">${escH(s.agente_nombre)}</div></div>`:''}
-      ${s.resumen_nova?`<div class="info-row" style="flex-direction:column;align-items:flex-start;gap:4px"><div class="info-lbl">📋 Resumen Nova</div><div class="info-val" style="font-size:11px;line-height:1.5;color:var(--ink2);background:var(--nova-l);padding:6px 8px;border-radius:6px;border-left:3px solid var(--nova)">${escH(s.resumen_nova)}</div></div>`:''}
+      ${s.resumen_nova?`
+        <div style="margin:8px 0;padding:10px 12px;background:var(--nova-l);border-radius:8px;border-left:3px solid var(--nova)">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--nova);margin-bottom:5px">📋 Resumen Nova TD</div>
+          <div style="font-size:12px;line-height:1.6;color:var(--ink)">${escH(s.resumen_nova)}</div>
+          ${s.sentimiento?`<div style="margin-top:6px;font-size:11px;color:var(--ink3)">Sentimiento: <span style="font-weight:600;color:${s.sentimiento?.toLowerCase().includes('negativ')||s.sentimiento?.toLowerCase().includes('molest')?'var(--red)':s.sentimiento?.toLowerCase().includes('positiv')?'var(--green)':'var(--ink2)'}">${escH(s.sentimiento)}</span></div>`:''}
+        </div>`:''}
       <div id="resumenNovaPanel" style="display:none;margin-top:8px;padding:8px;background:var(--nova-l);border-radius:6px;border-left:3px solid var(--nova)"></div>
       ${s.ciudad?`<div class="info-row"><div class="info-lbl">Ciudad</div><div class="info-val">${escH(s.ciudad)}</div></div>`:''}
       ${s.cedula?`<div class="info-row"><div class="info-lbl">Cédula</div><div class="info-val">${escH(s.cedula)}</div></div>`:''}
