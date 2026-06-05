@@ -399,6 +399,10 @@ app.get('/webhook/meta', (req, res) => {
 //  WEBHOOK POST — lógica principal
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/webhook/meta', async (req, res) => {
+  if (!verifyMetaSignature(req)) {
+    console.warn('❌ Firma Meta inválida — request rechazado');
+    return res.status(403).json({ error: 'Firma inválida' });
+  }
   res.sendStatus(200);
   try {
     const msg      = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
@@ -1109,7 +1113,7 @@ function verificarOrigen(req, res) {
 }
 
 // Enviar mensaje (agente → usuario)
-app.post('/send', async (req, res) => {
+app.post('/send', requireAgentToken, async (req, res) => {
   if (!verificarOrigen(req, res)) return;
   try {
     const { telefono, mensaje, agente_nombre, agente_id } = req.body;
@@ -1203,7 +1207,7 @@ app.post('/send-media', upload.single('file'), async (req, res) => {
 });
 
 // Enviar audio del agente
-app.post('/send-audio', upload.single('audio'), async (req, res) => {
+app.post('/send-audio', requireAgentToken, upload.single('audio'), async (req, res) => {
   if (!verificarOrigen(req, res)) return;
   try {
     const { telefono, agente_nombre, agente_id, duracion } = req.body;
