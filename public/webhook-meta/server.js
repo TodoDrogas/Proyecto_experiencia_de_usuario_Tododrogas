@@ -63,8 +63,29 @@ const META_TOKEN        = process.env.META_TOKEN;
 const META_PHONE_ID     = process.env.META_PHONE_NUMBER_ID;
 const META_VERIFY_TOKEN = process.env.META_WA_VERIFY_TOKEN;
 const NOVA_TOKEN        = process.env.NOVA_TOKEN || '';
+const META_APP_SECRET   = process.env.META_APP_SECRET || '';
 const OPENAI_KEY        = process.env.OPENAI_API_KEY || '';
 const PORT              = process.env.PORT || 3000;
+
+// ── Verificacion firma HMAC-SHA256 Meta ───────────────────────────────────────
+const crypto = require('crypto');
+function verifyMetaSignature(req) {
+  if (!META_APP_SECRET) return true;
+  const sig = req.headers['x-hub-signature-256'] || '';
+  if (!sig) return false;
+  const expected = 'sha256=' + crypto.createHmac('sha256', META_APP_SECRET).update(req.rawBody || '').digest('hex');
+  try { return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected)); }
+  catch { return false; }
+}
+
+// ── Middleware auth para endpoints de agente ──────────────────────────────────
+function requireAgentToken(req, res, next) {
+  if (!NOVA_TOKEN) return next();
+  const auth = req.headers['authorization'] || req.headers['x-agent-token'] || '';
+  const token = auth.replace(/^Bearer\s+/i, '').trim();
+  if (token !== NOVA_TOKEN) return res.status(401).json({ error: 'No autorizado' });
+  next();
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  UTILIDADES
@@ -399,6 +420,10 @@ app.get('/webhook/meta', (req, res) => {
 //  WEBHOOK POST — lógica principal
 // ══════════════════════════════════════════════════════════════════════════════
 app.post('/webhook/meta', async (req, res) => {
+  if (!verifyMetaSignature(req)) {
+    console.warn('❌ Firma Meta inválida — request rechazado');
+    return res.status(403).json({ error: 'Firma inválida' });
+  }
   res.sendStatus(200);
   try {
     const msg      = req.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
@@ -1109,7 +1134,7 @@ function verificarOrigen(req, res) {
 }
 
 // Enviar mensaje (agente → usuario)
-app.post('/send', async (req, res) => {
+app.post('/send', requireAgentToken, async (req, res) => {
   if (!verificarOrigen(req, res)) return;
   try {
     const { telefono, mensaje, agente_nombre, agente_id } = req.body;
@@ -1203,7 +1228,7 @@ app.post('/send-media', upload.single('file'), async (req, res) => {
 });
 
 // Enviar audio del agente
-app.post('/send-audio', upload.single('audio'), async (req, res) => {
+app.post('/send-audio', requireAgentToken, upload.single('audio'), async (req, res) => {
   if (!verificarOrigen(req, res)) return;
   try {
     const { telefono, agente_nombre, agente_id, duracion } = req.body;
@@ -1223,7 +1248,7 @@ app.post('/send-audio', upload.single('audio'), async (req, res) => {
         fs.writeFileSync(`${tmp}.webm`, file.buffer);
         execSync(`ffmpeg -y -i ${tmp}.webm -c:a libopus -b:a 64k ${tmp}.ogg 2>/dev/null`);
         audioBuffer = fs.readFileSync(`${tmp}.ogg`);
-        audioMime   = 'audio/ogg; codecs=opus';
+        audioMime   = 'audio/ogg'; // Supabase bucket solo acepta 'audio/ogg' sin sufijo codecs
         fs.unlinkSync(`${tmp}.webm`);
         fs.unlinkSync(`${tmp}.ogg`);
         console.log('🔄 webm→ogg convertido OK');
@@ -1233,7 +1258,7 @@ app.post('/send-audio', upload.single('audio'), async (req, res) => {
       }
     }
     const audioUrl = await subirASupabase(audioBuffer, `audios-agente/${telefono.replace('+','')}/${Date.now()}.${ext}`, audioMime);
-    const mr = await fetch(`https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${META_TOKEN}`},body:JSON.stringify({messaging_product:'whatsapp',to:telefono.replace('+',''),type:'audio',audio:{link:audioUrl}})});
+    const mr = await fetch(`https://graph.facebook.com/v19.0/${META_PHONE_ID}/messages`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${META_TOKEN}`},body:JSON.stringify({messaging_product:'whatsapp',to:telefono.replace('+',''),type:'audio',audio:{link:audioUrl,voice:true}})});
     if (!mr.ok) throw new Error(await mr.text());
     const { data: ses } = await supabase.from('wa_sesiones').select('history').eq('telefono',telefono).single();
     const hist = Array.isArray(ses?.history)?ses.history:[];
