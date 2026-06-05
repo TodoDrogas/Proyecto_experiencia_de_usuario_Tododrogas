@@ -1653,20 +1653,18 @@ async function enviarAudio(){
 
     // Quitar el mensaje temporal
     document.getElementById(tmpId)?.remove();
-    // Fetch fresco de Supabase (igual que enviar()) para no pisar el historial
-    const freshSesA = await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}&select=history&limit=1`);
-    const histBaseA = parseHist(freshSesA?.[0]?.history || S.selSesion?.history);
-    histBaseA.push({
+    // Agregar solo al historial local sin pisar lo que ya está
+    const audioMsg = {
       role:'assistant', sender:'agent', tipo:'audio',
       content:'[Audio de voz]',
       audio_url: d.audio_url || '',
       duracion: parseInt(duracion)||0,
       agente_nombre: AGENT_NAME,
       ts: new Date().toISOString()
-    });
-    if(S.selSesion) S.selSesion.history = histBaseA;
-    S.msgs = histBaseA;
-    renderMsgs(histBaseA);
+    };
+    S.msgs.push(audioMsg);
+    if(S.selSesion) S.selSesion.history = S.msgs;
+    renderMsgs(S.msgs);
 
   }catch(err){
     document.getElementById(tmpId)?.remove();
@@ -1678,13 +1676,14 @@ async function enviarAudio(){
 // tomar() eliminado — asignación automática del sistema
 
 // ── ENVIAR ───────────────────────────────────────
-let _sending=false;
+let _sendingAt=0;
 async function enviar(){
-  if(_sending) return;
+  const now=Date.now();
+  if(now-_sendingAt<2000) return; // bloquear si ya se envió hace menos de 2s
+  _sendingAt=now;
   const ta=document.getElementById('msgTa');
   const txt=(ta?.value||'').trim();
-  if(!txt||!S.selTel)return;
-  _sending=true;
+  if(!txt||!S.selTel){ _sendingAt=0; return; }
   const btn=document.getElementById('btnSend');
   if(btn) btn.disabled=true;
   ta.value='';ta.style.height='auto';
@@ -1697,14 +1696,14 @@ async function enviar(){
     });
     if(!waR.ok) throw new Error('Error WA: '+await waR.text());
     // Fetch fresco para no pisar mensajes que llegaron mientras enviábamos
-    const freshSes = await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}&select=history&limit=1`);
-    const histBase = parseHist(freshSes?.[0]?.history || S.selSesion?.history);
+    // Usar S.msgs local como base — nunca Supabase que puede estar desincronizado
+    const histBase = [...S.msgs];
     histBase.push({role:'assistant',sender:'agent',content:txt,agente_nombre:AGENT_NAME,ts:new Date().toISOString()});
     await sb(`wa_sesiones?telefono=eq.${enc(S.selTel)}`,'PATCH',{history:JSON.stringify(histBase),updated_at:new Date().toISOString()});
     if(S.selSesion) S.selSesion.history = histBase;
     S.msgs=histBase;renderMsgs(histBase);
   }catch(e){toast('Error al enviar: '+e.message,'err');if(ta)ta.value=txt;}
-  finally{_sending=false;if(btn)btn.disabled=false;if(ta)ta.focus();}
+  finally{_sendingAt=0;if(btn)btn.disabled=false;if(ta)ta.focus();}
 }
 
 // ── TRANSFERIR A AGENTE ───────────────────────────────────────────
