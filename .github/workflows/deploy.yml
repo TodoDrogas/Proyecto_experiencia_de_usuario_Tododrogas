@@ -36,19 +36,26 @@ jobs:
       - name: Ofuscar código JS en todos los HTML
         run: |
           npm install -g html-minifier-terser 2>/dev/null
+
+          echo '<!-- SEGURIDAD AVANZADA TD | No hay nada que ver aqui. -->' > /tmp/banner.txt
+
           COUNT=0
           for f in public/*.html; do
             [ -f "$f" ] || continue
+            # Minificar primero
             html-minifier-terser "$f" \
               --collapse-whitespace \
               --remove-comments \
               --minify-js '{"compress":true,"mangle":true}' \
               --minify-css true \
-              -o "$f"
-            echo "✅ $f ofuscado"
+              -o "$f.min"
+            # Agregar banner al inicio y reemplazar
+            cat /tmp/banner.txt "$f.min" > "$f"
+            rm "$f.min"
+            echo "✅ $f protegido"
             COUNT=$((COUNT+1))
           done
-          echo "✅ Total ofuscados: $COUNT archivos HTML"
+          echo "✅ Total protegidos: $COUNT archivos HTML"
 
       # ── 3. INYECTAR SECRETS EN PHP ──────────────────────────────
       - name: Inyectar secrets en PHP
