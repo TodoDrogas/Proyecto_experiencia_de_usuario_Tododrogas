@@ -1213,6 +1213,7 @@ input[type="email"].pqr-input{text-transform:none;letter-spacing:normal;}
 
 <div id="toasts"></div>
 
+<script src="/config.js"></script>
 <script>
 
 // ══════════════════════════════════════════
@@ -1226,9 +1227,15 @@ let SEDES_FORM = [];
 async function _cargarSedesForm() {
   try {
     // Intentar window.SUPABASE_URL (runtime) o el placeholder que inyecta sed al deployar
-    const sbUrl = (window.SUPABASE_URL||'__SB_URL__'||'').replace(/\/$/,'');
-    const sbKey = window.SUPABASE_KEY||'__SB_KEY__'||'';
-    if(!sbUrl||!sbKey||sbUrl.includes('__SB')||sbKey.includes('__SB')){ console.warn('Credenciales Supabase no disponibles'); return; }
+    // Esperar hasta 3s a que config.js inyecte las credenciales
+    let _tries = 0;
+    while((!window.SUPABASE_URL || !window.SUPABASE_KEY) && _tries < 30) {
+      await new Promise(r => setTimeout(r, 100));
+      _tries++;
+    }
+    const sbUrl = (window.SUPABASE_URL||'').replace(/\/$/,'');
+    const sbKey = window.SUPABASE_KEY||'';
+    if(!sbUrl||!sbKey){ console.warn('Credenciales Supabase no disponibles tras espera'); return; }
     const r = await fetch(
       `${sbUrl}/rest/v1/sedes?activa=eq.true&select=id,nombre,ciudad,municipio_norm,direccion,lat,lng&order=nombre.asc&limit=200`,
       { headers: { apikey: sbKey, Authorization: 'Bearer '+sbKey } }
