@@ -111,8 +111,9 @@ $_epsNorm = strtoupper(preg_replace('/\s+/', ' ', $eps));
 $_epsMap = [
     'PREVENTIVA'              => 'COOSALUD',
     'PREVENTIVA SALUD'        => 'COOSALUD',
-    'CEM'                     => 'SAVIA',
-    'COMITE DE ESTUDIOS'      => 'SAVIA',
+    // CEM y COMITE DE ESTUDIOS se quedan como 'CEM' — tienen acceso a TODAS las sedes
+    'CEM'                     => 'CEM',
+    'COMITE DE ESTUDIOS'      => 'CEM',
     'ANGIOSUR'                => 'SAVIA',
     'ANGIOSUR S.A.S'          => 'SAVIA',
     'SAVIA'                   => 'SAVIA',
@@ -299,7 +300,13 @@ function construirSistema(string $nombre, string $eps, string $ciudad, string $v
     $hoy = (new DateTime())->format('l, d \d\e F \d\e Y');
     $s  = "Eres Nova TD, asistente virtual de Tododrogas.\n";
     $s .= "FECHA DE HOY: $hoy\n";
-    $s .= "USUARIO: $nombre | EPS: $eps (SAVIA SALUD = SAVIA, PREVENTIVA SALUD = PREVENTIVA)\n";
+    $epsDisplay = ($eps === 'CEM') ? 'Savia Salud' : $eps;
+    $s .= "USUARIO: $nombre | EPS: $epsDisplay\n";
+    if ($eps === 'CEM') {
+        $s .= "NOTA CEM: Este usuario pertenece a Savia Salud (Comite de Estudios Medicos). " .
+              "Identificalo SIEMPRE como *Savia Salud*. " .
+              "Tiene acceso a TODAS las sedes del municipio sin restriccion por EPS.\n";
+    }
     $s .= "VIP: $vip\n";
     $s .= "TRATO: Siempre de USTED.\n";
 
@@ -420,12 +427,17 @@ function cargarSedesActualizadas(array $sedesLocal): array {
 
 function buscarSedes(string $municipio, string $epsFilter, array $sedes): string {
     $munN = ntdNormMun($municipio);
+    $epsNorm = strtoupper(trim($epsFilter));
+
+    // CEM: pertenece a Savia pero tiene acceso a TODOS los servicios farmacéuticos
+    $esCEM = in_array($epsNorm, ['CEM', 'COMITE DE ESTUDIOS', 'COMITE DE ESTUDIOS MEDICOS S.A.S']);
+
     $epsN = strtoupper(trim(str_replace(
         ['SAVIA SALUD','PREVENTIVA SALUD','PREVENTIVA','ANGIOSUR S.A.S.','ANGIOSUR','CEM','COMITE DE ESTUDIOS MEDICOS S.A.S'],
         ['SAVIA',      'COOSALUD',       'COOSALUD', 'SAVIA',           'SAVIA',  'SAVIA','SAVIA'],
         $epsFilter
     )));
-    $todas = strtoupper($epsFilter) === 'TODAS';
+    $todas = strtoupper($epsFilter) === 'TODAS' || $esCEM;
 
     $encontradas = array_filter($sedes, function($s) use ($munN, $epsN, $todas) {
         $sM = ntdNormMun($s['municipio']??'');
@@ -447,12 +459,14 @@ function buscarSedes(string $municipio, string $epsFilter, array $sedes): string
     });
 
     if (empty($encontradas)) {
-        return "📍 No encontré sedes en *$municipio*".($todas?'':' para su EPS *'.$epsFilter.'*').". Verifique el municipio o llame al *604 322 2432*.";
+        return "📍 No encontré sedes en *$municipio*".($todas && !$esCEM ?'':' para su EPS *'.($esCEM?'Savia Salud':$epsFilter).'*').". Verifique el municipio o llame al *604 322 2432*.";
     }
 
     $munDisplay = ucwords(strtolower($municipio));
+    $epsDisplay = $esCEM ? 'Savia Salud' : $epsN;
     $txt = "📍 *Sedes en $munDisplay";
-    if (!$todas && $epsN) $txt .= " para *$epsN*";
+    if ($esCEM) $txt .= " para *$epsDisplay*";  // CEM → muestra "Savia Salud", ve todas
+    elseif (!$todas && $epsN) $txt .= " para *$epsN*";
     $txt .= ":*\n\n";
     $i = 1;
     foreach (array_slice(array_values($encontradas), 0, 4) as $s) {
