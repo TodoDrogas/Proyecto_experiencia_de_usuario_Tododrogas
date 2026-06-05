@@ -32,6 +32,24 @@ jobs:
           CONFIGEOF
           echo "✅ config.js generado"
 
+      # ── 2b. OFUSCAR TODOS LOS HTML ─────────────────────────────
+      - name: Ofuscar código JS en todos los HTML
+        run: |
+          npm install -g html-minifier-terser 2>/dev/null
+          COUNT=0
+          for f in public/*.html; do
+            [ -f "$f" ] || continue
+            html-minifier-terser "$f" \
+              --collapse-whitespace \
+              --remove-comments \
+              --minify-js '{"compress":true,"mangle":true}' \
+              --minify-css true \
+              -o "$f"
+            echo "✅ $f ofuscado"
+            COUNT=$((COUNT+1))
+          done
+          echo "✅ Total ofuscados: $COUNT archivos HTML"
+
       # ── 3. INYECTAR SECRETS EN PHP ──────────────────────────────
       - name: Inyectar secrets en PHP
         run: |
