@@ -216,15 +216,45 @@ async function archivarEnHistorico(sesion, cerradoAt) {
   } catch(e) { console.error('❌ archivarEnHistorico:', e.message); }
 }
 
-async function generarSaludo(agenteNombre, resumenNova, nombreUsuario, eps) {
+async function generarSaludo(agenteNombre, resumenNova, nombreUsuario, eps, sentimiento = '') {
   if (!OPENAI_KEY) return null;
   try {
-    const nombre = agenteNombre.split(' ')[0];
-    const prompt = `Eres un asistente de Tododrogas. Genera UN saludo cálido y empático de máximo 3 líneas que el asesor ${nombre} enviará por WhatsApp al usuario ${nombreUsuario || 'el usuario'} (EPS: ${eps || 'no disponible'}). Contexto: ${resumenNova || 'solicita atención'}. Usa usted, no markdown, termina positivo.`;
+    const nombre    = agenteNombre.split(' ')[0];
+    const nombrePac = nombreUsuario ? nombreUsuario.split(' ')[0] : 'usted';
+    const epsStr    = eps || 'su EPS';
+    const resumen   = resumenNova || 'solicita atención';
+    const sent      = (sentimiento||'').toLowerCase();
+
+    // Tono según sentimiento detectado por Nova
+    const tonoGuia = sent.includes('negativ') || sent.includes('molest') || sent.includes('queja')
+      ? 'El usuario está molesto o frustrado — usa un tono muy empático, reconoce la situación primero, ofrece disculpas si aplica.'
+      : sent.includes('urgente') || sent.includes('dolor') || sent.includes('urgenc')
+      ? 'El usuario tiene una situación urgente — transmite prioridad y acción inmediata.'
+      : 'El usuario solicita información — sé cálido, profesional y servicial.';
+
+    const prompt = `Eres un experto en experiencia del cliente de Tododrogas, una empresa de servicios farmacéuticos colombiana.
+
+Genera UN mensaje de saludo personalizado que el asesor "${nombre}" enviará por WhatsApp al paciente "${nombrePac}" (EPS: ${epsStr}).
+
+Contexto de la conversación con Nova TD: ${resumen}
+Guía de tono: ${tonoGuia}
+
+REGLAS ESTRICTAS:
+- Preséntate con nombre completo: "${agenteNombre}, agente especializado/a en Experiencia del Servicio"  
+- Usa "usted" siempre, nunca "tú"
+- Máximo 3 oraciones, sin listas ni markdown
+- Menciona que revisará el caso de inmediato
+- Si hay queja o problema con medicamentos, expresa que lamenta la situación
+- Termina con una frase que transmita que el caso tiene atención prioritaria
+- Lenguaje colombiano natural y cálido
+- NO uses corchetes, variables ni placeholders
+
+Responde SOLO con el mensaje, sin comillas ni explicaciones.`;
+
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${OPENAI_KEY}` },
-      body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 200, temperature: 0.7, messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: 'gpt-4o-mini', max_tokens: 250, temperature: 0.8, messages: [{ role: 'user', content: prompt }] })
     });
     if (!res.ok) return null;
     const data = await res.json();
