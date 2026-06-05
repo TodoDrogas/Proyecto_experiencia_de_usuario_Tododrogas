@@ -1639,11 +1639,23 @@ async function enviarAudio(){
     });
 
     if(!res.ok) throw new Error(await res.text());
+    const d = await res.json().catch(()=>({}));
 
     // Quitar el mensaje temporal
     document.getElementById(tmpId)?.remove();
-    // El chat se actualizará con el polling normal
-    setTimeout(()=>{ if(S.selTel) refreshChat(S.selTel); }, 1000);
+    // Agregar el audio al historial local inmediatamente (no esperar polling)
+    const audioMsgLocal = {
+      role:'assistant', sender:'agent', tipo:'audio',
+      content:'[Audio de voz]',
+      audio_url: d.audio_url || '',
+      duracion: duracion,
+      agente_nombre: AGENT_NAME,
+      ts: new Date().toISOString()
+    };
+    S.msgs.push(audioMsgLocal);
+    renderMsgs(S.msgs);
+    // Confirmar con el servidor después de 1.5s
+    setTimeout(()=>{ if(S.selTel) refreshChat(S.selTel); }, 1500);
 
   }catch(err){
     document.getElementById(tmpId)?.remove();
