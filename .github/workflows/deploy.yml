@@ -278,16 +278,17 @@ jobs:
             npm list form-data > /dev/null 2>&1 || npm install form-data multer --save
             echo "✅ Dependencias OK" 
             if pm2 list | grep -q "webhook-meta"; then
-              pm2 restart webhook-meta
-              echo "✅ PM2 webhook-meta reiniciado"
+              pm2 reload webhook-meta --update-env
+              echo "✅ PM2 webhook-meta recargado (sin downtime)"
             else
               pm2 start server.js --name webhook-meta
               pm2 save
               echo "✅ PM2 webhook-meta iniciado por primera vez"
             fi
-            sleep 2
+            sleep 3
             curl -sf http://localhost:3000 && echo "✅ webhook-meta OK" || echo "❌ No responde"
-            pm2 logs webhook-meta --lines 5 --nostream 2>/dev/null | tail -6 || true
+            pm2 logs webhook-meta --lines 10 --nostream 2>/dev/null | tail -10 || true
+            pm2 save
 
       # ── 8. MIGRAR TABLAS SUPABASE ──────────────────────────────
       - name: Migrar tablas Supabase
