@@ -1223,7 +1223,7 @@ app.post('/send-audio', upload.single('audio'), async (req, res) => {
         fs.writeFileSync(`${tmp}.webm`, file.buffer);
         execSync(`ffmpeg -y -i ${tmp}.webm -c:a libopus -b:a 64k ${tmp}.ogg 2>/dev/null`);
         audioBuffer = fs.readFileSync(`${tmp}.ogg`);
-        audioMime   = 'audio/ogg; codecs=opus';
+        audioMime   = 'audio/ogg'; // Supabase bucket solo acepta 'audio/ogg' sin sufijo codecs
         fs.unlinkSync(`${tmp}.webm`);
         fs.unlinkSync(`${tmp}.ogg`);
         console.log('🔄 webm→ogg convertido OK');
