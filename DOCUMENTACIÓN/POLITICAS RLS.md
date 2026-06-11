@@ -1,7 +1,7 @@
 # Inventario de Politicas RLS — SIGI
 
 Sistema Integrado de Gestion Inteligente
-Tododrogas CIA SAS — Area de Innovacion y Tecnologia
+Tododrogas — Procesos Digitales
 
 Inventario literal de todas las politicas Row Level Security (RLS) existentes en la base de datos, tal como estan hoy. Este documento es el respaldo del control de acceso: sirve para reconstruirlo en otro entorno (por ejemplo, la migracion a Azure) o para restaurarlo si se pierde.
 
@@ -201,4 +201,4 @@ Recomendacion: antes de migrar, decidir el modelo de acceso en Azure. Si el back
 
 ---
 
-Documentacion tecnica de SIGI — Tododrogas CIA SAS.
+Documentacion tecnica de SIGI — Tododrogas.
