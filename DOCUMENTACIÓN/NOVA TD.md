@@ -1,15 +1,15 @@
 # Bot Nova TD — Documentacion Tecnica
 
 Sistema Integrado de Gestion Inteligente — SIGI
-Tododrogas — Procesos Digitales
+Tododrogas CIA SAS — Area de Innovacion y Tecnologia
 
-Nova TD es el asistente virtual de WhatsApp de Tododrogas. Atiende a los pacientes de forma automatica las 24 horas, resuelve las consultas mas comunes sin intervencion humana y escala a un agente cuando hace falta. Este documento describe en detalle como funciona por dentro, que componentes lo forman y como se conectan entre si.
+Nova TD es el asistente virtual de Tododrogas. Atiende a los pacientes de forma automatica las 24 horas, resuelve las consultas mas comunes sin intervencion humana y escala a un agente cuando hace falta. Nova opera en dos canales: el chat web (Nova directo, en el sitio) y WhatsApp. Ambos comparten la misma logica y conocimiento, pero se ejecutan en componentes distintos. Este documento describe en detalle como funciona por dentro, que componentes lo forman y como se conectan entre si.
 
 ---
 
 ## Contenido
 
-1. Componentes de Nova
+1. Los dos canales de Nova
 2. Como se conectan los componentes
 3. Ciclo de vida de una conversacion
 4. Maquina de estados
@@ -23,29 +23,58 @@ Nova TD es el asistente virtual de WhatsApp de Tododrogas. Atiende a los pacient
 12. Encuesta de cierre
 13. Tareas automaticas (crons)
 14. Tablas que usa Nova
-15. Observaciones para mejorar Nova
+15. Nova TD respuesta (correos)
+16. Observaciones para mejorar Nova
 
 ---
 
-## 1. Componentes de Nova
+## 1. Los dos canales de Nova
 
-Nova no es un solo archivo. Esta repartido en tres piezas que trabajan juntas:
+El nombre "Nova" se usa para tres cosas relacionadas. Conviene distinguirlas desde el principio:
+
+| Nombre | Que es | Donde vive |
+|--------|--------|-----------|
+| Nova directo (web) | Chat web que el paciente usa desde el navegador | nova.html |
+| Nova WhatsApp | El mismo asistente atendiendo por WhatsApp | webhook-meta/server.js + nova-wa.php |
+| Nova TD respuesta | Generador de respuestas sugeridas para los agentes sobre tickets de correo (no es un chat) | nova-td-respuesta.php |
+
+Las dos primeras son el asistente conversacional propiamente dicho (el foco de este documento). La tercera comparte el nombre pero es otra cosa: ayuda a los agentes a redactar respuestas a las PQRSFD que llegan por correo, y se explica al final.
+
+### Nova directo (web) y Nova WhatsApp: mismo cerebro, distinto canal
+
+Ambos canales hacen lo mismo de cara al paciente: piden aceptar la politica, identifican por cedula, muestran el mismo menu de 8 opciones, consultan las mismas sedes, aplican la misma normalizacion de EPS y escalan a un agente igual. La diferencia esta en donde corre la logica:
+
+| Aspecto | Nova directo (web) | Nova WhatsApp |
+|---------|--------------------|--------------|
+| Interfaz | nova.html (navegador) | WhatsApp del paciente |
+| Donde se arma el prompt | En JavaScript, dentro de nova.html (funcion ntdSys) | En PHP, dentro de nova-wa.php (funcion construirSistema) |
+| Quien controla el flujo | El propio nova.html | webhook-meta/server.js (Node) |
+| Llamada a IA | Directo a nova-proxy.php | nova-wa.php llama a nova-proxy.php |
+| Estado de la sesion | nova_sesiones (via funciones RPC) | wa_sesiones (tabla de estado completa) |
+
+En la practica, Nova web es autonomo: el mismo nova.html arma el prompt y llama al proxy de IA. Nova WhatsApp necesita la pareja Node + PHP porque el canal es asincrono (los mensajes entran por webhook) y requiere mantener el estado de la conversacion entre mensajes.
+
+Un punto importante de mantenimiento: como las dos versiones arman el prompt por separado (una en JavaScript, otra en PHP), cualquier cambio en el comportamiento de Nova hay que hacerlo en los dos lugares para que ambos canales se mantengan iguales.
+
+### Componentes completos
 
 | Componente | Tecnologia | Rol |
 |------------|-----------|-----|
-| webhook-meta/server.js | Node.js (PM2, puerto 3000) | Recibe los mensajes de WhatsApp, controla la maquina de estados y envia las respuestas |
-| nova-wa.php | PHP | El cerebro: decide que responder, aplica reglas, arma el prompt de IA, interpreta los tags |
-| nova-proxy.php | PHP | Puente seguro hacia OpenAI (chat, transcripcion, voz) |
-
-Apoyan tambien:
-- nova-consulta.php: consulta de radicados PQRSFD por cedula, ticket o correo.
-- validar-paciente.php: valida la cedula del paciente contra el padron.
+| nova.html | HTML + JavaScript | Nova directo: interfaz y logica del chat web |
+| webhook-meta/server.js | Node.js (PM2, puerto 3000) | Nova WhatsApp: recibe mensajes, controla la maquina de estados, envia respuestas |
+| nova-wa.php | PHP | Cerebro de Nova WhatsApp: decide que responder, aplica reglas, arma el prompt, interpreta tags |
+| nova-proxy.php | PHP | Puente seguro hacia OpenAI (chat, transcripcion, voz). Lo usan ambos canales |
+| nova-consulta.php | PHP | Consulta de radicados PQRSFD por cedula, ticket o correo. Lo usan ambos canales |
+| validar-paciente.php | PHP | Valida la cedula del paciente contra el padron. Lo usan ambos canales |
+| nova-td-respuesta.php | PHP | Genera respuestas sugeridas para agentes sobre tickets de correo (uso aparte) |
 
 ---
 
 ## 2. Como se conectan los componentes
 
-El flujo de una respuesta automatica recorre esta cadena:
+Esta seccion describe el canal de WhatsApp, que es el que mas piezas involucra. El canal web (nova.html) es mas simple: el navegador arma el prompt y llama directo a nova-proxy.php, sin pasar por el Node.
+
+El flujo de una respuesta automatica por WhatsApp recorre esta cadena:
 
 ```
 WhatsApp del paciente
@@ -310,13 +339,31 @@ El server.js corre tres tareas periodicas en segundo plano:
 
 ---
 
-## 15. Observaciones para mejorar Nova
+## 15. Nova TD respuesta (correos)
+
+Ademas del asistente conversacional, existe nova-td-respuesta.php, que comparte el nombre "Nova" pero cumple una funcion distinta: no chatea con pacientes, sino que ayuda a los agentes a responder las PQRSFD que llegan por correo.
+
+Como funciona:
+- Lo invocan los paneles admin.html y agente.html cuando un agente abre un ticket de correo.
+- Recibe los datos del ticket (asunto, contenido, tipo de PQRSFD, prioridad, ley aplicable, SLA, etc.).
+- Busca en la base de conocimiento (knowledge_base) situaciones similares.
+- Con GPT-4o-mini genera una respuesta sugerida que el agente puede usar o ajustar.
+
+Segun su propia documentacion interna, reemplazo a un flujo de automatizacion externo anterior, manteniendo el mismo formato de respuesta. Es decir, antes esta tarea la hacia una herramienta externa y ahora la resuelve este endpoint PHP.
+
+Aunque lleva "Nova" en el nombre, conviene tenerlo claro como una pieza separada: el asistente conversacional (web y WhatsApp) atiende pacientes; Nova TD respuesta asiste a los agentes con los correos.
+
+---
+
+## 16. Observaciones para mejorar Nova
 
 Estas son ideas para una version futura, no problemas de la version actual. Se dejan documentadas como hoja de ruta.
 
 Catalogo de sedes duplicado. El catalogo existe en dos lugares: la tabla `sedes` y una copia local dentro de nova-wa.php (y otra en nova.html). El codigo ya prioriza la tabla y usa la copia local solo como respaldo, pero mantener tres copias sincronizadas es laborioso. A futuro convendria que el respaldo local se genere automaticamente desde la tabla, o eliminarlo si la disponibilidad de Supabase es suficiente.
 
-Logica repartida entre Node y PHP. El control de la conversacion esta en el server.js (Node) y el cerebro de decision en nova-wa.php (PHP). Funciona, pero seguir un flujo completo exige saltar entre dos archivos y dos lenguajes. Documentar el contrato entre ambos (las acciones que devuelve el PHP) ya ayuda; a futuro podria unificarse la logica de fases en un solo lugar.
+Prompt de Nova duplicado entre canales. El comportamiento de Nova se define en dos lugares independientes: en JavaScript dentro de nova.html (canal web) y en PHP dentro de nova-wa.php (canal WhatsApp). Cualquier cambio de comportamiento hay que replicarlo en ambos para que los dos canales se mantengan iguales, lo que es facil de olvidar. A futuro convendria centralizar la definicion del prompt y las reglas en un solo lugar (por ejemplo, un endpoint que ambos canales consulten) para no mantener dos copias.
+
+Logica repartida entre Node y PHP. En el canal de WhatsApp, el control de la conversacion esta en el server.js (Node) y el cerebro de decision en nova-wa.php (PHP). Funciona, pero seguir un flujo completo exige saltar entre dos archivos y dos lenguajes. Documentar el contrato entre ambos (las acciones que devuelve el PHP) ya ayuda; a futuro podria unificarse la logica de fases en un solo lugar.
 
 Interceptor de menu fragil. El Node decide si un numero es navegacion de menu revisando si los ultimos mensajes contenian el menu. Es una heuristica que funciona, pero depende del formato del texto. Un estado explicito de "esperando opcion de menu" seria mas robusto que detectar emojis numerados en el historial.
 
