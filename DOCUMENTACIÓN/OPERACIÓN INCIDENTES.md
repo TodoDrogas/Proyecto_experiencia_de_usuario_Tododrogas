@@ -1,6 +1,7 @@
 # Operacion e Incidentes — SIGI
 
-Tododrogas — Procesos Digitales
+Sistema Integrado de Gestion Inteligente
+Tododrogas CIA SAS — Area de Innovacion y Tecnologia
 
 Registro de incidentes que ya ocurrieron en produccion, con su causa y su solucion, mas los procedimientos para resolverlos si se repiten. Este documento recoge aprendizajes reales del dia a dia: son los problemas que mas tiempo han costado.
 
@@ -11,7 +12,7 @@ Registro de incidentes que ya ocurrieron en produccion, con su causa y su soluci
 1. Orden de diagnostico cuando "el sistema no carga"
 2. Incidente: capacidad de la base de datos (Supabase)
 3. Incidente: Nginx no levanta tras editar la configuracion
-4. Incidente: no se guardan datos cuando no se acepta la politica
+4. Incidente: no se guardan ni cargan datos por falta de politica RLS en Supabase
 5. Restriccion de acceso: que todo responda solo desde el dominio
 6. Checklist rapido de incidentes
 
@@ -103,21 +104,54 @@ Regla de oro: nunca usar `systemctl restart nginx` antes de que `nginx -t` diga 
 
 ---
 
-## 4. Incidente: no se guardan datos cuando no se acepta la politica
+## 4. Incidente: no se guardan ni cargan datos por falta de politica RLS en Supabase
 
-Sintoma: una conversacion o radicacion no queda registrada en la base de datos. Ocurre cuando el flujo de aceptacion de la politica de tratamiento de datos no se completo o no esta creado.
+Sintoma: una tabla no devuelve datos (consulta vacia) o no acepta una insercion o actualizacion, aunque el dato exista y la consulta sea correcta. Tipicamente aparece al crear una tabla nueva o al usar una tabla recien creada desde el frontend o un endpoint.
 
-Causa: el sistema esta disenado para no almacenar los datos personales del paciente hasta que acepta la politica de tratamiento de datos (cumplimiento de Habeas Data). Si el registro de la politica no existe o el paciente no la acepta, el sistema, por diseno, no persiste la informacion.
+Causa: en Supabase, todas las tablas tienen Row Level Security (RLS) habilitado. Con RLS activo, una tabla sin politicas RECHAZA por defecto todas las operaciones de los roles anon y authenticated. Es decir: si una tabla no tiene una politica que permita explicitamente la operacion (SELECT, INSERT, UPDATE), Supabase no deja pasar la consulta y el resultado se ve como "no carga" o "no guarda", sin un error obvio.
+
+Esto explica el caso vivido: al crear una tabla o consultar una que no tenia la politica correspondiente, los datos no aparecian aunque estuvieran ahi (o no se insertaban), porque faltaba la politica que autoriza esa consulta.
 
 Que verificar:
 
-1. Confirmar que el paciente efectivamente acepto la politica en el flujo (en Nova, responder 1 / Acepto).
-2. Confirmar que existe la configuracion o el registro de la politica en la base de datos. En SIGI el documento de politica se referencia desde la configuracion del sistema y desde Nova; si ese registro falta, el flujo de aceptacion no puede completarse y los datos no se guardan.
-3. Revisar la tabla configuracion_sistema y el flujo de politica en nova-wa.php (fase "politica").
+1. Identificar la tabla afectada.
+2. Revisar si tiene RLS habilitado y que politicas tiene. En el SQL Editor de Supabase:
 
-Importante: este comportamiento es intencional y correcto desde el punto de vista legal. La accion no es "forzar el guardado", sino asegurarse de que el registro de la politica este creado y disponible para que el paciente pueda aceptarla. Una vez aceptada, los datos se guardan con normalidad.
+```sql
+-- Estado de RLS de la tabla
+SELECT tablename, rowsecurity
+FROM pg_tables
+WHERE schemaname = 'public' AND tablename = 'NOMBRE_TABLA';
 
-Punto a documentar para el futuro: dejar claro en la configuracion cual es el registro de politica requerido, para que al desplegar un entorno nuevo (por ejemplo, Azure) no se olvide crearlo y el sistema "no guarde datos" sin razon aparente.
+-- Politicas existentes en la tabla
+SELECT policyname, roles, cmd, qual, with_check
+FROM pg_policies
+WHERE schemaname = 'public' AND tablename = 'NOMBRE_TABLA';
+```
+
+3. Si la tabla tiene RLS habilitado pero NO tiene politica para la operacion que falla, esa es la causa.
+
+Solucion: crear la politica que autorice la operacion para el rol que la necesita. Ejemplos:
+
+```sql
+-- Permitir lectura publica (rol anon) de una tabla
+CREATE POLICY "lectura_anon" ON NOMBRE_TABLA
+  FOR SELECT TO anon USING (true);
+
+-- Permitir insercion (rol anon)
+CREATE POLICY "insert_anon" ON NOMBRE_TABLA
+  FOR INSERT TO anon WITH CHECK (true);
+
+-- Acceso completo para el backend (rol de servicio)
+CREATE POLICY "service_all" ON NOMBRE_TABLA
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+```
+
+Importante: la politica debe coincidir con el rol que hace la consulta. El frontend usa el rol anon (clave publica); los endpoints PHP y el servicio Node usan el rol de servicio. Si el frontend lee una tabla directamente, esa tabla necesita una politica para anon; si solo la toca el backend, basta una politica para service_role.
+
+Regla practica para tablas nuevas: cada vez que se crea una tabla en Supabase, hay que crear de inmediato sus politicas RLS, o la tabla quedara inaccesible desde la aplicacion. Crear la tabla no es suficiente: sin politica, RLS la bloquea.
+
+Nota para la migracion a Azure: si la base pasa a Azure Database for PostgreSQL, el modelo de RLS de PostgreSQL sigue existiendo (RLS es una caracteristica nativa de PostgreSQL, no de Supabase), pero el manejo de roles anon / authenticated / service_role es propio de Supabase. Al migrar habra que replantear como se controla el acceso, ya que esos roles automaticos no existiran igual en Azure. Conviene documentar todas las politicas actuales antes de migrar.
 
 ---
 
@@ -163,10 +197,10 @@ Recomendacion para Azure: al migrar, replicar estas tres capas (referer en el se
 |---------|-----------------|---------|
 | El sistema no carga / paneles en blanco | Capacidad de Supabase | 2 |
 | El sitio no responde tras tocar Nginx | nginx -t y restaurar respaldo | 3 |
-| Una PQRSFD o chat no se guarda | Aceptacion y registro de la politica | 4 |
+| Una tabla no carga o no guarda datos | Politicas RLS de esa tabla en Supabase | 4 |
 | Nova no responde WhatsApp | Token de Meta y estado de PM2 | Runbook |
 | No entran correos | Log de sincronizacion y cron | Runbook |
 
 ---
 
-Documentacion tecnica de SIGI — Tododrogas.
+Documentacion tecnica de SIGI — Tododrogas CIA SAS.
