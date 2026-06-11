@@ -1,257 +1,232 @@
-# Arquitectura — SIGI
+# Mapa de Conexiones — SIGI
 
 Sistema Integrado de Gestion Inteligente
-Tododrogas CIA SAS — Area de Innovacion y Tecnologia
+Tododrogas — Procesos Digitales
 
-Este documento describe como esta construido el sistema por dentro: los componentes, como se comunican entre si y como fluye la informacion de punta a punta. Complementa al README, que da la vision general.
+Este documento detalla que componente se conecta con que: cada archivo del sistema, los servicios externos que consume, las tablas de base de datos que usa y los modelos de IA que invoca. Sirve para entender las dependencias reales antes de modificar cualquier pieza.
 
 ---
 
 ## Contenido
 
-1. Diagrama de componentes
-2. Infraestructura del servidor
-3. Componentes en detalle
-4. Flujo por canal
-5. Comunicacion entre componentes
-6. Manejo de credenciales y despliegue
-7. Tareas programadas
-8. Configuracion heredada por revisar
+1. Servicios externos del sistema
+2. Conexiones de los endpoints PHP
+3. Conexiones del servicio Node
+4. Conexiones de las vistas (frontend)
+5. Quien escribe y quien lee cada tabla
+6. Resumen de dependencias
 
 ---
 
-## 1. Diagrama de componentes
+## 1. Servicios externos del sistema
 
-```
-                            Internet
-                               |
-                               v
-        ┌──────────────────────────────────────────────┐
-        |              Nginx (puerto 443)               |
-        |   Sirve los HTML, enruta PHP y proxys Node    |
-        └──────────────────────────────────────────────┘
-              |              |                |
-              v              v                v
-     ┌─────────────┐  ┌─────────────┐  ┌──────────────────┐
-     |  Vistas HTML |  | PHP 8.3-FPM |  | Node webhook-meta|
-     | (navegador)  |  | (endpoints) |  |  PM2 :3000       |
-     └─────────────┘  └─────────────┘  └──────────────────┘
-              |              |                |
-              |              v                |
-              |        ┌──────────┐           |
-              └───────>| Supabase |<──────────┘
-                       | Postgres |
-                       | + Storage|
-                       └──────────┘
-                            ^
-              servicios externos consumidos por PHP/Node:
-        OpenAI · Microsoft Graph (Outlook) · Meta WhatsApp API
-```
+El sistema se conecta con cuatro servicios externos:
+
+| Servicio | Para que se usa | Quien lo llama |
+|----------|-----------------|----------------|
+| OpenAI | Clasificacion, resumenes, transcripcion, voz, vision | Endpoints PHP y servicio Node |
+| Microsoft Graph | Leer y enviar correo de Outlook | Endpoints PHP |
+| Meta WhatsApp (graph.facebook.com) | Enviar y recibir mensajes de WhatsApp | Servicio Node y algunos PHP |
+| Supabase | Base de datos y almacenamiento de archivos | Todos |
+
+Modelos de OpenAI utilizados:
+
+| Modelo | Tarea |
+|--------|-------|
+| gpt-4o-mini | Clasificacion de PQRSFD, sentimiento, resumenes, respuestas del bot |
+| gpt-4o (Vision) | Lectura de imagenes y documentos adjuntos |
+| whisper-1 | Transcripcion de audio a texto |
+| tts-1 | Generacion de respuestas en audio (voz) |
 
 ---
 
-## 2. Infraestructura del servidor
+## 2. Conexiones de los endpoints PHP
 
-El sistema corre en un unico VPS (Hostinger).
+Cada endpoint con lo que consume. Todos usan la clave de servicio de Supabase (acceso de servidor).
 
-| Elemento | Version / detalle |
-|----------|-------------------|
-| Sistema operativo | Ubuntu |
-| Servidor web | Nginx 1.24.0 |
-| Backend | PHP 8.3.6 (FPM) |
-| Runtime de servicios | Node.js v20.20.2 |
-| Gestor de procesos Node | PM2 |
-| Dominio | tododrogas.online |
-| TLS | Let's Encrypt |
+### radicar-pqr.php
+Radica una PQRSFD desde el formulario web.
+- Externos: OpenAI (chat y transcripcion), Microsoft Graph
+- Modelos: gpt-4o, gpt-4o-mini, whisper-1
+- Tablas: correos, configuracion_sistema
+- Storage: si (guarda adjuntos)
 
-Distribucion en disco:
+### sincronizar-correos.php
+Trae correos nuevos de Outlook (ejecutado por cron cada minuto).
+- Externos: Microsoft Graph, OpenAI (chat), Meta WhatsApp
+- Modelos: gpt-4o-mini
+- Storage: si
 
-- `/var/www/pqr/` — raiz del sitio servida por Nginx: vistas HTML, endpoints PHP, `config.js`.
-- `/opt/webhook-meta/` — servicio Node que atiende WhatsApp, fuera de la raiz web.
+### transcribir-audio.php
+Transcribe audios adjuntos a un ticket.
+- Externos: OpenAI (transcripcion)
+- Modelos: whisper-1
+- Tablas: correos, adjuntos, historial_eventos
+- Storage: si
 
----
+### procesar-canvas.php
+Procesa imagenes y documentos adjuntos.
+- Externos: OpenAI (chat con vision)
+- Modelos: gpt-4o
+- Tablas: correos, adjuntos, historial_eventos
+- Storage: si
 
-## 3. Componentes en detalle
+### nova-consulta.php
+Backend principal del bot Nova.
+- Tablas: nova_sesiones, correos, agentes, sedes, knowledge_base, historial_eventos, configuracion_sistema
 
-### Nginx
+### nova-proxy.php
+Proxy seguro del bot, incluye respuestas en audio.
+- Externos: OpenAI (chat, transcripcion, voz)
+- Modelos: gpt-4o-mini, whisper-1, tts-1
 
-Es la puerta de entrada. Cumple tres funciones:
+### nova-td-respuesta.php
+Generacion de respuestas del bot.
+- Externos: OpenAI (chat)
+- Modelos: gpt-4o-mini
+- Tablas: knowledge_base
 
-1. Sirve los archivos estaticos (las vistas HTML y `config.js`).
-2. Pasa las peticiones a archivos `.php` al interprete PHP-FPM por socket Unix.
-3. Actua como proxy inverso hacia el servicio Node para las rutas de WhatsApp.
+### nova-wa.php
+Logica del bot para WhatsApp.
+- Tablas: nova_sesiones, sedes
+- Storage: si
 
-Ruta de WhatsApp activa:
+### whatsapp-webhook.php
+Recepcion de eventos de WhatsApp del lado PHP.
+- Externos: Meta WhatsApp, OpenAI (chat con vision)
+- Modelos: gpt-4o
+- Tablas: correos, sedes, tabla_usuarios
 
-```
-/wa/  ->  http://localhost:3000/
-```
+### chatbot.php
+Logica conversacional.
+- Externos: OpenAI (chat, transcripcion)
+- Modelos: gpt-4o-mini, whisper-1
+- Tablas: chatbot_sesiones
 
-### PHP-FPM (logica de negocio)
+### radicar-encuesta.php
+Registra una encuesta de satisfaccion.
+- Externos: OpenAI (chat), Microsoft Graph
+- Modelos: gpt-4o-mini
+- Tablas: correos
+- Storage: si
 
-Los endpoints PHP ejecutan toda la logica del lado del servidor y son los unicos que manejan las credenciales sensibles (clave de servicio de Supabase, OpenAI, Microsoft Graph). El navegador nunca habla directo con esos servicios; pasa por estos endpoints.
+### encuesta.php
+Recibe la calificacion embebida en un correo.
+- Tablas: correos, historial_eventos
 
-Agrupados por funcion:
+### login.php
+Valida acceso de administrador y agentes.
+- Tablas: agentes
 
-PQRSFD y correos:
-- `radicar-pqr.php` — radica una nueva PQRSFD desde el formulario web.
-- `sincronizar-correos.php` — trae los correos nuevos de Outlook y los registra como tickets (ejecutado por cron).
-- `transcribir-audio.php` — sube el audio a Storage y lo transcribe con Whisper.
-- `procesar-canvas.php` — sube imagenes y documentos adjuntos a Storage y los registra.
+### validar-paciente.php
+Valida identidad del paciente contra el padron. (Las consultas se resuelven via funciones del servidor.)
 
-Bot Nova y WhatsApp:
-- `nova-consulta.php` — backend principal del bot.
-- `nova-proxy.php` — proxy seguro del bot, incluye respuestas en audio (texto a voz).
-- `nova-td-respuesta.php` — generacion de respuestas del bot.
-- `nova-wa.php` — logica del bot para WhatsApp.
-- `whatsapp-webhook.php` — recepcion de eventos de WhatsApp del lado PHP.
-- `chatbot.php` — logica conversacional.
+### admin-buscar-paciente.php
+Busqueda de pacientes.
+- Tablas: via funcion RPC
 
-Encuestas:
-- `radicar-encuesta.php` — registra una encuesta de satisfaccion.
-- `encuesta.php` — recibe la calificacion embebida en un correo.
+### admin-buscar-medicamento.php
+Busqueda de medicamentos.
+- Tablas: medicamentos
 
-Autenticacion:
-- `login.php` — valida el acceso de administrador y agentes. Las credenciales se verifican en el servidor.
-
-Busquedas y validacion:
-- `validar-paciente.php` — valida la identidad del paciente contra el padron.
-- `admin-buscar-paciente.php` — busqueda de pacientes.
-- `admin-buscar-medicamento.php` — busqueda de medicamentos.
-- `cargar-plantillas.php` — carga plantillas a la base de conocimiento.
-
-### Servicio Node (webhook-meta)
-
-Servicio Express que corre bajo PM2 en el puerto 3000, con el nombre `webhook-meta`. Recibe los eventos de WhatsApp de Meta y gestiona el envio de mensajes salientes. Expone estas rutas:
-
-| Ruta | Funcion |
-|------|---------|
-| `/webhook` | Recibe los eventos entrantes de Meta (mensajes del paciente) |
-| `/send` | Envia un mensaje de texto |
-| `/send-audio` | Envia un mensaje de audio |
-| `/send-media` | Envia un archivo o imagen |
-| `/iniciar-conversacion` | Inicia una conversacion |
-| `/transferir` | Transfiere la sesion a un agente humano |
-| `/archivar` | Cierra y archiva la sesion |
-| `/heartbeat` | Senal de actividad |
-| `/continua-en-linea` | Verifica si la sesion sigue activa |
-| `/iniciar-encuesta-cierre` | Lanza la encuesta al cerrar |
-
-El servicio se accede desde el exterior a traves del proxy `/wa/` de Nginx.
-
-### Supabase (datos)
-
-Base de datos PostgreSQL y almacenamiento de archivos. Guarda los tickets, las sesiones, los catalogos y los adjuntos. La estructura completa esta en `estructura-base-de-datos.md`.
-
-Hay dos formas de acceso:
-- Los endpoints PHP y el servicio Node usan la clave de servicio (acceso completo, solo en el servidor).
-- El frontend usa la clave publica para las consultas que hace directamente desde el navegador.
+### cargar-plantillas.php
+Carga plantillas a la base de conocimiento.
+- Tablas: knowledge_base
 
 ---
 
-## 4. Flujo por canal
+## 3. Conexiones del servicio Node (webhook-meta)
 
-### Correo electronico
+Servicio que atiende WhatsApp, en el puerto 3000. Usa la clave de servicio de Supabase.
 
-```
-Outlook
-  -> cron cada minuto ejecuta sincronizar-correos.php
-  -> Microsoft Graph API trae los correos nuevos
-  -> IA clasifica (tipo, sentimiento, riesgo, resumen)
-  -> se inserta el ticket en la tabla correos
-  -> aparece en el panel del agente
-```
+- Externos: Meta WhatsApp (graph.facebook.com v19.0), OpenAI (chat y transcripcion)
+- Modelos: gpt-4o-mini, whisper-1
+- Tablas: wa_sesiones, wa_historico, logs_conversacion, agentes
 
-### WhatsApp
-
-```
-Paciente escribe por WhatsApp
-  -> Meta envia el evento a /webhook (servicio Node, via proxy /wa/)
-  -> el bot Nova procesa el mensaje
-  -> si Nova resuelve: responde automaticamente
-  -> si no: transfiere a un agente (/transferir) y se registra la sesion
-  -> al cerrar: se envia encuesta (/iniciar-encuesta-cierre) y se archiva
-```
-
-### Formulario web
-
-```
-Paciente llena pqr_form.html
-  -> radicar-pqr.php valida y procesa (incluye lectura de adjuntos con IA)
-  -> se inserta el ticket en la tabla correos
-  -> se envia acuse de recibo
-```
-
-### Llamada telefonica
-
-```
-Llamada entra al modulo PBX
-  -> el agente registra manualmente desde pbx.html
-  -> se crea el ticket asociado al canal PBX
-```
+Flujo: recibe el evento de Meta en `/webhook`, consulta o actualiza la sesion en `wa_sesiones`, usa OpenAI para las respuestas del bot, y al cerrar mueve la sesion a `wa_historico` y registra en `logs_conversacion`.
 
 ---
 
-## 5. Comunicacion entre componentes
+## 4. Conexiones de las vistas (frontend)
 
-El navegador del usuario nunca se comunica con los servicios externos (OpenAI, Graph, Meta) directamente. Toda llamada sensible pasa por el servidor:
+Las vistas leen datos de Supabase con la clave publica y llaman a los endpoints PHP o al servicio Node para las operaciones del servidor.
 
-```
-Navegador  ->  Nginx  ->  PHP-FPM  ->  Servicio externo
-                                   ->  Supabase
-```
+### admin.html
+- Lee directo: correos, contactos_frecuentes, historial_eventos, sedes, eps_catalogo, tabla_usuarios, usuarios_vip
+- Llama: admin-buscar-paciente.php
 
-Para WhatsApp el flujo es inverso (el evento llega de afuera):
+### agente.html
+- Lee directo: correos, agentes, wa_sesiones
+- Llama: admin-buscar-paciente.php
 
-```
-Meta  ->  Nginx (/wa/)  ->  Node :3000  ->  Supabase
-                                        ->  OpenAI (Nova)
-```
+### agente-wa.html
+- Lee directo: via funciones RPC
+- Llama al servicio Node (via /wa/): send, send-audio, send-media, transferir, archivar, iniciar-conversacion, iniciar-encuesta-cierre, continua-en-linea
 
-Las vistas del panel (admin, agente) tambien leen datos directamente de Supabase usando la clave publica, para refrescar listados en tiempo real.
+### pbx.html
+- Lee directo: agentes
+- Llama: validar-paciente.php
 
----
+### nova.html
+- Lee directo: correos, adjuntos, nova_sesiones, nova_reglas, sedes, via RPC
 
-## 6. Manejo de credenciales y despliegue
+### consulta.html
+- Lee directo: correos, adjuntos, configuracion_sistema
+- Es la consulta publica del estado de un ticket por parte del paciente.
 
-Las credenciales no estan en el codigo. Se guardan como secretos en GitHub y se inyectan durante el despliegue, que es automatico al hacer push a la rama `main`.
+### panel_config.html
+- Lee directo: configuracion_sistema, sedes
 
-Pasos del despliegue (definidos en `.github/workflows/deploy.yml`):
+### pqr_form.html
+- Lee directo: configuracion_sistema, sedes
+- Llama: radicar-pqr.php (al enviar el formulario)
 
-1. Genera `config.js` con los valores del frontend (incluida la clave publica de Supabase).
-2. Inyecta los secretos en los endpoints PHP, reemplazando marcadores `__NOMBRE__`.
-3. Minifica el codigo de las vistas HTML.
-4. Copia los archivos al VPS por SSH.
-5. Genera el `.env` del servicio Node y lo copia a `/opt/webhook-meta/`.
-6. Reinicia el servicio con PM2.
-7. Aplica migraciones pendientes en la base de datos.
-8. Valida que no queden marcadores sin reemplazar.
-
-En cada despliegue se crea una copia de respaldo del `server.js` anterior con marca de tiempo.
-
----
-
-## 7. Tareas programadas
-
-| Cron | Frecuencia | Que hace |
-|------|------------|----------|
-| `sincronizar-correos.php` | Cada minuto | Trae correos nuevos de Outlook y los registra como tickets |
-| `renovar-token.sh` | Ver nota | Renueva el token de acceso |
-
-Nota sobre `renovar-token.sh`: la expresion de cron actual (`0 3 5 7 *`) lo ejecuta solo una vez al ano, el 5 de julio a las 3:00 AM. Conviene revisar si la frecuencia es la correcta, dado que los tokens de acceso suelen requerir renovacion periodica.
+### pqr_encuesta.html
+- Lee directo: sedes
+- Llama: radicar-encuesta.php
 
 ---
 
-## 8. Configuracion heredada por revisar
+## 5. Quien escribe y quien lee cada tabla
 
-Durante la documentacion se identificaron elementos que parecen restos de etapas anteriores y que conviene revisar:
-
-- Proxy `/webhook/` en Nginx apuntando a un servicio externo en el puerto 5678. Si ya no se usa automatizacion externa, este bloque puede retirarse.
-- Proxy `/twilio/` en Nginx hacia el puerto 3000. Si WhatsApp opera solo por Meta, este proxy puede retirarse.
-- Acumulacion de respaldos `server.js.bak.*` en `/opt/webhook-meta/`. Conviene conservar solo los mas recientes y limpiar los antiguos.
-
-Estos puntos no afectan la operacion actual, pero mantenerlos limpios facilita el mantenimiento.
+| Tabla | Escriben | Leen |
+|-------|----------|------|
+| correos | radicar-pqr, sincronizar-correos, transcribir-audio, procesar-canvas, whatsapp-webhook, encuesta, radicar-encuesta | admin.html, agente.html, nova.html, consulta.html, nova-consulta |
+| agentes | login, servicio Node | agente.html, pbx.html, login, nova-consulta |
+| respuestas | endpoints de respuesta | paneles de agente |
+| adjuntos | transcribir-audio, procesar-canvas | nova.html, consulta.html |
+| historial_eventos | transcribir-audio, procesar-canvas, encuesta, nova-consulta | paneles |
+| gestiones_medicamentos | flujo de gestion de medicamentos | paneles |
+| encuestas_satisfaccion | radicar-encuesta | reportes y vistas |
+| knowledge_base | cargar-plantillas | nova-consulta, nova-td-respuesta |
+| wa_sesiones | servicio Node, nova-wa | agente.html, servicio Node |
+| wa_historico | servicio Node (al cerrar) | reportes |
+| nova_sesiones | nova-consulta, nova-wa | nova.html |
+| nova_reglas | configuracion | nova.html, bot Nova |
+| logs_conversacion | servicio Node | reportes |
+| tabla_usuarios | importacion del padron | validar-paciente, whatsapp-webhook, admin.html |
+| usuarios_vip | administracion | admin.html, bot Nova |
+| medicamentos | importacion de catalogo | admin-buscar-medicamento |
+| eps_catalogo | administracion | admin.html, formularios |
+| sedes | administracion | casi todos los flujos (geolocalizacion) |
+| configuracion_sistema | panel_config | radicar-pqr, consulta, nova, formularios |
 
 ---
 
-Documentacion tecnica de SIGI — Tododrogas CIA SAS.
+## 6. Resumen de dependencias
+
+Quien depende de OpenAI: radicar-pqr, sincronizar-correos, transcribir-audio, procesar-canvas, nova-proxy, nova-td-respuesta, whatsapp-webhook, chatbot, radicar-encuesta y el servicio Node. Si OpenAI falla, se afecta la clasificacion, la transcripcion y las respuestas del bot, pero no la radicacion basica.
+
+Quien depende de Microsoft Graph: radicar-pqr, sincronizar-correos, radicar-encuesta. Si Graph falla, se afecta la sincronizacion de correo y el envio de acuses.
+
+Quien depende de Meta WhatsApp: el servicio Node, whatsapp-webhook y sincronizar-correos. Si Meta falla, se afecta todo el canal de WhatsApp.
+
+Quien depende de Supabase: todos. Es el componente central; si Supabase falla, se detiene el sistema completo.
+
+La tabla mas conectada es `correos`: la escriben siete procesos distintos y la leen casi todas las vistas. Es el centro del modelo y cualquier cambio en su estructura impacta muchos componentes.
+
+La tabla `sedes` es la segunda mas usada, porque casi todos los flujos la consultan para la geolocalizacion de la sede mas cercana.
+
+---
+
+Documentacion tecnica de SIGI — Tododrogas.
