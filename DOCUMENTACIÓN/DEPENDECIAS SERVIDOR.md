@@ -1,7 +1,7 @@
 # Dependencias del Servidor — SIGI
 
 Sistema Integrado de Gestion Inteligente
-Tododrogas CIA SAS — Area de Innovacion y Tecnologia
+Tododrogas — Procesos Digitales
 
 Inventario de todo lo que debe estar instalado y configurado en el servidor para que SIGI funcione. Pensado como guia para montar un entorno desde cero, especialmente de cara a la migracion a Azure.
 
@@ -217,4 +217,4 @@ Ventaja de partida: como el backend PHP no usa Composer ni dependencias externas
 
 ---
 
-Documentacion tecnica de SIGI — Tododrogas CIA SAS.
+Documentacion tecnica de SIGI — Tododrogas.
