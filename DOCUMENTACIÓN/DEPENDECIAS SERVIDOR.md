@@ -1,7 +1,8 @@
 # Dependencias del Servidor — SIGI
 
-Tododrogas — Procesos Digitales
----
+Sistema Integrado de Gestion Inteligente
+Tododrogas CIA SAS — Area de Innovacion y Tecnologia
+
 Inventario de todo lo que debe estar instalado y configurado en el servidor para que SIGI funcione. Pensado como guia para montar un entorno desde cero, especialmente de cara a la migracion a Azure.
 
 ---
@@ -188,7 +189,7 @@ Base de datos:
 - Crear una instancia de Azure Database for PostgreSQL.
 - Dimensionar el tier mirando el consumo actual en Supabase (espacio, conexiones, computo).
 - Migrar el esquema y los datos (ver estructura-base-de-datos.md para el esquema completo).
-- Replicar las funciones, triggers y politicas RLS.
+- Replicar las funciones, triggers y politicas RLS (documentar todas las politicas actuales ANTES de migrar; los roles anon/service_role de Supabase no existen igual en Azure).
 - Revisar que el almacenamiento de archivos (hoy Supabase Storage) tenga equivalente: Azure Blob Storage.
 
 Servidor de aplicacion:
@@ -201,7 +202,7 @@ Servidor de aplicacion:
 Codigo y configuracion:
 - Desplegar el codigo (los endpoints PHP y el servicio Node).
 - Configurar las credenciales (idealmente en Azure Key Vault).
-- Crear el registro de politica de tratamiento de datos en la base (ver operacion-incidentes.md, seccion 4) para que el sistema guarde datos.
+- Crear las politicas RLS de todas las tablas (ver operacion-incidentes.md, seccion 4). Sin politicas, RLS bloquea el acceso y las tablas no cargan ni guardan datos.
 - Recrear las dos tareas cron (seccion 6).
 - Aplicar las restricciones de acceso por dominio (ver operacion-incidentes.md, seccion 5).
 
@@ -216,4 +217,4 @@ Ventaja de partida: como el backend PHP no usa Composer ni dependencias externas
 
 ---
 
-Documentacion tecnica de SIGI — Tododrogas.
+Documentacion tecnica de SIGI — Tododrogas CIA SAS.
