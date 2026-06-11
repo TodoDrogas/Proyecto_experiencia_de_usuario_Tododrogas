@@ -1,7 +1,7 @@
-# Bot Nova TD — Documentacion Tecnica
+#Nova TD — Documentacion Tecnica
 
 Sistema Integrado de Gestion Inteligente — SIGI
-Tododrogas CIA SAS — Area de Innovacion y Tecnologia
+Tododrogas — Procesos Digitales
 
 Nova TD es el asistente virtual de Tododrogas. Atiende a los pacientes de forma automatica las 24 horas, resuelve las consultas mas comunes sin intervencion humana y escala a un agente cuando hace falta. Nova opera en dos canales: el chat web (Nova directo, en el sitio) y WhatsApp. Ambos comparten la misma logica y conocimiento, pero se ejecutan en componentes distintos. Este documento describe en detalle como funciona por dentro, que componentes lo forman y como se conectan entre si.
 
