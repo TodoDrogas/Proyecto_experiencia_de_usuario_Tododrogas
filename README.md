@@ -2,7 +2,7 @@
 
 Plataforma omnicanal de gestion de PQRSFD (Peticiones, Quejas, Reclamos, Sugerencias, Felicitaciones y Denuncias) para Tododrogas. Centraliza en un solo lugar las comunicaciones de pacientes que llegan por correo, WhatsApp, llamada y formularios web, las clasifica con ayuda de inteligencia artificial y permite a los agentes gestionarlas con trazabilidad completa.
 
-Desarrollado por el Area de Innovacion y Tecnologia.
+Desarrollado por Procesos Digitales
 
 ---
 
