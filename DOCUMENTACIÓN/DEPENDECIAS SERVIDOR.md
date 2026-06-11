@@ -1,6 +1,5 @@
 # Dependencias del Servidor — SIGI
 
-Sistema Integrado de Gestion Inteligente
 Tododrogas — Procesos Digitales
 ---
 Inventario de todo lo que debe estar instalado y configurado en el servidor para que SIGI funcione. Pensado como guia para montar un entorno desde cero, especialmente de cara a la migracion a Azure.
