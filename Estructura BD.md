@@ -688,7 +688,7 @@ Funciones de soporte:
 
 ---
 
-## 10. Convenciones de diseno
+## 10. Convenciones de diseño
 
 Llaves primarias. Las entidades operativas usan uuid, los catalogos importados usan enteros autoincrementales por compatibilidad con el sistema de origen, y algunas tablas usan clave natural de tipo text, como wa_sesiones.telefono y usuarios_vip.cedula.
 
@@ -704,4 +704,4 @@ Marcas temporales. Todas las fechas usan timestamptz para manejar correctamente 
 
 ---
 
-Documento de la documentacion tecnica de SIGI. Debe actualizarse junto con cualquier cambio de esquema en Supabase.
+Documento de la documentacion técnica de SIGI. Debe actualizarse junto con cualquier cambio de esquema en Supabase.
