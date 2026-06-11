@@ -354,25 +354,4 @@ Segun su propia documentacion interna, reemplazo a un flujo de automatizacion ex
 Aunque lleva "Nova" en el nombre, conviene tenerlo claro como una pieza separada: el asistente conversacional (web y WhatsApp) atiende pacientes; Nova TD respuesta asiste a los agentes con los correos.
 
 ---
-
-## 16. Observaciones para mejorar Nova
-
-Estas son ideas para una version futura, no problemas de la version actual. Se dejan documentadas como hoja de ruta.
-
-Catalogo de sedes duplicado. El catalogo existe en dos lugares: la tabla `sedes` y una copia local dentro de nova-wa.php (y otra en nova.html). El codigo ya prioriza la tabla y usa la copia local solo como respaldo, pero mantener tres copias sincronizadas es laborioso. A futuro convendria que el respaldo local se genere automaticamente desde la tabla, o eliminarlo si la disponibilidad de Supabase es suficiente.
-
-Prompt de Nova duplicado entre canales. El comportamiento de Nova se define en dos lugares independientes: en JavaScript dentro de nova.html (canal web) y en PHP dentro de nova-wa.php (canal WhatsApp). Cualquier cambio de comportamiento hay que replicarlo en ambos para que los dos canales se mantengan iguales, lo que es facil de olvidar. A futuro convendria centralizar la definicion del prompt y las reglas en un solo lugar (por ejemplo, un endpoint que ambos canales consulten) para no mantener dos copias.
-
-Logica repartida entre Node y PHP. En el canal de WhatsApp, el control de la conversacion esta en el server.js (Node) y el cerebro de decision en nova-wa.php (PHP). Funciona, pero seguir un flujo completo exige saltar entre dos archivos y dos lenguajes. Documentar el contrato entre ambos (las acciones que devuelve el PHP) ya ayuda; a futuro podria unificarse la logica de fases en un solo lugar.
-
-Interceptor de menu fragil. El Node decide si un numero es navegacion de menu revisando si los ultimos mensajes contenian el menu. Es una heuristica que funciona, pero depende del formato del texto. Un estado explicito de "esperando opcion de menu" seria mas robusto que detectar emojis numerados en el historial.
-
-Memoria de conversacion. El historial se guarda completo en `wa_sesiones.history` y se recorta cuando crece mucho. Para conversaciones largas, un resumen progresivo en lugar del historial completo reduciria el tamano enviado al modelo y el costo.
-
-Reglas dinamicas sin interfaz. Las reglas de `nova_reglas` se editan directamente en la base de datos. Una pequena interfaz de administracion para crearlas y desactivarlas haria el mantenimiento mas seguro y accesible.
-
-Cobertura de pruebas. Al ser un flujo con muchos estados y casos especiales, un conjunto de pruebas automatizadas que simulen conversaciones tipicas (identificacion, cada opcion del menu, escalamiento, fuera de horario) ayudaria a detectar regresiones cuando se modifica el codigo.
-
----
-
-Documentacion tecnica de SIGI — Tododrogas CIA SAS.
+Documentacion tecnica de SIGI — Tododrogas.
