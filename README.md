@@ -137,7 +137,7 @@ El sistema usa los modelos de OpenAI para distintas tareas:
 
 ## Base de datos
 
-La estructura completa de la base de datos esta documentada en `estructura-base-de-datos.md`. En resumen, el modelo se organiza en torno a la tabla `correos` (tickets), con tablas de soporte para agentes, sesiones de WhatsApp, adjuntos, respuestas, encuestas, catalogos (medicamentos, EPS, sedes) y registros de auditoria.
+La estructura completa de la base de datos esta documentada en `ESTRUCTURA BD.md`. En resumen, el modelo se organiza en torno a la tabla `correos` (tickets), con tablas de soporte para agentes, sesiones de WhatsApp, adjuntos, respuestas, encuestas, catalogos (medicamentos, EPS, sedes) y registros de auditoria.
 
 ---
 
