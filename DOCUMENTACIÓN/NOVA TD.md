@@ -1,4 +1,4 @@
-# Nova TD — Documentacion Tecnica
+# Nova TD
 
 Sistema Integrado de Gestion Inteligente — SIGI
 Tododrogas — Procesos Digitales
