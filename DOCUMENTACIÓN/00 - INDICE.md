@@ -58,7 +58,7 @@ El modelo de datos completo. Las 21 tablas con sus columnas, las vistas, los tri
 Que se conecta con que. Para cada archivo: que servicios externos consume, que modelos de IA usa y que tablas toca. Incluye que proceso escribe y cual lee cada tabla, y que deja de funcionar si falla cada servicio.
 
 ### 05 NOVA TD
-El asistente virtual en detalle. Los dos canales de Nova (web y WhatsApp), como comparten el mismo cerebro, la maquina de estados, el menu, la identificacion del paciente, la normalizacion de EPS, el escalamiento a agentes y las tareas automaticas. Termina con ideas para mejorarlo.
+El asistente virtual en detalle. Los dos canales de Nova (web y WhatsApp), como comparten el mismo cerebro, la maquina de estados, el menu, la identificacion del paciente, la normalizacion de EPS, el escalamiento a agentes y las tareas automaticas.
 
 ### 06 DEPENDENCIAS SERVIDOR
 Todo lo que debe estar instalado para que SIGI funcione. Los paquetes de PHP y sus extensiones, Node y PM2, Nginx, la configuracion de produccion, los cron y las credenciales. Guia para montar el entorno desde cero.
