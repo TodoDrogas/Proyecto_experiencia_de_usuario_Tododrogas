@@ -28,7 +28,7 @@ Capa de presentacion. Vistas HTML que consume el usuario: panel de administracio
 
 Capa de logica de negocio. Endpoints en PHP que ejecutan las operaciones del lado del servidor: radicar PQRSFD, sincronizar correos, transcribir audios, clasificar documentos, responder consultas de Nova, validar pacientes, entre otros. Estos endpoints son los unicos que manejan las credenciales sensibles.
 
-Capa de mensajeria en tiempo real. Servicios en Node.js que reciben los webhooks de WhatsApp (Meta y Twilio) y los procesan. Corren bajo PM2 como procesos persistentes.
+Capa de mensajeria en tiempo real. Servicios en Node.js que reciben los webhooks de WhatsApp (Meta) y los procesan. Corren bajo PM2 como procesos persistentes.
 
 Capa de datos. Base de datos PostgreSQL gestionada en Supabase, mas almacenamiento de archivos (Supabase Storage) para adjuntos y audios.
 
@@ -45,7 +45,7 @@ Capa de datos. Base de datos PostgreSQL gestionada en Supabase, mas almacenamien
 | Almacenamiento de archivos | Supabase Storage |
 | Inteligencia artificial | OpenAI (GPT-4o-mini, GPT-4o Vision, Whisper, TTS) |
 | Correo | Microsoft Graph API (Outlook) |
-| WhatsApp | Meta WhatsApp Business API y Twilio |
+| WhatsApp | Meta WhatsApp Business API |
 | Hosting | VPS Hostinger (KVM) |
 | Despliegue | GitHub Actions (CI/CD) |
 
@@ -56,7 +56,7 @@ Capa de datos. Base de datos PostgreSQL gestionada en Supabase, mas almacenamien
 | Canal | Como ingresa | Procesamiento |
 |-------|--------------|---------------|
 | Correo electronico | Microsoft Graph API sincroniza la bandeja | Clasificacion automatica con IA |
-| WhatsApp | Webhook de Meta o Twilio | Atendido por el bot Nova, con escalamiento a agente |
+| WhatsApp | Webhook de Meta | Atendido por el bot Nova, con escalamiento a agente |
 | Llamada telefonica | Modulo PBX | Registro manual del agente |
 | Formulario web | Formulario publico de radicacion | Insercion directa del ticket |
 
@@ -81,8 +81,6 @@ public/
     pqr_encuesta.html       Formulario de encuesta
     pqr_bienvenida.html     Pagina de bienvenida
     consulta.html           Consulta publica del estado de un ticket
-    clasificador.html       Clasificador de documentos
-    gestor_pdf.html         Gestor de documentos PDF
     panel_config.html       Configuracion del sistema
     login.html              Acceso al sistema
 
@@ -92,7 +90,6 @@ public/
       sincronizar-correos.php  Sincroniza la bandeja de Outlook (cron cada minuto)
       transcribir-audio.php    Transcribe audios con Whisper
       procesar-canvas.php      Procesa imagenes y documentos adjuntos
-      clasificador-proxy.php   Clasifica documentos con GPT-4o Vision
 
     Bot Nova y WhatsApp
       nova-consulta.php        Backend principal de Nova
@@ -108,7 +105,6 @@ public/
 
     Autenticacion
       login.php                Validacion de acceso de administrador y agentes
-      login_gestor.php         Acceso del gestor de documentos
 
     Busquedas y validacion
       validar-paciente.php          Valida la identidad del paciente contra el padron
@@ -122,7 +118,7 @@ public/
     server.js               Servicio Node que recibe los webhooks de Meta WhatsApp
 ```
 
-Los servicios Node de produccion corren fuera del directorio web, en `/opt/webhook-meta` y `/opt/webhook-twilio`, gestionados por PM2.
+Los servicios Node de produccion corren fuera del directorio web, en `/opt/webhook-meta`, gestionados por PM2.
 
 ---
 
@@ -133,7 +129,7 @@ El sistema usa los modelos de OpenAI para distintas tareas:
 | Modelo | Uso |
 |--------|-----|
 | GPT-4o-mini | Clasificacion de PQRSFD, analisis de sentimiento, generacion de resumenes y respuestas de Nova |
-| GPT-4o (Vision) | Lectura y clasificacion de documentos e imagenes adjuntas |
+| GPT-4o (Vision) | Lectura de imagenes y documentos que llegan adjuntos a los tickets (por web y WhatsApp) |
 | Whisper | Transcripcion de mensajes de voz a texto |
 | TTS (texto a voz) | Respuestas en audio de Nova |
 
