@@ -1,7 +1,7 @@
 # Estructura de Base de Datos — SIGI
 
 Sistema Integrado de Gestion Inteligente
-Tododrogas CIA SAS — Area de Innovacion y Tecnologia
+Tododrogas — Procesos Digitales 
 
 Motor: Supabase PostgreSQL Pro
 Esquema: public
