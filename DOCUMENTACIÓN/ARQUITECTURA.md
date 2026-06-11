@@ -241,17 +241,4 @@ En cada despliegue se crea una copia de respaldo del `server.js` anterior con ma
 Nota sobre `renovar-token.sh`: la expresion de cron actual (`0 3 5 7 *`) lo ejecuta solo una vez al ano, el 5 de julio a las 3:00 AM. Conviene revisar si la frecuencia es la correcta, dado que los tokens de acceso suelen requerir renovacion periodica.
 
 ---
-
-## 8. Configuracion heredada por revisar
-
-Durante la documentacion se identificaron elementos que parecen restos de etapas anteriores y que conviene revisar:
-
-- Proxy `/webhook/` en Nginx apuntando a un servicio externo en el puerto 5678. Si ya no se usa automatizacion externa, este bloque puede retirarse.
-- Proxy `/twilio/` en Nginx hacia el puerto 3000. Si WhatsApp opera solo por Meta, este proxy puede retirarse.
-- Acumulacion de respaldos `server.js.bak.*` en `/opt/webhook-meta/`. Conviene conservar solo los mas recientes y limpiar los antiguos.
-
-Estos puntos no afectan la operacion actual, pero mantenerlos limpios facilita el mantenimiento.
-
----
-
 Documentacion tecnica de SIGI — Tododrogas
