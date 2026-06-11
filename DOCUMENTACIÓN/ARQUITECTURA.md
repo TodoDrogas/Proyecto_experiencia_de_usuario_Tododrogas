@@ -254,4 +254,4 @@ Estos puntos no afectan la operacion actual, pero mantenerlos limpios facilita e
 
 ---
 
-Documentacion tecnica de SIGI — Tododrogas.
+Documentacion tecnica de SIGI — Tododrogas
