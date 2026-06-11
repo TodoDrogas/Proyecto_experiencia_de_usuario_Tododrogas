@@ -180,4 +180,4 @@ Un cron en el servidor ejecuta `sincronizar-correos.php` cada minuto para traer 
 
 ---
 
-Documentacion tecnica de SIGI — Tododrogas CIA SAS.
+Documentacion tecnica de SIGI — Tododrogas.
