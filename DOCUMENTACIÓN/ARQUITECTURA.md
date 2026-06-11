@@ -1,7 +1,7 @@
 # Arquitectura — SIGI
 
 Sistema Integrado de Gestion Inteligente
-Tododrogas CIA SAS — Area de Innovacion y Tecnologia
+Tododrogas — Procesos Digitales
 
 Este documento describe como esta construido el sistema por dentro: los componentes, como se comunican entre si y como fluye la informacion de punta a punta. Complementa al README, que da la vision general.
 
