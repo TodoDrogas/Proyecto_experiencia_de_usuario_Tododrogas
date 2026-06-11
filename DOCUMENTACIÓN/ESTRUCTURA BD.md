@@ -1,7 +1,7 @@
 # Estructura de Base de Datos — SIGI
 
 Sistema Integrado de Gestion Inteligente
-Tododrogas — Procesos Digitales 
+Tododrogas — Procesos Digitales
 
 Motor: Supabase PostgreSQL Pro
 Esquema: public
@@ -19,6 +19,7 @@ Ultima actualizacion: junio de 2026
 6. Triggers y funciones
 7. Indices
 8. Vistas
+8.1 Almacenamiento de archivos (Storage)
 9. Extensiones
 10. Convenciones de diseno
 
@@ -678,6 +679,29 @@ Funciones de soporte:
 
 ---
 
+## 8.1 Almacenamiento de archivos (Supabase Storage)
+
+Ademas de las tablas, el sistema guarda archivos binarios en Supabase Storage, organizados en buckets. Las tablas (adjuntos, correos) guardan solo la URL y la ruta; el archivo real vive en el bucket.
+
+Inventario de buckets:
+
+| Bucket | Acceso | Limite de tamano | Tipos permitidos | Uso |
+|--------|--------|------------------|-------------------|-----|
+| adjuntos-pqr | Publico | 50 MB | PDF, imagenes, Word, Excel, ZIP, RAR, texto, correos (msg) | Adjuntos de las PQRSFD (el bucket principal) |
+| wa-media | Publico | 20 MB | Audio, imagenes, video, PDF, Word, Excel, texto | Archivos recibidos o enviados por WhatsApp |
+| audios | Publico | 10 MB | audio/webm, audio/mp4, audio/mpeg | Mensajes de voz para transcribir |
+| canvas-images | Publico | 5 MB | image/png, image/jpeg | Imagenes y documentos procesados con vision |
+| logos-config | Publico | 5 MB | PNG, JPEG, SVG | Logos e imagenes de configuracion |
+| POLITICAS TRATAMIENTO DE DATOS | Publico | Sin definir (50 MB) | Cualquiera | PDF de la politica de privacidad |
+| TURNEROS | Publico | Sin definir (50 MB) | video/mp4, video/quicktime | Videos de turnero |
+| MEDIOS H | Publico | Sin definir (50 MB) | Cualquiera | Medios varios |
+
+Notas:
+- Todos los buckets son publicos (los archivos se sirven por URL directa).
+- Algunos buckets tienen politicas de acceso propias (adjuntos-pqr y audios son los que mas politicas tienen); otros no tienen politicas especificas.
+- Los limites de tamano y tipos de archivo estan configurados por bucket; conviene respetarlos al migrar para no romper las subidas.
+- Para la migracion a Azure, cada bucket equivale a un contenedor de Azure Blob Storage, y los limites de tamano y tipo habria que reconfigurarlos en la capa de aplicacion o en Blob.
+
 ## 9. Extensiones
 
 | Extension | Uso |
@@ -688,7 +712,7 @@ Funciones de soporte:
 
 ---
 
-## 10. Convenciones de diseño
+## 10. Convenciones de diseno
 
 Llaves primarias. Las entidades operativas usan uuid, los catalogos importados usan enteros autoincrementales por compatibilidad con el sistema de origen, y algunas tablas usan clave natural de tipo text, como wa_sesiones.telefono y usuarios_vip.cedula.
 
@@ -704,4 +728,4 @@ Marcas temporales. Todas las fechas usan timestamptz para manejar correctamente 
 
 ---
 
-Documento de la documentacion técnica de SIGI. Debe actualizarse junto con cualquier cambio de esquema en Supabase.
+Documento de la documentacion tecnica de SIGI. Debe actualizarse junto con cualquier cambio de esquema en Supabase.
